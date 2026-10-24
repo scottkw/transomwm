@@ -174,4 +174,63 @@ private let tabRemovals: [(selected: Int, removed: Int, after: [WindowRef], sele
         #expect(throws: LayoutError.splitFull(n(1), limit: LayoutTree.maxChildren)) { try t.remove(b) }
         #expect(t == before)
     }
+
+    // MARK: resizeBoundary (D-07)
+
+    private func threeWide() throws -> LayoutTree {
+        try tree(root: 1, [1: h(2, 3, 4, weights: [0.5, 0.3, 0.2]), 2: .panel(a), 3: .panel(b), 4: .panel(c)])
+    }
+
+    private func weights(_ t: LayoutTree) -> [Double] {
+        if case let .split(_, _, weights)? = t.node(n(1)) { return weights }
+        return []
+    }
+
+    @Test func resizeMovesWeightBetweenTheTwoNeighboursOnly() throws {
+        var t = try threeWide()
+        let before = weights(t)
+        try t.resizeBoundary(in: n(1), after: 0, by: 0.1)
+        let after = weights(t)
+        expectWeights(after, [0.6, 0.2, 0.2])
+        #expect(after[2] == before[2])
+    }
+
+    @Test func resizeClampsBothNeighboursToTheMinimum() throws {
+        var t = try threeWide()
+        let before = weights(t)
+        try t.resizeBoundary(in: n(1), after: 1, by: 0.5)
+        var after = weights(t)
+        #expect(abs(after[1] + after[2] - 0.5) <= 1e-12)
+        #expect(abs(after[2] - LayoutTree.minWeight) <= 1e-12)
+        #expect(after[0] == before[0])
+
+        try t.resizeBoundary(in: n(1), after: 0, by: -1)
+        after = weights(t)
+        #expect(abs(after[0] - LayoutTree.minWeight) <= 1e-12)
+        #expect(abs(after[0] + after[1] - 0.99) <= 1e-12)
+    }
+
+    @Test func resizeRejectsUnknownNodesAndNonSplits() throws {
+        var t = try threeWide()
+        let before = t
+        #expect(throws: LayoutError.nodeNotFound(n(99))) { try t.resizeBoundary(in: n(99), after: 0, by: 0.1) }
+        #expect(throws: LayoutError.notASplit(n(2))) { try t.resizeBoundary(in: n(2), after: 0, by: 0.1) }
+        #expect(t == before)
+    }
+
+    @Test(arguments: [-1, 2, 3])
+    func resizeRejectsBoundariesOutsideTheSplit(index: Int) throws {
+        var t = try threeWide()
+        let before = t
+        #expect(throws: LayoutError.invalidBoundary(split: n(1), index: index)) { try t.resizeBoundary(in: n(1), after: index, by: 0.1) }
+        #expect(t == before)
+    }
+
+    @Test(arguments: [Double.nan, .infinity, -.infinity])
+    func resizeRejectsNonFiniteDeltas(delta: Double) throws {
+        var t = try threeWide()
+        let before = t
+        #expect(throws: LayoutError.invalidGeometry("delta must be finite")) { try t.resizeBoundary(in: n(1), after: 0, by: delta) }
+        #expect(t == before)
+    }
 }

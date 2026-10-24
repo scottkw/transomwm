@@ -94,6 +94,8 @@ extension LayoutTree {
         assertValid()
     }
 
+    public mutating func resizeBoundary(in split: NodeID, after index: Int, by delta: Double) throws(LayoutError) {}
+
     /// D-06, run on the working copy of every edit. Collapses and merges repeat until a pass finds
     /// none; then each split's weights are renormalised and clamped. Iterative throughout.
     mutating func normalize() throws(LayoutError) {
