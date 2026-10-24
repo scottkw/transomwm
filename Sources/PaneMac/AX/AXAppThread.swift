@@ -6,6 +6,8 @@ import os
 /// An AX notification from one app. A hint only: it triggers a refresh, it never decides anything.
 nonisolated struct AXEventHint: Sendable {
     let pid: Int32
+    /// The window the notification is about, when it is one already in the thread's element cache.
+    let windowID: UInt32?
     let notification: String
 }
 
@@ -23,6 +25,17 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     // Thread-confined.
     private var app: AXUIElement?
     private var observer: AXObserver?
+    /// Window elements seen by `observe()`, each registered for the per-window notifications.
+    private var windows: [UInt32: AXUIElement] = [:]
+
+    private static let appNotifications = [
+        kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification,
+        kAXApplicationHiddenNotification, kAXApplicationShownNotification,
+    ]
+    private static let windowNotifications = [
+        kAXUIElementDestroyedNotification, kAXWindowMovedNotification, kAXWindowResizedNotification,
+        kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification, kAXTitleChangedNotification,
+    ]
 
     init(pid: Int32, bundleID: String, hints: AsyncStream<AXEventHint>.Continuation) {
         self.pid = pid
@@ -38,11 +51,12 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             let keepAlive = CFRunLoopSourceCreate(nil, 0, &context)
             CFRunLoopAddSource(CFRunLoopGetCurrent(), keepAlive, .defaultMode)
             CFRunLoopRun()
-            // Teardown in reverse creation order: observer, then the app element.
+            // Teardown in reverse creation order: observer, then window elements, then the app element.
             if let observer {
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(observer), .defaultMode)
             }
             observer = nil
+            windows = [:]
             app = nil
             CFRunLoopSourceInvalidate(keepAlive)
         }
@@ -52,16 +66,20 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     }
 
     private func installObserver() {
-        let callback: AXObserverCallback = { _, _, notification, refcon in
+        let callback: AXObserverCallback = { _, element, notification, refcon in
             guard let refcon else { return }
             // The thread object outlives its observer: the thread's closure retains it until teardown.
+            // Runs on this thread's run loop, so reading the cache is thread-confined; CFEqual is no IPC.
             let me = Unmanaged<AXAppThread>.fromOpaque(refcon).takeUnretainedValue()
-            me.hints.yield(AXEventHint(pid: me.pid, notification: notification as String))
+            let windowID = me.windows.first { CFEqual($0.value, element) }?.key
+            me.hints.yield(AXEventHint(pid: me.pid, windowID: windowID, notification: notification as String))
         }
         var created: AXObserver?
         guard AXObserverCreate(pid, callback, &created) == .success, let created, let app else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        _ = AXObserverAddNotification(created, app, kAXWindowCreatedNotification as CFString, refcon)
+        for name in Self.appNotifications {
+            _ = AXObserverAddNotification(created, app, name as CFString, refcon)
+        }
         CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(created), .defaultMode)
         observer = created
     }
@@ -82,13 +100,26 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         }
     }
 
-    /// Reads the app's windows on this thread.
+    /// Reads the app's windows on this thread and keeps the element cache and its registrations in step.
     func observe() async -> AppObservation? {
-        let pid = pid
-        let bundleID = bundleID
-        return await perform { app in
-            AXSnapshotReader.observeApp(app, pid: pid, bundleID: bundleID, hidden: AXSnapshotReader.isHidden(app))
+        await perform { [self] app in
+            let (observation, elements) = AXSnapshotReader.observeApp(app, pid: pid, bundleID: bundleID, hidden: AXSnapshotReader.isHidden(app))
+            if let elements { updateWindows(elements) }
+            return observation
         }
+    }
+
+    /// Thread-confined. A window that left `AXWindows` loses its registrations; it is re-added if it returns.
+    private func updateWindows(_ current: [UInt32: AXUIElement]) {
+        guard let observer else { return }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        for (id, element) in windows where current[id] == nil {
+            for name in Self.windowNotifications { _ = AXObserverRemoveNotification(observer, element, name as CFString) }
+        }
+        for (id, element) in current where windows[id] == nil {
+            for name in Self.windowNotifications { _ = AXObserverAddNotification(observer, element, name as CFString, refcon) }
+        }
+        windows = current
     }
 
     /// Stops the run loop after already-queued jobs; the thread then tears down its AX objects.
