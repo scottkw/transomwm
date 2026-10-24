@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Layout Model
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-10-24T05:52:07.841Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-10-24T05:56:41.398Z"
 last_activity: 2026-10-23
 last_activity_desc: Phase 1 execution started
-state_head: f3b04c600e56da78be2b462a855a7562f96e333d
+state_head: b7a876d6142bd5a376d8b2d1d29db5eb20242aaa
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-23)
 ## Current Position
 
 Phase: 1 (Layout Model) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-10-23 — Phase 1 execution started
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1 P02 | 5 min | 2 tasks | 3 files |
 | Phase 01 P03 | 7 min | 3 tasks | 5 files |
 | Phase 01 P04 | 7 min | 3 tasks | 7 files |
+| Phase 01 P06 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Desk edits go through transactional World.edit; undo validates the restored World and never rewinds IDSource
 - [Phase 01]: UndoHistory is session-only (not Codable); 50 Desk snapshots per desk
 - [Phase 01]: Version-1 files decode original bytes; older files migrate via MigrationChain through JSONSerialization (precision caveat above 2^53)
+- [Phase 01]: 01-06: PaneEngine value types have explicit public inits so Phase 2 modules can construct them; WindowEvent/WindowCommand are Equatable, Sendable
+- [Phase 01]: 01-06: no-AppKit guardrail is scripts/check-no-appkit.sh, run by NoAppKitTests in every swift test and by CI on macos-26
 
 ### Pending Todos
 
@@ -109,6 +112,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T05:52:07.826Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-10-24T05:56:41.383Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None

@@ -13,7 +13,7 @@
 - [x] **MODEL-04**: Tile rects are computed for a given area with gaps, respecting each window's minimum size without overlap
 - [x] **MODEL-05**: Each desk has a floating Desktop layer that holds non-docked windows
 - [ ] **MODEL-06**: A tile can hold a tab group of several windows with one selected
-- [ ] **MODEL-07**: Desks are keyed by display UUID plus optional Space ID
+- [x] **MODEL-07**: Desks are keyed by display UUID plus optional Space ID
 - [ ] **MODEL-08**: Windows have lifecycle states (present, absent, fullscreen, closed) so an absent window keeps its reserved slot
 - [x] **MODEL-09**: Layout state serialises to versioned JSON and round-trips exactly
 - [x] **MODEL-10**: Every layout change can be undone back to the previous layout
@@ -138,7 +138,7 @@ Populated by the roadmapper on 2026-10-23.
 | MODEL-04 | Phase 1 | Complete |
 | MODEL-05 | Phase 1 | Complete |
 | MODEL-06 | Phase 1 | Pending |
-| MODEL-07 | Phase 1 | Pending |
+| MODEL-07 | Phase 1 | Complete |
 | MODEL-08 | Phase 1 | Pending |
 | MODEL-09 | Phase 1 | Complete |
 | MODEL-10 | Phase 1 | Complete |
