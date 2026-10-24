@@ -14,7 +14,19 @@ public struct Desk: Codable, Equatable, Sendable {
         tree.state(of: window) != nil || desktop.contains(window)
     }
 
-    public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {}
+    /// Lifecycle transition for a docked or floating window (D-17). Docked windows go through
+    /// `LayoutTree.setState`; a floating window keeps its frame unless `.closed` removes it. The same
+    /// contract applies: `.closed` only after two-source confirmation; lock, sleep and AX timeouts are
+    /// `.absent` (PITFALLS.md Pitfall 2). Throws `windowNotFound` if the desk has no such window.
+    public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {
+        if tree.state(of: window) != nil {
+            try tree.setState(state, for: window)
+        } else if state == .closed {
+            try desktop.remove(window)
+        } else {
+            try desktop.setState(state, for: window)
+        }
+    }
 
     /// Tree and Desktop layer are each valid, and no window is both docked and floating.
     public func validate() throws(LayoutError) {

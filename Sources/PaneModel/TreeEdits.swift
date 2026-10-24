@@ -120,7 +120,19 @@ extension LayoutTree {
         assertValid()
     }
 
-    public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {}
+    /// Lifecycle transition (D-17, MODEL-08). `.absent` and `.fullscreen` change `states` only, never
+    /// `nodes`, so the slot stays reserved: `resolve` gives its space to the neighbours, and `.present`
+    /// brings back exactly the rects it had. Only `.closed` removes the slot, exactly as `remove(_:)`.
+    ///
+    /// Callers (the Window Control phase) must send `.closed` only after two sources confirm the window
+    /// is gone: an AX invalid-element error and the window missing from the CG window list. Lock screen,
+    /// sleep and AX timeouts are `.absent`, never `.closed` (PITFALLS.md Pitfall 2).
+    public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {
+        if state == .closed { return try remove(window) }
+        guard states[window.identity] != nil else { throw .windowNotFound(window) }
+        states[window.identity] = state
+        assertValid()
+    }
 
     /// Moves `delta` (a fraction of the split's length) across the boundary after child `index`,
     /// between those two children only (D-07). Both stay at or above `minWeight`; every other
