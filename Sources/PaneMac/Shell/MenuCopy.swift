@@ -45,9 +45,10 @@ nonisolated public enum MenuCopy {
             + "select \u{201C}\(appName)\u{201D}, click the minus button, then turn \(appName) on again."
     }
 
-    public static func dontArrange(appName: String) -> String { "" }
-    public static let dontArrangeFallback = ""
-    public static let noExclusions = ""
+    /// Pass the name through `truncatedAppName` first.
+    public static func dontArrange(appName: String) -> String { "Don't Arrange \u{201C}\(appName)\u{201D}" }
+    public static let dontArrangeFallback = "Don't Arrange Frontmost App"
+    public static let noExclusions = "No apps excluded"
 
     private static func count(_ n: Int, _ noun: String) -> String {
         n == 1 ? "1 \(noun)" : "\(n) \(noun)s"

@@ -20,7 +20,10 @@ public enum PaneMacApp {
         // Tracking starts only through the reducer's startTracking effect, once access is confirmed.
         let permissionController = PermissionController(system: system)
         let setupController = SetupWindowController(permission: permissionController)
-        let controller = StatusItemController(system: system, permission: permissionController) { setupController.show() }
+        let exclusions = ExclusionStore()
+        let controller = StatusItemController(system: system, permission: permissionController, exclusions: exclusions) {
+            setupController.show()
+        }
         statusItem = controller
         permission = permissionController
         setupWindow = setupController

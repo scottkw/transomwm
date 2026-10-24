@@ -8,16 +8,23 @@ import os
 @MainActor final class StatusItemController: NSObject, NSMenuDelegate {
     private let system: AXWindowSystem
     private let permission: PermissionController
+    private let exclusions: ExclusionStore
     private let showSetup: () -> Void
     private var permissionSubscription: AnyCancellable?
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let logger = Logger(subsystem: "com.eightabyte.pane", category: "shell")
     private(set) var latest = WindowInventory(displays: [], windows: [])
+    /// The frontmost app when the menu opened; opening a status menu does not activate Pane.
+    private var frontmost: NSRunningApplication?
 
     /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item.
-    init(system: AXWindowSystem, permission: PermissionController, showSetup: @escaping () -> Void) {
+    init(
+        system: AXWindowSystem, permission: PermissionController, exclusions: ExclusionStore,
+        showSetup: @escaping () -> Void
+    ) {
         self.system = system
         self.permission = permission
+        self.exclusions = exclusions
         self.showSetup = showSetup
         super.init()
         permissionSubscription = permission.$state.map { $0.phase == .ready }.removeDuplicates()
@@ -40,7 +47,10 @@ import os
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        frontmost = NSWorkspace.shared.frontmostApplication
         addStatusItems(to: menu)
+        menu.addItem(.separator())
+        addExclusionItems(to: menu)
         menu.addItem(.separator())
         menu.addItem(debugMenuItem())
         menu.addItem(.separator())
@@ -76,6 +86,58 @@ import os
         if let degraded = MenuCopy.degradedLine(count: latest.degradedPIDs.count) {
             menu.addItem(Self.info(degraded))
         }
+    }
+
+    /// Items 4 and 5: the frontmost app's Don't Arrange toggle and the Never Arrange submenu (D-12).
+    private func addExclusionItems(to menu: NSMenu) {
+        let toggle: NSMenuItem
+        if let app = frontmost, let id = app.bundleIdentifier, app.processIdentifier != getpid(),
+            app.activationPolicy == .regular, ExclusionStore.isValid(id)
+        {
+            let name = MenuCopy.truncatedAppName(app.localizedName ?? id)
+            toggle = NSMenuItem(title: MenuCopy.dontArrange(appName: name), action: #selector(toggleFrontmost), keyEquivalent: "")
+            toggle.target = self
+            toggle.representedObject = id
+            toggle.state = exclusions.contains(id) ? .on : .off
+        } else {
+            toggle = Self.info(MenuCopy.dontArrangeFallback)
+        }
+        menu.addItem(toggle)
+
+        let submenu = NSMenu(title: "Never Arrange")
+        let names = Dictionary(uniqueKeysWithValues: exclusions.bundleIDs.compactMap { id in Self.displayName(of: id).map { (id, $0) } })
+        for entry in exclusions.sortedEntries(displayNames: names) {
+            let item = NSMenuItem(title: entry.title, action: #selector(removeExclusion), keyEquivalent: "")
+            item.target = self
+            item.representedObject = entry.bundleID
+            item.state = .on
+            submenu.addItem(item)
+        }
+        if submenu.items.isEmpty { submenu.addItem(Self.info(MenuCopy.noExclusions)) }
+        let item = NSMenuItem(title: "Never Arrange", action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        menu.addItem(item)
+    }
+
+    @objc private func toggleFrontmost(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        do {
+            try exclusions.toggle(id)
+        } catch {
+            logger.error("could not toggle exclusion for \(id, privacy: .public)")
+        }
+    }
+
+    @objc private func removeExclusion(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        exclusions.remove(id)
+    }
+
+    /// The installed app's display name, or nil when no app has this bundle ID.
+    private static func displayName(of bundleID: String) -> String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        let name = FileManager.default.displayName(atPath: url.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
     }
 
     @objc private func openSetup() {
