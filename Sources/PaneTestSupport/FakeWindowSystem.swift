@@ -108,8 +108,16 @@ public actor FakeWindowSystem: WindowSystem {
         self.displays = displays
     }
 
-    public func setLocked(_ locked: Bool) {
+    public func setLocked(_ locked: Bool, gate: Bool = true) {
         self.locked = locked
+    }
+
+    /// The window closed: AX says invalid and it left the CG list.
+    public func close(_ id: UInt32) {
+        update(id) {
+            $0.axValid = false
+            $0.inCGList = false
+        }
     }
 
     /// The process is gone: its windows leave both AX (invalid) and the CG list.
