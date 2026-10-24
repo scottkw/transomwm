@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 0
 waived_count: 0
-fixed_count: 0
+fixed_count: 1
 total_count: 1
-last_updated: 2026-10-24T04:55:49.599Z
+last_updated: 2026-10-24T05:03:53.145Z
 ---
 
 # Broken Windows Ledger
@@ -15,7 +15,7 @@ last_updated: 2026-10-24T04:55:49.599Z
 
 | id | phase | kind | file | line | description | status | reason | recorded_at | resolved_at |
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
-| 1 | 1 | deviation | Sources/PaneModel/TreeEdits.swift | 64 | n-ary insert scales sibling weights without a minWeight clamp; 01-02 normalize() adds it | open |  | 2026-10-24T04:55:49.599Z |  |
+| 1 | 1 | deviation | Sources/PaneModel/TreeEdits.swift | 64 | n-ary insert scales sibling weights without a minWeight clamp; 01-02 normalize() adds it | fixed |  | 2026-10-24T04:55:49.599Z | 2026-10-24T05:03:53.145Z |
 
 ````json
 [
@@ -26,10 +26,10 @@ last_updated: 2026-10-24T04:55:49.599Z
     "file": "Sources/PaneModel/TreeEdits.swift",
     "line": 64,
     "description": "n-ary insert scales sibling weights without a minWeight clamp; 01-02 normalize() adds it",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-10-24T04:55:49.599Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-24T05:03:53.145Z",
     "milestone": null
   }
 ]
