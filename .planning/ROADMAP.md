@@ -12,7 +12,7 @@ Pane is built bottom-up along its dependency chain: a pure, headless layout mode
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Layout Model** - Headless PaneModel: nested split tree, Desktop layer, tab groups, desks, lifecycle states, JSON, undo
+- [x] **Phase 1: Layout Model** - Headless PaneModel: nested split tree, Desktop layer, tab groups, desks, lifecycle states, JSON, undo (completed 2026-10-24)
 - [ ] **Phase 2: Window Control** - Accessibility permission, non-blocking window tracking and move/resize, classifier, exclusions, private-API fallback
 - [ ] **Phase 3: Tiling MVP** - Drag-to-dock nested tiling, reflow, gaps, commands, crash-safe restore; first usable signed release
 - [ ] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle
@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Any layout serialises to versioned JSON and round-trips exactly, and every edit can be undone back to the previous layout
   5. `PaneModel` builds and tests without importing AppKit, enforced by a CI check
 
-**Plans:** 6/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
@@ -199,7 +199,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Layout Model | 6/6 | In Progress | - |
+| 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 0/TBD | Not started | - |
 | 3. Tiling MVP | 0/TBD | Not started | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |

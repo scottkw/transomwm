@@ -12,11 +12,10 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Pure-Swift layout model: nested split tree with weights, panels, tab groups and a floating Desktop; insert at an edge, remove, resize, minimum sizes; serialisable — Phase 1 (141 tests, debug + release)
 
 ### Active
 
-- [ ] Pure-Swift layout model: nested split tree with weights, panels, tab groups and a floating Desktop; insert at an edge, remove, resize, minimum sizes; serialisable
 - [ ] Accessibility-based window control: permission flow, window tracking, move/resize, per-app exclusion list
 - [ ] Drag-to-dock tiling with drop preview, reflow on close, gaps, drag-gap resize, green button docks/floats
 - [ ] Zoom camera: overlay with window snapshots (colour + icon fallback without Screen Recording), zoom out to everything, step in/out a level, rectangle zoom, back/forward history, hotkeys
@@ -60,6 +59,11 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 | v1 = all 9 phases | User wants full feature parity for public release | — Pending |
 | Model / Engine / App layering | Mirrors the reference app's proven split; makes core logic testable | — Pending |
 | Snapshot-overlay zoom, no SIP | Only way to "zoom" other apps' windows without disabling SIP | — Pending |
+| Model / Engine / App layering | PaneModel is Foundation-only; enforced by `scripts/check-no-appkit.sh` inside `swift test` | ✓ Good (Phase 1) |
+| Undo covers user edits only | OS lifecycle reports go through `World.apply`, off the undo stack; a confirmed close purges the window from history | ✓ Good (Phase 1 review) |
+| `World.undo` returns restored windows | Model can't know OS state for windows on no desk; the engine re-reports them | — Pending (Phase 2 must honour) |
+| Unfit windows reported, never overlapped | Water-filling resolve pins minimums; windows that can't fit get no rect | ✓ Good (Phase 1) |
+| Clean-room docs scrub | TrellisWM internal names removed from PLAN.md and research docs | ✓ Good |
 
 ## Evolution
 
@@ -79,4 +83,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-23 after initialization*
+*Last updated: 2026-10-24 after Phase 1*
