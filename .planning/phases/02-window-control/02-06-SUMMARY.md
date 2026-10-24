@@ -192,7 +192,7 @@ See `key-decisions` in the frontmatter. The main one is `AppRegistry.onStop(pid,
 **Total deviations:** 3 (1 blocking, 1 interface, 1 added verification). **Impact:** no public contract changed. `AppRegistry` and `RefreshScheduler` are internal.
 
 ## Issues Encountered
-- None. NSWorkspace launch and terminate notifications do reach the `swift test` process: all seven live cases pass in about 0.6–1.2 s each, well under the 5 s sweep. They passed in 4 consecutive runs, and the full `swift test` passes.
+- None. NSWorkspace launch and terminate notifications do reach the `swift test` process: all seven live cases pass in about 0.6–1.2 s each, well under the 5 s sweep. The first six passed in 3 consecutive runs; all seven passed standalone and again inside a full `swift test`.
 
 ## Human checks for phase UAT (end-of-phase)
 1. **Multi-display arrangements (D5):** attach an external display. Arrange it above, then left, then below the built-in display (System Settings › Displays › Arrange). For each arrangement, put a window on each display and check that the window's display matches in `swift run PaneApp --print-inventory-summary` or the Tracked Windows view (Plan 02-08/10). Expected: each window reports the UUID of the display it is mostly on, and frames on the external display have negative y (above), negative x (left), or y ≥ the built-in height (below).
@@ -216,7 +216,7 @@ None - no external service configuration required.
 ## Self-Check: PASSED
 - All 7 created files exist; commits 57c1f7b, cdbdf93 and b8ce330 are on HEAD.
 - Task acceptance greps all at least 1. `scripts/check-no-appkit.sh` OK (18 files).
-- `swift test --filter "CoordinatesTests|TrackerDisplayTests|LiveTrackingTests"` passes (integration not skipped). Full `swift test` passes: 142 + 15 + 9 + 69 tests, plus the 7 live cases.
+- `swift test --filter "CoordinatesTests|TrackerDisplayTests|LiveTrackingTests"` passes (integration not skipped). Full `swift test` passes: 142 engine + 15 PaneMac + 10 integration (7 of them live) + 69 model tests.
 
 ---
 *Phase: 02-window-control*
