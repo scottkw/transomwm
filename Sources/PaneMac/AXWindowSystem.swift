@@ -73,6 +73,8 @@ import os
 
     private func sweep(initial: Bool) async {
         let threads = Array(threads.values)
+        // One CG list per refresh: the window layer fact for the classifier (and the close rule's second source).
+        let cgWindows = CGWindowList.snapshot()
         await withTaskGroup(of: AppObservation?.self) { group in
             for thread in threads {
                 group.addTask { await thread.observe() }
@@ -82,7 +84,7 @@ import os
                 if let failure = observation.listFailure {
                     logger.info("pid \(observation.pid, privacy: .public) AXWindows failed: \(String(describing: failure), privacy: .public)")
                 }
-                let context = ObservationContext(initialSweep: initial, now: .now)
+                let context = ObservationContext(cgWindows: cgWindows, initialSweep: initial, now: .now)
                 for event in tracker.ingest(observation, context: context) {
                     continuation.yield(event)
                 }

@@ -5,10 +5,14 @@ import PaneModel
 private let pid: Int32 = 100
 private let bundleID = "com.example.app"
 private let frame = Rect(x: 40, y: 80, width: 320, height: 232)
-private let context = ObservationContext(now: .now)
+// Initial-sweep context: these tests are about tracking, not the settle delay (TrackerClassificationTests).
+private let context = ObservationContext(initialSweep: true, now: .now)
 
 private func snapshot(role: String = "AXWindow", subrole: String = "AXStandardWindow", minimized: Bool = false, frame: Rect = frame) -> WindowSnapshot {
-    WindowSnapshot(role: role, subrole: subrole, minimized: minimized, fullScreen: false, close: .enabled, frame: frame)
+    WindowSnapshot(
+        role: role, subrole: subrole, minimized: minimized, fullScreen: false,
+        close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: frame
+    )
 }
 
 private func window(_ id: UInt32?, _ read: Result<WindowSnapshot, AXFailure> = .success(snapshot())) -> WindowObservation {

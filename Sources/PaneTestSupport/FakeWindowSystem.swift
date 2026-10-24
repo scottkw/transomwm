@@ -74,6 +74,8 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var performed: [WindowCommand] = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()
+    /// Like `AXWindowSystem.start()`, the first `refreshAll()` is the initial sweep; later new windows settle first.
+    private var initialSweepDone = false
 
     public init(now: ContinuousClock.Instant = .now) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -140,7 +142,7 @@ public actor FakeWindowSystem: WindowSystem {
         let cgWindows = windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
-        let context = ObservationContext(cgWindows: cgWindows, sessionActive: !locked, now: clock)
+        let context = ObservationContext(cgWindows: cgWindows, sessionActive: !locked, initialSweep: !initialSweepDone, now: clock)
         for event in tracker.ingest(observation, context: context) {
             continuation.yield(event)
         }
@@ -148,6 +150,7 @@ public actor FakeWindowSystem: WindowSystem {
 
     public func refreshAll() {
         for pid in apps.keys.sorted() { refresh(pid: pid) }
+        initialSweepDone = true
     }
 
     public func inventory() async -> WindowInventory {
