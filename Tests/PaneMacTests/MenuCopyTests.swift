@@ -1,3 +1,4 @@
+import PaneEngine
 import PaneMac
 import Testing
 
@@ -42,5 +43,30 @@ import Testing
         let cut = MenuCopy.truncatedAppName(name)
         #expect(cut == String(repeating: family, count: 32) + "\u{2026}")
         #expect(cut.count == 33)
+    }
+
+    @Test(arguments: [
+        (PermissionPhase.notTrusted, "Accessibility access needed"),
+        (.waitingForGrant, "Accessibility access needed"),
+        (.probing, "Checking Accessibility access\u{2026}"),
+        (.staleTrustedButFailing, "Accessibility access isn't working"),
+    ])
+    func permissionHeaderNamesTheState(phase: PermissionPhase, expected: String) {
+        #expect(MenuCopy.permissionHeader(phase) == expected)
+    }
+
+    @Test func permissionHeaderIsAbsentWhenReady() {
+        #expect(MenuCopy.permissionHeader(.ready) == nil)
+    }
+
+    @Test func permissionItemSaysFixWhenStale() {
+        #expect(MenuCopy.permissionItem(stale: false) == "Grant Accessibility Access\u{2026}")
+        #expect(MenuCopy.permissionItem(stale: true) == "Fix Accessibility Access\u{2026}")
+    }
+
+    @Test func resetFailedBodyNamesTheCodeAndTheApp() {
+        let body = MenuCopy.resetFailedBody(code: 64, appName: "Pane Debug")
+        #expect(body.contains("tccutil stopped with code 64"))
+        #expect(body.contains("\u{201C}Pane Debug\u{201D}"))
     }
 }

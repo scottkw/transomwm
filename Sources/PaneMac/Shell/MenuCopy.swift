@@ -1,3 +1,5 @@
+import PaneEngine
+
 /// Status-menu copy from the UI-SPEC Copywriting Contract. Pure strings, no AppKit types.
 nonisolated public enum MenuCopy {
     public static let maxAppNameLength = 32
@@ -21,6 +23,12 @@ nonisolated public enum MenuCopy {
     public static func truncatedAppName(_ name: String) -> String {
         name.count <= maxAppNameLength ? name : name.prefix(maxAppNameLength) + "\u{2026}"
     }
+
+    public static func permissionHeader(_ phase: PermissionPhase) -> String? { nil }
+
+    public static func permissionItem(stale: Bool) -> String { "" }
+
+    public static func resetFailedBody(code: Int32, appName: String) -> String { "" }
 
     private static func count(_ n: Int, _ noun: String) -> String {
         n == 1 ? "1 \(noun)" : "\(n) \(noun)s"
