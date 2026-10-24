@@ -25,6 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Layout Model
+
 **Goal**: As a Pane developer, I want to edit and resolve a nested tile layout in headless tests, so that every later feature rests on correct geometry.
 **Mode:** mvp
 **Depends on**: Nothing (first phase)
@@ -35,19 +36,27 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A desk keyed by display UUID (plus optional Space ID) holds a tiled tree, a floating Desktop layer and tab-group tiles with one selected window; an absent or fullscreen window keeps its reserved slot until it is confirmed closed
   4. Any layout serialises to versioned JSON and round-trips exactly, and every edit can be undone back to the previous layout
   5. `PaneModel` builds and tests without importing AppKit, enforced by a CI check
+
 **Plans:** 6 plans
 
 Plans:
+**Wave 1**
 - [ ] 01-01-PLAN.md — Walking skeleton: package, core types, dock-beside → resolve → World → versioned JSON, full invariant checker
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — Tree edits: remove with proportional redistribution, normalisation (collapse/merge/ε clamp), gap-drag reweigh, seeded edit fuzz
 - [ ] 01-03-PLAN.md — Geometry: min-size water-filling, unfit reporting, lifecycle exclusion, input validation, resolve property fuzz, drop-zone hit testing
 - [ ] 01-04-PLAN.md — Desks: Desktop layer, transactional edits with 50-level per-desk undo, hardened persistence (version gate, migration chain, corrupt corpus)
-- [ ] 01-05-PLAN.md — Tab groups, lifecycle transitions (reserved slots until closed), drop targets → edits, end-to-end scenario
 - [ ] 01-06-PLAN.md — PaneEngine target with draft WindowSystem protocol, no-AppKit check in `swift test` + CI workflow on macos-26
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-05-PLAN.md — Tab groups, lifecycle transitions (reserved slots until closed), drop targets → edits, end-to-end scenario
+
 **Research**: Standard patterns (fully specified in research ARCHITECTURE.md); skip phase research
 **Scope notes**: Lock the expensive-to-change shapes here: flat value tree keyed by `NodeID`, fractional weights, `Node.tabs` case, `DesktopLayer`, `DeskKey(displayUUID, spaceID?)`, `WindowRef` with persisted match hints, single top-left global coordinate space, schema version. Also: drop-zone hit-testing and a first draft of the `WindowSystem` protocol.
 
 ### Phase 2: Window Control
+
 **Goal**: As a Mac user, I want to grant Pane access and have it track and move every window, so that no slow app or lock screen can freeze or lose them.
 **Mode:** mvp
 **Depends on**: Phase 1
@@ -58,11 +67,13 @@ Plans:
   3. Pane can move and resize any tracked window on any display, including secondary displays in any arrangement; when an app refuses a size Pane learns its real minimum, and apps on the user's exclusion list are never touched
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
+
 **Plans**: TBD
 **Research**: Moderate. Patterns are documented (AeroSpace), but the window classifier corpus, native-tab heuristics and two-source close-confirmation rules need careful design
 **Scope notes**: Pulled forward per research: coordinate conversion at one tested boundary plus display-UUID matching (from Phase 6) and native-tab detection (from Phase 7). Also: per-app AX threads with ~1 s messaging timeouts, coalesced size-position-size writes with read-back, the `PanePrivate` dlsym pattern and capability registry, `FakeWindowSystem`, fullscreen state detection (tile return is verified in Phase 3 under WIN-07), stable dev signing identity and a separate debug bundle ID so TCC grants survive rebuilds.
 
 ### Phase 3: Tiling MVP
+
 **Goal**: As a Mac user, I want to drag windows into nested tiles that reflow as windows open and close, so that my windows never overlap.
 **Mode:** mvp
 **Depends on**: Phase 2
@@ -73,12 +84,14 @@ Plans:
   3. From the menu bar and from hotkeys, routed through one command dispatcher, the user can dock, float, focus a neighbour, undo the last layout change, pause and resume arranging, and "Restore all windows" (also via `pane://restore`)
   4. Quitting Pane returns every window it moved to a sensible on-screen frame, a crash or force-quit is followed on next launch by stranded windows coming back on-screen, and Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict, offers to turn them off and can restore the originals; quitting and relaunching Pane while apps keep running brings each layout back with the same windows in their tiles
   5. All of the above works with zoom absent and Screen Recording denied, and testers install it as a Developer ID-signed, notarised build whose Accessibility grant survives updates
+
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Standard patterns; drop-zone geometry starts from yabai's numbers (edge bands ~25%, centre ~50%) and is tuned in UAT
 **Scope notes**: First usable release. Pulled forward per research: crash restore, edge-tiling detection and a minimal signed + notarised pipeline (an enabler for SHIP-05, which completes in Phase 9 with the Homebrew cask; confirm notarisation works with dlopen of private frameworks). Drags are detected from frame deltas, not mouse-down hit-tests; keep the top-edge zone clear of Mission Control. Includes the event-tap wrapper with re-enable watchdog, persisted home frames, default exclusions and single-display correctness. The `pane://` scheme is registered here with `restore` only; Phase 8 generalises it. Basic layout restore (SAFE-06) re-attaches by unchanged window IDs while apps keep running; reboot/app-relaunch re-matching stays in Phase 8 (VIEW-04).
 
 ### Phase 4: Zoom Camera
+
 **Goal**: As a Mac user, I want to zoom out to see every window and zoom back in to any of them, so that I can find and focus any window fast.
 **Mode:** mvp
 **Depends on**: Phase 3
@@ -89,12 +102,14 @@ Plans:
   3. Zoomed views show live window snapshots when Screen Recording is granted and app colour plus icon when it isn't; denying Screen Recording never breaks zoom
   4. After a zoom settles, 15 real windows are at their new sizes within 500 ms with no visible flash of a stale layout, and windows parked out of view still come back on-screen on quit, after a crash and via "Restore all windows"
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
+
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Needs phase research. Start with a feasibility spike with measurable criteria: settle latency with Electron-heavy windows, terminal re-wrap, represented-state UX, ScreenCaptureKit memory growth over hours (soak test), overlay window level versus menus, Core Animation performance with 100+ layers
 **Scope notes**: Only the snapshot overlay animates; real windows get one AX write when the camera settles (changed and visible targets only). Capture before parking; park by moving, not shrinking. Camera targets are `NodeID`s so history and saved views survive reflows.
 
 ### Phase 5: Gestures
+
 **Goal**: As a trackpad user, I want to pinch and pan the desk with my fingers, so that zooming and moving around feels direct.
 **Mode:** mvp
 **Depends on**: Phase 4
@@ -104,11 +119,13 @@ Plans:
   2. Pinch and pan on the bare desktop work without holding ⌥
   3. Gestures Pane handles never reach the app under the pointer, while ordinary pinch and scroll inside apps keep working
   4. Gestures keep working after sleep/wake and after the trackpad disconnects and reconnects; if the private multitouch API is unavailable Pane falls back and still launches
+
 **Plans**: TBD
 **Research**: Needs phase research. One-day spike comparing MultitouchSupport raw touches against event-tap magnify events (types 29/30, visibility over other apps unverified); verify MT callback struct layout and the macOS 27 `int32_t` return semantics
 **Scope notes**: Own MultitouchSupport shim (port OpenMultitouchSupport headers, don't depend on 4.x), magnify-event fallback, device re-enumeration on wake and hot-plug, per-API crash canary.
 
 ### Phase 6: Overview, Spaces & Displays
+
 **Goal**: As a multi-display user, I want to see every window on every display and Space in one overview, so that I can jump anywhere and keep each layout.
 **Mode:** mvp
 **Depends on**: Phase 4
@@ -118,12 +135,14 @@ Plans:
   2. User can opt in to Mission Control's swipe and shortcut opening Pane's overview and opt out to get the system behaviour back; if Pane crashes while the takeover is on, the next launch restores the system shortcuts
   3. Each display and each Space keeps its own layout, and switching Spaces leaves the other layouts untouched
   4. Unplugging and re-plugging a display, or sleeping and waking the Mac, restores that display's layout, with "Displays have separate Spaces" both on and off
+
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Needs phase research. Verify SkyLight signatures, Space-UUID stability across reboots and macOS updates, and symbolic-hotkey state after deliberate crash tests
 **Scope notes**: Read-only SkyLight `SpacesProvider` with a single-Space fallback; skip dirty desks while their Space is hidden; orphan/dormant desks on unplug re-attached by display UUID; debounced display reconfiguration; Mission Control takeover is opt-in with a restore watchdog.
 
 ### Phase 7: Tab Groups
+
 **Goal**: As a Mac user, I want to group windows from any apps into one tabbed tile, so that related windows share space without overlapping.
 **Mode:** mvp
 **Depends on**: Phase 4
@@ -134,12 +153,14 @@ Plans:
   3. The group's close, minimise and dock/float buttons act on the whole group
   4. Dragging a tab out of the strip makes it its own window again
   5. Tab groups work for windows from different apps, both docked and floating on the Desktop tile
+
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Standard patterns; builds on `Node.tabs` (Phase 1), native-tab detection (Phase 2) and window parking (Phase 4)
 **Scope notes**: Tab strip panel tracks the group leader via CG bounds polling; inactive tabs are hidden by parking, never minimised.
 
 ### Phase 8: Saved Views, URLs & Persistence
+
 **Goal**: As a power user, I want to save views to hotkeys and run Pane from pane:// URLs, so that my layouts and automations survive restarts.
 **Mode:** mvp
 **Depends on**: Phase 4
@@ -148,11 +169,13 @@ Plans:
   1. User can save the current view to slots 1-9 and return to it with a hotkey, and it still lands on the right windows after the layout changes and after Pane restarts
   2. Raycast, Alfred, Shortcuts or a shell `open pane://...` can run Pane commands, and unknown commands are rejected without side effects
   3. After quitting and relaunching Pane, or rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires rather than a permanent hole
+
 **Plans**: TBD
 **Research**: Standard patterns; cheap on top of the Phase 3 command dispatcher and Phase 4 `NodeID` camera targets
 **Scope notes**: Layout-aware default chords for views; `pane://` with an allow-list and rate limit; re-matching uses persisted match hints with a score threshold.
 
 ### Phase 9: Polish & Ship
+
 **Goal**: As a new user, I want to install Pane with Homebrew and be guided through setup, so that it starts at login and keeps itself updated.
 **Mode:** mvp
 **Depends on**: Phase 5, Phase 6, Phase 7, Phase 8
@@ -163,6 +186,7 @@ Plans:
   3. User can turn on launch at login, and Pane starts at the next login
   4. Pane updates itself through Sparkle, and every window is back on-screen before it relaunches
   5. `brew install --cask` installs a Developer ID-signed, notarised Pane that opens without Gatekeeper warnings
+
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Standard patterns; Sparkle, notarisation and Homebrew are well documented (Rectangle and Amethyst casks as models)
