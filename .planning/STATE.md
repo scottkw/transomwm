@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-10-24T16:55:47.950Z"
+stopped_at: Completed 02-09-PLAN.md
+last_updated: "2026-10-24T17:19:55.714Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 2952fbe9df24003b4b40f0d63f82bbbcaf94dc21
+state_head: cc621b9e8f60b1ed835a7eceb9590d0156540553
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 14
+  completed_plans: 15
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 (Window Control) — EXECUTING
-Plan: 9 of 13
+Plan: 10 of 13
 Status: Ready to execute
 Last activity: 2026-10-24 — Phase 2 execution started
 
@@ -70,6 +70,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P06 | 10 min | 2 tasks | 13 files |
 | Phase 2 P07 | 10 min | 2 tasks | 9 files |
 | Phase 2 P08 | 10 min | 3 tasks | 13 files |
+| Phase 2 P09 | 19 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,12 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-08: Tracked Windows footer segments after apps count rows (windows)
 - [Phase 2]: 02-08: NSAlert has no hasDestructiveAction; Freeze button carries it, Esc mapped to Cancel by a local key monitor
 - [Phase 2]: 02-08: a frozen app is resumed on willTerminate and by resumeRecordedPID() at every launch
+- [Phase 2]: 02-09: a known window's state comes only from CloseRule; a new window starts from its snapshot
+- [Phase 2]: 02-09: a .recheck triggers a follow-up refresh after 250 ms, at most 8 in a row (WindowServer drops a closed window ~0.3 s after AX reports -25202)
+- [Phase 2]: 02-09: windows that left AXWindows stay in the AXAppThread element cache while tracked, so each refresh probes them
+- [Phase 2]: 02-09: a quit app's windows are rechecked every 250 ms for 5 s, then after every refresh
+- [Phase 2]: 02-09: A3 confirmed on macOS 27 while locked: CGSSessionScreenIsLocked = 1, frontmost com.apple.loginwindow
+- [Phase 2]: 02-09: PaneFixtureApp frees a closed NSWindow; a kept NSWindow keeps its CG entry
 
 ### Pending Todos
 
@@ -151,6 +158,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T16:55:47.784Z
-Stopped at: Completed 02-08-PLAN.md
+Last session: 2026-10-24T17:19:55.587Z
+Stopped at: Completed 02-09-PLAN.md
 Resume file: None
