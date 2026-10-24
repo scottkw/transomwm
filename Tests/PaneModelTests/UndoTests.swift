@@ -143,19 +143,26 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
         #expect(newLeaf.raw >= issuedBefore)
     }
 
-    @Test func undoThatWouldPutAWindowOnTwoDesksThrowsAndChangesNothing() throws {
+    @Test func undoThatWouldPutAWindowOnTwoDesksThrowsAndDiscardsOnlyThatSnapshot() throws {
         var world = try worldWithDesks(k1, k2)
         var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(a, &desk, &ids) }
         try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(w, frame: frame) }
         try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.remove(w) }
         try world.edit(k2, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(w, frame: frame) }
         let before = world
-        let historyBefore = history
 
+        // The newest k1 snapshot has w floating, but w is on k2 now: it cannot be restored.
         #expect(throws: LayoutError.duplicateWindow(w)) { try world.undo(k1, history: &history) }
         #expect(world == before)
-        #expect(history == historyBefore)
         #expect(history.depth(for: k1) == 2)
         #expect(history.depth(for: k2) == 1)
+
+        // The stale entry is gone, so it no longer blocks the older ones.
+        #expect(try world.undo(k1, history: &history))
+        #expect(world[k1]?.tree.windows == [a])
+        #expect(world[k1]?.desktop.windows.isEmpty == true)
+        #expect(try world.undo(k1, history: &history))
+        #expect(world[k1] == Desk())
     }
 }

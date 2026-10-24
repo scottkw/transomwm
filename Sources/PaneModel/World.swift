@@ -96,18 +96,17 @@ public struct World: Codable, Equatable, Sendable {
     }
 
     /// Restores the newest snapshot of `key`'s desk. Returns false when there is none. `ids` is
-    /// never rewound, so NodeIDs are not reused. Throws, changing nothing, if the restored desk
-    /// would make the World invalid (for example a window that has since moved to another desk).
+    /// never rewound, so NodeIDs are not reused. If the restored desk would make the World invalid
+    /// (for example a window that has since moved to another desk), throws and leaves the World
+    /// unchanged, but the snapshot is still consumed so it cannot block the older ones.
     @discardableResult
     public mutating func undo(_ key: DeskKey, history: inout UndoHistory) throws(LayoutError) -> Bool {
         guard desks[key] != nil else { throw .deskNotFound(key) }
-        var nextHistory = history
-        guard let snapshot = nextHistory.pop(for: key) else { return false }
+        guard let snapshot = history.pop(for: key) else { return false }
         var candidate = self
         candidate.desks[key] = snapshot
         try candidate.validate()
         self = candidate
-        history = nextHistory
         return true
     }
 
