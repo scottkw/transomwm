@@ -104,6 +104,9 @@ None yet.
 - ⌥-hotkey restriction on macOS 15.0-15.1: sources conflict; ship a ⌃⌥ fallback regardless (affects Phase 3/4 hotkey defaults)
 - Phase 3: confirm notarisation works with dlopen of private frameworks in the minimal pipeline
 - Name "Pane": check for existing macOS apps before public release (Phase 9)
+- Phase 2 obligation (from Phase 1 review fix c403f45): `World.undo` returns `[WindowRef]?`; the engine must re-query the OS for every returned window and report its real state through `World.apply`
+- Phase 2 obligation: OS lifecycle events (open/close/minimise/fullscreen) go through `World.apply`, never `World.edit`, so they stay off the undo stack; `.closed` needs no valid desk key
+- Phase 1 work is on branch `gsd/phase-01-layout-model` (main is protected); merging to main is the developer's call
 
 ## Deferred Items
 
