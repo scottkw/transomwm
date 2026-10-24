@@ -144,4 +144,34 @@ private let tabRemovals: [(selected: Int, removed: Int, after: [WindowRef], sele
         #expect(t.node(n(1)) == h(2, 3, weights: [0.4, 0.6]))
         #expect(t.state(of: a) == nil)
     }
+
+    @Test func insertBesideANearMinimumSiblingClampsIt() throws {
+        // n/(n+1) scaling gives [0.01 * 2/3, 0.99 * 2/3, 1/3]; A is pinned to 0.01 and the others share 0.99.
+        var t = try tree(root: 1, [1: h(2, 3, weights: [0.01, 0.99]), 2: .panel(a), 3: .panel(b)])
+        var ids = IDSource(next: 10)
+        try t.insert(c, at: .right, of: n(3), ids: &ids)
+        guard case let .split(_, children, weights)? = t.node(n(1)) else {
+            Issue.record("root is not a split")
+            return
+        }
+        #expect(children.count == 3)
+        let free = 0.99 * 2 / 3 + 1.0 / 3
+        expectWeights(weights, [0.01, 0.99 * 2 / 3 / free * 0.99, 1.0 / 3 / free * 0.99], tolerance: 1e-12)
+        #expect(weights.allSatisfy { $0 >= LayoutTree.minWeight })
+        #expect(abs(weights.reduce(0, +) - 1) <= 1e-9)
+    }
+
+    @Test func mergePastMaxChildrenThrowsAndChangesNothing() throws {
+        // H[50 panels, V[B, H[60 panels]]] minus B would merge into one split of 109 children.
+        var nodes: [UInt64: Node] = [3: .panel(b)]
+        let outer = Array(UInt64(100)..<150), inner = Array(UInt64(200)..<260)
+        for raw in outer + inner { nodes[raw] = .panel(makeWindow(UInt32(raw))) }
+        nodes[1] = .split(axis: .horizontal, children: (outer + [2]).map(n), weights: Array(repeating: 1 / 51, count: 51))
+        nodes[2] = v(3, 4, weights: [0.5, 0.5])
+        nodes[4] = .split(axis: .horizontal, children: inner.map(n), weights: Array(repeating: 1 / 60, count: 60))
+        var t = try tree(root: 1, nodes)
+        let before = t
+        #expect(throws: LayoutError.splitFull(n(1), limit: LayoutTree.maxChildren)) { try t.remove(b) }
+        #expect(t == before)
+    }
 }
