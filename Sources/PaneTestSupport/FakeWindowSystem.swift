@@ -80,23 +80,85 @@ public actor FakeWindowSystem: WindowSystem {
         clock = now
     }
 
-    public func addApp(_ app: FakeApp) {}
-    public func open(_ window: FakeWindow) {}
-    public func update(_ id: UInt32, _ change: @Sendable (inout FakeWindow) -> Void) {}
-    public func setHung(pid: Int32, _ hung: Bool) {}
-    public func setLocked(_ locked: Bool) {}
-    public func terminate(pid: Int32) {}
-    public func advance(by duration: Duration) {}
-    public func refresh(pid: Int32) {}
-    public func refreshAll() {}
-
-    public func inventory() async -> WindowInventory {
-        WindowInventory(displays: [], windows: [])
+    public func addApp(_ app: FakeApp) {
+        apps[app.pid] = app
     }
 
-    public func perform(_ commands: [WindowCommand]) async {}
+    public func open(_ window: FakeWindow) {
+        windows[window.id] = window
+    }
+
+    public func update(_ id: UInt32, _ change: @Sendable (inout FakeWindow) -> Void) {
+        guard var window = windows[id] else { return }
+        change(&window)
+        windows[id] = window
+    }
+
+    public func setHung(pid: Int32, _ hung: Bool) {
+        apps[pid]?.hung = hung
+    }
+
+    public func setLocked(_ locked: Bool) {
+        self.locked = locked
+    }
+
+    /// The process is gone: its windows leave both AX (invalid) and the CG list.
+    public func terminate(pid: Int32) {
+        apps[pid]?.terminated = true
+        for (id, window) in windows where window.pid == pid {
+            windows[id]?.axValid = false
+            windows[id]?.inCGList = false
+        }
+    }
+
+    public func advance(by duration: Duration) {
+        clock += duration
+    }
+
+    /// Builds this app's observation from the simulation and feeds it to the tracker.
+    public func refresh(pid: Int32) {
+        guard let app = apps[pid], !app.terminated else { return }
+        let observation: AppObservation
+        if app.hung {
+            observation = AppObservation(pid: pid, bundleID: app.bundleID, appHidden: app.hidden, windows: [],
+                                         listFailure: .cannotComplete, duration: app.responseDelay)
+        } else {
+            let listed = windows.values.filter { $0.pid == pid && $0.listedInAX }.sorted { $0.id < $1.id }
+            observation = AppObservation(
+                pid: pid, bundleID: app.bundleID, appHidden: app.hidden,
+                windows: listed.map { window in
+                    var snapshot = window.snapshot
+                    snapshot.frame = window.frame
+                    return WindowObservation(
+                        windowID: window.id, idSource: .axPrivate,
+                        read: window.axValid ? .success(snapshot) : .failure(.invalidElement), title: window.title
+                    )
+                },
+                duration: app.responseDelay
+            )
+        }
+        let cgWindows = windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
+            CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
+        }
+        let context = ObservationContext(cgWindows: cgWindows, sessionActive: !locked, now: clock)
+        for event in tracker.ingest(observation, context: context) {
+            continuation.yield(event)
+        }
+    }
+
+    public func refreshAll() {
+        for pid in apps.keys.sorted() { refresh(pid: pid) }
+    }
+
+    public func inventory() async -> WindowInventory {
+        WindowInventory(displays: [], windows: tracker.sortedWindows(), sessionPaused: locked, initialRefreshComplete: true)
+    }
+
+    public func perform(_ commands: [WindowCommand]) async {
+        performed += commands
+    }
 
     public func windowInfo(_ window: WindowRef) async -> WindowInfo? {
-        nil
+        tracker.info(for: window.identity)
     }
 }
