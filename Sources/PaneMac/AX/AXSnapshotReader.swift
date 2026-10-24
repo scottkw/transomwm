@@ -17,12 +17,14 @@ public nonisolated enum AXSnapshotReader {
     /// One app's windows, read on the calling thread (for `pane-dump`; the live system reads on the app's thread).
     public static func observeApp(pid: Int32, bundleID: String) -> AppObservation {
         let app = AXUIElementCreateApplication(pid)
-        return observeApp(app, pid: pid, bundleID: bundleID, hidden: isHidden(app)).observation
+        // Never cancelled, so never nil.
+        return observeApp(app, pid: pid, bundleID: bundleID, hidden: isHidden(app))!.observation
     }
 
     /// Also returns the listed window elements by window ID (nil when `AXWindows` failed), for the app thread's cache.
-    static func observeApp(_ app: AXUIElement, pid: Int32, bundleID: String, hidden: Bool)
-        -> (observation: AppObservation, elements: [UInt32: AXUIElement]?)
+    /// `isCancelled` is checked between AX calls; once it returns true the read stops and returns nil.
+    static func observeApp(_ app: AXUIElement, pid: Int32, bundleID: String, hidden: Bool, isCancelled: () -> Bool = { false })
+        -> (observation: AppObservation, elements: [UInt32: AXUIElement]?)?
     {
         let start = ContinuousClock.now
         var value: CFTypeRef?
@@ -36,11 +38,13 @@ public nonisolated enum AXSnapshotReader {
                                    listFailure: .attributeUnsupported, duration: start.duration(to: .now)), nil)
         }
         var byID: [UInt32: AXUIElement] = [:]
-        let windows = elements.map { element in
+        var windows: [WindowObservation] = []
+        for element in elements {
+            if isCancelled() { return nil }
             let (snapshot, title) = read(element)
             let id = windowID(of: element)
             if let id { byID[id] = element }
-            return WindowObservation(windowID: id, idSource: .axPrivate, read: snapshot, title: title)
+            windows.append(WindowObservation(windowID: id, idSource: .axPrivate, read: snapshot, title: title))
         }
         return (AppObservation(pid: pid, bundleID: bundleID, appHidden: hidden, windows: windows, duration: start.duration(to: .now)), byID)
     }

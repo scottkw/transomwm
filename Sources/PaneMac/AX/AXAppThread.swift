@@ -101,13 +101,40 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     }
 
     /// Reads the app's windows on this thread and keeps the element cache and its registrations in step.
+    /// `duration` covers the whole job. A stop request ends the job between AX calls (nil) instead of
+    /// letting a hung app time out on every remaining window.
     func observe() async -> AppObservation? {
-        await perform { [self] app in
-            let (observation, elements) = AXSnapshotReader.observeApp(app, pid: pid, bundleID: bundleID, hidden: AXSnapshotReader.isHidden(app))
+        await perform { [self] app -> AppObservation? in
+            guard !isStopped else { return nil }
+            let start = ContinuousClock.now
+            let hidden = AXSnapshotReader.isHidden(app)
+            guard !isStopped,
+                  let (observation, elements) = AXSnapshotReader.observeApp(app, pid: pid, bundleID: bundleID, hidden: hidden, isCancelled: { self.isStopped })
+            else { return nil }
             if let elements { updateWindows(elements) }
-            return observation
-        }
+            var timed = observation
+            timed.duration = start.duration(to: .now)
+            return timed
+        } ?? nil
     }
+
+    /// Reads only the app element's AXRole: the cheap check that a degraded app answers again (D-16).
+    func probe() async -> (JobOutcome, Duration) {
+        await perform { app -> (JobOutcome, Duration) in
+            let start = ContinuousClock.now
+            var value: CFTypeRef?
+            let outcome: JobOutcome =
+                switch AXUIElementCopyAttributeValue(app, kAXRoleAttribute as CFString, &value) {
+                case .success: .success
+                case .cannotComplete: .cannotComplete
+                default: .otherFailure
+                }
+            return (outcome, start.duration(to: .now))
+        } ?? (.otherFailure, .zero)
+    }
+
+    /// The job token: true once `stop()` was called.
+    private var isStopped: Bool { stopped.withLock { $0 } }
 
     /// Thread-confined. A window that left `AXWindows` loses its registrations; it is re-added if it returns.
     private func updateWindows(_ current: [UInt32: AXUIElement]) {
