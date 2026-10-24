@@ -1,5 +1,17 @@
 import PaneModel
 
+/// Windows an undo of `key`'s desk brought back that no desk held before it. Their states are the
+/// snapshot's and may be stale until re-queried (D-11).
+public struct RevivedWindows: Equatable, Sendable {
+    public let key: DeskKey
+    public let windows: [WindowRef]
+
+    public init(key: DeskKey, windows: [WindowRef]) {
+        self.key = key
+        self.windows = windows
+    }
+}
+
 /// The one path from OS lifecycle facts into the layout model (D-10). Every change goes through
 /// `World.apply`, never `World.edit`, so no OS fact ever lands on the user's undo stack. No state of its own.
 public enum LifecycleSync {
@@ -24,4 +36,16 @@ public enum LifecycleSync {
             return false
         }
     }
+
+    public static func undo(_ key: DeskKey, world: inout World, history: inout UndoHistory) throws(LayoutError) -> RevivedWindows? {
+        nil
+    }
+
+    public static func requery(_ revived: RevivedWindows, using system: any WindowSystem) async -> [(WindowRef, WindowState)] {
+        []
+    }
+
+    public static func applyRequeried(
+        _ states: [(WindowRef, WindowState)], on key: DeskKey, world: inout World, history: inout UndoHistory
+    ) throws(LayoutError) {}
 }

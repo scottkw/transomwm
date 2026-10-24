@@ -52,6 +52,18 @@ private func undoAllNeverRevives(_ window: WindowRef, world: inout World, histor
     }
 }
 
+/// A fake that knows `known` (one standard window per ID, all present after the initial sweep), with
+/// `minimised` minimised and refreshed.
+private func fake(knowing known: [WindowRef], minimised: [WindowRef] = []) async -> FakeWindowSystem {
+    let fake = FakeWindowSystem()
+    await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+    for window in known { await fake.open(.standard(id: window.windowID, pid: pid, frame: frame)) }
+    await fake.refreshAll()
+    for window in minimised { await fake.update(window.windowID) { $0.snapshot.minimized = true } }
+    await fake.refreshAll()
+    return fake
+}
+
 @Suite struct LifecycleSyncTests {
     // MARK: Task 1 — events reach the model only through World.apply
 
@@ -155,5 +167,67 @@ private func undoAllNeverRevives(_ window: WindowRef, world: inout World, histor
         #expect(try !LifecycleSync.handle(event, world: &world, history: &history))
         #expect(world == worldBefore)
         #expect(history == historyBefore)
+    }
+
+    // MARK: Task 2 — undo re-queries every revived window
+
+    @Test func undoReviveOfAMinimisedWindowEndsAbsent() async throws {
+        let system = await fake(knowing: [a, b], minimised: [b])
+        #expect(await system.windowInfo(b)?.state == .absent)
+        var history = UndoHistory()
+        var world = try world([a, b], history: &history)
+        try userRemoves(b, from: &world, history: &history)
+
+        let revived = try LifecycleSync.undo(key, world: &world, history: &history)
+        #expect(revived == RevivedWindows(key: key, windows: [b]))
+        let states = await LifecycleSync.requery(try #require(revived), using: system)
+        #expect(states.map(\.0) == [b])
+        #expect(states.map(\.1) == [.absent])
+        try LifecycleSync.applyRequeried(states, on: key, world: &world, history: &history)
+        #expect(world[key]?.state(of: b) == .absent)
+    }
+
+    @Test func undoReviveOfAWindowTheSystemNoLongerKnowsClosesIt() async throws {
+        let system = await fake(knowing: [a])
+        var history = UndoHistory()
+        var world = try world([a, b], history: &history)
+        try userRemoves(b, from: &world, history: &history)
+
+        let revived = try #require(try LifecycleSync.undo(key, world: &world, history: &history))
+        #expect(revived.windows == [b])
+        #expect(onAnyDesk(b, world))
+        let states = await LifecycleSync.requery(revived, using: system)
+        #expect(states.map(\.0) == [b])
+        #expect(states.map(\.1) == [.closed])
+        try LifecycleSync.applyRequeried(states, on: key, world: &world, history: &history)
+        #expect(!onAnyDesk(b, world))
+        try undoAllNeverRevives(b, world: &world, history: &history)
+    }
+
+    @Test func undoWithNothingToUndoReturnsNil() throws {
+        var history = UndoHistory()
+        var world = World()
+        try world.addDesk(key)
+        #expect(try LifecycleSync.undo(key, world: &world, history: &history) == nil)
+    }
+
+    @Test func undoThatRevivesNothingReturnsAnEmptyListAndApplyingItChangesNothing() throws {
+        var history = UndoHistory()
+        var world = try world([a, b], history: &history)
+
+        let revived = try LifecycleSync.undo(key, world: &world, history: &history)
+        #expect(revived == RevivedWindows(key: key, windows: []))
+        #expect(world[key]?.contains(b) == false)
+        let (worldBefore, historyBefore) = (world, history)
+        try LifecycleSync.applyRequeried([], on: key, world: &world, history: &history)
+        #expect(world == worldBefore)
+        #expect(history == historyBefore)
+    }
+
+    @Test func requeryPreservesTheRevivedOrder() async {
+        let system = await fake(knowing: [a, b], minimised: [b])
+        let states = await LifecycleSync.requery(RevivedWindows(key: key, windows: [c, a, b]), using: system)
+        #expect(states.map(\.0) == [c, a, b])
+        #expect(states.map(\.1) == [.closed, .present, .absent])
     }
 }
