@@ -52,6 +52,10 @@ extension World {
                 throw PersistenceError.corrupt("schema \(version) file is not a JSON object")
             }
             try migrations.migrate(&object, from: version, to: currentSchemaVersion)
+            // data(withJSONObject:) raises an NSException, which Swift cannot catch, for a non-JSON value.
+            guard JSONSerialization.isValidJSONObject(object) else {
+                throw PersistenceError.corrupt("migration to schema \(currentSchemaVersion) produced a non-JSON value")
+            }
             do {
                 current = try JSONSerialization.data(withJSONObject: object)
             } catch {

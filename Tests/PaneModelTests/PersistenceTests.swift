@@ -292,6 +292,18 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         }
     }
 
+    @Test func migrationThatProducesANonJSONValueIsCorruptNotACrash() {
+        // JSONSerialization raises an uncatchable NSException for a Date; decode must refuse first.
+        let chain = MigrationChain(steps: [0: { object in object["stamp"] = Date() }])
+        let v0 = Data(#"{"desks":[],"ids":{"next":1},"schemaVersion":0}"#.utf8)
+        do {
+            _ = try World.decode(from: v0, migrations: chain)
+            Issue.record("expected corrupt")
+        } catch {
+            guard case .corrupt = error else { Issue.record("expected corrupt, got \(error)"); return }
+        }
+    }
+
     @Test func olderFileDecodesThroughTheChain() throws {
         // A hypothetical schema 0 that called desks "spaces".
         let v1 = try richWorld().encoded()
