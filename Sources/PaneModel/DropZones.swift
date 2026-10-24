@@ -50,5 +50,15 @@ public enum DropZones {
 }
 
 extension LayoutTree {
-    public mutating func applyDrop(_ target: DropTarget, window: WindowRef, ids: inout IDSource) throws(LayoutError) {}
+    /// Turns a hit-test result into its edit (D-20). A plain mapping: the edits' own checks and
+    /// all-or-nothing commit apply, so a target gone stale since the hit test throws and changes nothing.
+    public mutating func applyDrop(_ target: DropTarget, window: WindowRef, ids: inout IDSource) throws(LayoutError) {
+        switch target {
+        case .emptyLayout: try insertRoot(window, ids: &ids)
+        case let .tile(node, .edge(edge)): try insert(window, at: edge, of: node, ids: &ids)
+        case let .tile(node, .center): try group(window, into: node)
+        case let .layoutEdge(edge):
+            if let root { try insert(window, at: edge, of: root, ids: &ids) } else { try insertRoot(window, ids: &ids) }
+        }
+    }
 }

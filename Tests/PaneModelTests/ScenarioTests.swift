@@ -103,8 +103,8 @@ private func expectRoundTrip(_ world: World) throws {
 
         // 2. Drop B on the right band of A.
         let rectA = try #require(layout().windowRects[a])
-        let second = try #require(DropZones.target(
-            at: Point(x: rectA.minX + rectA.width * 0.9, y: rectA.midY), in: area, tree: desk().tree, resolution: layout()))
+        let bandPoint = Point(x: rectA.minX + rectA.width * 0.9, y: rectA.midY)
+        let second = try #require(DropZones.target(at: bandPoint, in: area, tree: desk().tree, resolution: layout()))
         #expect(second == .tile(leafA, .edge(.right)))
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in try desk.tree.applyDrop(second, window: b, ids: &ids) }
         let leafB = try #require(desk().tree.leaf(containing: b))
@@ -112,8 +112,8 @@ private func expectRoundTrip(_ world: World) throws {
 
         // 3. Drop C on the centre of B: a tab group [B, C].
         let rectB = try #require(layout().windowRects[b])
-        let third = try #require(DropZones.target(
-            at: Point(x: rectB.midX, y: rectB.midY), in: area, tree: desk().tree, resolution: layout()))
+        let centreB = Point(x: rectB.midX, y: rectB.midY)
+        let third = try #require(DropZones.target(at: centreB, in: area, tree: desk().tree, resolution: layout()))
         #expect(third == .tile(leafB, .center))
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in try desk.tree.applyDrop(third, window: c, ids: &ids) }
         #expect(try desk().tree.node(leafB) == .tabs(windows: [b, c], selected: 1))
