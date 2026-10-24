@@ -42,19 +42,27 @@ Component Inventory: omitted, because `Tool: none` (no design-system package to 
 
 ## Spacing Scale
 
-All values are points (pt) and multiples of 4. They follow macOS HIG window and control spacing.
+All values are points (pt). The token scale is the standard 4 / 8 / 16 / 24 / 32 / 48 / 64 set. The only off-scale values are the two macOS HIG metrics in Exceptions below, and they may be used only where listed.
 
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4pt | Icon-to-text gap inside a table cell (app icon → app name); gap between a badge and its neighbour |
 | sm | 8pt | Gap between a status icon and its caption (spinner + "Waiting for access…"); vertical gap between numbered steps; inner padding of table badges (horizontal 8, vertical 4 → see exceptions) |
-| md | 12pt | Gap between push buttons in a button row (HIG); padding inside a `GroupBox` callout; gap between heading and body |
-| lg | 16pt | Gap between content blocks in the setup window (hero → steps → status row → callout) |
-| xl | 20pt | Window content inset on all four edges for the setup window (macOS standard window margin) |
-| 2xl | 24pt | Gap above the bottom button row in the setup window |
-| 3xl | 32pt | Not used in Phase 2 (reserved) |
+| md | 16pt | Gap between content blocks in the setup window (hero → steps → status row → callout) |
+| lg | 24pt | Gap above the bottom button row in the setup window |
+| xl | 32pt | Not used in Phase 2 (reserved) |
+| 2xl | 48pt | Not used in Phase 2 (reserved) |
+| 3xl | 64pt | Not used in Phase 2 (reserved) |
 
 Exceptions:
+- **20pt: macOS window content margin (HIG standard).** It is allowed only as the setup window's content inset on all four edges. It is not used anywhere else, and Tracked Windows uses system table insets.
+- **12pt: macOS push-button gap (HIG standard).** It is allowed only in these four places:
+  - between push buttons in a button row (setup window)
+  - as the inner padding of a `GroupBox` callout
+  - as the gap between a heading and its body in the setup window and callouts
+  - as the horizontal inset of the Tracked Windows footer bar
+
+  It is never used as a general gap.
 - **Badges** ("Excluded", "Not responding") use 8pt horizontal and 4pt vertical padding with a 4pt corner radius. That is still on the 4-pt grid and is listed here only because it is the one custom-styled element.
 - **Fixed sizes.** The status-item glyph is a 16pt SF Symbol, regular weight. The setup-window hero symbol is 48pt. App icons in table rows are 16×16pt. These are glyph sizes, not spacing.
 - **System metrics.** Table row height, menu item height, control heights and title-bar height are system-drawn. Never override them.
