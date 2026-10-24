@@ -7,9 +7,9 @@
 
 ### Layout Model
 
-- [ ] **MODEL-01**: Layout is a nested tree of splits (horizontal/vertical) whose children have fractional sizes that always sum to 1
+- [x] **MODEL-01**: Layout is a nested tree of splits (horizontal/vertical) whose children have fractional sizes that always sum to 1
 - [ ] **MODEL-02**: A window can be inserted beside any tile on any of its four edges, creating or extending a split
-- [ ] **MODEL-03**: Removing a window gives its space back and collapses single-child splits automatically
+- [x] **MODEL-03**: Removing a window gives its space back and collapses single-child splits automatically
 - [ ] **MODEL-04**: Tile rects are computed for a given area with gaps, respecting each window's minimum size without overlap
 - [ ] **MODEL-05**: Each desk has a floating Desktop layer that holds non-docked windows
 - [ ] **MODEL-06**: A tile can hold a tab group of several windows with one selected
@@ -132,9 +132,9 @@ Populated by the roadmapper on 2026-10-23.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MODEL-01 | Phase 1 | Pending |
+| MODEL-01 | Phase 1 | Complete |
 | MODEL-02 | Phase 1 | Pending |
-| MODEL-03 | Phase 1 | Pending |
+| MODEL-03 | Phase 1 | Complete |
 | MODEL-04 | Phase 1 | Pending |
 | MODEL-05 | Phase 1 | Pending |
 | MODEL-06 | Phase 1 | Pending |

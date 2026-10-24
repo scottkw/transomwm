@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Layout Model
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-10-24T04:55:46.858Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-10-24T05:05:02.390Z"
 last_activity: 2026-10-23
 last_activity_desc: Phase 1 execution started
-state_head: de017e3317077786774eceaa61ae2d752d7f8902
+state_head: e36cebebb77e984585d473ab08103a1dc3a1715f
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-23)
 ## Current Position
 
 Phase: 1 (Layout Model) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-10-23 — Phase 1 execution started
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 1 P01 | 6 min | 2 tasks | 10 files |
+| Phase 1 P02 | 5 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Recent decisions affecting current work:
 - [Phase 1]: LayoutTree storage is public internal(set) so TreeEdits.swift can write it; read-only outside PaneModel
 - [Phase 1]: Persisted World JSON: sortedKeys, states/desks as sorted record arrays, NodeID as bare number / decimal key; duplicate records rejected
 - [Phase 1]: Phase 1 commits live on branch gsd/phase-01-layout-model because main is protected
+- [Phase 1]: normalize() throws splitFull when a same-axis merge would exceed maxChildren; the edit rolls back
+- [Phase 1]: normalize() leaves already-normalised weights bit-identical, so resizeBoundary can call it and keep D-07
 
 ### Pending Todos
 
@@ -99,6 +102,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T04:55:46.836Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-10-24T05:05:02.375Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
