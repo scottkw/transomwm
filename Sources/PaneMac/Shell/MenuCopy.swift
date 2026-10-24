@@ -24,11 +24,26 @@ nonisolated public enum MenuCopy {
         name.count <= maxAppNameLength ? name : name.prefix(maxAppNameLength) + "\u{2026}"
     }
 
-    public static func permissionHeader(_ phase: PermissionPhase) -> String? { nil }
+    /// Item 1 of the menu while not ready; nil when ready (the tracking header shows instead).
+    public static func permissionHeader(_ phase: PermissionPhase) -> String? {
+        switch phase {
+        case .ready: nil
+        case .notTrusted, .waitingForGrant: "Accessibility access needed"
+        case .probing: "Checking Accessibility access\u{2026}"
+        // A reset only starts from a stale form.
+        case .staleTrustedButFailing, .resetting: "Accessibility access isn't working"
+        }
+    }
 
-    public static func permissionItem(stale: Bool) -> String { "" }
+    public static func permissionItem(stale: Bool) -> String {
+        stale ? "Fix Accessibility Access\u{2026}" : "Grant Accessibility Access\u{2026}"
+    }
 
-    public static func resetFailedBody(code: Int32, appName: String) -> String { "" }
+    /// Callout E body (UI-SPEC error state).
+    public static func resetFailedBody(code: Int32, appName: String) -> String {
+        "tccutil stopped with code \(code). In System Settings \u{25B8} Privacy & Security \u{25B8} Accessibility, "
+            + "select \u{201C}\(appName)\u{201D}, click the minus button, then turn \(appName) on again."
+    }
 
     private static func count(_ n: Int, _ noun: String) -> String {
         n == 1 ? "1 \(noun)" : "\(n) \(noun)s"
