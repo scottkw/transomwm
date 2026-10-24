@@ -9,9 +9,19 @@ public struct Desk: Codable, Equatable, Sendable {
         self.desktop = desktop
     }
 
-    public func contains(_ window: WindowRef) -> Bool { false }
+    /// True when `window` is docked in the tree or floats on the Desktop layer.
+    public func contains(_ window: WindowRef) -> Bool {
+        tree.state(of: window) != nil || desktop.contains(window)
+    }
 
-    public func validate() throws(LayoutError) {}
+    /// Tree and Desktop layer are each valid, and no window is both docked and floating.
+    public func validate() throws(LayoutError) {
+        try tree.validate()
+        try desktop.validate()
+        if let both = desktop.windows.first(where: { tree.state(of: $0.window) != nil }) {
+            throw .duplicateWindow(both.window)
+        }
+    }
 }
 
 /// All desks, keyed by display (and optionally Space), plus the ID source their node IDs come from.
@@ -32,12 +42,12 @@ public struct World: Codable, Equatable, Sendable {
         try validate()
     }
 
-    /// Every tree is valid, no window is on two desks, and every NodeID came from `ids`.
+    /// Every desk is valid, no window (docked or floating) is on two desks, and every NodeID came from `ids`.
     public func validate() throws(LayoutError) {
         var seen: Set<WindowIdentity> = []
         for (_, desk) in desks.sorted(by: { $0.key < $1.key }) {
-            try desk.tree.validate()
-            for window in desk.tree.windows where !seen.insert(window.identity).inserted {
+            try desk.validate()
+            for window in desk.tree.windows + desk.desktop.windows.map(\.window) where !seen.insert(window.identity).inserted {
                 throw .duplicateWindow(window)
             }
             if let id = desk.tree.nodes.keys.first(where: { $0.raw >= ids.next }) {
