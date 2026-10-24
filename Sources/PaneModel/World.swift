@@ -64,18 +64,20 @@ public struct World: Codable, Equatable, Sendable {
         desks = [:]
     }
 
+    /// The load path (`init(from:)` uses it). Besides `validate()`, requires `ids` to have half its range
+    /// left, which no real session approaches, so a hostile file cannot load with an ID source about to
+    /// run out. Edits are not held to this bound: they stop only where `IDSource.make()` throws.
     public init(ids: IDSource, desks: [DeskKey: Desk]) throws(LayoutError) {
+        guard ids.next <= UInt64.max / 2 else {
+            throw .invariantViolated("ID source \(ids.next) is too close to exhaustion")
+        }
         self.ids = ids
         self.desks = desks
         try validate()
     }
 
-    /// Every desk is valid, no window (docked or floating) is on two desks, every NodeID came from `ids`,
-    /// and `ids` has headroom left, so a hostile file cannot load with an ID source that is about to run out.
+    /// Every desk is valid, no window (docked or floating) is on two desks, and every NodeID came from `ids`.
     public func validate() throws(LayoutError) {
-        guard ids.next <= UInt64.max - UInt64(LayoutTree.maxNodes) * 2 else {
-            throw .invariantViolated("ID source \(ids.next) is too close to exhaustion")
-        }
         var seen: Set<WindowIdentity> = []
         for (_, desk) in desks.sorted(by: { $0.key < $1.key }) {
             try desk.validate()

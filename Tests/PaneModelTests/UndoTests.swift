@@ -144,6 +144,23 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
         #expect(newLeaf.raw >= issuedBefore)
     }
 
+    @Test func aWorldAtTheLoadHeadroomBoundStillEditsUntilTheIDSourceRunsOut() throws {
+        // Headroom is a load-time gate only (review iteration 2, WR-02); edits stop only where make() does.
+        var world = try World(ids: IDSource(next: UInt64.max / 2), desks: [k1: Desk()])
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(a, &desk, &ids) }
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+            ids = IDSource(next: .max - 2)
+            try dock(b, &desk, &ids)
+        }
+        #expect(world.ids.next == .max)
+        let before = world
+        #expect(throws: LayoutError.invariantViolated("ID source exhausted")) {
+            try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(c, &desk, &ids) }
+        }
+        #expect(world == before)
+    }
+
     // MARK: Lifecycle facts are not user edits (WR-03)
 
     @Test func lifecycleChangesUseNoUndoLevelsAndUndoKeepsTheCurrentStates() throws {

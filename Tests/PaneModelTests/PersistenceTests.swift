@@ -98,6 +98,7 @@ private let corruptCorpus: [CorruptCase] = [
     CorruptCase(name: "NodeID >= ids.next", data: worldJSON([validPair], next: 3), invalidLayout: true),
     CorruptCase(name: "ids.next = UInt64.max", data: worldJSON([], next: .max), invalidLayout: true),
     CorruptCase(name: "ids.next within maxNodes of exhaustion", data: worldJSON([validPair], next: .max - 100), invalidLayout: true),
+    CorruptCase(name: "ids.next one past the load headroom bound", data: worldJSON([validPair], next: .max / 2 + 1), invalidLayout: true),
     CorruptCase(name: "floating frame width -1", data: worldJSON([
         deskJSON(root: nil, nodes: [:], windows: [], floating: [floatingJSON(7, width: "-1")]),
     ]), invalidLayout: true),
