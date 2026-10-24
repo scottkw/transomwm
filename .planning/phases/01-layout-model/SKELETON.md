@@ -5,9 +5,9 @@
 
 ## Capability Proven End-to-End
 
-A developer runs `swift test` and sees one window docked beside another, resolved into exact whole-point tile rects with a gap, stored in a desk keyed by display UUID, and round-tripped through versioned JSON byte for byte. The same `swift test` run fails if the model or engine library imports a UI framework.
+A developer runs `swift test` and sees one window docked beside another, resolved into exact whole-point tile rects with a gap, stored in a desk keyed by display UUID, and round-tripped through versioned JSON byte for byte. From Plan 06, the same `swift test` run fails if the model or engine library imports a UI framework.
 
-This phase builds a headless Swift library, not an app. The template's layers map like this: there is **no database, no routing, no UI and no deployment** in Phase 1, and none are invented here. The "full stack" of this phase is: package manifest → value types → tree edit → resolve → World/desk → JSON persistence → tests → no-AppKit check → CI workflow file.
+This phase builds a headless Swift library, not an app. The template's layers map like this: there is **no database, no routing, no UI and no deployment** in Phase 1, and none are invented here. The "full stack" of this phase is: package manifest → value types → tree edit → resolve → World/desk → JSON persistence → tests (Plan 01 tracer), then PaneEngine target → no-AppKit check → CI workflow file (Plan 06).
 
 ## Architectural Decisions
 
@@ -15,7 +15,7 @@ This phase builds a headless Swift library, not an app. The template's layers ma
 |---|---|---|
 | Language / toolchain | Swift 6 language mode, `swift-tools-version: 6.2`, `.macOS(.v14)` (D-21) | Builds on GitHub `macos-26` runners (Xcode 26.6) and locally on Xcode 27.1 / Swift 6.4 |
 | Build system | One SwiftPM `Package.swift`, no dependencies | `swift build` / `swift test` run headless with no Xcode project; an XcodeGen app wrapper comes in Phase 3 |
-| Module layering | `PaneModel` (Foundation only) ← `PaneEngine` (draft `WindowSystem` protocol) ← later `PaneMac`/`PaneApp` (D-22) | Dependency direction is strictly downward; Model and Engine never import AppKit/Cocoa/SwiftUI, so ~70% of logic tests headless |
+| Module layering | `PaneModel` (Foundation only, Plan 01) ← `PaneEngine` (draft `WindowSystem` protocol, Plan 06) ← later `PaneMac`/`PaneApp` (D-22) | Dependency direction is strictly downward; Model and Engine never import AppKit/Cocoa/SwiftUI, so ~70% of logic tests headless |
 | Layout data model | Flat value tree: `LayoutTree { root: NodeID?, nodes: [NodeID: Node], states }`, `Node = split(axis, children, weights) \| panel(WindowRef) \| tabs(windows, selected)` (D-01) | Value snapshots give cheap undo, tweens and Codable; whole-tree equality in tests |
 | Identity | `NodeID` = monotonic `UInt64` from `IDSource` (D-02); `WindowRef` = identity `{windowID, pid, bundleID}` + hints `{titleHint, axIdentifier?, creationOrder}`, equality by identity only (D-16) | Readable, stable across persistence; hints allow re-matching after relaunch (Phase 8) without a title change splitting one window into two |
 | Weights | Normalised fractions per n-ary split, sum 1, clamp ≥ 0.01 (D-04..D-07) | Resolution-independent, which the zoom camera needs |
@@ -26,16 +26,16 @@ This phase builds a headless Swift library, not an app. The template's layers ma
 | Undo | Transactional `World.edit` funnel pushing a desk snapshot, 50 per desk; history is session state, not persisted (D-18) | Every layout change is undoable; failed edits leave no trace |
 | Persistence | JSON with `schemaVersion: 1`, sorted keys and sorted arrays (deterministic bytes), validate on decode, newer version refused, migration chain for older ones, 16 MiB cap (D-19) | Exact round-trip; corrupt files throw instead of crashing; future format changes go through migrations |
 | Testing | Swift Testing (`import Testing`), example tests plus seeded hand-rolled fuzz loops | Headless, no TCC permissions needed |
-| CI | `scripts/check-no-appkit.sh` (also run inside `swift test` by `NoAppKitTests`) + `.github/workflows/ci.yml` on `macos-26` (D-23) | No git remote yet, so the local script inside `swift test` is the enforced check; the workflow runs once a remote exists |
+| CI | `scripts/check-no-appkit.sh` (also run inside `swift test` by `NoAppKitTests`) + `.github/workflows/ci.yml` on `macos-26` (D-23), built in Plan 06 | No git remote yet, so the local script inside `swift test` is the enforced check; the workflow runs once a remote exists |
 | Directory layout | `Sources/PaneModel/*.swift`, `Sources/PaneEngine/WindowSystem.swift`, `Tests/PaneModelTests/*.swift`, `scripts/`, `.github/workflows/` | Matches research ARCHITECTURE.md "Recommended Project Structure" |
 
 ## Stack Touched in Phase 1
 
-- [x] Project scaffold: `Package.swift`, Swift 6 build, Swift Testing runner (Plan 01)
+- [x] Project scaffold: `Package.swift`, Swift 6 build, Swift Testing runner (Plan 01); `PaneEngine` target, no-AppKit check and CI workflow (Plan 06)
 - [ ] Routing: not applicable. Pane is a menu-bar agent with no routes; `pane://` URL handling starts in Phase 3
 - [ ] Database: not applicable. The persistence layer is versioned JSON produced and parsed by `World.encoded()` / `World.decode(from:)`; the real write is the encode and the real read is the decode, both exercised by the skeleton test. Writing the file to Application Support starts in Phase 3
 - [ ] UI: not applicable. There is no UI in Phase 1; the "interaction" is a test docking a window via a tree edit, and from Plan 03 a drop-zone hit test standing in for a pointer drop
-- [x] Deployment / run command: `swift test` from the repo root is the documented full-stack run; `.github/workflows/ci.yml` runs the same on `macos-26` once a remote exists
+- [x] Deployment / run command: `swift test` from the repo root is the documented full-stack run; `.github/workflows/ci.yml` (Plan 06) runs the same on `macos-26` once a remote exists
 
 ## Out of Scope (Deferred to Later Slices)
 
