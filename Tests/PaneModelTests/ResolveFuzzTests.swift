@@ -98,6 +98,23 @@ private func fitsAll(_ tree: LayoutTree, _ windows: Set<WindowRef>, _ mins: [Win
                 let total = lengths.reduce(gap * Double(lengths.count - 1), +)
                 check(total == (axis == .horizontal ? rect.width : rect.height), "P7 split \(id) lengths \(lengths)")
             }
+            // P9: in a placed split where no child's weighted share is below its minimum (so nothing is
+            // pinned), every child but the last gets its weighted share of the length, to within rounding.
+            for (id, rect) in resolution.nodeRects {
+                guard case let .split(axis, children, weights)? = tree.nodes[id] else { continue }
+                let horizontal = axis == .horizontal
+                let parts = zip(children, weights).compactMap { child, weight -> (length: Double, weight: Double, min: Double)? in
+                    guard let r = resolution.nodeRects[child], let size = need(tree, child, placed, mins, gap) else { return nil }
+                    return (horizontal ? r.width : r.height, weight, horizontal ? size.width : size.height)
+                }
+                let available = (horizontal ? rect.width : rect.height) - gap * Double(parts.count - 1)
+                let weight = parts.reduce(0) { $0 + $1.weight }
+                let exact = parts.map { available * $0.weight / weight }
+                guard zip(exact, parts).allSatisfy({ $0 >= $1.min }) else { continue }
+                for (share, part) in zip(exact, parts).dropLast() {
+                    check(abs(part.length - share) <= 1, "P9 split \(id) length \(part.length) is not its weighted share \(share)")
+                }
+            }
             // P8: maximality — no unfit window could have joined the placed ones.
             for window in resolution.unfit {
                 check(!fitsAll(tree, placed.union([window]), mins, gap, in: inner), "P8 \(window) would have fit")

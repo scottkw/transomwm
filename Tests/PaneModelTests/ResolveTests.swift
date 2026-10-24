@@ -148,6 +148,17 @@ private let third = 1.0 / 3
         #expect(try resolve(single, in: area, mins: [:], gap: 9.6).windowRects[a] == Rect(x: 11, y: 11, width: 979, height: 479))
     }
 
+    @Test func unequalWeightsSplitTheLengthProportionally() throws {
+        let r = try resolve(try pair(weights: [0.3, 0.7]), in: wide, mins: [:], gap: 0)
+        #expect(r.windowRects[a] == Rect(x: 0, y: 0, width: 300, height: 500))
+        #expect(r.windowRects[b] == Rect(x: 300, y: 0, width: 700, height: 500))
+
+        let column = try tree(root: 1, [1: v(2, 3, weights: [0.8, 0.2]), 2: .panel(a), 3: .panel(b)])
+        let rv = try resolve(column, in: wide, mins: [:], gap: 10)
+        #expect(rv.windowRects[a] == Rect(x: 10, y: 10, width: 980, height: 376))
+        #expect(rv.windowRects[b] == Rect(x: 10, y: 396, width: 980, height: 94))
+    }
+
     @Test func resolveIsDeterministicAndLaysChildrenOutInOrder() throws {
         let t = try tree(root: 1, [1: v(2, 3, weights: [0.3, 0.7]), 2: .panel(a), 3: h(4, 5, weights: [0.6, 0.4]), 4: .panel(b), 5: .panel(c)])
         let first = try resolve(t, in: wide, mins: [c: Size(width: 300, height: 200)], gap: 10)
