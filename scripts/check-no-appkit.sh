@@ -8,7 +8,10 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 if [ "$#" -eq 0 ]; then set -- Sources/PaneModel Sources/PaneEngine; fi
 
-pattern='^[[:space:]]*(@[A-Za-z_]+[[:space:]]+)*import[[:space:]]+((typealias|struct|class|enum|protocol|let|var|func)[[:space:]]+)?(AppKit|Cocoa|SwiftUI)([[:space:].]|$)'
+# An import at the line start or after `;`, with any attributes (with or without arguments), of a UI
+# framework or an umbrella that pulls one in. A `;` inside a comment can over-match; that only fails safe.
+# shortcut: a text match cannot see transitive imports; upgrade to -emit-loaded-module-trace if one slips through.
+pattern='(^|;)[[:space:]]*(@[A-Za-z_]+(\([^)]*\))?[[:space:]]+)*import[[:space:]]+((typealias|struct|class|enum|protocol|let|var|func)[[:space:]]+)?(AppKit|Cocoa|SwiftUI|WebKit|Quartz|Carbon)([^A-Za-z0-9_]|$)'
 files=()
 for dir in "$@"; do
     if [ ! -d "$dir" ]; then

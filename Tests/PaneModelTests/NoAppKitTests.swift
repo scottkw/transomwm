@@ -38,6 +38,13 @@ import Testing
         "@preconcurrency import SwiftUI",
         "import struct Cocoa.NSRect",
         "   @_exported import AppKit",
+        "import AppKit;",
+        "@_spi(Private) import AppKit",
+        "import Foundation; import AppKit",
+        "import AppKit.NSView",
+        "import WebKit",
+        "import Quartz",
+        "import Carbon",
     ])
     func violationFails(line: String) throws {
         #expect(try check(line: line) == 1)
@@ -47,6 +54,8 @@ import Testing
         "// import AppKit",
         "import Foundation",
         "import AppKitty",
+        "import Foundation; import Dispatch",
+        "let x = 1 // not an import AppKit",
     ])
     func cleanLinePasses(line: String) throws {
         #expect(try check(line: line) == 0)
