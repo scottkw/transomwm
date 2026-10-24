@@ -165,3 +165,28 @@ private func blank(_ fake: FakeWindowSystem, gate: Bool) async {
         #expect(states == [.absent, .present, .fullscreen])
     }
 }
+
+@Suite struct QuickRecheckTests {
+    private static let identity = WindowIdentity(windowID: 7, pid: pid, bundleID: bundleID)
+    private static let cg = [CGWindowEntry(windowID: 7, pid: pid, bounds: Rect(x: 0, y: 25, width: 400, height: 300), layer: 0, onScreen: true, alpha: 1)]
+
+    private static func app(_ read: Result<WindowSnapshot, AXFailure>) -> AppObservation {
+        AppObservation(pid: pid, bundleID: bundleID, windows: [WindowObservation(windowID: 7, idSource: .axPrivate, read: read, title: "")])
+    }
+
+    @Test func aRecheckAsksForAQuickRefreshAtMost8TimesInARow() {
+        var tracker = WindowTracker()
+        let standard = FakeWindow.standard(id: 7, pid: pid, frame: Rect(x: 0, y: 25, width: 400, height: 300)).snapshot
+        _ = tracker.ingest(Self.app(.success(standard)), context: ObservationContext(cgWindows: Self.cg, initialSweep: true, now: .now))
+        #expect(!tracker.needsQuickRecheck(pid: pid))
+        for _ in 0..<WindowTracker.maxQuickRechecks {
+            _ = tracker.ingest(Self.app(.failure(.invalidElement)), context: ObservationContext(cgWindows: Self.cg, now: .now))
+            #expect(tracker.needsQuickRecheck(pid: pid))
+        }
+        _ = tracker.ingest(Self.app(.failure(.invalidElement)), context: ObservationContext(cgWindows: Self.cg, now: .now))
+        #expect(!tracker.needsQuickRecheck(pid: pid), "a window that never settles is left to the sweep")
+        let events = tracker.ingest(Self.app(.failure(.invalidElement)), context: ObservationContext(now: .now))
+        #expect(events == [.windowDestroyed(WindowRef(identity: Self.identity))])
+        #expect(!tracker.needsQuickRecheck(pid: pid))
+    }
+}

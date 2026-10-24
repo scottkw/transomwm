@@ -196,8 +196,9 @@ import os
         let context = ObservationContext(cgWindows: cgWindows, displays: displays, initialSweep: initial, now: .now)
         emit(tracker.ingest(observation, context: context))
         emit(tracker.recheckTerminated(context: context))
-        // A new window is withheld until it settles; refresh again once it has.
-        if tracker.hasPendingWindows(pid: observation.pid) {
+        // A new window is withheld until it settles, and a close AX reported waits for the CG list to agree:
+        // refresh again soon.
+        if tracker.hasPendingWindows(pid: observation.pid) || tracker.needsQuickRecheck(pid: observation.pid) {
             scheduler?.schedule(pid: observation.pid, after: tracker.settleDelay)
         }
     }

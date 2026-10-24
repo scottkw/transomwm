@@ -33,8 +33,9 @@ struct FixtureFailure: Error {
 }
 
 final class Fixture: NSObject, NSApplicationDelegate {
-    /// Every window ever opened; an index stays valid after its window closes.
-    var entries: [(window: NSWindow, kind: String, open: Bool)] = []
+    /// Every window ever opened; an index stays valid after its window closes. A closed window is released
+    /// (nil), as a real app does, so it leaves WindowServer and its AX element turns invalid.
+    var entries: [(window: NSWindow?, kind: String, open: Bool)] = []
     let launchSpecs: [String]
     /// AppKit animates sheets and tab groups in; report frames once they settle.
     let settle: Duration = .milliseconds(300)
@@ -129,6 +130,7 @@ final class Fixture: NSObject, NSApplicationDelegate {
 
     func emitWindow(_ index: Int) {
         let (window, kind, _) = entries[index]
+        guard let window else { return }
         let f = window.frame
         emit("window index=\(index) id=\(window.windowNumber) kind=\(kind) frame=\(Int(f.minX.rounded())),\(Int((primaryHeight() - f.maxY).rounded())),\(Int(f.width.rounded())),\(Int(f.height.rounded()))")
     }
@@ -137,7 +139,7 @@ final class Fixture: NSObject, NSApplicationDelegate {
         guard let argument, let index = Int(argument), entries.indices.contains(index), entries[index].open else {
             throw FixtureFailure(message: "no open window \(argument ?? "<missing>")")
         }
-        return entries[index].window
+        return entries[index].window!
     }
 
     func numbers(_ parts: [String], _ count: Int) throws(FixtureFailure) -> [Double] {
@@ -159,7 +161,10 @@ final class Fixture: NSObject, NSApplicationDelegate {
             case "close":
                 let target = try window(parts.dropFirst().first)
                 target.close()
-                if let index = entries.firstIndex(where: { $0.window === target }) { entries[index].open = false }
+                if let index = entries.firstIndex(where: { $0.window === target }) {
+                    entries[index].open = false
+                    entries[index].window = nil
+                }
             case "move":
                 let target = try window(parts.dropFirst().first)
                 let p = try numbers(parts, 2)

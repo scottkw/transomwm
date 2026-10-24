@@ -18,6 +18,11 @@ public struct WindowTracker: Sendable {
     private var closedIDs = ClosedIDCache()
     /// Apps NSWorkspace reported terminated that still have tracked windows.
     private var terminatedPIDs: Set<Int32> = []
+    /// Windows whose last decision was `.recheck`, with how many in a row.
+    private var rechecks: [WindowIdentity: Int] = [:]
+    /// Quick follow-ups per window before it is left to the sweep: WindowServer drops a closed window a few
+    /// hundred ms after AX reports it invalid, so the decision must be retried soon, but not forever.
+    public static let maxQuickRechecks = 8
 
     private struct ClassificationFacts: Equatable, Sendable {
         var subrole: String?
@@ -158,6 +163,7 @@ public struct WindowTracker: Sendable {
                 sessionActive: context.sessionActive, app: app, ax: fact(identity),
                 inCGList: inCG.contains(identity.windowID), isKnownTabMember: false
             )
+            if decision == .recheck { rechecks[identity, default: 0] += 1 } else { rechecks[identity] = nil }
             switch decision {
             case .closed:
                 guard let info = windows.removeValue(forKey: identity) else { continue }
@@ -187,6 +193,12 @@ public struct WindowTracker: Sendable {
             if classified == .neverDock(.noFullscreenButton), snapshot.fullScreenButton.present { return old }
         }
         return classified
+    }
+
+    /// True while a window of `pid` awaits a quick recheck (at most `maxQuickRechecks` in a row); the caller
+    /// refreshes again after `settleDelay`.
+    public func needsQuickRecheck(pid: Int32) -> Bool {
+        rechecks.contains { $0.key.pid == pid && $0.value <= Self.maxQuickRechecks }
     }
 
     /// True while a window of `pid` is withheld waiting for its settle delay; the caller refreshes again then.
