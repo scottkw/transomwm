@@ -20,16 +20,25 @@ public struct Desk: Codable, Equatable, Sendable {
     }
 
     /// Lifecycle transition for a docked or floating window (D-17). Docked windows go through
-    /// `LayoutTree.setState`; a floating window keeps its frame unless `.closed` removes it. The same
-    /// contract applies: `.closed` only after two-source confirmation; lock, sleep and AX timeouts are
-    /// `.absent` (PITFALLS.md Pitfall 2). Throws `windowNotFound` if the desk has no such window.
+    /// `LayoutTree.setState`; a floating window keeps its frame. The same contract applies: lock, sleep
+    /// and AX timeouts are `.absent` (PITFALLS.md Pitfall 2). `.closed` is rejected: a close made here,
+    /// for example inside `World.edit`, would be undoable, so only `World.apply(.closed, …)` closes.
+    /// Throws `windowNotFound` if the desk has no such window.
     public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {
         if tree.state(of: window) != nil {
             try tree.setState(state, for: window)
-        } else if state == .closed {
-            try desktop.remove(window)
         } else {
             try desktop.setState(state, for: window)
+        }
+    }
+
+    /// Removes a window the OS confirmed closed. Internal so that every close goes through
+    /// `World.apply`, which also purges the window from undo history.
+    mutating func close(_ window: WindowRef) throws(LayoutError) {
+        if tree.state(of: window) != nil {
+            try tree.remove(window)
+        } else {
+            try desktop.remove(window)
         }
     }
 
@@ -102,14 +111,20 @@ public struct World: Codable, Equatable, Sendable {
     }
 
     /// Records a lifecycle fact the OS reported (D-17) for a window on `key`'s desk, with the same
-    /// rules as `Desk.setState`. Undo is for user edits only, so nothing is pushed onto `history`;
-    /// `.closed` also removes the window from every snapshot, so no undo brings a closed window back.
-    /// Any throw leaves `self` and `history` unchanged.
+    /// rules as `Desk.setState`. Undo is for user edits only, so nothing is pushed onto `history`.
+    /// `.closed` is about the window, not the desk: it removes the window from whichever desk holds it,
+    /// if any, and always from every snapshot, so no undo brings a closed window back, even one that an
+    /// undo or a move had already taken off every desk. Any throw leaves `self` and `history` unchanged.
     public mutating func apply(_ state: WindowState, for window: WindowRef, on key: DeskKey, history: inout UndoHistory) throws(LayoutError) {
-        guard var desk = desks[key] else { throw .deskNotFound(key) }
-        try desk.setState(state, for: window)
+        guard desks[key] != nil else { throw .deskNotFound(key) }
         var candidate = self
-        candidate.desks[key] = desk
+        if state == .closed {
+            if let holder = desks.first(where: { $0.value.contains(window) })?.key {
+                try candidate.desks[holder]?.close(window)
+            }
+        } else {
+            try candidate.desks[key]?.setState(state, for: window)
+        }
         try candidate.validate()
         self = candidate
         if state == .closed { history.forget(window) }

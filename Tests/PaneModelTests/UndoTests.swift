@@ -196,7 +196,67 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
         let before = world
         let historyBefore = history
         #expect(throws: LayoutError.deskNotFound(k2)) { try world.apply(.absent, for: a, on: k2, history: &history) }
-        #expect(throws: LayoutError.windowNotFound(b)) { try world.apply(.closed, for: b, on: k1, history: &history) }
+        #expect(throws: LayoutError.windowNotFound(b)) { try world.apply(.absent, for: b, on: k1, history: &history) }
+        // A confirmed close of a window no desk holds is not an error: there is nothing left to remove.
+        try world.apply(.closed, for: b, on: k1, history: &history)
+        #expect(world == before)
+        #expect(history == historyBefore)
+    }
+
+    // MARK: A closed window stays closed (review iteration 2, WR-01)
+
+    @Test func closingAWindowThatUndoTookOffEveryDeskStillPurgesHistory() throws {
+        var world = try worldWithDesks(k1, k2)
+        var history = UndoHistory()
+        // Move w from k1 to k2, then Cmd-Z on k2: w is on no desk, but k1's snapshots still hold it.
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+            try dock(a, &desk, &ids)
+            try dock(w, &desk, &ids)
+        }
+        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.tree.remove(w) }
+        try world.edit(k2, history: &history) { desk, ids throws(LayoutError) in try desk.tree.insertRoot(w, ids: &ids) }
+        #expect(try world.undo(k2, history: &history))
+        #expect(world[k1]?.contains(w) == false)
+        #expect(world[k2]?.contains(w) == false)
+
+        try world.apply(.closed, for: w, on: k1, history: &history)
+        try world.apply(.closed, for: w, on: k2, history: &history)
+
+        #expect(try world.undo(k1, history: &history))
+        #expect(world[k1]?.tree.windows == [a])
+        #expect(world[k1]?.contains(w) == false)
+        try world.validate()
+    }
+
+    @Test func closingIsAboutTheWindowNotTheDeskKey() throws {
+        var world = try worldWithDesks(k1, k2)
+        var history = UndoHistory()
+        try world.edit(k2, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(w, frame: frame) }
+        try world.apply(.closed, for: w, on: k1, history: &history)
+        #expect(world[k2]?.contains(w) == false)
+        #expect(try world.undo(k2, history: &history))
+        #expect(world[k2] == Desk())
+    }
+
+    @Test func closingInsideAnEditIsRejectedSoUndoCannotReviveIt() throws {
+        var world = try worldWithDesks(k1)
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+            try dock(a, &desk, &ids)
+            try dock(b, &desk, &ids)
+            try desk.desktop.add(w, frame: frame)
+        }
+        let before = world
+        let historyBefore = history
+        // A close pushed by `edit` would sit on the undo stack, never forgotten: only `apply` may close.
+        for window in [b, w] {
+            #expect(throws: LayoutError.self) {
+                try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.setState(.closed, for: window) }
+            }
+        }
+        #expect(throws: LayoutError.self) {
+            try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.tree.setState(.closed, for: b) }
+        }
         #expect(world == before)
         #expect(history == historyBefore)
     }

@@ -30,7 +30,7 @@ public struct UndoHistory: Equatable, Sendable {
                 guard snapshot.contains(window) else { return snapshot }
                 var desk = snapshot
                 // Cannot fail: the snapshot is a valid desk that holds the window, and removal only throws windowNotFound.
-                try! desk.setState(.closed, for: window)
+                try! desk.close(window)
                 return desk
             }
         }

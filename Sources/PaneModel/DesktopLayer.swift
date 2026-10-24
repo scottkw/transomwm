@@ -35,11 +35,11 @@ public struct DesktopLayer: Codable, Equatable, Sendable {
         windows[index].frame = frame
     }
 
-    /// Stores a lifecycle state, keeping the frame. `.closed` is not storable: `Desk.setState` closes a
-    /// floating window through `remove`, after the same two-source confirmation as docked windows.
+    /// Stores a lifecycle state, keeping the frame. `.closed` is not storable: `World.apply(.closed, …)`
+    /// closes a floating window through `remove`, after the same two-source confirmation as docked windows.
     public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {
         guard let index = index(of: window) else { throw .windowNotFound(window) }
-        guard state != .closed else { throw .invariantViolated("closed is a transition, not a stored state; remove \(window) instead") }
+        guard state != .closed else { throw .invariantViolated("closed is a transition, not a stored state; close \(window) through World.apply") }
         windows[index].state = state
     }
 

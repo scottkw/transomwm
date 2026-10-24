@@ -189,7 +189,7 @@ private let tabRemovals: [(selected: Int, removed: Int, after: [WindowRef], sele
         nodes[4] = innerSplit
         var t = try tree(root: 1, nodes)
 
-        try t.setState(.closed, for: b)
+        try t.remove(b)
         #expect(t.state(of: b) == nil)
         #expect(t.node(n(2)) == nil)
         guard case let .split(.horizontal, children, _)? = t.node(n(1)) else {

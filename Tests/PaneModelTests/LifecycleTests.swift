@@ -60,13 +60,12 @@ private func layout(_ tree: LayoutTree) throws -> Resolution {
         #expect(try layout(tree) == before)
     }
 
-    @Test func closedRemovesTheSlotExactlyLikeRemove() throws {
+    @Test func closedIsNotAStoredStateSoTheTreeRejectsIt() throws {
+        // Only World.apply closes a window (it also purges undo history); see UndoTests.
         var (tree, _) = try triple()
-        var removed = tree
-        try removed.remove(b)
-        try tree.setState(.closed, for: b)
-        #expect(tree == removed)
-        #expect(tree.state(of: b) == nil)
+        let before = tree
+        #expect(throws: LayoutError.self) { try tree.setState(.closed, for: b) }
+        #expect(tree == before)
     }
 
     @Test func unknownWindowThrowsAndChangesNothing() throws {
@@ -114,7 +113,8 @@ private func layout(_ tree: LayoutTree) throws -> Resolution {
         #expect(desk.desktop.windows == [FloatingWindow(window: w, frame: floatFrame, state: .absent)])
         try desk.setState(.present, for: w)
         #expect(desk.desktop.windows.first?.state == .present)
-        try desk.setState(.closed, for: w)
+        #expect(throws: LayoutError.self) { try desk.setState(.closed, for: w) }
+        try desk.close(w)
         #expect(!desk.desktop.contains(w))
         #expect(throws: LayoutError.windowNotFound(w)) { try desk.setState(.absent, for: w) }
     }
@@ -126,8 +126,8 @@ private func layout(_ tree: LayoutTree) throws -> Resolution {
         try desk.setState(.fullscreen, for: b)
         try tree.setState(.fullscreen, for: b)
         #expect(desk.tree == tree)
-        try desk.setState(.closed, for: b)
-        try tree.setState(.closed, for: b)
+        try desk.close(b)
+        try tree.remove(b)
         #expect(desk.tree == tree)
         #expect(desk.desktop.contains(w))
         let before = desk
