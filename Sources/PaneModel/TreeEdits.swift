@@ -94,7 +94,23 @@ extension LayoutTree {
         assertValid()
     }
 
-    public mutating func resizeBoundary(in split: NodeID, after index: Int, by delta: Double) throws(LayoutError) {}
+    /// Moves `delta` (a fraction of the split's length) across the boundary after child `index`,
+    /// between those two children only (D-07). Both stay at or above `minWeight`; every other
+    /// weight is left bit-identical.
+    public mutating func resizeBoundary(in split: NodeID, after index: Int, by delta: Double) throws(LayoutError) {
+        guard let node = nodes[split] else { throw .nodeNotFound(split) }
+        guard case .split(let axis, let children, var weights) = node else { throw .notASplit(split) }
+        guard index >= 0, index < children.count - 1 else { throw .invalidBoundary(split: split, index: index) }
+        guard delta.isFinite else { throw .invalidGeometry("delta must be finite") }
+        let total = weights[index] + weights[index + 1]
+        weights[index] = min(max(weights[index] + delta, Self.minWeight), total - Self.minWeight)
+        weights[index + 1] = total - weights[index]
+        var next = self
+        next.nodes[split] = .split(axis: axis, children: children, weights: weights)
+        try next.normalize()
+        self = next
+        assertValid()
+    }
 
     /// D-06, run on the working copy of every edit. Collapses and merges repeat until a pass finds
     /// none; then each split's weights are renormalised and clamped. Iterative throughout.
