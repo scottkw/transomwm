@@ -68,7 +68,7 @@ public enum WindowCommand: Equatable, Sendable {
 ///
 /// All coordinates are in the D-09 global space: top-left origin, y growing downward.
 /// Commands are fire-and-forget; implementations may coalesce them (for example, keep only
-/// the last `setFrame` per window). Phase 2 provides `MacWindowSystem` and `FakeWindowSystem`.
+/// the last `setFrame` per window). Phase 2 provides `AXWindowSystem` and `FakeWindowSystem`.
 public protocol WindowSystem: AnyObject, Sendable {
     var events: AsyncStream<WindowEvent> { get }
     func inventory() async -> WindowInventory

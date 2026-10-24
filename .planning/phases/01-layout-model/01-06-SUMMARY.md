@@ -66,7 +66,7 @@ coverage:
         ref: "swift build --target PaneEngine"
         status: pass
     human_judgment: true
-    rationale: "Draft protocol only; whether its shape fits Phase 2's MacWindowSystem is a design judgment no test asserts yet"
+    rationale: "Draft protocol only; whether its shape fits Phase 2's AXWindowSystem is a design judgment no test asserts yet"
   - id: D3
     description: "scripts/check-no-appkit.sh exits 0 on real sources, 1 on UI-framework imports (plain, attributed, scoped), 2 on a missing or empty directory"
     verification:
@@ -131,7 +131,7 @@ status: complete
 ## Decisions Made
 - Added public memberwise-style initializers to the value structs; without them Phase 2 code in another module could not construct them.
 - Made `WindowEvent` and `WindowCommand` `Equatable, Sendable` too (the plan named the conformance for "all" value types).
-- Doc comment states D-09's coordinate space (top-left origin), fire-and-forget/coalescing commands, and that Phase 2 provides `MacWindowSystem` and `FakeWindowSystem`.
+- Doc comment states D-09's coordinate space (top-left origin), fire-and-forget/coalescing commands, and that Phase 2 provides `AXWindowSystem` and `FakeWindowSystem`.
 
 ## Deviations from Plan
 
@@ -144,7 +144,7 @@ None. Extra check beyond the plan: a temporary `Sources/PaneEngine/Probe.swift` 
 None - no external service configuration required.
 
 ## Next Phase Readiness
-- Phase 2 can implement `MacWindowSystem` / `FakeWindowSystem` against the draft protocol; the shape is expected to change once real AX behaviour is wired in.
+- Phase 2 can implement `AXWindowSystem` / `FakeWindowSystem` against the draft protocol; the shape is expected to change once real AX behaviour is wired in.
 - The CI workflow has not run on GitHub (no remote). The first push should confirm the `macos-26` runner's Xcode 26.6 builds tools-version 6.2.
 - MODEL-08 is also declared by a sibling plan still in progress (01-05), so it stays unchecked in REQUIREMENTS.md until that plan finishes.
 

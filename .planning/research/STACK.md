@@ -77,7 +77,7 @@ Sources/
                               //   HIServicesPrivate.swift (_AXUIElementGetWindow, CoreDockSendNotification), SymbolicHotKeys.swift.
                               //   Every symbol is `static let fn: FnType? = load("name")`.
   PaneMac/                    // depends: PaneEngine, PanePrivate, Sparkle, KeyboardShortcuts. AppKit + AX + SCK + taps + overlays.
-                              //   `MacWindowSystem: WindowSystem`. This is AeroSpace's "AppBundle" library target.
+                              //   `AXWindowSystem: WindowSystem`. This is AeroSpace's "AppBundle" library target.
   PaneApp/                    // executableTarget: 5-line main.swift -> PaneMac.run(). Lets `swift run PaneApp` work for quick dev.
 Tests/
   PaneModelTests/             // Swift Testing

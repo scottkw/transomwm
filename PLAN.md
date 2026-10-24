@@ -1,6 +1,6 @@
 # Open-source TrellisWM alternative: plan
 
-Working name: **Arbor** (rename freely).
+Working name: **Pane** (rename freely).
 Target: macOS 14+, Apple Silicon and Intel, Swift, MIT or GPL-3.0.
 
 ## 0. Ground rules (clean room)
@@ -19,7 +19,7 @@ Source: `TrellisWM-0.9.8.dmg` (sha256 `82c54c77…ec003`), REA evidence `ev_c1a9
 | Fact | Evidence type |
 |---|---|
 | Swift app, arm64 only, macOS 14+, menu-bar only (`LSUIElement`) | Info.plist, `lipo` |
-| 4 Swift modules: `TrellisWM` (app/macOS glue), `SpacesEngine` (behaviour), `SpacesModel` (pure layout tree), `Licensing` | Swift symbol names |
+| 4 Swift modules: app/macOS glue, a behaviour engine, a pure layout-tree model, and licensing | Swift symbol names |
 | Moves windows with the Accessibility API (`AXUIElementSetAttributeValue`, `AXObserver`) | imports |
 | Gets window IDs with private `_AXUIElementGetWindow` | imports |
 | Reads Spaces and windows with private SkyLight calls (`SLSCopyManagedDisplaySpaces`, `SLSWindowQueryWindows`, iterators) via `dlsym` | strings |
@@ -29,16 +29,16 @@ Source: `TrellisWM-0.9.8.dmg` (sha256 `82c54c77…ec003`), REA evidence `ev_c1a9
 | **No** SIP-requiring calls (no window transforms, no scripting additions) | absence in imports (bounded search) |
 | Sparkle 2.10 for updates | bundled framework |
 
-**Inference (how the zoom works without SIP):** macOS doesn't let a normal app scale another app's window. So the "zoom" is a full-screen overlay (`StagePanel`/`StageRenderer`) drawing ScreenCaptureKit snapshots. When the camera settles, real windows are resized with AX to match, then the overlay fades out. Off-screen windows get "parked" small (`parkOutOfViewSmall`). Settings like `redrawWait` (0.5 s) back this up.
+**Inference (how the zoom works without SIP):** macOS doesn't let a normal app scale another app's window. So the "zoom" is a full-screen overlay drawing ScreenCaptureKit snapshots. When the camera settles, real windows are resized with AX to match, then the overlay fades out. Off-screen windows get "parked" small. Settings for parking hidden windows and for waiting on apps to redraw back this up.
 
 ### Feature list (from UI text and type names)
 
 Core (TrellisWM's Free tier):
-1. **Dock (tile)**: drag a window to a screen edge or another window's edge and it splits that space. Splits nest as deep as you like (`SplitNode`, `PanelNode`, weights).
-2. **Float**: the green button toggles docked or floating. Floating windows live on a "Desktop" tile (`DesktopNode`, `HiddenDesktop`).
-3. **Zoom/navigate**: ⌥-pinch or a hotkey zooms out to "Everything"; step in or out one level; ⌘⇧-drag a rectangle to zoom to it (`Navigator`, `CameraCurve`, `RectZoom`).
-4. **Back/forward history** of views (`recordVisit`, menu bar arrows).
-5. **Gaps** with draggable resize handles (`GapHandleWindow`, `resizeBoundary`).
+1. **Dock (tile)**: drag a window to a screen edge or another window's edge and it splits that space. Splits nest as deep as you like, with weights.
+2. **Float**: the green button toggles docked or floating. Floating windows live on a "Desktop" tile, which can be hidden.
+3. **Zoom/navigate**: ⌥-pinch or a hotkey zooms out to "Everything"; step in or out one level; ⌘⇧-drag a rectangle to zoom to it.
+4. **Back/forward history** of views (menu bar arrows).
+5. **Gaps** with draggable resize handles.
 6. **Overview** that replaces Mission Control: every window on every display, Spaces along the top.
 7. Turns off conflicting macOS features (Edge tiling, Stage Manager, click wallpaper to reveal desktop).
 8. Per-app exclusion list, launch at login, onboarding.
@@ -52,14 +52,14 @@ Pro (free in our version):
 ## 2. Architecture (mirror the 3-layer split; it is a good one)
 
 ```
-ArborModel   (pure Swift, no AppKit) layout tree + geometry. 100% unit-testable.
-ArborEngine  (pure Swift)            camera, navigation, drag/drop/resize sessions,
+PaneModel    (pure Swift, no AppKit) layout tree + geometry. 100% unit-testable.
+PaneEngine   (pure Swift)            camera, navigation, drag/drop/resize sessions,
                                      saved views, layout tweens. Talks to a WindowSystem protocol.
-Arbor.app    (AppKit)                AX window control, SkyLight Spaces queries, event taps,
+Pane.app    (AppKit)                AX window control, SkyLight Spaces queries, event taps,
                                      multitouch, ScreenCaptureKit, overlays, menu bar, settings.
 ```
 
-The `WindowSystem` protocol is the seam. The engine gets a fake in tests and `MacWindowSystem` in the app.
+The `WindowSystem` protocol is the seam. The engine gets a fake in tests and an Accessibility-backed `AXWindowSystem` in the app.
 
 ### Prior art to read (all permissively licensed; check each licence before copying code)
 - **AeroSpace** (MIT, Swift): tree tiling, AX handling, `_AXUIElementGetWindow`, hiding windows off-screen instead of using Spaces. Closest match. Read it first.
@@ -89,12 +89,12 @@ Total: about 4–5 months part-time. Phases 1–3 alone (about a month) give you
 ## 4. Risks
 
 - **Private APIs** (`_AXUIElementGetWindow`, SkyLight, MultitouchSupport, CoreDock) can break on any macOS update. Isolate each one behind one file with a fallback, and never ship to the Mac App Store.
-- **Zoom illusion quality**: snapshot latency and apps that redraw slowly after a resize cause flicker. Budget time for `redrawWait`-style tuning.
+- **Zoom illusion quality**: snapshot latency and apps that redraw slowly after a resize cause flicker. Budget time for tuning how long to wait for apps to redraw.
 - **AX is slow and flaky** for some apps (Electron, Java). Use per-app timeouts (`AXUIElementSetMessagingTimeout`) and an exclusion list.
 - **Clean-room discipline**: whoever writes code should work from this spec and the public prior art, not from the binary or its strings.
 
 ## 5. Open questions (not answered by static analysis)
 
 - Exact drop-zone geometry (how close to an edge counts, how long to hover). Settle these by using the app, then pick your own values.
-- How it behaves across macOS Spaces: does each Space get its own tree? `SavedDisplay`/`DisplayStore` suggest per-display state; per-Space state is unconfirmed.
-- Camera animation curve details (`CameraCurve`): design your own.
+- How it behaves across macOS Spaces: does each Space get its own tree? Symbol names suggest per-display state; per-Space state is unconfirmed.
+- Camera animation curve details: design your own.

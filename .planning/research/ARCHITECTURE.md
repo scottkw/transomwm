@@ -38,14 +38,14 @@
 │ └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ │ TabStrip     │ │
 │       │ WindowEvent  │ SpaceEvent   │ InputEvent   │ images └──────▲───────┘ │
 │ ┌─────┴──────────────┴──────────────┴──────────────┴────────┐       │ Scene   │
-│ │ MacWindowSystem  (implements WindowSystem; owns ID mapping)│───────┘         │
+│ │ AXWindowSystem  (implements WindowSystem; owns ID mapping)│───────┘         │
 │ └────────────────────────────┬──────────────────────────────┘                 │
 ├──────────────────────────────┼───────────────────────────────────────────────┤
 │ PaneEngine  (no AppKit; @MainActor; injected Clock)                           │
 │   events in ──▶ ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐ │
 │                 │ Reconciler   │  │ Sessions     │  │ Camera / Navigator    │ │
 │                 │ desired vs   │  │ Drag, Resize │  │ curve, history,       │ │
-│                 │ observed     │  │ RectZoom,    │  │ saved views 1–9       │ │
+│                 │ observed     │  │ MarqueeZoom,    │  │ saved views 1–9       │ │
 │                 └──────┬───────┘  │ Gesture      │  └──────────┬────────────┘ │
 │                        │          └──────┬───────┘             │              │
 │                 ┌──────▼─────────────────▼─────────────────────▼────────────┐ │
@@ -74,7 +74,7 @@
 | **PaneEngine.Sessions** | Drag-to-dock, gap resize, rectangle zoom, gesture camera | One active session at a time; `begin/update/end/cancel` |
 | **PaneEngine.Camera** | Viewport in desk coordinates, the zoom/pan curve, back/forward history | Value `Camera`, a `CameraTween` sampled by Clock |
 | **PaneEngine.Planner** | Turns (tree, camera, constraints) into a `FramePlan`: which windows are *live* (real AX frame), *parked*, or *represented* (snapshot only) | Pure function, fully unit-tested |
-| **WindowSystem (protocol)** | The seam. Async queries and fire-and-forget commands; an event stream | `MacWindowSystem` in the app, `FakeWindowSystem` in tests |
+| **WindowSystem (protocol)** | The seam. Async queries and fire-and-forget commands; an event stream | `AXWindowSystem` in the app, `FakeWindowSystem` in tests |
 | **AXBackend** | `AXUIElement` lifetime, observers, `_AXUIElementGetWindow` ID lookup, messaging timeouts, coalesced setFrame | Per-app thread with CFRunLoop (AeroSpace pattern) |
 | **SpacesProvider** | Read-only list of displays → Spaces → window IDs; current Space per display | SkyLight via `dlsym` in **one file**, with a fallback that reports a single Space per display |
 | **InputHub** | Mouse (drag, mouse up), hotkeys, ⌥-pinch/pan, Mission Control interception | CGEventTap on its own thread; MultitouchSupport callback thread; everything marshalled to MainActor |
@@ -104,7 +104,7 @@ Sources/
 │   ├── Engine.swift          # @MainActor facade: handle(event)
 │   ├── Reconciler.swift
 │   ├── Planner.swift         # FramePlan: live / parked / represented
-│   ├── Camera/               # Camera, CameraCurve, Navigator, History
+│   ├── Camera/               # Camera, ZoomCurve, Navigator, History
 │   ├── Sessions/             # DragSession, ResizeSession, RectZoomSession, GestureSession
 │   └── Scene.swift           # value description of what overlays must draw
 ├── PaneMac/                  # AppKit glue as a library (so parts are testable)
@@ -114,10 +114,10 @@ Sources/
 │   │   ├── SkyLight.swift            # SLS* via dlsym
 │   │   ├── MultitouchSupport.swift
 │   │   └── CoreDock.swift            # symbolic hotkeys / Dock notifications
-│   ├── MacWindowSystem.swift
+│   ├── AXWindowSystem.swift
 │   ├── Input/                # EventTapThread, HotkeyCenter, TrackpadSource
 │   ├── Snapshots/            # SnapshotService, PlaceholderRenderer
-│   ├── Overlays/             # StageOverlay, DropPreviewPanel, GapHandlePanel, TabStripPanel
+│   ├── Overlays/             # StageOverlay, DropPreviewPanel, GapHandlePanel, TabBarOverlay
 │   └── Persistence/
 ├── PaneApp/                  # thin app target: AppDelegate, menu bar, Settings (SwiftUI), URL handler
 Tests/
@@ -229,7 +229,7 @@ macOS gives a non-SIP app no way to scale another app's window. So **zoom is an 
              (use cached image if fresher than T; otherwise SCScreenshotManager)
  2. COVER    show StageOverlay on each affected display, drawn at the CURRENT camera
              so frame 0 is pixel-aligned with the real windows (no visible jump)
- 3. ANIMATE  drive camera with CameraCurve on CADisplayLink; only the CALayer
+ 3. ANIMATE  drive camera with ZoomCurve on CADisplayLink; only the CALayer
              root transform changes (GPU, 120 Hz-safe). Gestures feed the same camera.
  4. SETTLE   Planner(tree, finalCamera, mins) → FramePlan
              live windows: AX setFrame (coalesced, parallel across app threads)
@@ -276,7 +276,7 @@ public protocol StageSink: AnyObject { func show(_ s: Scene); func update(camera
 ```
 AX observer (app thread) ─┐
 NSWorkspace notifications ─┤
-SkyLight space change ─────┼──▶ MacWindowSystem ──▶ WindowEvent ──▶ Engine (MainActor)
+SkyLight space change ─────┼──▶ AXWindowSystem ──▶ WindowEvent ──▶ Engine (MainActor)
 CGEventTap / Multitouch ───┘    (normalise IDs,                     │
                                  coords top-left)                   ▼
                                                      Reconciler ── classify ──▶ Sessions
@@ -289,7 +289,7 @@ CGEventTap / Multitouch ───┘    (normalise IDs,                     │
                                                      │                    │
                                      WindowCommand ◀─┘                    └─▶ StageSink (overlays)
                                           │
-                       MacWindowSystem → AXAppThread job (coalesced) → app
+                       AXWindowSystem → AXAppThread job (coalesced) → app
                                           │
                                kAXResized echo ──▶ back into Reconciler (suppressed or learned)
 ```
@@ -301,7 +301,7 @@ World (value)  ── owned by Engine, mutated only via Model edit functions
     │  (debounced, on change)
     ▼
 Persistence (App) ── JSON world.json + views.json
-Observed state ── owned by MacWindowSystem (inventory cache); Engine keeps lastApplied[w]
+Observed state ── owned by AXWindowSystem (inventory cache); Engine keeps lastApplied[w]
 Snapshots ── owned by SnapshotService; Scene refers to window IDs, overlay pulls images
 ```
 
@@ -419,7 +419,7 @@ The scale that matters here is windows and displays, not users.
 |----------|---------------|-------|
 | Model ↔ Engine | Direct calls to pure functions on values | Engine is the only owner of `World` |
 | Engine ↔ App | `WindowSystem` (commands + `AsyncStream` events), `StageSink` (Scene), `Clock` | Everything crossing is a value: `WindowRef`, `Rect`, `DisplayID` |
-| MacWindowSystem ↔ AXAppThread | Cancellable jobs; callbacks carry IDs only | `AXUIElement` never leaves its thread |
+| AXWindowSystem ↔ AXAppThread | Cancellable jobs; callbacks carry IDs only | `AXUIElement` never leaves its thread |
 | Overlay ↔ SnapshotService | Overlay pulls images by window ID | Scene stays image-free, so it's testable |
 
 ---
@@ -428,7 +428,7 @@ The scale that matters here is windows and displays, not users.
 
 ```
 Phase 1  PaneModel ───────────────┐ (no deps; decide DeskKey + WindowRef + Node.tabs NOW)
-Phase 2  WindowSystem protocol ───┤──▶ FakeWindowSystem (tests)  +  MacWindowSystem/AXBackend
+Phase 2  WindowSystem protocol ───┤──▶ FakeWindowSystem (tests)  +  AXWindowSystem/AXBackend
                                   ▼
 Phase 3  Engine: Reconciler + Planner(identity camera) + Drag/Resize sessions + small overlays
          ── FIRST USABLE RELEASE; core-value gate: tiling must work with stage disabled ──
@@ -436,7 +436,7 @@ Phase 3  Engine: Reconciler + Planner(identity camera) + Drag/Resize sessions + 
 Phase 4  Camera + StageOverlay + SnapshotService + park/represent states  (needs a solid Reconciler)
 Phase 5  InputHub gestures → same Camera API (needs Phase 4's camera, not its overlay polish)
 Phase 6  SpacesProvider + multi-display desks + Overview (model keying already exists)
-Phase 7  Tab groups (Node.tabs exists since P1; adds setHidden + TabStripPanel)
+Phase 7  Tab groups (Node.tabs exists since P1; adds setHidden + TabBarOverlay)
 Phase 8  Saved views + URL commands + persistence hardening (needs NodeID-based camera targets)
 Phase 9  Polish/ship
 ```

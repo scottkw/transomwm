@@ -64,7 +64,7 @@ See FEATURES.md. Evidence is competitors' most-commented issues; the central les
 
 ### Architecture Approach
 
-See ARCHITECTURE.md. Strictly downward dependencies: App → Engine → Model. **PaneModel** is pure Codable/Sendable values: a flat `[NodeID: Node]` tree (`split | panel | tabs`), normalized fractional weights, a `DesktopLayer` per desk, and a min-size-aware water-filling `resolve()`. **PaneEngine** (no AppKit, MainActor) holds the Reconciler — which classifies every observed frame as echo / user drag / user resize / app refusal / close — and the Planner, which produces a `FramePlan` marking each window *live*, *parked*, or *represented*. **PaneMac** contains MacWindowSystem, per-app AX threads, InputHub, SnapshotService, overlays, and one-file-per-API private shims.
+See ARCHITECTURE.md. Strictly downward dependencies: App → Engine → Model. **PaneModel** is pure Codable/Sendable values: a flat `[NodeID: Node]` tree (`split | panel | tabs`), normalized fractional weights, a `DesktopLayer` per desk, and a min-size-aware water-filling `resolve()`. **PaneEngine** (no AppKit, MainActor) holds the Reconciler — which classifies every observed frame as echo / user drag / user resize / app refusal / close — and the Planner, which produces a `FramePlan` marking each window *live*, *parked*, or *represented*. **PaneMac** contains AXWindowSystem, per-app AX threads, InputHub, SnapshotService, overlays, and one-file-per-API private shims.
 
 **Major components:**
 1. **LayoutTree / Geometry / World (Model)** — tree edits, rect resolution with gaps + minimums, drop-zone hit-testing, desks keyed by `DeskKey`.
@@ -100,7 +100,7 @@ PROJECT.md fixes v1 = all 9 phases. Research supports keeping PLAN.md's 9-phase 
 **Avoids:** Pitfalls 2 (lifecycle states), 6 (constraint-aware solver), 8/14 (state keying, coordinate convention), 20 (persisted identity).
 **Uses:** SPM, Swift Testing, Foundation only (CI grep forbids AppKit).
 
-### Phase 2: Window Control (AXBackend + MacWindowSystem)
+### Phase 2: Window Control (AXBackend + AXWindowSystem)
 **Rationale:** The async seam must exist before any engine behavior; bundle ID/signing is decided where permissions are first requested.
 **Delivers:** per-app AX threads + timeouts + unresponsiveness tracker; coalesced size→position→size writes with read-back; `_AXUIElementGetWindow` via the PanePrivate dlsym pattern + capability registry; reconciliation with lock/sleep guard; window classifier + AX-dump corpus harness; native-tab detection (at least treat tab siblings as one window); fullscreen state; coordinate conversion + display-UUID matching; AX permission probe with stale-grant UX; FakeWindowSystem; stable dev signing + separate debug bundle ID.
 **Avoids:** Pitfalls 1, 2, 4 (pattern), 6, 7, 10, 11, 17.
@@ -126,7 +126,7 @@ PROJECT.md fixes v1 = all 9 phases. Research supports keeping PLAN.md's 9-phase 
 **Avoids:** Pitfalls 8, 12, 14, 24.
 
 ### Phase 7: Tab Groups
-**Rationale:** `Node.tabs` exists from Phase 1 and native-tab detection from Phase 2; adds `setHidden` and the TabStripPanel.
+**Rationale:** `Node.tabs` exists from Phase 1 and native-tab detection from Phase 2; adds `setHidden` and the TabBarOverlay.
 **Delivers:** drop on center to group, tab strip following the group leader (CG bounds polling), group-wide traffic lights, inactive tabs hidden by parking (never minimized).
 **Avoids:** Pitfalls 7 (native tabs), 18, 19.
 
