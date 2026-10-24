@@ -14,6 +14,11 @@ public struct Desk: Codable, Equatable, Sendable {
         tree.state(of: window) != nil || desktop.contains(window)
     }
 
+    /// Lifecycle state of a docked or floating window, nil if the desk has no such window.
+    public func state(of window: WindowRef) -> WindowState? {
+        tree.state(of: window) ?? desktop.windows.first { $0.window == window }?.state
+    }
+
     /// Lifecycle transition for a docked or floating window (D-17). Docked windows go through
     /// `LayoutTree.setState`; a floating window keeps its frame unless `.closed` removes it. The same
     /// contract applies: `.closed` only after two-source confirmation; lock, sleep and AX timeouts are
@@ -81,9 +86,10 @@ public struct World: Codable, Equatable, Sendable {
         desks[key] = Desk()
     }
 
-    /// The one way to change a desk. `change` runs on copies of the desk and the ID source; the
-    /// result is committed, and the pre-edit desk pushed onto `history`, only if `change` succeeds
-    /// and the whole World still validates. Any throw leaves `self`, `history` and `ids` unchanged.
+    /// The one way to make a user edit to a desk. `change` runs on copies of the desk and the ID
+    /// source; the result is committed, and the pre-edit desk pushed onto `history`, only if `change`
+    /// succeeds and the whole World still validates. Any throw leaves `self`, `history` and `ids`
+    /// unchanged. Lifecycle states reported by the OS go through `apply` instead.
     public mutating func edit(_ key: DeskKey, history: inout UndoHistory, _ change: (inout Desk, inout IDSource) throws(LayoutError) -> Void) throws(LayoutError) {
         guard let before = desks[key] else { throw .deskNotFound(key) }
         var candidate = self
@@ -95,14 +101,32 @@ public struct World: Codable, Equatable, Sendable {
         self = candidate
     }
 
-    /// Restores the newest snapshot of `key`'s desk. Returns false when there is none. `ids` is
+    /// Records a lifecycle fact the OS reported (D-17) for a window on `key`'s desk, with the same
+    /// rules as `Desk.setState`. Undo is for user edits only, so nothing is pushed onto `history`;
+    /// `.closed` also removes the window from every snapshot, so no undo brings a closed window back.
+    /// Any throw leaves `self` and `history` unchanged.
+    public mutating func apply(_ state: WindowState, for window: WindowRef, on key: DeskKey, history: inout UndoHistory) throws(LayoutError) {
+        guard var desk = desks[key] else { throw .deskNotFound(key) }
+        try desk.setState(state, for: window)
+        var candidate = self
+        candidate.desks[key] = desk
+        try candidate.validate()
+        self = candidate
+        if state == .closed { history.forget(window) }
+    }
+
+    /// Restores the newest snapshot of `key`'s desk, keeping the current lifecycle state of every
+    /// window still on the desk (those are OS facts, not something the user edited). Returns false when there is none. `ids` is
     /// never rewound, so NodeIDs are not reused. If the restored desk would make the World invalid
     /// (for example a window that has since moved to another desk), throws and leaves the World
     /// unchanged, but the snapshot is still consumed so it cannot block the older ones.
     @discardableResult
     public mutating func undo(_ key: DeskKey, history: inout UndoHistory) throws(LayoutError) -> Bool {
-        guard desks[key] != nil else { throw .deskNotFound(key) }
-        guard let snapshot = history.pop(for: key) else { return false }
+        guard let current = desks[key] else { throw .deskNotFound(key) }
+        guard var snapshot = history.pop(for: key) else { return false }
+        for window in snapshot.tree.windows + snapshot.desktop.windows.map(\.window) {
+            if let state = current.state(of: window) { try snapshot.setState(state, for: window) }
+        }
         var candidate = self
         candidate.desks[key] = snapshot
         try candidate.validate()

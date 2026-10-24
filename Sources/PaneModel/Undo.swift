@@ -22,4 +22,17 @@ public struct UndoHistory: Equatable, Sendable {
     }
 
     mutating func pop(for key: DeskKey) -> Desk? { stacks[key]?.popLast() }
+
+    /// Removes `window` from every snapshot of every desk (it was confirmed closed).
+    mutating func forget(_ window: WindowRef) {
+        for (key, stack) in stacks {
+            stacks[key] = stack.map { snapshot in
+                guard snapshot.contains(window) else { return snapshot }
+                var desk = snapshot
+                // Cannot fail: the snapshot is a valid desk that holds the window, and removal only throws windowNotFound.
+                try! desk.setState(.closed, for: window)
+                return desk
+            }
+        }
+    }
 }

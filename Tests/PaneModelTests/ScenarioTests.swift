@@ -82,7 +82,7 @@ private func expectRoundTrip(_ world: World) throws {
         #expect(ids == idsBefore)
     }
 
-    /// Hit test → edit → resolve → lifecycle → undo → JSON, every mutation through the World funnel.
+    /// Hit test → edit → resolve → lifecycle → undo → JSON, every mutation through World (`edit` or `apply`).
     @Test func dropTabAbsentPresentUndoAndPersist() throws {
         let key = DeskKey(displayUUID: "D1", spaceID: nil)
         let area = Rect(x: 0, y: 0, width: 1200, height: 800)
@@ -130,7 +130,7 @@ private func expectRoundTrip(_ world: World) throws {
         #expect(docked.unfit.isEmpty)
 
         // 5. A goes absent: the tab group takes the full inner width, A keeps its node.
-        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in try desk.setState(.absent, for: a) }
+        try world.apply(.absent, for: a, on: key, history: &history)
         let hidden = try layout()
         #expect(hidden.windowRects[a] == nil)
         #expect(hidden.nodeRects[leafB] == Rect(x: gap, y: gap, width: area.width - 2 * gap, height: area.height - 2 * gap))
@@ -138,13 +138,14 @@ private func expectRoundTrip(_ world: World) throws {
         try expectRoundTrip(world)
 
         // 6. A comes back to exactly the step 4 layout.
-        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in try desk.setState(.present, for: a) }
+        try world.apply(.present, for: a, on: key, history: &history)
         #expect(try layout() == docked)
         try expectRoundTrip(world)
 
-        // 8. (Step 7, the JSON round-trip, runs after every step.) Five edits, five undos back to the empty desk; a sixth has nothing to undo.
-        #expect(history.depth(for: key) == 5)
-        for _ in 0..<5 {
+        // 8. (Step 7, the JSON round-trip, runs after every step.) Three user edits, three undos back to the
+        // empty desk; the lifecycle reports of steps 5 and 6 are not on the stack, and a fourth has nothing to undo.
+        #expect(history.depth(for: key) == 3)
+        for _ in 0..<3 {
             #expect(try world.undo(key, history: &history))
             try expectRoundTrip(world)
         }

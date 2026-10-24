@@ -4,6 +4,7 @@ import Testing
 
 private let a = makeWindow(1)
 private let b = makeWindow(2)
+private let c = makeWindow(3)
 private let w = makeWindow(9)
 private let k1 = DeskKey(displayUUID: "D1", spaceID: nil)
 private let k2 = DeskKey(displayUUID: "D2", spaceID: nil)
@@ -141,6 +142,63 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
         try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(w, &desk, &ids) }
         let newLeaf = try #require(world[k1]?.tree.leaf(containing: w))
         #expect(newLeaf.raw >= issuedBefore)
+    }
+
+    // MARK: Lifecycle facts are not user edits (WR-03)
+
+    @Test func lifecycleChangesUseNoUndoLevelsAndUndoKeepsTheCurrentStates() throws {
+        var world = try worldWithDesks(k1)
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+            try dock(a, &desk, &ids)
+            try desk.desktop.add(w, frame: frame)
+        }
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(b, &desk, &ids) }
+        try world.apply(.absent, for: a, on: k1, history: &history)
+        try world.apply(.fullscreen, for: w, on: k1, history: &history)
+        #expect(history.depth(for: k1) == 2)
+
+        // Cmd-Z undoes the user's last edit (docking b), not the OS reports, and a and w stay hidden.
+        #expect(try world.undo(k1, history: &history))
+        #expect(world[k1]?.tree.windows == [a])
+        #expect(world[k1]?.state(of: a) == .absent)
+        #expect(world[k1]?.state(of: w) == .fullscreen)
+    }
+
+    @Test func undoNeverBringsBackAClosedWindow() throws {
+        var world = try worldWithDesks(k1, k2)
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+            try dock(a, &desk, &ids)
+            try dock(b, &desk, &ids)
+        }
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(w, &desk, &ids) }
+        try world.edit(k2, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(c, frame: frame) }
+        try world.edit(k2, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.remove(c) }
+
+        try world.apply(.closed, for: b, on: k1, history: &history)
+        #expect(world[k1]?.contains(b) == false)
+        #expect(history.depth(for: k1) == 2)
+
+        #expect(try world.undo(k1, history: &history))
+        #expect(world[k1]?.tree.windows == [a])
+        #expect(world[k1]?.contains(b) == false)
+        try world.validate()
+        // Other desks' snapshots keep their own windows.
+        #expect(try world.undo(k2, history: &history))
+        #expect(world[k2]?.desktop.contains(c) == true)
+    }
+
+    @Test func applyToAnUnknownDeskOrWindowThrowsAndChangesNothing() throws {
+        var world = try worldWithDesks(k1)
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(a, &desk, &ids) }
+        let before = world
+        let historyBefore = history
+        #expect(throws: LayoutError.deskNotFound(k2)) { try world.apply(.absent, for: a, on: k2, history: &history) }
+        #expect(throws: LayoutError.windowNotFound(b)) { try world.apply(.closed, for: b, on: k1, history: &history) }
+        #expect(world == before)
+        #expect(history == historyBefore)
     }
 
     @Test func undoThatWouldPutAWindowOnTwoDesksThrowsAndDiscardsOnlyThatSnapshot() throws {
