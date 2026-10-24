@@ -24,7 +24,7 @@
 - [ ] **WIN-02**: Pane tracks every standard window of every running app, including windows opened or closed later
 - [ ] **WIN-03**: A hung or slow app never freezes Pane or delays arranging other apps' windows
 - [ ] **WIN-04**: Pane moves and resizes windows and learns an app's real minimum size when it refuses a size
-- [ ] **WIN-05**: Dialogs, sheets, popovers and picture-in-picture windows are never docked (classifier tested against recorded AX dumps)
+- [x] **WIN-05**: Dialogs, sheets, popovers and picture-in-picture windows are never docked (classifier tested against recorded AX dumps)
 - [ ] **WIN-06**: Native tabs (Finder, Terminal, Safari, etc.) count as one window
 - [ ] **WIN-07**: A window that goes native fullscreen keeps its tile reserved and returns to it
 - [ ] **WIN-08**: User can list apps whose windows Pane never arranges
@@ -146,7 +146,7 @@ Populated by the roadmapper on 2026-10-23.
 | WIN-02 | Phase 2 | Pending |
 | WIN-03 | Phase 2 | Pending |
 | WIN-04 | Phase 2 | Pending |
-| WIN-05 | Phase 2 | Pending |
+| WIN-05 | Phase 2 | Complete |
 | WIN-06 | Phase 2 | Pending |
 | WIN-07 | Phase 3 | Pending |
 | WIN-08 | Phase 2 | Pending |
