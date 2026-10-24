@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-10-24T16:11:47.579Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-10-24T16:25:42.921Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 5cad34f671f9e6627e84fdd22a4785b95a191762
+state_head: 428f667d552fc82a2f25edd402625feb8dacb76d
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 11
+  completed_plans: 12
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 (Window Control) — EXECUTING
-Plan: 6 of 13
+Plan: 7 of 13
 Status: Ready to execute
 Last activity: 2026-10-24 — Phase 2 execution started
 
@@ -67,6 +67,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P03 | 14 min | 3 tasks | 28 files |
 | Phase 2 P04 | 4 min | 2 tasks | 4 files |
 | Phase 2 P05 | 9 min | 3 tasks | 12 files |
+| Phase 2 P06 | 10 min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,9 @@ Recent decisions affecting current work:
 - [Phase 2]: Undo runs LifecycleSync.undo -> requery (windowInfo nil = .closed) -> applyRequeried; windowCreated is not a lifecycle fact (placement is Phase 3)
 - [Phase 2]: 02-05: a trusted launch waits for its AX probe before deciding to show Set Up Pane, so a working grant never flashes the window
 - [Phase 2]: 02-05: the permission probe treats only -25211 as stale; -25204 retries; any other AX answer counts as success
+- [Phase 2]: AppRegistry.onStop carries (pid, terminated) so appTerminated is emitted only for a quit, not for a policy change
+- [Phase 2]: refreshAll() re-reads displays and re-checks app eligibility before refreshing; the 5 s sweep and the 500 ms display refresh go through it
+- [Phase 2]: The AX hint loop starts only after the initial sweep; apps running at start() get threads but no appLaunched
 
 ### Pending Todos
 
@@ -137,6 +141,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T16:11:47.471Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-10-24T16:25:42.802Z
+Stopped at: Completed 02-06-PLAN.md
 Resume file: None
