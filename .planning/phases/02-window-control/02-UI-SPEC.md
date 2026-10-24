@@ -1,7 +1,8 @@
 ---
 phase: "2"
 slug: "window-control"
-status: draft
+status: approved
+reviewed_at: "2026-10-24"
 shadcn_initialized: false
 preset: none
 created: "2026-10-24"
@@ -321,7 +322,7 @@ Voice: plain, second person, sentence case for body text, title case for menu it
 
 ## UI Considerations
 
-Applicable state considerations resolved: 17 covered, 2 backstop, 0 unresolved.
+Applicable state considerations resolved: 19 covered, 2 backstop, 0 unresolved. (Cross-checked against ui-consideration-probe: 6 surfaces, 37 element×category candidates; categories not listed are N/A for that surface — e.g. the alert has no list/empty state.)
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -344,6 +345,8 @@ Applicable state considerations resolved: 17 covered, 2 backstop, 0 unresolved.
 | long-text | Menu items containing an app name | ✅ covered | The app name in "Don't Arrange “…”", "Freeze “…”…" and "Resume “…” Now" is truncated to 32 characters + "…" so the menu width stays bounded |
 | long-text | Setup window body and steps (localised or long app name) | 🧪 backstop | Body text wraps (`fixedSize(horizontal: false, vertical: true)`) at the fixed 480pt width and is never truncated; the window grows vertically. Verify by visual check with a long `CFBundleName` during UAT |
 | populated | Status-item glyph in light, dark and tinted menu bars | 🧪 backstop | Template image renders legibly in every menu bar appearance. Verify by visual check in light and dark mode during UAT |
+| error | Debug submenu (Nudge / Freeze) | ✅ covered | Unavailable actions are disabled with an explanatory title: "Nudge Focused Window (app excluded)", "Nudge Focused Window (no window)", "Freeze Frontmost App (not allowed)". Never a silent no-op |
+| long-text | Freeze confirmation alert | ✅ covered | `messageText`/`informativeText` use the same 32-character-truncated app name as the menu; NSAlert wraps the rest (system) |
 
 ---
 
@@ -369,12 +372,12 @@ Applicable state considerations resolved: 17 covered, 2 backstop, 0 unresolved.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: FLAG (non-blocking: bare "Freeze" button label)
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
 **Approval:** pending
