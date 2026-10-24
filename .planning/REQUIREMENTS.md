@@ -50,6 +50,7 @@
 - [ ] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
 - [ ] **SAFE-04**: Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
 - [ ] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
+- [ ] **SAFE-06**: Quitting and relaunching Pane while apps keep running restores each display's layout with the same windows in their tiles
 
 ### Zoom
 
@@ -90,7 +91,7 @@
 - [ ] **VIEW-01**: User can save the current view to slots 1–9 and return to it with a hotkey
 - [ ] **VIEW-02**: Saved views survive layout changes and app restarts
 - [ ] **VIEW-03**: Pane commands run from `pane://` URLs (for Raycast, Alfred, Shortcuts, scripts)
-- [ ] **VIEW-04**: Layouts persist across Pane restarts and reboots, with windows re-matched to their tiles
+- [ ] **VIEW-04**: Layouts persist across reboots and app relaunches (new window IDs), with windows re-matched to their tiles
 
 ### Ship
 
@@ -127,16 +128,82 @@
 
 ## Traceability
 
-Populated by the roadmapper.
+Populated by the roadmapper on 2026-10-23.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| MODEL-01 | Phase 1 | Pending |
+| MODEL-02 | Phase 1 | Pending |
+| MODEL-03 | Phase 1 | Pending |
+| MODEL-04 | Phase 1 | Pending |
+| MODEL-05 | Phase 1 | Pending |
+| MODEL-06 | Phase 1 | Pending |
+| MODEL-07 | Phase 1 | Pending |
+| MODEL-08 | Phase 1 | Pending |
+| MODEL-09 | Phase 1 | Pending |
+| MODEL-10 | Phase 1 | Pending |
+| WIN-01 | Phase 2 | Pending |
+| WIN-02 | Phase 2 | Pending |
+| WIN-03 | Phase 2 | Pending |
+| WIN-04 | Phase 2 | Pending |
+| WIN-05 | Phase 2 | Pending |
+| WIN-06 | Phase 2 | Pending |
+| WIN-07 | Phase 3 | Pending |
+| WIN-08 | Phase 2 | Pending |
+| WIN-09 | Phase 2 | Pending |
+| TILE-01 | Phase 3 | Pending |
+| TILE-02 | Phase 3 | Pending |
+| TILE-03 | Phase 3 | Pending |
+| TILE-04 | Phase 3 | Pending |
+| TILE-05 | Phase 3 | Pending |
+| TILE-06 | Phase 3 | Pending |
+| TILE-07 | Phase 3 | Pending |
+| TILE-08 | Phase 3 | Pending |
+| TILE-09 | Phase 3 | Pending |
+| TILE-10 | Phase 3 | Pending |
+| SAFE-01 | Phase 3 | Pending |
+| SAFE-02 | Phase 3 | Pending |
+| SAFE-03 | Phase 3 | Pending |
+| SAFE-04 | Phase 3 | Pending |
+| SAFE-05 | Phase 2 | Pending |
+| SAFE-06 | Phase 3 | Pending |
+| ZOOM-01 | Phase 4 | Pending |
+| ZOOM-02 | Phase 4 | Pending |
+| ZOOM-03 | Phase 4 | Pending |
+| ZOOM-04 | Phase 4 | Pending |
+| ZOOM-05 | Phase 4 | Pending |
+| ZOOM-06 | Phase 4 | Pending |
+| ZOOM-07 | Phase 4 | Pending |
+| ZOOM-08 | Phase 4 | Pending |
+| GEST-01 | Phase 5 | Pending |
+| GEST-02 | Phase 5 | Pending |
+| GEST-03 | Phase 5 | Pending |
+| GEST-04 | Phase 5 | Pending |
+| OVER-01 | Phase 6 | Pending |
+| OVER-02 | Phase 6 | Pending |
+| OVER-03 | Phase 6 | Pending |
+| OVER-04 | Phase 6 | Pending |
+| OVER-05 | Phase 6 | Pending |
+| TABS-01 | Phase 7 | Pending |
+| TABS-02 | Phase 7 | Pending |
+| TABS-03 | Phase 7 | Pending |
+| TABS-04 | Phase 7 | Pending |
+| TABS-05 | Phase 7 | Pending |
+| VIEW-01 | Phase 8 | Pending |
+| VIEW-02 | Phase 8 | Pending |
+| VIEW-03 | Phase 8 | Pending |
+| VIEW-04 | Phase 8 | Pending |
+| SHIP-01 | Phase 9 | Pending |
+| SHIP-02 | Phase 9 | Pending |
+| SHIP-03 | Phase 9 | Pending |
+| SHIP-04 | Phase 9 | Pending |
+| SHIP-05 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 65 total
-- Mapped to phases: 0
-- Unmapped: 65 ⚠️
+- v1 requirements: 66 total
+- Mapped to phases: 66
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-23*
-*Last updated: 2026-10-23 after initial definition*
+*Last updated: 2026-10-23 after roadmap creation (traceability populated)*
