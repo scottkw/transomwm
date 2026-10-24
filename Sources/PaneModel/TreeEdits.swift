@@ -54,6 +54,8 @@ extension LayoutTree {
             }
         }
 
+        guard next.nodes.count <= Self.maxNodes else { throw .tooManyNodes(limit: Self.maxNodes) }
+        guard next.depth(of: leaf) <= Self.maxDepth else { throw .tooDeep(limit: Self.maxDepth) }
         self = next
         ids = nextIDs
         assertValid()

@@ -56,7 +56,10 @@ public struct LayoutTree: Codable, Equatable, Sendable {
         try validate()
     }
 
+    /// Checks every structural invariant. Iterative with a visited set and a depth limit, never
+    /// recursive, so a hostile decoded file cannot overflow the stack or loop forever.
     public func validate() throws(LayoutError) {
+        guard nodes.count <= Self.maxNodes else { throw .tooManyNodes(limit: Self.maxNodes) }
         guard let root else {
             guard nodes.isEmpty, states.isEmpty else {
                 throw .invariantViolated("root is nil but the tree has \(nodes.count) nodes and \(states.count) states")
@@ -65,30 +68,63 @@ public struct LayoutTree: Codable, Equatable, Sendable {
         }
         var visited: Set<NodeID> = []
         var seen: Set<WindowIdentity> = []
-        var stack = [root]
-        while let id = stack.popLast() {
-            guard visited.insert(id).inserted, let node = nodes[id] else { continue }
+        func see(_ window: WindowRef) throws(LayoutError) {
+            guard seen.insert(window.identity).inserted else { throw .duplicateWindow(window) }
+        }
+        // The root is depth 0.
+        var stack: [(id: NodeID, depth: Int, parentAxis: Axis?)] = [(root, 0, nil)]
+        while let (id, depth, parentAxis) = stack.popLast() {
+            guard visited.insert(id).inserted else { throw .invariantViolated("node \(id) is reachable more than once") }
+            guard depth <= Self.maxDepth else { throw .tooDeep(limit: Self.maxDepth) }
+            guard let node = nodes[id] else { throw .invariantViolated("node \(id) is referenced but does not exist") }
             switch node {
-            case let .split(_, children, weights):
-                guard children.count >= 2, weights.count == children.count else {
-                    throw .invariantViolated("split \(id) needs at least 2 children and one weight per child")
+            case let .split(axis, children, weights):
+                guard (2...Self.maxChildren).contains(children.count) else {
+                    throw .invariantViolated("split \(id) has \(children.count) children, needs 2...\(Self.maxChildren)")
+                }
+                guard weights.count == children.count else {
+                    throw .invariantViolated("split \(id) has \(weights.count) weights for \(children.count) children")
+                }
+                guard weights.allSatisfy({ $0.isFinite && $0 >= Self.minWeight - 1e-12 }) else {
+                    throw .invariantViolated("split \(id) has a weight that is not finite or below \(Self.minWeight)")
                 }
                 guard abs(weights.reduce(0, +) - 1) <= 1e-9 else {
                     throw .invariantViolated("weights of split \(id) do not sum to 1")
                 }
-                stack.append(contentsOf: children)
+                guard axis != parentAxis else {
+                    throw .invariantViolated("split \(id) has the same axis as its parent split")
+                }
+                stack.append(contentsOf: children.map { ($0, depth + 1, axis) })
             case let .panel(window):
-                seen.insert(window.identity)
-            case let .tabs(windows, _):
-                seen.formUnion(windows.map(\.identity))
+                try see(window)
+            case let .tabs(windows, selected):
+                guard windows.count >= 2 else { throw .invariantViolated("tab group \(id) has fewer than 2 windows") }
+                guard windows.indices.contains(selected) else {
+                    throw .invariantViolated("tab group \(id) selects \(selected) of \(windows.count) tabs")
+                }
+                for window in windows { try see(window) }
             }
         }
-        guard nodes.keys.allSatisfy(visited.contains) else {
-            throw .invariantViolated("tree has nodes not reachable from root \(root)")
+        guard visited.count == nodes.count else {
+            throw .invariantViolated("tree has \(nodes.count - visited.count) nodes not reachable from root \(root)")
         }
         guard Set(states.keys) == seen else {
             throw .invariantViolated("window states do not match the windows in the tree")
         }
+        guard !states.values.contains(.closed) else {
+            throw .invariantViolated("a stored window state is closed; closed windows must be removed")
+        }
+    }
+
+    /// Edges from the root; the root is depth 0. Linear scan per level, fine at maxNodes.
+    func depth(of id: NodeID) -> Int {
+        var depth = 0
+        var current = id
+        while let parent = parent(of: current) {
+            depth += 1
+            current = parent
+        }
+        return depth
     }
 
     public func node(_ id: NodeID) -> Node? { nodes[id] }
