@@ -201,6 +201,23 @@ private let malformedTabs: [(windows: [WindowRef], selected: Int)] = [([a], 0), 
         #expect(ids == IDSource(next: next))
     }
 
+    @Test func anExhaustedIDSourceThrowsInsteadOfTrapping() throws {
+        var ids = IDSource(next: .max)
+        #expect(throws: LayoutError.self) { try ids.make() }
+        #expect(ids == IDSource(next: .max))
+
+        var tree = LayoutTree()
+        #expect(throws: LayoutError.self) { try tree.insertRoot(a, ids: &ids) }
+        #expect(tree == LayoutTree())
+
+        var almost = IDSource(next: .max - 1)
+        try tree.insertRoot(a, ids: &almost)
+        let before = tree
+        #expect(throws: LayoutError.self) { try tree.insert(b, at: .right, of: n(.max - 1), ids: &almost) }
+        #expect(tree == before)
+        #expect(almost == IDSource(next: .max))
+    }
+
     @Test func decodingInvalidTreeThrowsDecodingErrorWrappingLayoutError() {
         let json = """
             {"nodes":{"1":{"split":{"axis":"horizontal","children":[1,2],"weights":[0.5,0.5]}},

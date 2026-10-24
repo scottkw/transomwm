@@ -45,8 +45,9 @@ public struct IDSource: Codable, Equatable, Sendable {
         self.next = next
     }
 
-    public mutating func make() -> NodeID {
-        guard next < UInt64.max else { preconditionFailure("IDSource exhausted") }
+    /// Throws rather than traps: `next` can come from an untrusted file.
+    public mutating func make() throws(LayoutError) -> NodeID {
+        guard next < UInt64.max else { throw .invariantViolated("ID source exhausted") }
         defer { next += 1 }
         return NodeID(raw: next)
     }

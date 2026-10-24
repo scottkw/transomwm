@@ -7,7 +7,7 @@ extension LayoutTree {
         guard root == nil else { throw .treeNotEmpty }
         var next = self
         var nextIDs = ids
-        let leaf = nextIDs.make()
+        let leaf = try nextIDs.make()
         next.root = leaf
         next.nodes[leaf] = .panel(window)
         next.states[window.identity] = .present
@@ -28,7 +28,7 @@ extension LayoutTree {
         let axis = edge.axis
         var next = self
         var nextIDs = ids
-        let leaf = nextIDs.make()
+        let leaf = try nextIDs.make()
         next.nodes[leaf] = .panel(window)
         next.states[window.identity] = .present
 
@@ -44,7 +44,7 @@ extension LayoutTree {
             let index = edge.isLeading ? 0 : children.count
             next.nodes[target] = try Self.adding(leaf, at: index, to: target, targetAxis, children, weights)
         } else {
-            let split = nextIDs.make()
+            let split = try nextIDs.make()
             next.nodes[split] = .split(axis: axis, children: edge.isLeading ? [leaf, target] : [target, leaf], weights: [0.5, 0.5])
             if let parent, let parentSplit {
                 let children = parentSplit.children.map { $0 == target ? split : $0 }

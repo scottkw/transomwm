@@ -56,8 +56,12 @@ public struct World: Codable, Equatable, Sendable {
         try validate()
     }
 
-    /// Every desk is valid, no window (docked or floating) is on two desks, and every NodeID came from `ids`.
+    /// Every desk is valid, no window (docked or floating) is on two desks, every NodeID came from `ids`,
+    /// and `ids` has headroom left, so a hostile file cannot load with an ID source that is about to run out.
     public func validate() throws(LayoutError) {
+        guard ids.next <= UInt64.max - UInt64(LayoutTree.maxNodes) * 2 else {
+            throw .invariantViolated("ID source \(ids.next) is too close to exhaustion")
+        }
         var seen: Set<WindowIdentity> = []
         for (_, desk) in desks.sorted(by: { $0.key < $1.key }) {
             try desk.validate()

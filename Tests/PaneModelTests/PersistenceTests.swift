@@ -28,7 +28,7 @@ private func deskJSON(
     return #"{"desk":{"desktop":{"windows":[\#(floating.joined(separator: ","))]},"tree":{"nodes":{\#(nodeList)}\#(rootPart),"states":[\#(states)]}},"key":{"displayUUID":"\#(key)"}}"#
 }
 
-private func worldJSON(_ desks: [String], next: Int = 100_000) -> Data {
+private func worldJSON(_ desks: [String], next: UInt64 = 100_000) -> Data {
     Data(#"{"desks":[\#(desks.joined(separator: ","))],"ids":{"next":\#(next)},"schemaVersion":1}"#.utf8)
 }
 
@@ -96,6 +96,8 @@ private let corruptCorpus: [CorruptCase] = [
         deskJSON(key: "D2", root: 2, nodes: [2: panelJSON(1)], windows: [1]),
     ]), invalidLayout: true),
     CorruptCase(name: "NodeID >= ids.next", data: worldJSON([validPair], next: 3), invalidLayout: true),
+    CorruptCase(name: "ids.next = UInt64.max", data: worldJSON([], next: .max), invalidLayout: true),
+    CorruptCase(name: "ids.next within maxNodes of exhaustion", data: worldJSON([validPair], next: .max - 100), invalidLayout: true),
     CorruptCase(name: "floating frame width -1", data: worldJSON([
         deskJSON(root: nil, nodes: [:], windows: [], floating: [floatingJSON(7, width: "-1")]),
     ]), invalidLayout: true),
