@@ -61,6 +61,8 @@ extension LayoutTree {
         assertValid()
     }
 
+    public mutating func remove(_ window: WindowRef) throws(LayoutError) {}
+
     // shortcut: scaled weights can fall below minWeight when a sibling already sits near it;
     // Plan 01-02's normalize() adds the clamp.
     private static func adding(
