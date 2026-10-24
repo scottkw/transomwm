@@ -57,7 +57,7 @@ extension LayoutTree {
             }
         }
 
-        try next.normalize()
+        next.normalize()
         // The whole tree, not just the new leaf: wrapping the root pushes every node one level deeper.
         // Runs in release too, so an invalid insert throws instead of committing.
         try next.validate()
@@ -67,7 +67,7 @@ extension LayoutTree {
 
     /// Removes `window` (D-05). A panel's share goes back to its siblings in proportion to their
     /// weights; a tab group left with one window becomes a panel under the same NodeID.
-    /// Throws `splitFull` if the collapse that follows would merge more than `maxChildren` children.
+    /// Throws only `windowNotFound`: a confirmed `.closed` must always be able to drop the slot.
     public mutating func remove(_ window: WindowRef) throws(LayoutError) {
         guard let leaf = leaf(containing: window) else { throw .windowNotFound(window) }
         var next = self
@@ -92,7 +92,7 @@ extension LayoutTree {
                 next.root = nil
             }
         }
-        try next.normalize()
+        next.normalize()
         self = next
         assertValid()
     }
@@ -150,15 +150,17 @@ extension LayoutTree {
         weights[index + 1] = total - weights[index]
         var next = self
         next.nodes[split] = .split(axis: axis, children: children, weights: weights)
-        try next.normalize()
+        next.normalize()
         self = next
         assertValid()
     }
 
     /// D-06, run on the working copy of every edit. Collapses and merges repeat until a pass finds
     /// none; then each split's weights are renormalised and clamped. Iterative throughout.
-    mutating func normalize() throws(LayoutError) {
-        while try collapseOrMergeOnce() {}
+    /// A merge that would pass `maxChildren` is skipped, leaving that same-axis child nested: more than
+    /// maxChildren siblings cannot all keep `minWeight`. A later edit that makes room merges it.
+    mutating func normalize() {
+        while collapseOrMergeOnce() {}
         for (id, node) in nodes {
             if case let .split(axis, children, weights) = node, !Self.isNormalised(weights) {
                 nodes[id] = .split(axis: axis, children: children, weights: Self.clamped(weights))
@@ -168,7 +170,7 @@ extension LayoutTree {
 
     /// Applies the first collapse (a split with one child) or merge (a child split on its parent's
     /// axis) found walking down from the root. Returns false when there is none.
-    private mutating func collapseOrMergeOnce() throws(LayoutError) -> Bool {
+    private mutating func collapseOrMergeOnce() -> Bool {
         var stack: [(id: NodeID, parent: NodeID?)] = root.map { [($0, nil)] } ?? []
         while let (id, parent) = stack.popLast() {
             guard case let .split(axis, children, weights)? = nodes[id] else { continue }
@@ -184,9 +186,7 @@ extension LayoutTree {
             }
             for (index, child) in children.enumerated() {
                 guard case let .split(childAxis, grandchildren, childWeights)? = nodes[child], childAxis == axis else { continue }
-                guard children.count - 1 + grandchildren.count <= Self.maxChildren else {
-                    throw .splitFull(id, limit: Self.maxChildren)
-                }
+                guard children.count - 1 + grandchildren.count <= Self.maxChildren else { continue }
                 var merged = children
                 var mergedWeights = weights
                 merged.replaceSubrange(index...index, with: grandchildren)

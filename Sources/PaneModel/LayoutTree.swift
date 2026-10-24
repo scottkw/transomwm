@@ -73,8 +73,8 @@ public struct LayoutTree: Codable, Equatable, Sendable {
             guard seen.insert(window.identity).inserted else { throw .duplicateWindow(window) }
         }
         // The root is depth 0.
-        var stack: [(id: NodeID, depth: Int, parentAxis: Axis?)] = [(root, 0, nil)]
-        while let (id, depth, parentAxis) = stack.popLast() {
+        var stack: [(id: NodeID, depth: Int, parentAxis: Axis?, siblings: Int)] = [(root, 0, nil, 0)]
+        while let (id, depth, parentAxis, siblings) = stack.popLast() {
             guard visited.insert(id).inserted else { throw .invariantViolated("node \(id) is reachable more than once") }
             guard depth <= Self.maxDepth else { throw .tooDeep(limit: Self.maxDepth) }
             guard let node = nodes[id] else { throw .invariantViolated("node \(id) is referenced but does not exist") }
@@ -92,10 +92,11 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                 guard abs(weights.reduce(0, +) - 1) <= 1e-9 else {
                     throw .invariantViolated("weights of split \(id) do not sum to 1")
                 }
-                guard axis != parentAxis else {
+                // Same-axis nesting is allowed only where merging would pass maxChildren (see normalize()).
+                guard axis != parentAxis || siblings - 1 + children.count > Self.maxChildren else {
                     throw .invariantViolated("split \(id) has the same axis as its parent split")
                 }
-                stack.append(contentsOf: children.map { ($0, depth + 1, axis) })
+                stack.append(contentsOf: children.map { ($0, depth + 1, axis, children.count) })
             case let .panel(window):
                 try see(window)
             case let .tabs(windows, selected):

@@ -176,18 +176,46 @@ private let tabRemovals: [(selected: Int, removed: Int, after: [WindowRef], sele
         }
     }
 
-    @Test func mergePastMaxChildrenThrowsAndChangesNothing() throws {
-        // H[50 panels, V[B, H[60 panels]]] minus B would merge into one split of 109 children.
+    @Test func closingAWindowWhoseMergeWouldPassMaxChildrenKeepsTheChildSplitNested() throws {
+        // H[50 panels, V[B, H[60 panels]]] minus B would merge into one split of 109 children, which
+        // cannot keep every weight >= minWeight. A confirmed close must still remove B, so the inner
+        // H stays nested under the outer H until a later edit makes the merge fit.
         var nodes: [UInt64: Node] = [3: .panel(b)]
         let outer = Array(UInt64(100)..<150), inner = Array(UInt64(200)..<260)
         for raw in outer + inner { nodes[raw] = .panel(makeWindow(UInt32(raw))) }
         nodes[1] = .split(axis: .horizontal, children: (outer + [2]).map(n), weights: Array(repeating: 1 / 51, count: 51))
         nodes[2] = v(3, 4, weights: [0.5, 0.5])
-        nodes[4] = .split(axis: .horizontal, children: inner.map(n), weights: Array(repeating: 1 / 60, count: 60))
+        let innerSplit = Node.split(axis: .horizontal, children: inner.map(n), weights: Array(repeating: 1 / 60, count: 60))
+        nodes[4] = innerSplit
         var t = try tree(root: 1, nodes)
-        let before = t
-        #expect(throws: LayoutError.splitFull(n(1), limit: LayoutTree.maxChildren)) { try t.remove(b) }
-        #expect(t == before)
+
+        try t.setState(.closed, for: b)
+        #expect(t.state(of: b) == nil)
+        #expect(t.node(n(2)) == nil)
+        guard case let .split(.horizontal, children, _)? = t.node(n(1)) else {
+            Issue.record("root is not a horizontal split")
+            return
+        }
+        #expect(children == (outer + [4]).map(n))
+        #expect(t.node(n(4)) == innerSplit)
+        try t.validate()
+
+        // 40 outer panels + 60 inner = 100 children: now the merge fits and normalisation does it.
+        for raw in outer.prefix(10) { try t.remove(makeWindow(UInt32(raw))) }
+        #expect(t.node(n(4)) == nil)
+        guard case let .split(_, merged, _)? = t.node(n(1)) else {
+            Issue.record("root is not a split")
+            return
+        }
+        #expect(merged == (outer.dropFirst(10) + inner).map(n))
+        try t.validate()
+    }
+
+    @Test func sameAxisNestingIsRejectedWhenTheMergeWouldFit() {
+        // The overflow exception above must not admit an ordinary unmerged H[A, H[B, C]].
+        #expect(throws: LayoutError.self) {
+            try tree(root: 1, [1: h(2, 3, weights: [0.5, 0.5]), 2: .panel(a), 3: h(4, 5, weights: [0.5, 0.5]), 4: .panel(b), 5: .panel(c)])
+        }
     }
 
     // MARK: resizeBoundary (D-07)

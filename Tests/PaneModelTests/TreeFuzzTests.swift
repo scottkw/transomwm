@@ -85,7 +85,9 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
             #expect(weights.allSatisfy { $0 >= LayoutTree.minWeight - 1e-12 })
             #expect(children.count >= 2)
             for child in children {
-                if case let .split(childAxis, _, _)? = tree.nodes[child] { #expect(childAxis != axis) }
+                if case let .split(childAxis, grandchildren, _)? = tree.nodes[child] {
+                    #expect(childAxis != axis || children.count - 1 + grandchildren.count > LayoutTree.maxChildren)
+                }
             }
         }
         #expect(Set(tree.windows.map(\.identity)) == expected)
