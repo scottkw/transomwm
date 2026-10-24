@@ -1,11 +1,13 @@
 import AppKit
 import ApplicationServices
+import PaneEngine
 import PanePrivate
 
 /// Entry point shared by the PaneApp executable and the Xcode-built app bundle.
 public enum PaneMacApp {
     /// Keeps the menu-bar item (and through it the window system) alive for the process lifetime.
     private static var statusItem: StatusItemController?
+    private static var permission: PermissionController?
 
     public static func run(arguments: [String]) -> Never {
         Capabilities.logReport()
@@ -16,12 +18,11 @@ public enum PaneMacApp {
         let system = AXWindowSystem()
         let controller = StatusItemController(system: system)
         statusItem = controller
-        if AXIsProcessTrusted() {
-            Task {
-                await system.start()
-                await controller.refresh()
-            }
-        }
+        // Tracking starts only through the reducer's startTracking effect, once access is confirmed.
+        let permissionController = PermissionController(system: system)
+        permission = permissionController
+        permissionController.onTrackingStarted = { await controller.refresh() }
+        permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         app.run()
         exit(0)
     }
