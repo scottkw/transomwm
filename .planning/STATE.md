@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-10-24T15:51:48.596Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-10-24T15:58:37.215Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 06f071fb4a3d92f0e1be2aef5db00c01546c24e1
+state_head: fe19debdbb894aaab208c49201ce19e6d7e443a8
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 9
+  completed_plans: 10
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 (Window Control) — EXECUTING
-Plan: 4 of 13
+Plan: 5 of 13
 Status: Ready to execute
 Last activity: 2026-10-24 — Phase 2 execution started
 
@@ -65,6 +65,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P01 | 14 min | 3 tasks | 22 files |
 | Phase 2 P02 | 6 min | 2 tasks | 11 files |
 | Phase 2 P03 | 14 min | 3 tasks | 28 files |
+| Phase 2 P04 | 4 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 2]: Classifier: provisional kinds (first seen minimised/hidden/under a sheet) are replaced in full at the first reliable observation; disabled-button stickiness applies only to reliable dockable windows
 - [Phase 2]: Corpus finding: org.libreoffice.script joined fullscreenButtonOptional (Start Center labelled dockable, no fullscreen button); developer to confirm in UAT
 - [Phase 2]: AXSnapshotReader and CGWindowList are public so pane-dump records the exact live snapshot
+- [Phase 2]: LifecycleSync is the only path from OS lifecycle events into the World (World.apply only); .closed uses a placeholder DeskKey since apply ignores it
+- [Phase 2]: Undo runs LifecycleSync.undo -> requery (windowInfo nil = .closed) -> applyRequeried; windowCreated is not a lifecycle fact (placement is Phase 3)
 
 ### Pending Todos
 
@@ -117,8 +120,8 @@ None yet.
 - ⌥-hotkey restriction on macOS 15.0-15.1: sources conflict; ship a ⌃⌥ fallback regardless (affects Phase 3/4 hotkey defaults)
 - Phase 3: confirm notarisation works with dlopen of private frameworks in the minimal pipeline
 - Name "Pane": check for existing macOS apps before public release (Phase 9)
-- Phase 2 obligation (from Phase 1 review fix c403f45): `World.undo` returns `[WindowRef]?`; the engine must re-query the OS for every returned window and report its real state through `World.apply`
-- Phase 2 obligation: OS lifecycle events (open/close/minimise/fullscreen) go through `World.apply`, never `World.edit`, so they stay off the undo stack; `.closed` needs no valid desk key
+- Phase 2 obligation (from Phase 1 review fix c403f45): `World.undo` returns `[WindowRef]?`; the engine must re-query the OS for every returned window and report its real state through `World.apply` — MET by 02-04 (`LifecycleSync.undo` → `requery` → `applyRequeried`)
+- Phase 2 obligation: OS lifecycle events (open/close/minimise/fullscreen) go through `World.apply`, never `World.edit`, so they stay off the undo stack; `.closed` needs no valid desk key — MET by 02-04 (`LifecycleSync.handle`)
 - Phase 1 work is on branch `gsd/phase-01-layout-model` (main is protected); merging to main is the developer's call
 
 ## Deferred Items
@@ -131,6 +134,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T15:51:48.479Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-10-24T15:58:37.104Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
