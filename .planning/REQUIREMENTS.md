@@ -1,0 +1,142 @@
+# Requirements: Pane
+
+**Defined:** 2026-10-23
+**Core Value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize.
+
+## v1 Requirements
+
+### Layout Model
+
+- [ ] **MODEL-01**: Layout is a nested tree of splits (horizontal/vertical) whose children have fractional sizes that always sum to 1
+- [ ] **MODEL-02**: A window can be inserted beside any tile on any of its four edges, creating or extending a split
+- [ ] **MODEL-03**: Removing a window gives its space back and collapses single-child splits automatically
+- [ ] **MODEL-04**: Tile rects are computed for a given area with gaps, respecting each window's minimum size without overlap
+- [ ] **MODEL-05**: Each desk has a floating Desktop layer that holds non-docked windows
+- [ ] **MODEL-06**: A tile can hold a tab group of several windows with one selected
+- [ ] **MODEL-07**: Desks are keyed by display UUID plus optional Space ID
+- [ ] **MODEL-08**: Windows have lifecycle states (present, absent, fullscreen, closed) so an absent window keeps its reserved slot
+- [ ] **MODEL-09**: Layout state serialises to versioned JSON and round-trips exactly
+- [ ] **MODEL-10**: Every layout change can be undone back to the previous layout
+
+### Window Control
+
+- [ ] **WIN-01**: User is guided through granting Accessibility permission, and a stale grant is detected and explained
+- [ ] **WIN-02**: Pane tracks every standard window of every running app, including windows opened or closed later
+- [ ] **WIN-03**: A hung or slow app never freezes Pane or delays arranging other apps' windows
+- [ ] **WIN-04**: Pane moves and resizes windows and learns an app's real minimum size when it refuses a size
+- [ ] **WIN-05**: Dialogs, sheets, popovers and picture-in-picture windows are never docked (classifier tested against recorded AX dumps)
+- [ ] **WIN-06**: Native tabs (Finder, Terminal, Safari, etc.) count as one window
+- [ ] **WIN-07**: A window that goes native fullscreen keeps its tile reserved and returns to it
+- [ ] **WIN-08**: User can list apps whose windows Pane never arranges
+- [ ] **WIN-09**: A window is only treated as closed when two sources confirm it; lock screen, sleep and timeouts never close windows
+
+### Tiling
+
+- [ ] **TILE-01**: Dragging a window by its title bar to a screen edge or another window's edge shows a drop preview and docks it there on release
+- [ ] **TILE-02**: Holding a bypass modifier while dragging moves the window freely without docking
+- [ ] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
+- [ ] **TILE-04**: User can set the gap between windows
+- [ ] **TILE-05**: Dragging the gap between two windows resizes both
+- [ ] **TILE-06**: The green button toggles a window between docked and floating on the Desktop
+- [ ] **TILE-07**: New windows open floating on the Desktop tile, never auto-split into the layout
+- [ ] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
+- [ ] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
+- [ ] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
+
+### Safety & Recovery
+
+- [ ] **SAFE-01**: On quit, every window Pane moved returns to a sensible on-screen frame
+- [ ] **SAFE-02**: After a crash or force-quit, the next launch restores stranded windows on-screen
+- [ ] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
+- [ ] **SAFE-04**: Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
+- [ ] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
+
+### Zoom
+
+- [ ] **ZOOM-01**: User can zoom out to see every window on the display at once
+- [ ] **ZOOM-02**: User can step in or out one level of the layout tree
+- [ ] **ZOOM-03**: User can ⌘⇧-drag a rectangle to zoom to the windows it frames
+- [ ] **ZOOM-04**: User can go back and forward through previous views
+- [ ] **ZOOM-05**: Zoomed views show live window snapshots, or app colour and icon when Screen Recording isn't granted
+- [ ] **ZOOM-06**: Clicking a window in a zoomed view zooms in to it and focuses it
+- [ ] **ZOOM-07**: After a zoom settles, real windows are arranged at their new sizes within 500 ms for 15 windows, without visible flashing of stale layouts
+- [ ] **ZOOM-08**: Zoom hotkeys are rebindable
+
+### Gestures
+
+- [ ] **GEST-01**: ⌥-pinch on the trackpad zooms in and out anywhere
+- [ ] **GEST-02**: ⌥-two-finger pan moves the view
+- [ ] **GEST-03**: Pinch and pan on bare desktop work without ⌥
+- [ ] **GEST-04**: Gestures keep working after sleep/wake and trackpad reconnect, and never leak into the app under the pointer
+
+### Overview, Spaces & Displays
+
+- [ ] **OVER-01**: Overview shows every window on every display, with Spaces along the top; clicking a window goes to it
+- [ ] **OVER-02**: User can opt in to having Mission Control's swipe and shortcut open Pane's overview instead
+- [ ] **OVER-03**: If Pane crashes while replacing Mission Control, the system shortcuts are restored on next launch
+- [ ] **OVER-04**: Each display (and each Space) keeps its own layout
+- [ ] **OVER-05**: Unplugging and re-plugging a display, or sleep/wake, restores that display's layout
+
+### Tab Groups
+
+- [ ] **TABS-01**: Dropping a window on the middle of another and pausing groups them under one tab strip
+- [ ] **TABS-02**: Clicking a tab switches the visible window; other tabs stay hidden
+- [ ] **TABS-03**: A group's close, minimise and dock/float buttons act on the whole group
+- [ ] **TABS-04**: A tab can be dragged out to become its own window
+- [ ] **TABS-05**: Tab groups work for windows from different apps, docked or floating
+
+### Saved Views & Commands
+
+- [ ] **VIEW-01**: User can save the current view to slots 1–9 and return to it with a hotkey
+- [ ] **VIEW-02**: Saved views survive layout changes and app restarts
+- [ ] **VIEW-03**: Pane commands run from `pane://` URLs (for Raycast, Alfred, Shortcuts, scripts)
+- [ ] **VIEW-04**: Layouts persist across Pane restarts and reboots, with windows re-matched to their tiles
+
+### Ship
+
+- [ ] **SHIP-01**: Settings window covers gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
+- [ ] **SHIP-02**: First-run onboarding walks through permissions and conflicting macOS features
+- [ ] **SHIP-03**: User can launch Pane at login
+- [ ] **SHIP-04**: Pane updates itself via Sparkle and restores windows before relaunching
+- [ ] **SHIP-05**: Releases are Developer ID signed, notarised, and installable with `brew install --cask`
+
+## v2 Requirements
+
+- **V2-01**: Type-to-jump to a window in overview
+- **V2-02**: Per-app rules that dock an app's windows automatically
+- **V2-03**: Export/import settings
+- **V2-04**: Maximum tile width on ultrawide displays
+- **V2-05**: Focus follows mouse
+- **V2-06**: Event hooks for scripts
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Licensing, trials, paid tiers, window limits | Pane is free |
+| Mac App Store | Private APIs required |
+| Features needing SIP disabled | Keeps install safe and simple |
+| Moving windows between native Spaces | Needs SIP since macOS 14.5 |
+| Auto-tiling every new window | Research: top source of user frustration; new windows go to the Desktop tile |
+| Animating real windows during zoom | Causes resize storms; only the snapshot overlay animates |
+| Borders drawn around other apps' windows | Fragile, performance cost, low value |
+| Scripting language / text-config DSL as main interface | Pane is GUI-first; URL commands cover automation |
+| Second (scrolling) layout engine | Scope; one model done well |
+| Mission Control takeover on by default | Risky; opt-in only |
+| Copying any TrellisWM text, assets or code | Clean-room rule |
+
+## Traceability
+
+Populated by the roadmapper.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+
+**Coverage:**
+- v1 requirements: 65 total
+- Mapped to phases: 0
+- Unmapped: 65 ⚠️
+
+---
+*Requirements defined: 2026-10-23*
+*Last updated: 2026-10-23 after initial definition*
