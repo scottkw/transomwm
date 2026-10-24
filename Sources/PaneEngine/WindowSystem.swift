@@ -15,18 +15,58 @@ public struct DisplayInfo: Equatable, Sendable {
     }
 }
 
+/// Why a tracked window is never arranged into a tile.
+public enum NeverDockReason: String, Codable, Sendable, CaseIterable {
+    case floatingLevel, subrole, modal, noCloseButton, noFullscreenButton
+}
+
+/// Whether a window may be docked into a tile. Never-dock windows are tracked but never arranged (D-06).
+public enum WindowKind: Codable, Equatable, Hashable, Sendable {
+    case dockable
+    case neverDock(NeverDockReason)
+}
+
+/// Where a window's `WindowIdentity.windowID` came from.
+public enum WindowIDSource: String, Codable, Sendable {
+    /// `_AXUIElementGetWindow` (PanePrivate).
+    case axPrivate
+    /// The same-pid CG window whose bounds match the AX frame (fallback, SAFE-05).
+    case cgFrameMatch
+    /// A session-only ID from `WindowIdentity.syntheticIDBase` when the fallback match is ambiguous.
+    case synthetic
+}
+
 /// One window as the window system reports it, with its lifecycle state and the display it is on.
+///
+/// `frame` is in the global top-left space. `visibleMemberID` is the CGWindowID to address right now
+/// when the window is a native tab group (whose identity is the first-seen member).
 public struct WindowInfo: Equatable, Sendable {
     public var window: WindowRef
     public var frame: Rect
     public var state: WindowState
     public var displayUUID: String?
+    public var kind: WindowKind
+    public var idSource: WindowIDSource
+    public var visibleMemberID: UInt32?
+    public var tabCount: Int
+    public var isExcluded: Bool
+    public var learnedMinimum: Size?
 
-    public init(window: WindowRef, frame: Rect, state: WindowState, displayUUID: String?) {
+    public init(
+        window: WindowRef, frame: Rect, state: WindowState, displayUUID: String?,
+        kind: WindowKind = .dockable, idSource: WindowIDSource = .axPrivate, visibleMemberID: UInt32? = nil,
+        tabCount: Int = 1, isExcluded: Bool = false, learnedMinimum: Size? = nil
+    ) {
         self.window = window
         self.frame = frame
         self.state = state
         self.displayUUID = displayUUID
+        self.kind = kind
+        self.idSource = idSource
+        self.visibleMemberID = visibleMemberID
+        self.tabCount = tabCount
+        self.isExcluded = isExcluded
+        self.learnedMinimum = learnedMinimum
     }
 }
 
@@ -34,10 +74,22 @@ public struct WindowInfo: Equatable, Sendable {
 public struct WindowInventory: Equatable, Sendable {
     public var displays: [DisplayInfo]
     public var windows: [WindowInfo]
+    /// Apps whose AX calls are currently timing out; their windows keep their last known info.
+    public var degradedPIDs: Set<Int32>
+    /// True while the screen is locked or the Mac sleeps; nothing is closed while paused.
+    public var sessionPaused: Bool
+    /// True once every app has answered or failed the first sweep.
+    public var initialRefreshComplete: Bool
 
-    public init(displays: [DisplayInfo], windows: [WindowInfo]) {
+    public init(
+        displays: [DisplayInfo], windows: [WindowInfo], degradedPIDs: Set<Int32> = [],
+        sessionPaused: Bool = false, initialRefreshComplete: Bool = false
+    ) {
         self.displays = displays
         self.windows = windows
+        self.degradedPIDs = degradedPIDs
+        self.sessionPaused = sessionPaused
+        self.initialRefreshComplete = initialRefreshComplete
     }
 }
 
@@ -49,6 +101,12 @@ public enum WindowEvent: Equatable, Sendable {
     case windowResized(WindowRef, Rect)
     case windowFocused(WindowRef)
     case windowStateChanged(WindowRef, WindowState)
+    /// Title, kind, tab or exclusion changed. Titles are never logged.
+    case windowChanged(WindowInfo)
+    /// A frame write finished; `actual` is the read-back frame.
+    case frameApplied(WindowRef, requested: Rect, actual: Rect)
+    case appResponsiveness(pid: Int32, degraded: Bool)
+    case sessionPaused(Bool)
     case appLaunched(pid: Int32, bundleID: String)
     case appTerminated(pid: Int32)
     case displaysChanged
@@ -64,13 +122,24 @@ public enum WindowCommand: Equatable, Sendable {
     case setHidden(WindowRef, Bool)
 }
 
-/// Draft boundary between the engine and the OS window system.
+/// Boundary between the engine and the OS window system.
 ///
 /// All coordinates are in the D-09 global space: top-left origin, y growing downward.
 /// Commands are fire-and-forget; implementations may coalesce them (for example, keep only
-/// the last `setFrame` per window). Phase 2 provides `AXWindowSystem` and `FakeWindowSystem`.
+/// the last `setFrame` per window). Window titles never appear in errors or logs.
+/// Implemented by `AXWindowSystem` (PaneMac) and `FakeWindowSystem` (PaneTestSupport).
 public protocol WindowSystem: AnyObject, Sendable {
     var events: AsyncStream<WindowEvent> { get }
     func inventory() async -> WindowInventory
     func perform(_ commands: [WindowCommand]) async
+    /// The latest known info for one window. Returns nil only for a window never seen or confirmed
+    /// closed by two sources; while its app is hung or the session is paused it returns the last known info.
+    func windowInfo(_ window: WindowRef) async -> WindowInfo?
+}
+
+extension WindowIdentity {
+    /// Start of the reserved range for synthetic fallback IDs (`syntheticIDBase | counter`).
+    public static let syntheticIDBase: UInt32 = 0xF000_0000
+
+    public var isSyntheticWindowID: Bool { windowID >= Self.syntheticIDBase }
 }
