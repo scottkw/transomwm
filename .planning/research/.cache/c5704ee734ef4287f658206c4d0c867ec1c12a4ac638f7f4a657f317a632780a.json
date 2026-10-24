@@ -1,0 +1,1 @@
+{"content":"Swift 6.4 toolchain (Xcode 27.1): swift package init generates Swift Testing tests by default; swift test runs them headless. Swift 6.4 adds Swift Testing/XCTest interoperability. Use Swift Testing for new tests.","source":"web","provider":"websearch","confidence":"MEDIUM","fetched_at":"2026-10-24T03:31:27.508Z","ttl":86400000,"kind":"web"}
