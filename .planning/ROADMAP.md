@@ -35,7 +35,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A desk keyed by display UUID (plus optional Space ID) holds a tiled tree, a floating Desktop layer and tab-group tiles with one selected window; an absent or fullscreen window keeps its reserved slot until it is confirmed closed
   4. Any layout serialises to versioned JSON and round-trips exactly, and every edit can be undone back to the previous layout
   5. `PaneModel` builds and tests without importing AppKit, enforced by a CI check
-**Plans**: TBD
+**Plans:** 5 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Walking skeleton: package, core types, dock-beside → resolve → World → versioned JSON, full invariant checker, PaneEngine draft protocol, no-AppKit check + CI workflow
+- [ ] 01-02-PLAN.md — Tree edits: remove with proportional redistribution, normalisation (collapse/merge/ε clamp), gap-drag reweigh, seeded edit fuzz
+- [ ] 01-03-PLAN.md — Geometry: min-size water-filling, unfit reporting, lifecycle exclusion, input validation, resolve property fuzz, drop-zone hit testing
+- [ ] 01-04-PLAN.md — Desks: Desktop layer, transactional edits with 50-level per-desk undo, hardened persistence (version gate, migration chain, corrupt corpus)
+- [ ] 01-05-PLAN.md — Tab groups, lifecycle transitions (reserved slots until closed), drop targets → edits, end-to-end scenario
 **Research**: Standard patterns (fully specified in research ARCHITECTURE.md); skip phase research
 **Scope notes**: Lock the expensive-to-change shapes here: flat value tree keyed by `NodeID`, fractional weights, `Node.tabs` case, `DesktopLayer`, `DeskKey(displayUUID, spaceID?)`, `WindowRef` with persisted match hints, single top-left global coordinate space, schema version. Also: drop-zone hit-testing and a first draft of the `WindowSystem` protocol.
 
@@ -167,7 +174,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Layout Model | 0/TBD | Not started | - |
+| 1. Layout Model | 0/5 | Planned | - |
 | 2. Window Control | 0/TBD | Not started | - |
 | 3. Tiling MVP | 0/TBD | Not started | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
