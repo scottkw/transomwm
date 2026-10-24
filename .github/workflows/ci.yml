@@ -14,3 +14,6 @@ jobs:
       - run: scripts/check-no-appkit.sh
       - run: swift build
       - run: swift test
+      # Release compiles out assertValid(), so the edits' invariant behaviour must be tested there too.
+      - run: swift build -c release
+      - run: swift test -c release -Xswiftc -enable-testing

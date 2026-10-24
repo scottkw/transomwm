@@ -61,6 +61,13 @@ import Testing
         #expect(try check(line: line) == 0)
     }
 
+    /// The edits' invariant checks differ between debug and release (`assertValid`), so CI runs both.
+    @Test func ciBuildsAndTestsInReleaseToo() throws {
+        let workflow = try String(contentsOf: Self.repoRoot.appendingPathComponent(".github/workflows/ci.yml"), encoding: .utf8)
+        #expect(workflow.contains("run: swift build -c release"))
+        #expect(workflow.contains("run: swift test -c release -Xswiftc -enable-testing"))
+    }
+
     @Test func missingDirectoryIsAnError() throws {
         #expect(try runCheck(["Sources/DoesNotExist-\(UUID().uuidString)"]) == 2)
     }
