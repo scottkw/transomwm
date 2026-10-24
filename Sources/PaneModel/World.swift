@@ -116,15 +116,16 @@ public struct World: Codable, Equatable, Sendable {
     /// rules as `Desk.setState`. Undo is for user edits only, so nothing is pushed onto `history`.
     /// `.closed` is about the window, not the desk: it removes the window from whichever desk holds it,
     /// if any, and always from every snapshot, so no undo brings a closed window back, even one that an
-    /// undo or a move had already taken off every desk. Any throw leaves `self` and `history` unchanged.
+    /// undo or a move had already taken off every desk. `key` is ignored for `.closed` and need not have
+    /// a desk. Any throw leaves `self` and `history` unchanged.
     public mutating func apply(_ state: WindowState, for window: WindowRef, on key: DeskKey, history: inout UndoHistory) throws(LayoutError) {
-        guard desks[key] != nil else { throw .deskNotFound(key) }
         var candidate = self
         if state == .closed {
             if let holder = desks.first(where: { $0.value.contains(window) })?.key {
                 try candidate.desks[holder]?.close(window)
             }
         } else {
+            guard desks[key] != nil else { throw .deskNotFound(key) }
             try candidate.desks[key]?.setState(state, for: window)
         }
         try candidate.validate()

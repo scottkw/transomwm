@@ -279,6 +279,21 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
         #expect(world[k2] == Desk())
     }
 
+    @Test func closingAWindowNoDeskHoldsNeedsNoExistingDeskKey() throws {
+        var world = try worldWithDesks(k1)
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+            try dock(a, &desk, &ids)
+            try dock(w, &desk, &ids)
+        }
+        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.tree.remove(w) }
+        // k2 has no desk; `.closed` ignores the key, so it must not block the history purge (review iteration 3, WR-02).
+        try world.apply(.closed, for: w, on: k2, history: &history)
+        #expect(try world.undo(k1, history: &history) == [])
+        #expect(world[k1]?.contains(w) == false)
+        #expect(world[k1]?.tree.windows == [a])
+    }
+
     @Test func closingInsideAnEditIsRejectedSoUndoCannotReviveIt() throws {
         var world = try worldWithDesks(k1)
         var history = UndoHistory()
