@@ -58,6 +58,13 @@ public struct World: Codable, Equatable, Sendable {
 
     public subscript(key: DeskKey) -> Desk? { desks[key] }
 
+    public mutating func addDesk(_ key: DeskKey) throws(LayoutError) {}
+
+    public mutating func edit(_ key: DeskKey, history: inout UndoHistory, _ change: (inout Desk, inout IDSource) throws(LayoutError) -> Void) throws(LayoutError) {}
+
+    @discardableResult
+    public mutating func undo(_ key: DeskKey, history: inout UndoHistory) throws(LayoutError) -> Bool { false }
+
     // MARK: Codable — deterministic output, validated input
 
     private enum CodingKeys: String, CodingKey { case schemaVersion, ids, desks }
