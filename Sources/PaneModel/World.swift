@@ -133,22 +133,32 @@ public struct World: Codable, Equatable, Sendable {
     }
 
     /// Restores the newest snapshot of `key`'s desk, keeping the current lifecycle state of every
-    /// window still on the desk (those are OS facts, not something the user edited). Returns false when there is none. `ids` is
-    /// never rewound, so NodeIDs are not reused. If the restored desk would make the World invalid
-    /// (for example a window that has since moved to another desk), throws and leaves the World
-    /// unchanged, but the snapshot is still consumed so it cannot block the older ones.
+    /// window still on the desk (those are OS facts, not something the user edited). `ids` is never
+    /// rewound, so NodeIDs are not reused. If the restored desk would make the World invalid (for
+    /// example a window that has since moved to another desk), throws and leaves the World unchanged,
+    /// but the snapshot is still consumed so it cannot block the older ones.
+    ///
+    /// Returns nil when there is nothing to undo. Otherwise returns the windows the undo brought back
+    /// that no desk held before it (in snapshot order, usually empty). The model tracks no state for a
+    /// window on no desk, so these keep the state their snapshot held, which may be stale: the caller
+    /// must re-report each one's real state through `apply`.
     @discardableResult
-    public mutating func undo(_ key: DeskKey, history: inout UndoHistory) throws(LayoutError) -> Bool {
+    public mutating func undo(_ key: DeskKey, history: inout UndoHistory) throws(LayoutError) -> [WindowRef]? {
         guard let current = desks[key] else { throw .deskNotFound(key) }
-        guard var snapshot = history.pop(for: key) else { return false }
+        guard var snapshot = history.pop(for: key) else { return nil }
+        var revived: [WindowRef] = []
         for window in snapshot.tree.windows + snapshot.desktop.windows.map(\.window) {
-            if let state = current.state(of: window) { try snapshot.setState(state, for: window) }
+            if let state = current.state(of: window) {
+                try snapshot.setState(state, for: window)
+            } else {
+                revived.append(window) // a window on another desk instead makes validate() throw below
+            }
         }
         var candidate = self
         candidate.desks[key] = snapshot
         try candidate.validate()
         self = candidate
-        return true
+        return revived
     }
 
     // MARK: Codable — deterministic output, validated input

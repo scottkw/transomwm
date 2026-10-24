@@ -146,11 +146,11 @@ private func expectRoundTrip(_ world: World) throws {
         // empty desk; the lifecycle reports of steps 5 and 6 are not on the stack, and a fourth has nothing to undo.
         #expect(history.depth(for: key) == 3)
         for _ in 0..<3 {
-            #expect(try world.undo(key, history: &history))
+            #expect(try world.undo(key, history: &history) != nil)
             try expectRoundTrip(world)
         }
         #expect(try desk() == Desk())
-        #expect(try world.undo(key, history: &history) == false)
+        #expect(try world.undo(key, history: &history) == nil)
     }
 
     @Test func aDropOfAWindowAlreadyOnTheDeskIsRejectedByTheFunnel() throws {
