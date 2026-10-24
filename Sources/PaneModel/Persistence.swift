@@ -21,7 +21,18 @@ extension World {
         }
     }
 
+    /// Largest file `decode` will parse (threat T-01-09).
+    public static let maxEncodedBytes = 16 * 1024 * 1024
+
     public static func decode(from data: Data) throws(PersistenceError) -> World {
+        try decode(from: data, migrations: .standard)
+    }
+
+    /// Decodes a saved World. Throws `.newerVersion` for a file written by a newer Pane: the caller
+    /// should tell the user it was "saved by a newer version of Pane" and must not overwrite the file
+    /// (threat T-01-10). Older files are upgraded through `migrations` one version at a time.
+    public static func decode(from data: Data, migrations: MigrationChain) throws(PersistenceError) -> World {
+        guard data.count <= maxEncodedBytes else { throw .tooLarge(bytes: data.count, limit: maxEncodedBytes) }
         struct VersionProbe: Decodable { let schemaVersion: Int }
         let decoder = JSONDecoder()
         let version: Int
@@ -33,11 +44,22 @@ extension World {
         if version > currentSchemaVersion {
             throw PersistenceError.newerVersion(found: version, supported: currentSchemaVersion)
         }
+        var current = data
         if version < currentSchemaVersion {
-            throw PersistenceError.missingMigration(from: version)  // Plan 01-04 adds the migration chain
+            // JSONSerialization goes through NSNumber and may not keep integers above 2^53 exact
+            // (IDSource, creationOrder); future migration steps must keep that in mind.
+            guard var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                throw PersistenceError.corrupt("schema \(version) file is not a JSON object")
+            }
+            try migrations.migrate(&object, from: version, to: currentSchemaVersion)
+            do {
+                current = try JSONSerialization.data(withJSONObject: object)
+            } catch {
+                throw PersistenceError.corrupt(String(describing: error))
+            }
         }
         do {
-            return try decoder.decode(World.self, from: data)
+            return try decoder.decode(World.self, from: current)
         } catch {
             if case let DecodingError.dataCorrupted(context) = error, let layout = context.underlyingError as? LayoutError {
                 throw PersistenceError.invalidLayout(layout)
@@ -47,20 +69,34 @@ extension World {
     }
 }
 
+/// Upgrades a parsed file one schema version at a time. Steps are keyed by the version they
+/// upgrade from; schema 1 is the first version, so `standard` has none yet.
 public struct MigrationChain: Sendable {
     public typealias Step = @Sendable (inout [String: Any]) throws -> Void
 
-    public init(steps: [Int: Step]) {}
+    private let steps: [Int: Step]
+
+    public init(steps: [Int: Step]) {
+        self.steps = steps
+    }
 
     public static let standard = MigrationChain(steps: [:])
 
-    public func migrate(_ object: inout [String: Any], from: Int, to: Int) throws(PersistenceError) {}
-}
-
-extension World {
-    public static let maxEncodedBytes = 16 * 1024 * 1024
-
-    public static func decode(from data: Data, migrations: MigrationChain) throws(PersistenceError) -> World {
-        try decode(from: data)
+    /// Runs the steps for `from`, `from + 1`, ... `to - 1` in order, setting `schemaVersion` after
+    /// each. Commits to `object` only if every step succeeds.
+    public func migrate(_ object: inout [String: Any], from: Int, to: Int) throws(PersistenceError) {
+        var working = object
+        var version = from
+        while version < to {
+            guard let step = steps[version] else { throw .missingMigration(from: version) }
+            do {
+                try step(&working)
+            } catch {
+                throw .corrupt("migration from schema \(version) failed: \(error)")
+            }
+            version += 1
+            working["schemaVersion"] = version
+        }
+        object = working
     }
 }
