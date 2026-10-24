@@ -1,0 +1,45 @@
+# XcodeGen spec for the signed app bundle (D-03, D-04, D-05). All code lives in the SwiftPM package;
+# this only wraps Sources/PaneApp + the PaneMac product. Generate with scripts/generate.sh.
+name: Pane
+packages:
+  Pane:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_LSUIElement: YES
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Developer ID Application"
+    DEVELOPMENT_TEAM: S2K7P43927
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  Pane:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - ../Sources/PaneApp
+    dependencies:
+      - package: Pane
+        product: PaneMac
+    entitlements:
+      # XcodeGen rewrites this file from `properties` on every generate. AX needs no sandbox.
+      path: Pane.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    scheme: {}
+    settings:
+      configs:
+        Debug:
+          PRODUCT_NAME: "Pane Debug"
+          PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.pane.debug
+        Release:
+          PRODUCT_NAME: Pane
+          PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.pane
+          SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+          # No debugger-attach (get-task-allow) entitlement in Release (T-02-05).
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
