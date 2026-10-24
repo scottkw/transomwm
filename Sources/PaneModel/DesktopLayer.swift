@@ -35,6 +35,8 @@ public struct DesktopLayer: Codable, Equatable, Sendable {
         windows[index].frame = frame
     }
 
+    public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {}
+
     public func frame(of window: WindowRef) -> Rect? {
         index(of: window).map { windows[$0].frame }
     }

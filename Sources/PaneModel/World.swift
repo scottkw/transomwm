@@ -14,6 +14,8 @@ public struct Desk: Codable, Equatable, Sendable {
         tree.state(of: window) != nil || desktop.contains(window)
     }
 
+    public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {}
+
     /// Tree and Desktop layer are each valid, and no window is both docked and floating.
     public func validate() throws(LayoutError) {
         try tree.validate()

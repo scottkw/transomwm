@@ -120,6 +120,8 @@ extension LayoutTree {
         assertValid()
     }
 
+    public mutating func setState(_ state: WindowState, for window: WindowRef) throws(LayoutError) {}
+
     /// Moves `delta` (a fraction of the split's length) across the boundary after child `index`,
     /// between those two children only (D-07). Both stay at or above `minWeight`; every other
     /// weight is left bit-identical.
