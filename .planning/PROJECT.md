@@ -23,7 +23,7 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 - [ ] Overview of all windows on all displays with a Spaces bar; optional Mission Control replacement; multi-display
 - [ ] Tab groups: drop onto the middle of a window to group; tab strip overlay with group-wide traffic lights
 - [ ] Saved views 1–9 and `pane://` URL commands
-- [ ] Settings, onboarding, launch at login, auto-update (Sparkle), signed and notarised builds, Homebrew cask
+- [ ] Settings, onboarding, launch at login, update check against GitHub Releases (gifsmith-style), signed and notarised builds, Homebrew cask
 
 ### Out of Scope
 
@@ -63,6 +63,7 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 | Undo covers user edits only | OS lifecycle reports go through `World.apply`, off the undo stack; a confirmed close purges the window from history | ✓ Good (Phase 1 review) |
 | `World.undo` returns restored windows | Model can't know OS state for windows on no desk; the engine re-reports them | — Pending (Phase 2 must honour) |
 | Unfit windows reported, never overlapped | Water-filling resolve pins minimums; windows that can't fit get no rect | ✓ Good (Phase 1) |
+| GitHub Releases update check instead of Sparkle | User wants the same updater as gifsmith: latest-release check with ETag, notify, Settings toggle + Check for Updates button, sha256 + Team ID verified DMG. Drops the Sparkle dependency; no in-place relaunch | — Pending (Phase 9, decided 2026-10-24) |
 | Clean-room docs scrub | TrellisWM internal names removed from PLAN.md and research docs | ✓ Good |
 
 ## Evolution

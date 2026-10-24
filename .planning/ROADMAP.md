@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts
 - [ ] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons
 - [ ] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `pane://` commands, layouts restored across restarts and reboots
-- [ ] **Phase 9: Polish & Ship** - Settings, onboarding, launch at login, Sparkle updates, Homebrew cask
+- [ ] **Phase 9: Polish & Ship** - Settings, onboarding, launch at login, GitHub Releases update check, Homebrew cask
 
 ## Phase Details
 
@@ -184,12 +184,12 @@ Plans:
   1. The Settings window lets the user change gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
   2. On first run, onboarding walks the user through Accessibility, optional Screen Recording and the conflicting macOS features, without looping on permission prompts
   3. User can turn on launch at login, and Pane starts at the next login
-  4. Pane updates itself through Sparkle, and every window is back on-screen before it relaunches
+  4. Settings (opened from the menu-bar icon) has an Updates section: an automatic-check toggle and a "Check for Updates" button; when GitHub has a newer release Pane notifies the user, and the downloaded DMG is opened only after its sha256 digest and Team ID verify
   5. `brew install --cask` installs a Developer ID-signed, notarised Pane that opens without Gatekeeper warnings
 
 **Plans**: TBD
 **UI hint**: yes
-**Research**: Standard patterns; Sparkle, notarisation and Homebrew are well documented (Rectangle and Amethyst casks as models)
+**Research**: Standard patterns; port gifsmith's GitHub Releases updater (`~/dev/gifsmith/internal/update`, `internal/services/updates.go`) to Swift; notarisation and Homebrew are well documented (Rectangle and Amethyst casks as models)
 **Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Pane" for existing macOS apps before release.
 
 ## Progress

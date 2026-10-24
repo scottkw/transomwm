@@ -98,7 +98,7 @@
 - [ ] **SHIP-01**: Settings window covers gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
 - [ ] **SHIP-02**: First-run onboarding walks through permissions and conflicting macOS features
 - [ ] **SHIP-03**: User can launch Pane at login
-- [ ] **SHIP-04**: Pane updates itself via Sparkle and restores windows before relaunching
+- [ ] **SHIP-04**: Pane checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
 - [ ] **SHIP-05**: Releases are Developer ID signed, notarised, and installable with `brew install --cask`
 
 ## v2 Requirements
