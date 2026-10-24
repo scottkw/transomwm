@@ -65,6 +65,10 @@ public struct WindowTracker: Sendable {
         return events
     }
 
+    public func hasPendingWindows(pid: Int32) -> Bool {
+        false
+    }
+
     public func info(for identity: WindowIdentity) -> WindowInfo? {
         windows[identity]
     }
