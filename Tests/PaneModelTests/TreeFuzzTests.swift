@@ -34,7 +34,14 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
                 let window = makeWindow(nextWindow)
                 nextWindow += 1
                 if let target = nodeIDs.randomElement(using: &rng) {
-                    try tree.insert(window, at: Edge.allCases.randomElement(using: &rng)!, of: target, ids: &ids)
+                    // A third of the drops onto a leaf make (or grow) a tab group instead of docking beside it.
+                    if case .split? = tree.nodes[target] {
+                        try tree.insert(window, at: Edge.allCases.randomElement(using: &rng)!, of: target, ids: &ids)
+                    } else if Int.random(in: 0..<3, using: &rng) == 0 {
+                        try tree.group(window, into: target)
+                    } else {
+                        try tree.insert(window, at: Edge.allCases.randomElement(using: &rng)!, of: target, ids: &ids)
+                    }
                 } else {
                     try tree.insertRoot(window, ids: &ids)
                 }
@@ -43,7 +50,13 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
                 guard let window = tree.windows.randomElement(using: &rng) else { continue }
                 try tree.remove(window)
                 expected.remove(window.identity)
-            case 7..<9:
+            case 7:
+                let tabbed = tree.windows.filter { window in
+                    if case .tabs? = tree.leaf(containing: window).flatMap({ tree.nodes[$0] }) { true } else { false }
+                }
+                guard let window = tabbed.randomElement(using: &rng) else { continue }
+                try tree.selectTab(window)
+            case 8:
                 let splits = nodeIDs.filter { if case .split? = tree.nodes[$0] { true } else { false } }
                 guard let split = splits.randomElement(using: &rng), case let .split(_, children, _)? = tree.nodes[split] else { continue }
                 let index = Int.random(in: 0..<(children.count - 1), using: &rng)
