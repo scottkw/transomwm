@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Layout Model
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-10-24T05:15:01.252Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-10-24T05:52:07.841Z"
 last_activity: 2026-10-23
 last_activity_desc: Phase 1 execution started
-state_head: "0b52c914d46f23acd942e690c7d88e81e0729922"
+state_head: f3b04c600e56da78be2b462a855a7562f96e333d
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-23)
 ## Current Position
 
 Phase: 1 (Layout Model) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-10-23 — Phase 1 execution started
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 1 P01 | 6 min | 2 tasks | 10 files |
 | Phase 1 P02 | 5 min | 2 tasks | 3 files |
 | Phase 01 P03 | 7 min | 3 tasks | 5 files |
+| Phase 01 P04 | 7 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase 1]: normalize() leaves already-normalised weights bit-identical, so resizeBoundary can call it and keep D-07
 - [Phase 01]: resolve never changes stored weights; unfit windows are chosen greedily (largest minimum on the violated axis, ties to larger NodeID then identity) and re-admitted in removal order wherever they fit
 - [Phase 01]: Drop zones: tile centre is [0.25, 0.75] on both axes; layout edge is < 24 pt from the area edge; constants tuned in Phase 3 UAT
+- [Phase 01]: Desk edits go through transactional World.edit; undo validates the restored World and never rewinds IDSource
+- [Phase 01]: UndoHistory is session-only (not Codable); 50 Desk snapshots per desk
+- [Phase 01]: Version-1 files decode original bytes; older files migrate via MigrationChain through JSONSerialization (precision caveat above 2^53)
 
 ### Pending Todos
 
@@ -105,6 +109,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T05:15:01.227Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-10-24T05:52:07.826Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None

@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Any layout serialises to versioned JSON and round-trips exactly, and every edit can be undone back to the previous layout
   5. `PaneModel` builds and tests without importing AppKit, enforced by a CI check
 
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 **Wave 1**
@@ -46,7 +46,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 01-02-PLAN.md — Tree edits: remove with proportional redistribution, normalisation (collapse/merge/ε clamp), gap-drag reweigh, seeded edit fuzz
 - [x] 01-03-PLAN.md — Geometry: min-size water-filling, unfit reporting, lifecycle exclusion, input validation, resolve property fuzz, drop-zone hit testing
-- [ ] 01-04-PLAN.md — Desks: Desktop layer, transactional edits with 50-level per-desk undo, hardened persistence (version gate, migration chain, corrupt corpus)
+- [x] 01-04-PLAN.md — Desks: Desktop layer, transactional edits with 50-level per-desk undo, hardened persistence (version gate, migration chain, corrupt corpus)
 - [ ] 01-06-PLAN.md — PaneEngine target with draft WindowSystem protocol, no-AppKit check in `swift test` + CI workflow on macos-26
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -199,7 +199,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Layout Model | 3/6 | In Progress | - |
+| 1. Layout Model | 4/6 | In Progress | - |
 | 2. Window Control | 0/TBD | Not started | - |
 | 3. Tiling MVP | 0/TBD | Not started | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |

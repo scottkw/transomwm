@@ -11,12 +11,12 @@
 - [ ] **MODEL-02**: A window can be inserted beside any tile on any of its four edges, creating or extending a split
 - [x] **MODEL-03**: Removing a window gives its space back and collapses single-child splits automatically
 - [x] **MODEL-04**: Tile rects are computed for a given area with gaps, respecting each window's minimum size without overlap
-- [ ] **MODEL-05**: Each desk has a floating Desktop layer that holds non-docked windows
+- [x] **MODEL-05**: Each desk has a floating Desktop layer that holds non-docked windows
 - [ ] **MODEL-06**: A tile can hold a tab group of several windows with one selected
 - [ ] **MODEL-07**: Desks are keyed by display UUID plus optional Space ID
 - [ ] **MODEL-08**: Windows have lifecycle states (present, absent, fullscreen, closed) so an absent window keeps its reserved slot
-- [ ] **MODEL-09**: Layout state serialises to versioned JSON and round-trips exactly
-- [ ] **MODEL-10**: Every layout change can be undone back to the previous layout
+- [x] **MODEL-09**: Layout state serialises to versioned JSON and round-trips exactly
+- [x] **MODEL-10**: Every layout change can be undone back to the previous layout
 
 ### Window Control
 
@@ -136,12 +136,12 @@ Populated by the roadmapper on 2026-10-23.
 | MODEL-02 | Phase 1 | Pending |
 | MODEL-03 | Phase 1 | Complete |
 | MODEL-04 | Phase 1 | Complete |
-| MODEL-05 | Phase 1 | Pending |
+| MODEL-05 | Phase 1 | Complete |
 | MODEL-06 | Phase 1 | Pending |
 | MODEL-07 | Phase 1 | Pending |
 | MODEL-08 | Phase 1 | Pending |
-| MODEL-09 | Phase 1 | Pending |
-| MODEL-10 | Phase 1 | Pending |
+| MODEL-09 | Phase 1 | Complete |
+| MODEL-10 | Phase 1 | Complete |
 | WIN-01 | Phase 2 | Pending |
 | WIN-02 | Phase 2 | Pending |
 | WIN-03 | Phase 2 | Pending |
