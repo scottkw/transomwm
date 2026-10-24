@@ -29,7 +29,8 @@ public enum LayoutError: Error, Equatable, Sendable {
 }
 
 /// A flat value tree: nodes refer to children by ID, so the whole layout is a cheap copy-on-write
-/// snapshot. Every way of building one (init, decoding, edits) ends in `validate()`.
+/// snapshot. `init`, decoding and `insert` run `validate()` in every build and throw rather than
+/// commit an invalid tree; the other edits add no nodes and check it in debug builds (`assertValid`).
 public struct LayoutTree: Codable, Equatable, Sendable {
     // internal(set) rather than private(set): the edits in TreeEdits.swift write these; callers outside
     // the module still only read them.

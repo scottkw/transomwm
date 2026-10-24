@@ -161,6 +161,21 @@ private let tabRemovals: [(selected: Int, removed: Int, after: [WindowRef], sele
         #expect(abs(weights.reduce(0, +) - 1) <= 1e-9)
     }
 
+    @Test func anIDSourceThatLagsTheTreeThrowsInsteadOfOverwritingNodes() throws {
+        // H[A n1, B n2] under n3. Rule 1 would reuse n1 for the new leaf; rule 3 gets a fresh leaf n0
+        // but would reuse n1 for the new split.
+        let t = try tree(root: 3, [3: h(1, 2, weights: [0.5, 0.5]), 1: .panel(a), 2: .panel(b)])
+        for (edge, next) in [(Edge.right, UInt64(1)), (.bottom, 0)] {
+            var edited = t
+            var ids = IDSource(next: next)
+            #expect(throws: LayoutError.invariantViolated("ID source issued n1, which is already in the tree")) {
+                try edited.insert(c, at: edge, of: n(2), ids: &ids)
+            }
+            #expect(edited == t)
+            #expect(ids == IDSource(next: next))
+        }
+    }
+
     @Test func mergePastMaxChildrenThrowsAndChangesNothing() throws {
         // H[50 panels, V[B, H[60 panels]]] minus B would merge into one split of 109 children.
         var nodes: [UInt64: Node] = [3: .panel(b)]

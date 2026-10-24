@@ -28,7 +28,9 @@ extension LayoutTree {
         let axis = edge.axis
         var next = self
         var nextIDs = ids
+        // IDSource is public and not tied to the tree, so a lagging one must not overwrite a node.
         let leaf = try nextIDs.make()
+        guard nodes[leaf] == nil else { throw .invariantViolated("ID source issued \(leaf), which is already in the tree") }
         next.nodes[leaf] = .panel(window)
         next.states[window.identity] = .present
 
@@ -45,6 +47,7 @@ extension LayoutTree {
             next.nodes[target] = try Self.adding(leaf, at: index, to: target, targetAxis, children, weights)
         } else {
             let split = try nextIDs.make()
+            guard nodes[split] == nil else { throw .invariantViolated("ID source issued \(split), which is already in the tree") }
             next.nodes[split] = .split(axis: axis, children: edge.isLeading ? [leaf, target] : [target, leaf], weights: [0.5, 0.5])
             if let parent, let parentSplit {
                 let children = parentSplit.children.map { $0 == target ? split : $0 }
