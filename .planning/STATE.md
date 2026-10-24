@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-10-24T15:22:53.975Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-10-24T15:33:24.433Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: e6910db47a17dccf90f17cdd3f65528d325c95c6
+state_head: 9ea6ecedf7ffb1b44c1688a017fba2be450c6ad1
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 7
+  completed_plans: 8
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 (Window Control) — EXECUTING
-Plan: 2 of 13
+Plan: 3 of 13
 Status: Ready to execute
 Last activity: 2026-10-24 — Phase 2 execution started
 
@@ -63,6 +63,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 01 P06 | 2min | 2 tasks | 5 files |
 | Phase 01 P05 | 5 min | 3 tasks | 8 files |
 | Phase 2 P01 | 14 min | 3 tasks | 22 files |
+| Phase 2 P02 | 6 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,9 @@ Recent decisions affecting current work:
 - [Phase 2]: AXAppThread.init returns once the run loop exists; AX observer registration (IPC) happens on the thread afterwards so a hung app never blocks main
 - [Phase 2]: WindowTracker keeps a window's known kind while it is absent (minimised/hidden subrole reads AXDialog)
 - [Phase 2]: Fixture stdin protocol: a command's window lines precede its ok/error line; launch reads windows via list; stdin EOF quits the fixture
+- [Phase 2]: XcodeGen rewrites Pane.entitlements on every generate, so project.yml declares app-sandbox=false under entitlements.properties
+- [Phase 2]: Manual Developer ID signing of Debug works with no profile; target scheme: {} makes xcodebuild -scheme Pane resolve (A4 confirmed)
+- [Phase 2]: StatusItemController consumes AXWindowSystem.events; a second consumer must fan the stream out
 
 ### Pending Todos
 
@@ -122,6 +126,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T15:22:53.858Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-10-24T15:33:24.298Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
