@@ -1,0 +1,10 @@
+# Original app: copyrighted, never commit (clean-room rule)
+*.dmg
+*.app/
+
+# Swift
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+.DS_Store
