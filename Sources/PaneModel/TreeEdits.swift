@@ -94,9 +94,31 @@ extension LayoutTree {
         assertValid()
     }
 
-    public mutating func group(_ window: WindowRef, into target: NodeID) throws(LayoutError) {}
+    /// Adds `window` as the last, selected tab of the leaf `target` (MODEL-06). A panel becomes a
+    /// tab group `[existing, window]` under the same NodeID; tab order is insertion order.
+    public mutating func group(_ window: WindowRef, into target: NodeID) throws(LayoutError) {
+        guard states[window.identity] == nil else { throw .duplicateWindow(window) }
+        guard let node = nodes[target] else { throw .nodeNotFound(target) }
+        var next = self
+        switch node {
+        case let .panel(existing): next.nodes[target] = .tabs(windows: [existing, window], selected: 1)
+        case let .tabs(windows, _): next.nodes[target] = .tabs(windows: windows + [window], selected: windows.count)
+        case .split: throw .notALeaf(target)
+        }
+        next.states[window.identity] = .present
+        self = next
+        assertValid()
+    }
 
-    public mutating func selectTab(_ window: WindowRef) throws(LayoutError) {}
+    /// Makes `window` the selected tab of its group.
+    public mutating func selectTab(_ window: WindowRef) throws(LayoutError) {
+        guard let leaf = leaf(containing: window) else { throw .windowNotFound(window) }
+        guard case let .tabs(windows, _)? = nodes[leaf] else { throw .notATabGroup(leaf) }
+        var next = self
+        next.nodes[leaf] = .tabs(windows: windows, selected: windows.firstIndex(of: window)!)
+        self = next
+        assertValid()
+    }
 
     /// Moves `delta` (a fraction of the split's length) across the boundary after child `index`,
     /// between those two children only (D-07). Both stay at or above `minWeight`; every other
