@@ -68,7 +68,38 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: TBD
+**Plans**: 13 plans
+
+Plans:
+**Wave 1**
+- [ ] 02-01-PLAN.md — Tracer: fixture window tracked end to end on a per-app AX thread; WindowSystem contract, WindowTracker, FakeWindowSystem, fixture app
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md — Signed menu-bar app: status item with live header, XcodeGen + Developer ID Pane Debug.app / Pane.app
+- [ ] 02-03-PLAN.md — Classifier, CG window list, pane-dump and the redacted AX-dump corpus (WIN-05)
+- [ ] 02-04-PLAN.md — LifecycleSync: OS lifecycle via World.apply and the undo re-query obligation
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-05-PLAN.md — Accessibility onboarding, stale-grant detection and Reset Permission (WIN-01)
+- [ ] 02-06-PLAN.md — Live tracking (app launch/quit, AX hints, debounce, sweep) and display UUIDs via one coordinate boundary
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 02-07-PLAN.md — Hung and slow apps: responsiveness tracker, degraded probing, SIGSTOP test (WIN-03)
+- [ ] 02-08-PLAN.md — Tracked Windows window, Don't Arrange exclusions, Freeze test
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 02-09-PLAN.md — Two-source close confirmation and lock/sleep session gate (WIN-09)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 02-10-PLAN.md — Native tab groups count as one window (WIN-06)
+- [ ] 02-11-PLAN.md — Window-ID fallback matching and capability degradation (SAFE-05)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 02-12-PLAN.md — Latest-wins move/resize pipeline with read-back and learned minimums (WIN-04)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 02-13-PLAN.md — Exclusion enforcement, persisted minimum hints, Nudge Focused Window
+
 **Research**: Moderate. Patterns are documented (AeroSpace), but the window classifier corpus, native-tab heuristics and two-source close-confirmation rules need careful design
 **Scope notes**: Pulled forward per research: coordinate conversion at one tested boundary plus display-UUID matching (from Phase 6) and native-tab detection (from Phase 7). Also: per-app AX threads with ~1 s messaging timeouts, coalesced size-position-size writes with read-back, the `PanePrivate` dlsym pattern and capability registry, `FakeWindowSystem`, fullscreen state detection (tile return is verified in Phase 3 under WIN-07), stable dev signing identity and a separate debug bundle ID so TCC grants survive rebuilds.
 

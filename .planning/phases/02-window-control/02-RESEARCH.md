@@ -788,16 +788,20 @@ open -n "$APP" --args --disable-private=AXWindowID     # always via LaunchServic
 | A10 | Classifier rule 7 (no enabled fullscreen button → never-dock) is the right default for Pane (System Settings would float) | Pattern 2 | Developer may want System Settings dockable; it's an override table entry either way |
 | A11 | Register app threads only after `isFinishedLaunching`; re-check activation policy on refresh | Pitfall 11 | Missed early windows; caught by the periodic sweep |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Why did the system-wide `kAXFocusedApplicationAttribute` return -25204 while trusted?**
+1. **Why did the system-wide `kAXFocusedApplicationAttribute` return -25204 while trusted?** RESOLVED (design avoids it)
    - What we know: app elements worked fine in the same session, and the shell may be sandboxed.
-   - What's unclear: whether this happens in a normal signed app.
-   - Recommendation: don't base the probe on the system-wide element; use Finder's app element.
-2. **Is System Settings dockable?** AeroSpace floats it (no fullscreen button). CONTEXT lists it in the corpus but not its expected label. Recommendation: label it never-dock by default (rule 7) and let the developer confirm at capture.
-3. **Java app for the corpus:** there's no Java runtime and no Java GUI app on this Mac (`java_home`: "Unable to locate a Java Runtime"). Options: install a JDK GUI app (e.g. IntelliJ IDEA CE via a checkpoint), or record the gap and defer the case. Recommendation: a human-verify checkpoint asking the developer.
-4. **Multi-display UAT:** only the built-in display is attached. Secondary-display criteria (SC3) need an external display or Sidecar during UAT. Coordinates are unit-tested with synthetic layouts meanwhile.
-5. **Group identity when the leader tab closes:** keep the leader ref (recommended) or emit a ref-replace event? Phase 3/4 consumers should be told. Recommendation: keep the leader ref in Phase 2 and document it in the protocol doc comment.
+   - Resolution: Pane never relies on the system-wide focused-application attribute. The permission probe reads `AXRole` of Finder's app element on a background thread (1 s timeout, 3 retries, then the frontmost regular app, never Pane's own pid), and an all-timeout result resolves to ready and is logged. Implemented in 02-05-PLAN.md Task 2 (`PermissionProbe`). Focused windows for Nudge come from AX focus hints and `AXMain`, not the system-wide element (02-06, 02-13).
+2. **Is System Settings dockable?** RESOLVED: never-dock by default.
+   - Resolution: classifier rule 7 (no enabled fullscreen button) leaves System Settings never-dock (Assumption A10); the corpus case is labelled `neverDock` and the developer confirms it in the 02-03 human-check, so changing it later is a one-line override-table entry. Implemented in 02-03-PLAN.md Tasks 1 and 3.
+3. **Java app for the corpus:** RESOLVED: Android Studio.
+   - Correction: this Mac has `/Applications/Android Studio.app`, a JetBrains IntelliJ-platform (Swing) app that bundles its own Java runtime, so a Java GUI app is available even though `java_home` finds no system JDK. No install and no checkpoint are needed. LibreOffice covers the office case.
+   - Resolution: 02-03-PLAN.md Task 3 captures Android Studio's first window (family `java`) and LibreOffice's Start Center (family `office`); the corpus coverage test requires both families.
+4. **Multi-display UAT:** RESOLVED: unit vectors now, physical check in manual UAT.
+   - Resolution: coordinate conversion and display assignment are unit-tested with synthetic above/left/below layouts (02-06-PLAN.md Task 1); FrameWriteIntegrationTests exercises a second display when one is attached and records when it was not (02-12-PLAN.md Task 2); the developer runs the multi-display Nudge check with an external display or Sidecar (02-13-PLAN.md Task 3 human-check).
+5. **Group identity when the leader tab closes:** RESOLVED: keep the leader ref.
+   - Resolution: a tab group keeps its first-seen member's `WindowRef` for its whole life; `WindowInfo.visibleMemberID` carries the CGWindowID to address. Recorded in the 02-01-PLAN.md `<assumption_delta_decision>` (with the conditions that would force a Pane-owned ID later) and implemented in 02-10-PLAN.md; Phases 3-4 are told to address windows through `visibleMemberID`.
 
 ## Environment Availability
 
@@ -813,12 +817,13 @@ open -n "$APP" --args --disable-private=AXWindowID     # always via LaunchServic
 | `tccutil` | Reset permission | ✓ | /usr/bin/tccutil | — |
 | gh CLI | Prior-art reading | ✓ | logged in | — |
 | AX trust in dev shell | Integration tests | ✓ | `AXIsProcessTrusted()` true from this shell | Suite skips when false |
-| Corpus apps | `pane-dump` corpus | Partial | Finder, Safari, Terminal, System Settings; Electron: VS Code, Obsidian, Signal, Termius; Office: LibreOffice (no MS Office); Chrome, Firefox (PiP cases); Warp | Java: **none** (see Open Question 3) |
+| Corpus apps | `pane-dump` corpus | ✓ | Finder, Safari, Terminal, System Settings; Electron: VS Code, Obsidian, Signal, Termius; Java: Android Studio (bundled runtime); Office: LibreOffice (no MS Office); Chrome, Firefox (PiP cases); Warp | — (Open Question 3 resolved) |
 | External display | SC3 multi-display UAT | ✗ | built-in only (2560×1664 Retina, 1710×1112 pt) | Unit-tested coordinates; UAT needs a display/Sidecar |
 
 **Missing dependencies with no fallback:**
-- A Java GUI app for the corpus (the developer decides: install one or defer the case).
-- An external display for the SC3 multi-display UAT step.
+- An external display for the SC3 multi-display UAT step (or Sidecar; covered by the 02-13 human-check).
+
+(Correction: a Java GUI app is available, Android Studio; see Open Question 3.)
 
 **Missing dependencies with fallback:**
 - XcodeGen (install via brew behind a checkpoint).
