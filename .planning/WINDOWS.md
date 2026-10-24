@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
+open_count: 1
 waived_count: 0
 fixed_count: 1
-total_count: 1
-last_updated: 2026-10-24T05:03:53.145Z
+total_count: 2
+last_updated: 2026-10-24T15:21:12.256Z
 ---
 
 # Broken Windows Ledger
@@ -16,6 +16,7 @@ last_updated: 2026-10-24T05:03:53.145Z
 | id | phase | kind | file | line | description | status | reason | recorded_at | resolved_at |
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 1 | deviation | Sources/PaneModel/TreeEdits.swift | 64 | n-ary insert scales sibling weights without a minWeight clamp; 01-02 normalize() adds it | fixed |  | 2026-10-24T04:55:49.599Z | 2026-10-24T05:03:53.145Z |
+| 2 | 2 | stub | Sources/PaneMac/AXWindowSystem.swift | 64 | AXWindowSystem.perform logs and drops commands until the frame write pipeline (Plan 02-12) | open |  | 2026-10-24T15:21:12.256Z |  |
 
 ````json
 [
@@ -30,6 +31,19 @@ last_updated: 2026-10-24T05:03:53.145Z
     "reason": "",
     "recorded_at": "2026-10-24T04:55:49.599Z",
     "resolved_at": "2026-10-24T05:03:53.145Z",
+    "milestone": null
+  },
+  {
+    "id": 2,
+    "kind": "stub",
+    "phase": "2",
+    "file": "Sources/PaneMac/AXWindowSystem.swift",
+    "line": 64,
+    "description": "AXWindowSystem.perform logs and drops commands until the frame write pipeline (Plan 02-12)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-24T15:21:12.256Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]
