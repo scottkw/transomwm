@@ -68,11 +68,11 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: 13 plans
+**Plans**: 1/13 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 02-01-PLAN.md — Tracer: fixture window tracked end to end on a per-app AX thread; WindowSystem contract, WindowTracker, FakeWindowSystem, fixture app
+- [x] 02-01-PLAN.md — Tracer: fixture window tracked end to end on a per-app AX thread; WindowSystem contract, WindowTracker, FakeWindowSystem, fixture app
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 02-02-PLAN.md — Signed menu-bar app: status item with live header, XcodeGen + Developer ID Pane Debug.app / Pane.app
@@ -231,7 +231,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
-| 2. Window Control | 0/TBD | Not started | - |
+| 2. Window Control | 1/13 | In Progress | - |
 | 3. Tiling MVP | 0/TBD | Not started | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |

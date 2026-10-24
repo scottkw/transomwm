@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-10-24T15:03:20.904Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-10-24T15:22:53.975Z"
 last_activity: 2026-10-24
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
-state_head: 4bbc50cdd542be45d63ce49b33dd7fee099a5a11
+last_activity_desc: Phase 2 execution started
+state_head: e6910db47a17dccf90f17cdd3f65528d325c95c6
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 6
+  completed_plans: 7
   percent: 11
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 ## Current Position
 
-Phase: 2 (Window Control) — READY TO EXECUTE
-Plan: Not started
+Phase: 2 (Window Control) — EXECUTING
+Plan: 2 of 13
 Status: Ready to execute
-Last activity: 2026-10-24 — Phase 1 complete, transitioned to Phase 2
+Last activity: 2026-10-24 — Phase 2 execution started
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -62,6 +62,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 01 P04 | 7 min | 3 tasks | 7 files |
 | Phase 01 P06 | 2min | 2 tasks | 5 files |
 | Phase 01 P05 | 5 min | 3 tasks | 8 files |
+| Phase 2 P01 | 14 min | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-06: no-AppKit guardrail is scripts/check-no-appkit.sh, run by NoAppKitTests in every swift test and by CI on macos-26
 - [Phase 01]: group(_:into:) checks duplicate identity before target, matching insert; floating-into-tree duplicates are caught by World.edit validation
 - [Phase 01]: Lifecycle setState changes states only; .closed delegates to remove; DesktopLayer refuses to store .closed (two-source close contract documented for Phase 2)
+- [Phase 2]: AXAppThread.init returns once the run loop exists; AX observer registration (IPC) happens on the thread afterwards so a hung app never blocks main
+- [Phase 2]: WindowTracker keeps a window's known kind while it is absent (minimised/hidden subrole reads AXDialog)
+- [Phase 2]: Fixture stdin protocol: a command's window lines precede its ok/error line; launch reads windows via list; stdin EOF quits the fixture
 
 ### Pending Todos
 
@@ -118,6 +122,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T14:05:29.684Z
-Stopped at: Phase 2 UI-SPEC approved
-Resume file: .planning/phases/02-window-control/02-UI-SPEC.md
+Last session: 2026-10-24T15:22:53.858Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
