@@ -50,6 +50,11 @@ nonisolated public enum MenuCopy {
     public static let dontArrangeFallback = "Don't Arrange Frontmost App"
     public static let noExclusions = "No apps excluded"
 
+    public static func freezeItem(appName: String) -> String { "" }
+    public static let freezeNotAllowed = ""
+    public static func resumeItem(appName: String) -> String { "" }
+    public static func freezeAlertMessage(appName: String) -> String { "" }
+
     private static func count(_ n: Int, _ noun: String) -> String {
         n == 1 ? "1 \(noun)" : "\(n) \(noun)s"
     }
