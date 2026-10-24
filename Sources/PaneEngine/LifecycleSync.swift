@@ -37,15 +37,32 @@ public enum LifecycleSync {
         }
     }
 
+    /// Undoes the newest user edit on `key`'s desk. Returns nil when there is nothing to undo. Otherwise the
+    /// revived windows carry their snapshot states, which may be stale (D-11): callers must run `requery` and
+    /// then `applyRequeried` for them before trusting their states. The steps are split so a caller holding
+    /// the World in an actor never passes actor state inout across the `await`.
     public static func undo(_ key: DeskKey, world: inout World, history: inout UndoHistory) throws(LayoutError) -> RevivedWindows? {
-        nil
+        guard let windows = try world.undo(key, history: &history) else { return nil }
+        return RevivedWindows(key: key, windows: windows)
     }
 
+    /// Each revived window's real state, in order: what the window system reports, or `.closed` when it no
+    /// longer knows the window (it returns nil only for one never seen or confirmed closed by two sources).
     public static func requery(_ revived: RevivedWindows, using system: any WindowSystem) async -> [(WindowRef, WindowState)] {
-        []
+        var states: [(WindowRef, WindowState)] = []
+        for window in revived.windows {
+            states.append((window, await system.windowInfo(window)?.state ?? .closed))
+        }
+        return states
     }
 
+    /// Reports re-queried states through `World.apply`, in order. A `.closed` pair removes the window and
+    /// purges it from history (the key is ignored for it).
     public static func applyRequeried(
         _ states: [(WindowRef, WindowState)], on key: DeskKey, world: inout World, history: inout UndoHistory
-    ) throws(LayoutError) {}
+    ) throws(LayoutError) {
+        for (window, state) in states {
+            try world.apply(state, for: window, on: key, history: &history)
+        }
+    }
 }
