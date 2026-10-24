@@ -53,6 +53,16 @@
         }
     }
 
+    /// Drops every pending refresh and stops the sweep (the session paused); `startSweep()` restarts it.
+    func stop() {
+        for task in pending.values { task.cancel() }
+        pending = [:]
+        pendingAll?.cancel()
+        pendingAll = nil
+        sweep?.cancel()
+        sweep = nil
+    }
+
     /// Drops the pending refresh for `pid` (the app quit).
     func cancel(pid: Int32) {
         pending.removeValue(forKey: pid)?.cancel()

@@ -35,6 +35,13 @@ import os
     private var inFlight: Set<Int32> = []
     private var followUp: Set<Int32> = []
     private var probes: [Int32: Task<Void, Never>] = [:]
+    /// Lock, sleep and session signals (D-09). While paused no refresh runs and nothing is closed.
+    private var gate: SessionGate?
+    /// `inventory().sessionPaused`: true from the pause until the post-resume full refresh has finished.
+    private var sessionPaused = false
+    private var resumeTask: Task<Void, Never>?
+    /// Quiet time after the last session signal before the post-resume full refresh.
+    static let resumeQuiet: Duration = .milliseconds(1500)
 
     /// `appFilter(pid, bundleKey)` limits which apps get a thread (tests track only the fixture).
     public init(appFilter: @escaping @MainActor (Int32, String) -> Bool = { _, _ in true }) {
@@ -46,6 +53,7 @@ import os
     isolated deinit {
         for thread in threads.values { thread.stop() }
         for probe in probes.values { probe.cancel() }
+        resumeTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         hintContinuation.finish()
     }
@@ -77,13 +85,23 @@ import os
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.displaysDidChange() }
         }
+        let gate = SessionGate(
+            workspaceCenter: NSWorkspace.shared.notificationCenter, distributedCenter: DistributedNotificationCenter.default(),
+            sessionDictionary: { CGSessionCopyCurrentDictionary() as? [String: Any] },
+            frontmostBundleID: { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
+            onPause: { [weak self] in self?.sessionDidPause() },
+            onResume: { [weak self] in self?.sessionDidResume() }
+        )
+        self.gate = gate
+        gate.evaluate()
         await sweep(initial: true)
         initialRefreshComplete = true
         // Hints queued during the initial sweep are handled now; each only schedules a refresh (T-02-18).
         Task { [weak self, hints] in
             for await hint in hints { self?.handle(hint) }
         }
-        scheduler.startSweep()
+        // Started while locked: the post-resume refresh starts the sweep.
+        if !paused { scheduler.startSweep() }
     }
 
     /// Re-reads displays, re-checks which apps are eligible and refreshes every tracked app concurrently.
@@ -96,7 +114,7 @@ import os
     public func inventory() async -> WindowInventory {
         WindowInventory(
             displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded,
-            initialRefreshComplete: initialRefreshComplete
+            sessionPaused: sessionPaused, initialRefreshComplete: initialRefreshComplete
         )
     }
 
@@ -125,7 +143,9 @@ import os
     /// One app's refresh, from the sweep, a hint, a launch or a settle follow-up. Dropped while the app is
     /// degraded; collapsed into one follow-up while a job for it is in flight.
     private func refresh(pid: Int32, initial: Bool = false, cgWindows: [CGWindowEntry]? = nil) async {
-        guard let thread = threads[pid], responsiveness.shouldRefresh(pid: pid) else { return }
+        // Polls the CGSession lock flag too (A3: belt and braces); a paused session refreshes nothing.
+        gate?.evaluate()
+        guard !paused, let thread = threads[pid], responsiveness.shouldRefresh(pid: pid) else { return }
         guard inFlight.insert(pid).inserted else {
             followUp.insert(pid)
             return
@@ -193,7 +213,7 @@ import os
         if let failure = observation.listFailure {
             logger.info("pid \(observation.pid, privacy: .public) AXWindows failed: \(String(describing: failure), privacy: .public)")
         }
-        let context = ObservationContext(cgWindows: cgWindows, displays: displays, initialSweep: initial, now: .now)
+        let context = ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !paused, initialSweep: initial, now: .now)
         emit(tracker.ingest(observation, context: context))
         emit(tracker.recheckTerminated(context: context))
         // A new window is withheld until it settles, and a close AX reported waits for the CG list to agree:
@@ -214,7 +234,7 @@ import os
             for _ in 0..<20 {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard let self, !self.tracker.knownWindowIDs(pid: pid).isEmpty else { return }
-                let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: self.displays, now: .now)
+                let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: self.displays, sessionActive: !self.paused, now: .now)
                 self.emit(self.tracker.recheckTerminated(context: context))
             }
         }
@@ -250,9 +270,41 @@ import os
         followUp.remove(pid)
         guard terminated else { return }
         continuation.yield(.appTerminated(pid: pid))
-        let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: displays, now: .now)
+        let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: displays, sessionActive: !paused, now: .now)
         emit(tracker.appTerminated(pid: pid, context: context))
         if !tracker.knownWindowIDs(pid: pid).isEmpty { recheckTerminatedSoon(pid) }
+    }
+
+    private var paused: Bool { gate?.isPaused ?? false }
+
+    /// Locked or asleep: report it once, drop scheduled refreshes and stop the sweep (T-02-26).
+    private func sessionDidPause() {
+        resumeTask?.cancel()
+        resumeTask = nil
+        scheduler?.stop()
+        guard !sessionPaused else { return }
+        sessionPaused = true
+        logger.notice("session paused: locked or asleep")
+        continuation.yield(.sessionPaused(true))
+    }
+
+    /// After `resumeQuiet` with no new pause, one full refresh of every app, then the pause ends and the sweep
+    /// restarts. A pause meanwhile cancels this, and the next resume waits the full quiet time again.
+    private func sessionDidResume() {
+        resumeTask?.cancel()
+        resumeTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.resumeQuiet)
+            guard !Task.isCancelled, let self else { return }
+            self.gate?.evaluate()
+            guard !self.paused else { return }
+            await self.refreshAll()
+            guard !Task.isCancelled, !self.paused else { return }
+            self.resumeTask = nil
+            self.sessionPaused = false
+            self.logger.notice("session resumed after a full refresh")
+            self.continuation.yield(.sessionPaused(false))
+            self.scheduler?.startSweep()
+        }
     }
 
     /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.
