@@ -74,6 +74,8 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var performed: [WindowCommand] = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()
+    /// Hung and slow apps go through the production responsiveness rule (D-14, D-16).
+    private var responsiveness = ResponsivenessTracker()
     private var displays: [DisplayInfo] = []
     /// Like `AXWindowSystem.start()`, the first `refreshAll()` is the initial sweep; later new windows settle first.
     private var initialSweepDone = false
@@ -113,6 +115,7 @@ public actor FakeWindowSystem: WindowSystem {
     /// The process is gone: its windows leave both AX (invalid) and the CG list.
     public func terminate(pid: Int32) {
         apps[pid]?.terminated = true
+        responsiveness.forget(pid: pid)
         for (id, window) in windows where window.pid == pid {
             windows[id]?.axValid = false
             windows[id]?.inCGList = false
@@ -123,13 +126,22 @@ public actor FakeWindowSystem: WindowSystem {
         clock += duration
     }
 
-    /// Builds this app's observation from the simulation and feeds it to the tracker.
+    /// How long a simulated job for a hung app takes: the 1 s AX timeout.
+    public static let hungJobDuration: Duration = .seconds(1)
+
+    /// Builds this app's observation from the simulation and feeds it to the tracker. A degraded app is
+    /// skipped unless its probe is due; a successful probe recovers it and refreshes it in full.
     public func refresh(pid: Int32) {
         guard let app = apps[pid], !app.terminated else { return }
+        if !responsiveness.shouldRefresh(pid: pid) {
+            guard responsiveness.needsProbe(pid: pid, at: clock) else { return }
+            let change = record(pid, app.hung ? .cannotComplete : .success, app.hung ? Self.hungJobDuration : app.responseDelay)
+            guard change == .recovered(pid) else { return }
+        }
         let observation: AppObservation
         if app.hung {
             observation = AppObservation(pid: pid, bundleID: app.bundleID, appHidden: app.hidden, windows: [],
-                                         listFailure: .cannotComplete, duration: app.responseDelay)
+                                         listFailure: .cannotComplete, duration: Self.hungJobDuration)
         } else {
             let listed = windows.values.filter { $0.pid == pid && $0.listedInAX }.sorted { $0.id < $1.id }
             observation = AppObservation(
@@ -145,6 +157,9 @@ public actor FakeWindowSystem: WindowSystem {
                 duration: app.responseDelay
             )
         }
+        record(pid, app.hung ? .cannotComplete : .success, observation.duration)
+        // A hung app's observation never reaches the tracker, so its windows keep their last values (WIN-09).
+        guard !app.hung else { return }
         let cgWindows = windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
@@ -154,13 +169,24 @@ public actor FakeWindowSystem: WindowSystem {
         }
     }
 
+    @discardableResult
+    private func record(_ pid: Int32, _ outcome: JobOutcome, _ duration: Duration) -> ResponsivenessChange? {
+        let change = responsiveness.record(pid: pid, outcome: outcome, duration: duration, at: clock)
+        switch change {
+        case .degraded: continuation.yield(.appResponsiveness(pid: pid, degraded: true))
+        case .recovered: continuation.yield(.appResponsiveness(pid: pid, degraded: false))
+        case nil: break
+        }
+        return change
+    }
+
     public func refreshAll() {
         for pid in apps.keys.sorted() { refresh(pid: pid) }
         initialSweepDone = true
     }
 
     public func inventory() async -> WindowInventory {
-        WindowInventory(displays: displays, windows: tracker.sortedWindows(), sessionPaused: locked, initialRefreshComplete: true)
+        WindowInventory(displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded, sessionPaused: locked, initialRefreshComplete: true)
     }
 
     public func perform(_ commands: [WindowCommand]) async {
