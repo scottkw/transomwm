@@ -70,6 +70,11 @@ public struct ClosedIDCache: Equatable, Sendable {
     }
 
     /// True while `now < closed + ttl`.
+    /// The ID is a live window again.
+    public mutating func remove(_ identity: WindowIdentity) {
+        closedAt[identity] = nil
+    }
+
     public func contains(_ identity: WindowIdentity, at now: ContinuousClock.Instant) -> Bool {
         closedAt[identity].map { now < $0 + Self.ttl } ?? false
     }

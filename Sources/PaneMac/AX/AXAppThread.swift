@@ -101,21 +101,40 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     }
 
     /// Reads the app's windows on this thread and keeps the element cache and its registrations in step.
+    /// Each `known` window that left `AXWindows` is probed through its cached element (one AXRole read), so a
+    /// closed one answers -25202 instead of silently vanishing (D-09); one with no cached element is omitted.
     /// `duration` covers the whole job. A stop request ends the job between AX calls (nil) instead of
     /// letting a hung app time out on every remaining window.
-    func observe() async -> AppObservation? {
+    func observe(known: [UInt32] = []) async -> AppObservation? {
         await perform { [self] app -> AppObservation? in
             guard !isStopped else { return nil }
             let start = ContinuousClock.now
             let hidden = AXSnapshotReader.isHidden(app)
             guard !isStopped,
-                  let (observation, elements) = AXSnapshotReader.observeApp(app, pid: pid, bundleID: bundleID, hidden: hidden, isCancelled: { self.isStopped })
+                  let (listed, elements) = AXSnapshotReader.observeApp(app, pid: pid, bundleID: bundleID, hidden: hidden, isCancelled: { self.isStopped })
             else { return nil }
-            if let elements { updateWindows(elements) }
-            var timed = observation
-            timed.duration = start.duration(to: .now)
-            return timed
+            var observation = listed
+            if var cache = elements {
+                for id in known where cache[id] == nil {
+                    guard let element = windows[id] else { continue }
+                    if isStopped { return nil }
+                    cache[id] = element
+                    observation.windows.append(WindowObservation(
+                        windowID: id, idSource: .axPrivate, read: Self.role(of: element), title: "", listedInAXWindows: false
+                    ))
+                }
+                updateWindows(cache)
+            }
+            observation.duration = start.duration(to: .now)
+            return observation
         } ?? nil
+    }
+
+    /// A probe of a window element: its AXRole, or the AX error that decides a close.
+    private static func role(of element: AXUIElement) -> Result<WindowSnapshot, AXFailure> {
+        var value: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value)
+        return error == .success ? .success(WindowSnapshot(role: value as? String)) : .failure(AXFailure(code: error.rawValue))
     }
 
     /// Reads only the app element's AXRole: the cheap check that a degraded app answers again (D-16).
@@ -136,7 +155,8 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     /// The job token: true once `stop()` was called.
     private var isStopped: Bool { stopped.withLock { $0 } }
 
-    /// Thread-confined. A window that left `AXWindows` loses its registrations; it is re-added if it returns.
+    /// Thread-confined. A window that left the cache (no longer listed or known) loses its registrations; it is
+    /// re-added if it returns.
     private func updateWindows(_ current: [UInt32: AXUIElement]) {
         guard let observer else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()

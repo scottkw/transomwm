@@ -89,18 +89,6 @@ import Testing
         #expect(absent, "no windowStateChanged(.absent) within 1 s")
     }
 
-    /// The destroyed notification is a hint: it only schedules a refresh, and closing needs two sources (Plan 09).
-    @Test(.timeLimit(.minutes(1)))
-    func aDestroyedNotificationAloneNeverClosesAWindow() async throws {
-        let (system, log, fixture) = try await liveSystem()
-        defer { fixture.terminate() }
-        let info = try await trackedWindow(system, fixture, id: try #require(fixture.windows.first).id)
-        _ = try await fixture.send("close 0")
-        try await Task.sleep(for: .milliseconds(500))
-        #expect(await system.windowInfo(info.window) != nil)
-        #expect(!log.events.contains(.windowDestroyed(info.window)))
-    }
-
     @Test(.timeLimit(.minutes(1)))
     func theWindowCarriesItsDisplayUUID() async throws {
         let (system, _, fixture) = try await liveSystem()

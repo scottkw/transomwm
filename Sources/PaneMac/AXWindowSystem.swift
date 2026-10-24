@@ -130,10 +130,12 @@ import os
             followUp.insert(pid)
             return
         }
-        let cgWindows = cgWindows ?? CGWindowList.snapshot()
-        let observation = await thread.observe()
+        let observation = await thread.observe(known: tracker.knownWindowIDs(pid: pid))
         inFlight.remove(pid)
-        guard let observation else { return }
+        // The app may have quit meanwhile; its windows are decided by the terminated path now.
+        guard let observation, threads[pid] === thread else { return }
+        // Read after AX answered, so a window AX just reported invalid has had the most time to leave the CG list.
+        let cgWindows = cgWindows ?? CGWindowList.snapshot()
         record(pid, Self.outcome(of: observation), observation.duration)
         ingest(observation, cgWindows: cgWindows, initial: initial)
         if let windowID = pendingFocus.removeValue(forKey: pid),
@@ -192,16 +194,33 @@ import os
             logger.info("pid \(observation.pid, privacy: .public) AXWindows failed: \(String(describing: failure), privacy: .public)")
         }
         let context = ObservationContext(cgWindows: cgWindows, displays: displays, initialSweep: initial, now: .now)
-        for event in tracker.ingest(observation, context: context) {
-            continuation.yield(event)
-        }
+        emit(tracker.ingest(observation, context: context))
+        emit(tracker.recheckTerminated(context: context))
         // A new window is withheld until it settles; refresh again once it has.
         if tracker.hasPendingWindows(pid: observation.pid) {
             scheduler?.schedule(pid: observation.pid, after: tracker.settleDelay)
         }
     }
 
-    /// A hint never decides anything: it only schedules its pid's refresh (D-09).
+    private func emit(_ events: [WindowEvent]) {
+        for event in events { continuation.yield(event) }
+    }
+
+    /// A quitting app's windows can stay in the CG list briefly: recheck every 250 ms for up to 5 s, then leave
+    /// any rest to the rechecks that follow every refresh.
+    private func recheckTerminatedSoon(_ pid: Int32) {
+        Task { [weak self] in
+            for _ in 0..<20 {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self, !self.tracker.knownWindowIDs(pid: pid).isEmpty else { return }
+                let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: self.displays, now: .now)
+                self.emit(self.tracker.recheckTerminated(context: context))
+            }
+        }
+    }
+
+    /// A hint never decides anything: it only schedules its pid's refresh (D-09). A destroyed notification
+    /// included: the refresh probes the cached element, and CloseRule needs the CG list to agree.
     private func handle(_ hint: AXEventHint) {
         guard threads[hint.pid] != nil else { return }
         let focus = hint.notification == kAXFocusedWindowChangedNotification || hint.notification == kAXMainWindowChangedNotification
@@ -218,7 +237,7 @@ import os
         scheduler?.schedule(pid: pid)
     }
 
-    /// Stops the app's thread. Its windows stay tracked: closing them needs two sources (Plan 09).
+    /// Stops the app's thread. On a quit, each of its windows closes once it has also left the CG list.
     private func appStopped(_ pid: Int32, terminated: Bool) {
         guard let thread = threads.removeValue(forKey: pid) else { return }
         thread.stop()
@@ -228,7 +247,11 @@ import os
         responsiveness.forget(pid: pid)
         inFlight.remove(pid)
         followUp.remove(pid)
-        if terminated { continuation.yield(.appTerminated(pid: pid)) }
+        guard terminated else { return }
+        continuation.yield(.appTerminated(pid: pid))
+        let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: displays, now: .now)
+        emit(tracker.appTerminated(pid: pid, context: context))
+        if !tracker.knownWindowIDs(pid: pid).isEmpty { recheckTerminatedSoon(pid) }
     }
 
     /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.

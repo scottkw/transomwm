@@ -71,6 +71,8 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var apps: [Int32: FakeApp] = [:]
     public private(set) var windows: [UInt32: FakeWindow] = [:]
     public private(set) var locked = false
+    /// Whether a lock also pauses the session (`sessionActive: false`), as `SessionGate` does live.
+    private var lockGate = true
     public private(set) var performed: [WindowCommand] = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()
@@ -108,8 +110,11 @@ public actor FakeWindowSystem: WindowSystem {
         self.displays = displays
     }
 
+    /// Lock blanking (D-14): every AX read fails with -25204 and the CG list is empty. With `gate: false` the
+    /// session stays active, as if no lock signal arrived.
     public func setLocked(_ locked: Bool, gate: Bool = true) {
         self.locked = locked
+        lockGate = gate
     }
 
     /// The window closed: AX says invalid and it left the CG list.
@@ -120,14 +125,15 @@ public actor FakeWindowSystem: WindowSystem {
         }
     }
 
-    /// The process is gone: its windows leave both AX (invalid) and the CG list.
+    /// The process quit, as NSWorkspace reports it. Its windows stay in the CG list until a test removes them
+    /// (WindowServer lag); each later `refreshAll()` rechecks them.
     public func terminate(pid: Int32) {
         apps[pid]?.terminated = true
         responsiveness.forget(pid: pid)
         for (id, window) in windows where window.pid == pid {
             windows[id]?.axValid = false
-            windows[id]?.inCGList = false
         }
+        yield(tracker.appTerminated(pid: pid, context: context()))
     }
 
     public func advance(by duration: Duration) {
@@ -147,11 +153,13 @@ public actor FakeWindowSystem: WindowSystem {
             guard change == .recovered(pid) else { return }
         }
         let observation: AppObservation
-        if app.hung {
+        if app.hung || locked {
             observation = AppObservation(pid: pid, bundleID: app.bundleID, appHidden: app.hidden, windows: [],
-                                         listFailure: .cannotComplete, duration: Self.hungJobDuration)
+                                         listFailure: .cannotComplete, duration: app.hung ? Self.hungJobDuration : app.responseDelay)
         } else {
             let listed = windows.values.filter { $0.pid == pid && $0.listedInAX }.sorted { $0.id < $1.id }
+            // Like AXAppThread: known windows that left AXWindows are probed through their cached element.
+            let probed = tracker.knownWindowIDs(pid: pid).compactMap { windows[$0] }.filter { !$0.listedInAX }
             observation = AppObservation(
                 pid: pid, bundleID: app.bundleID, appHidden: app.hidden,
                 windows: listed.map { window in
@@ -161,20 +169,33 @@ public actor FakeWindowSystem: WindowSystem {
                         windowID: window.id, idSource: .axPrivate,
                         read: window.axValid ? .success(snapshot) : .failure(.invalidElement), title: window.title
                     )
+                } + probed.map { window in
+                    WindowObservation(
+                        windowID: window.id, idSource: .axPrivate,
+                        read: window.axValid ? .success(WindowSnapshot(role: window.snapshot.role)) : .failure(.invalidElement),
+                        title: "", listedInAXWindows: false
+                    )
                 },
                 duration: app.responseDelay
             )
         }
-        record(pid, app.hung ? .cannotComplete : .success, observation.duration)
+        record(pid, observation.listFailure == nil ? .success : .cannotComplete, observation.duration)
         // A hung app's observation never reaches the tracker, so its windows keep their last values (WIN-09).
         guard !app.hung else { return }
-        let cgWindows = windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
+        yield(tracker.ingest(observation, context: context()))
+    }
+
+    /// The CG list (empty while locked), displays, session state and clock of the simulation right now.
+    private func context() -> ObservationContext {
+        let cgWindows = locked ? [] : windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
-        let context = ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !locked, initialSweep: !initialSweepDone, now: clock)
-        for event in tracker.ingest(observation, context: context) {
-            continuation.yield(event)
-        }
+        return ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !(locked && lockGate),
+                                  initialSweep: !initialSweepDone, now: clock)
+    }
+
+    private func yield(_ events: [WindowEvent]) {
+        for event in events { continuation.yield(event) }
     }
 
     @discardableResult
@@ -190,11 +211,12 @@ public actor FakeWindowSystem: WindowSystem {
 
     public func refreshAll() {
         for pid in apps.keys.sorted() { refresh(pid: pid) }
+        yield(tracker.recheckTerminated(context: context()))
         initialSweepDone = true
     }
 
     public func inventory() async -> WindowInventory {
-        WindowInventory(displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded, sessionPaused: locked, initialRefreshComplete: true)
+        WindowInventory(displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded, sessionPaused: locked && lockGate, initialRefreshComplete: true)
     }
 
     public func perform(_ commands: [WindowCommand]) async {
