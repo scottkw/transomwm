@@ -20,7 +20,7 @@
 
 ### Window Control
 
-- [ ] **WIN-01**: User is guided through granting Accessibility permission, and a stale grant is detected and explained
+- [x] **WIN-01**: User is guided through granting Accessibility permission, and a stale grant is detected and explained
 - [ ] **WIN-02**: Pane tracks every standard window of every running app, including windows opened or closed later
 - [ ] **WIN-03**: A hung or slow app never freezes Pane or delays arranging other apps' windows
 - [ ] **WIN-04**: Pane moves and resizes windows and learns an app's real minimum size when it refuses a size
@@ -142,7 +142,7 @@ Populated by the roadmapper on 2026-10-23.
 | MODEL-08 | Phase 1 | Complete |
 | MODEL-09 | Phase 1 | Complete |
 | MODEL-10 | Phase 1 | Complete |
-| WIN-01 | Phase 2 | Pending |
+| WIN-01 | Phase 2 | Complete |
 | WIN-02 | Phase 2 | Pending |
 | WIN-03 | Phase 2 | Pending |
 | WIN-04 | Phase 2 | Pending |
