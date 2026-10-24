@@ -42,7 +42,7 @@ import SwiftUI
         let view = SetupView(permission: permission, appName: appName) { [weak self] in self?.window?.performClose(nil) }
         let hosting = NSHostingController(rootView: view)
         hosting.sizingOptions = [.intrinsicContentSize]  // the window's height follows each state's content
-        let window = SetupWindow(contentViewController: hosting)
+        let window = KeyClosableWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable]
         window.title = "Set Up Pane"
         window.isReleasedWhenClosed = false
@@ -68,8 +68,9 @@ import SwiftUI
 }
 
 /// Esc and ⌘W close the window (an accessory app has no main menu to supply ⌘W); both go through
-/// `performClose`, so the delegate still blocks them while a reset runs.
-private final class SetupWindow: NSWindow {
+/// `performClose`, so a delegate can still block them (the setup window does while a reset runs).
+/// Shared by the Set Up Pane and Tracked Windows windows.
+final class KeyClosableWindow: NSWindow {
     override func cancelOperation(_ sender: Any?) {
         performClose(sender)
     }

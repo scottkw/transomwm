@@ -9,6 +9,7 @@ public enum PaneMacApp {
     private static var statusItem: StatusItemController?
     private static var permission: PermissionController?
     private static var setupWindow: SetupWindowController?
+    private static var trackedWindows: TrackedWindowsWindowController?
 
     public static func run(arguments: [String]) -> Never {
         Capabilities.logReport()
@@ -21,9 +22,16 @@ public enum PaneMacApp {
         let permissionController = PermissionController(system: system)
         let setupController = SetupWindowController(permission: permissionController)
         let exclusions = ExclusionStore()
-        let controller = StatusItemController(system: system, permission: permissionController, exclusions: exclusions) {
-            setupController.show()
-        }
+        let trackedController = TrackedWindowsWindowController(
+            permission: permissionController, exclusions: exclusions,
+            windowIDLookupAvailable: system.capabilityReport[.axWindowID] == true
+        ) { setupController.show() }
+        let controller = StatusItemController(
+            system: system, permission: permissionController, exclusions: exclusions,
+            showTrackedWindows: { trackedController.show() }, showSetup: { setupController.show() }
+        )
+        controller.onInventory = { trackedController.feed.inventory = $0 }
+        trackedWindows = trackedController
         statusItem = controller
         permission = permissionController
         setupWindow = setupController

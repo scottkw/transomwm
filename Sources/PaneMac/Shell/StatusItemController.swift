@@ -10,21 +10,27 @@ import os
     private let permission: PermissionController
     private let exclusions: ExclusionStore
     private let showSetup: () -> Void
+    private let showTrackedWindows: () -> Void
     private var permissionSubscription: AnyCancellable?
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let logger = Logger(subsystem: "com.eightabyte.pane", category: "shell")
-    private(set) var latest = WindowInventory(displays: [], windows: [])
+    private(set) var latest = WindowInventory(displays: [], windows: []) {
+        didSet { onInventory?(latest) }
+    }
+    /// Fan-out of each re-read inventory (the Tracked Windows feed); `system.events` has only this reader.
+    var onInventory: ((WindowInventory) -> Void)?
     /// The frontmost app when the menu opened; opening a status menu does not activate Pane.
     private var frontmost: NSRunningApplication?
 
     /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item.
     init(
         system: AXWindowSystem, permission: PermissionController, exclusions: ExclusionStore,
-        showSetup: @escaping () -> Void
+        showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.permission = permission
         self.exclusions = exclusions
+        self.showTrackedWindows = showTrackedWindows
         self.showSetup = showSetup
         super.init()
         permissionSubscription = permission.$state.map { $0.phase == .ready }.removeDuplicates()
@@ -49,6 +55,10 @@ import os
         menu.removeAllItems()
         frontmost = NSWorkspace.shared.frontmostApplication
         addStatusItems(to: menu)
+        menu.addItem(.separator())
+        let tracked = NSMenuItem(title: "Show Tracked Windows", action: #selector(openTrackedWindows), keyEquivalent: "")
+        tracked.target = self
+        menu.addItem(tracked)
         menu.addItem(.separator())
         addExclusionItems(to: menu)
         menu.addItem(.separator())
@@ -138,6 +148,10 @@ import os
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
         let name = FileManager.default.displayName(atPath: url.path)
         return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    @objc private func openTrackedWindows() {
+        showTrackedWindows()
     }
 
     @objc private func openSetup() {
