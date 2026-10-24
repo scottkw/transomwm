@@ -55,11 +55,11 @@ extension LayoutTree {
         }
 
         try next.normalize()
-        guard next.nodes.count <= Self.maxNodes else { throw .tooManyNodes(limit: Self.maxNodes) }
-        guard next.depth(of: leaf) <= Self.maxDepth else { throw .tooDeep(limit: Self.maxDepth) }
+        // The whole tree, not just the new leaf: wrapping the root pushes every node one level deeper.
+        // Runs in release too, so an invalid insert throws instead of committing.
+        try next.validate()
         self = next
         ids = nextIDs
-        assertValid()
     }
 
     /// Removes `window` (D-05). A panel's share goes back to its siblings in proportion to their

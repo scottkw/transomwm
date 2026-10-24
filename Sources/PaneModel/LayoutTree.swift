@@ -116,17 +116,6 @@ public struct LayoutTree: Codable, Equatable, Sendable {
         }
     }
 
-    /// Edges from the root; the root is depth 0. Linear scan per level, fine at maxNodes.
-    func depth(of id: NodeID) -> Int {
-        var depth = 0
-        var current = id
-        while let parent = parent(of: current) {
-            depth += 1
-            current = parent
-        }
-        return depth
-    }
-
     public func node(_ id: NodeID) -> Node? { nodes[id] }
 
     /// Linear scan; the tree keeps no parent index.

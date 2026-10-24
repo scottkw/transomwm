@@ -165,6 +165,19 @@ private let malformedTabs: [(windows: [WindowRef], selected: Int)] = [([a], 0), 
         try tree.insert(makeWindow(5000), at: along, of: deep.deepest, ids: &ids)
     }
 
+    @Test func layoutEdgeDropThatWrapsAFullDepthRootThrowsAndLeavesTreeUnchanged() throws {
+        // The root is horizontal, so a top drop wraps the whole tree in a new vertical split.
+        let deep = chain(splits: 64)
+        var tree = try LayoutTree(root: deep.root, nodes: deep.nodes, states: deep.states)
+        let before = tree
+        var ids = IDSource(next: 3000)
+        #expect(throws: LayoutError.tooDeep(limit: 64)) {
+            try tree.applyDrop(.layoutEdge(.top), window: makeWindow(5000), ids: &ids)
+        }
+        #expect(tree == before)
+        #expect(ids == IDSource(next: 3000))
+    }
+
     @Test func insertBeyondNodeLimitThrowsAndLeavesTreeUnchanged() throws {
         // Root H holding 40 V splits of 100 panels each plus 54 panels: 1 + 40 + 4000 + 54 = 4095 nodes.
         var nodes: [NodeID: Node] = [:]
