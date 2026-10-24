@@ -46,3 +46,21 @@ extension World {
         }
     }
 }
+
+public struct MigrationChain: Sendable {
+    public typealias Step = @Sendable (inout [String: Any]) throws -> Void
+
+    public init(steps: [Int: Step]) {}
+
+    public static let standard = MigrationChain(steps: [:])
+
+    public func migrate(_ object: inout [String: Any], from: Int, to: Int) throws(PersistenceError) {}
+}
+
+extension World {
+    public static let maxEncodedBytes = 16 * 1024 * 1024
+
+    public static func decode(from data: Data, migrations: MigrationChain) throws(PersistenceError) -> World {
+        try decode(from: data)
+    }
+}
