@@ -21,6 +21,9 @@ import os
     private var threads: [Int32: AXAppThread] = [:]
     private var started = false
     private var initialRefreshComplete = false
+    private var displays: [DisplayInfo] = []
+    private var screenObserver: (any NSObjectProtocol)?
+    private var displayRefresh: Task<Void, Never>?
 
     /// `appFilter(pid, bundleKey)` limits which apps get a thread (tests track only the fixture).
     public init(appFilter: @escaping @MainActor (Int32, String) -> Bool = { _, _ in true }) {
@@ -31,6 +34,8 @@ import os
 
     isolated deinit {
         for thread in threads.values { thread.stop() }
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        displayRefresh?.cancel()
     }
 
     public var capabilityReport: [Capability: Bool] { Capabilities.report() }
@@ -41,6 +46,12 @@ import os
         started = true
         // Per-element timeouts do not reach equal or child elements (Pitfall 1), so set the global one.
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
+        displays = Displays.current()
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.displaysDidChange() }
+        }
         let ownPID = ProcessInfo.processInfo.processIdentifier
         for app in NSWorkspace.shared.runningApplications
         where app.activationPolicy == .regular && app.isFinishedLaunching
@@ -59,7 +70,7 @@ import os
     }
 
     public func inventory() async -> WindowInventory {
-        WindowInventory(displays: [], windows: tracker.sortedWindows(), initialRefreshComplete: initialRefreshComplete)
+        WindowInventory(displays: displays, windows: tracker.sortedWindows(), initialRefreshComplete: initialRefreshComplete)
     }
 
     public func perform(_ commands: [WindowCommand]) async {
@@ -84,11 +95,23 @@ import os
                 if let failure = observation.listFailure {
                     logger.info("pid \(observation.pid, privacy: .public) AXWindows failed: \(String(describing: failure), privacy: .public)")
                 }
-                let context = ObservationContext(cgWindows: cgWindows, initialSweep: initial, now: .now)
+                let context = ObservationContext(cgWindows: cgWindows, displays: displays, initialSweep: initial, now: .now)
                 for event in tracker.ingest(observation, context: context) {
                     continuation.yield(event)
                 }
             }
+        }
+    }
+
+    /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.
+    private func displaysDidChange() {
+        continuation.yield(.displaysChanged)
+        displayRefresh?.cancel()
+        displayRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, let self else { return }
+            displays = Displays.current()
+            await refreshAll()
         }
     }
 

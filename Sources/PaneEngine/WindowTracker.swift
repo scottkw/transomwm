@@ -78,6 +78,7 @@ public struct WindowTracker: Sendable {
             info.kind = kind
             info.idSource = observation.idSource
             info.tabCount = snapshot.tabGroup?.tabCount ?? 1
+            info.displayUUID = Coordinates.displayUUID(for: frame, among: context.displays)
             windows[identity] = info
 
             guard let old else {
@@ -88,7 +89,9 @@ public struct WindowTracker: Sendable {
             if old.frame.origin != frame.origin { events.append(.windowMoved(ref, frame)) }
             if old.frame.size != frame.size { events.append(.windowResized(ref, frame)) }
             if old.state != state { events.append(.windowStateChanged(ref, state)) }
-            if old.window.titleHint != ref.titleHint || old.kind != kind || old.tabCount != info.tabCount {
+            if old.window.titleHint != ref.titleHint || old.kind != kind || old.tabCount != info.tabCount
+                || old.displayUUID != info.displayUUID
+            {
                 events.append(.windowChanged(info))
             }
         }

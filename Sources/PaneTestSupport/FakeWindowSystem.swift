@@ -74,6 +74,7 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var performed: [WindowCommand] = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()
+    private var displays: [DisplayInfo] = []
     /// Like `AXWindowSystem.start()`, the first `refreshAll()` is the initial sweep; later new windows settle first.
     private var initialSweepDone = false
 
@@ -98,6 +99,11 @@ public actor FakeWindowSystem: WindowSystem {
 
     public func setHung(pid: Int32, _ hung: Bool) {
         apps[pid]?.hung = hung
+    }
+
+    /// The displays every later observation and `inventory()` report.
+    public func setDisplays(_ displays: [DisplayInfo]) {
+        self.displays = displays
     }
 
     public func setLocked(_ locked: Bool) {
@@ -142,7 +148,7 @@ public actor FakeWindowSystem: WindowSystem {
         let cgWindows = windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
-        let context = ObservationContext(cgWindows: cgWindows, sessionActive: !locked, initialSweep: !initialSweepDone, now: clock)
+        let context = ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !locked, initialSweep: !initialSweepDone, now: clock)
         for event in tracker.ingest(observation, context: context) {
             continuation.yield(event)
         }
@@ -154,7 +160,7 @@ public actor FakeWindowSystem: WindowSystem {
     }
 
     public func inventory() async -> WindowInventory {
-        WindowInventory(displays: [], windows: tracker.sortedWindows(), sessionPaused: locked, initialRefreshComplete: true)
+        WindowInventory(displays: displays, windows: tracker.sortedWindows(), sessionPaused: locked, initialRefreshComplete: true)
     }
 
     public func perform(_ commands: [WindowCommand]) async {

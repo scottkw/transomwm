@@ -1,6 +1,7 @@
 import Testing
 import PaneEngine
 import PaneModel
+import PaneTestSupport
 
 private let pid: Int32 = 100
 private let a = DisplayInfo(uuid: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 1000),
@@ -42,5 +43,18 @@ private func context(initial: Bool = false) -> ObservationContext {
         #expect(info.displayUUID == "A")
         #expect(events.contains(.windowMoved(info.window, moved)))
         #expect(events.contains(.windowChanged(info)))
+    }
+}
+
+@Suite struct FakeDisplayTests {
+    @Test func theFakeReportsItsDisplaysAndAssignsWindowsToThem() async {
+        let fake = FakeWindowSystem()
+        await fake.setDisplays([a, b])
+        await fake.addApp(FakeApp(pid: pid, bundleID: "com.example.app"))
+        await fake.open(.standard(id: 7, pid: pid, frame: Rect(x: 1200, y: 100, width: 600, height: 400)))
+        await fake.refreshAll()
+        let inventory = await fake.inventory()
+        #expect(inventory.displays == [a, b])
+        #expect(inventory.windows.map(\.displayUUID) == ["B"])
     }
 }
