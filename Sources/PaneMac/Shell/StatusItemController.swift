@@ -9,6 +9,7 @@ import os
     private let system: AXWindowSystem
     private let permission: PermissionController
     private let exclusions: ExclusionStore
+    private let freezeTest: FreezeTest
     private let showSetup: () -> Void
     private let showTrackedWindows: () -> Void
     private var permissionSubscription: AnyCancellable?
@@ -24,12 +25,13 @@ import os
 
     /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item.
     init(
-        system: AXWindowSystem, permission: PermissionController, exclusions: ExclusionStore,
+        system: AXWindowSystem, permission: PermissionController, exclusions: ExclusionStore, freezeTest: FreezeTest,
         showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.permission = permission
         self.exclusions = exclusions
+        self.freezeTest = freezeTest
         self.showTrackedWindows = showTrackedWindows
         self.showSetup = showSetup
         super.init()
@@ -160,12 +162,72 @@ import os
 
     private func debugMenuItem() -> NSMenuItem {
         let submenu = NSMenu(title: "Debug")
+        #if DEBUG
+            submenu.addItem(freezeMenuItem())
+            submenu.addItem(.separator())
+        #endif
         let available = system.capabilityReport[.axWindowID] == true
         submenu.addItem(Self.info(MenuCopy.capabilityItem(windowIDLookupAvailable: available)))
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
     }
+
+    #if DEBUG
+        /// "Freeze “App” for 10 Seconds…" for the frontmost app, or "Resume “App” Now" while one is frozen.
+        private func freezeMenuItem() -> NSMenuItem {
+            if let pid = freezeTest.frozenPID {
+                let name = NSRunningApplication(processIdentifier: pid)?.localizedName ?? "pid \(pid)"
+                let item = NSMenuItem(
+                    title: MenuCopy.resumeItem(appName: MenuCopy.truncatedAppName(name)), action: #selector(resumeFrozen),
+                    keyEquivalent: "")
+                item.target = self
+                return item
+            }
+            guard let app = frontmost,
+                FreezeTest.isAllowed(pid: app.processIdentifier, bundleID: app.bundleIdentifier, ownPID: getpid())
+            else { return Self.info(MenuCopy.freezeNotAllowed) }
+            let name = MenuCopy.truncatedAppName(app.localizedName ?? app.bundleIdentifier ?? "pid \(app.processIdentifier)")
+            let item = NSMenuItem(title: MenuCopy.freezeItem(appName: name), action: #selector(confirmFreeze), keyEquivalent: "")
+            item.target = self
+            item.representedObject = app
+            return item
+        }
+
+        /// Surface 4: Return and Esc cancel; only a click on the red "Freeze" button freezes.
+        @objc private func confirmFreeze(_ sender: NSMenuItem) {
+            guard let app = sender.representedObject as? NSRunningApplication else { return }
+            let name = MenuCopy.truncatedAppName(app.localizedName ?? app.bundleIdentifier ?? "pid \(app.processIdentifier)")
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = MenuCopy.freezeAlertMessage(appName: name)
+            alert.informativeText = MenuCopy.freezeAlertInfo(appName: name)
+            let freeze = alert.addButton(withTitle: "Freeze")  // first button: rightmost
+            freeze.keyEquivalent = ""
+            freeze.hasDestructiveAction = true
+            let cancel = alert.addButton(withTitle: "Cancel")
+            cancel.keyEquivalent = "\r"  // NSAlert itself has no hasDestructiveAction; the button carries it
+            // Cancel now holds Return, so map Esc (key code 53) to it while the alert is up.
+            let escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                guard event.keyCode == 53 else { return event }
+                cancel.performClick(nil)
+                return nil
+            }
+            NSApp.activate()
+            let response = alert.runModal()
+            if let escape { NSEvent.removeMonitor(escape) }
+            guard response == .alertFirstButtonReturn else { return }
+            // Re-check: the app may have changed while the alert was up.
+            guard FreezeTest.isAllowed(pid: app.processIdentifier, bundleID: app.bundleIdentifier, ownPID: getpid()),
+                !app.isTerminated
+            else { return }
+            freezeTest.freeze(pid: app.processIdentifier)
+        }
+
+        @objc private func resumeFrozen() {
+            freezeTest.resumeNow()
+        }
+    #endif
 
     /// A disabled informational item (no action, so NSMenu's auto-enabling greys it out).
     private static func info(_ title: String) -> NSMenuItem {

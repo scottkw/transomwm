@@ -10,8 +10,11 @@ public enum PaneMacApp {
     private static var permission: PermissionController?
     private static var setupWindow: SetupWindowController?
     private static var trackedWindows: TrackedWindowsWindowController?
+    private static let freezeTest = FreezeTest()
 
     public static func run(arguments: [String]) -> Never {
+        // First, in every build: a crash or quit during a Debug freeze must never leave an app stopped.
+        freezeTest.resumeRecordedPID()
         Capabilities.logReport()
         if arguments.contains("--print-inventory-summary") { printInventorySummary() }
 
@@ -27,7 +30,7 @@ public enum PaneMacApp {
             windowIDLookupAvailable: system.capabilityReport[.axWindowID] == true
         ) { setupController.show() }
         let controller = StatusItemController(
-            system: system, permission: permissionController, exclusions: exclusions,
+            system: system, permission: permissionController, exclusions: exclusions, freezeTest: freezeTest,
             showTrackedWindows: { trackedController.show() }, showSetup: { setupController.show() }
         )
         controller.onInventory = { trackedController.feed.inventory = $0 }
@@ -38,6 +41,10 @@ public enum PaneMacApp {
         permissionController.onTrackingStarted = { await controller.refresh() }
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
+        // Quit Pane during a freeze resumes the app now rather than at the next launch.
+        _ = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { _ in MainActor.assumeIsolated { freezeTest.resumeNow() } }
         app.run()
         exit(0)
     }

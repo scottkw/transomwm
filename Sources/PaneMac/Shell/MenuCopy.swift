@@ -50,10 +50,15 @@ nonisolated public enum MenuCopy {
     public static let dontArrangeFallback = "Don't Arrange Frontmost App"
     public static let noExclusions = "No apps excluded"
 
-    public static func freezeItem(appName: String) -> String { "" }
-    public static let freezeNotAllowed = ""
-    public static func resumeItem(appName: String) -> String { "" }
-    public static func freezeAlertMessage(appName: String) -> String { "" }
+    /// Freeze-test copy (Debug submenu, Surface 4). Pass names through `truncatedAppName` first.
+    public static func freezeItem(appName: String) -> String { "Freeze \u{201C}\(appName)\u{201D} for 10 Seconds\u{2026}" }
+    public static let freezeNotAllowed = "Freeze Frontmost App (not allowed)"
+    public static func resumeItem(appName: String) -> String { "Resume \u{201C}\(appName)\u{201D} Now" }
+    public static func freezeAlertMessage(appName: String) -> String { "Freeze \u{201C}\(appName)\u{201D} for 10 seconds?" }
+    public static func freezeAlertInfo(appName: String) -> String {
+        "Pane will pause \(appName) to check that a frozen app can't stall it. \(appName) resumes by itself after "
+            + "10 seconds, or choose Debug \u{25B8} Resume \u{201C}\(appName)\u{201D} Now."
+    }
 
     private static func count(_ n: Int, _ noun: String) -> String {
         n == 1 ? "1 \(noun)" : "\(n) \(noun)s"
