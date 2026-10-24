@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 1
 current_phase_name: Layout Model
 status: executing
-stopped_at: Roadmap and state initialised; ready for `/gsd-plan-phase 1`
-last_updated: "2026-10-24T04:40:59.622Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-10-24T04:55:46.858Z"
 last_activity: 2026-10-23
-last_activity_desc: Roadmap created (9 phases, 65/65 v1 requirements mapped)
-state_head: 7900b9beb78da39fea683a1ea2e8fc62dbb95273
+last_activity_desc: Phase 1 execution started
+state_head: de017e3317077786774eceaa61ae2d752d7f8902
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-23)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 1: Layout Model
+**Current focus:** Phase 1 — Layout Model
 
 ## Current Position
 
-Phase: 1 (Layout Model) — READY TO EXECUTE
-Plan: 0 of TBD in current phase
+Phase: 1 (Layout Model) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-10-23 — Roadmap created (9 phases, 65/65 v1 requirements mapped)
+Last activity: 2026-10-23 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -52,6 +52,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 1 P01 | 6 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -66,6 +71,10 @@ Recent decisions affecting current work:
 - Roadmap: SAFE-03 in Phase 3 registers `pane://` with `restore` only; Phase 8 (VIEW-03) generalises URL commands
 - Roadmap: SAFE-04 (all three conflicting macOS features) lands in Phase 3; Phase 9 onboarding (SHIP-02) surfaces it on first run
 - Roadmap: User chose basic layout restore in Phase 3 (SAFE-06, same window IDs); VIEW-04 narrowed to reboot/app-relaunch re-matching in Phase 8
+- [Phase 1]: Tree depth counts edges from the root (root = 0); maxDepth 64 accepts a 64-split chain, rejects 65
+- [Phase 1]: LayoutTree storage is public internal(set) so TreeEdits.swift can write it; read-only outside PaneModel
+- [Phase 1]: Persisted World JSON: sortedKeys, states/desks as sorted record arrays, NodeID as bare number / decimal key; duplicate records rejected
+- [Phase 1]: Phase 1 commits live on branch gsd/phase-01-layout-model because main is protected
 
 ### Pending Todos
 
@@ -90,6 +99,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-23
-Stopped at: Roadmap and state initialised; ready for `/gsd-plan-phase 1`
+Last session: 2026-10-24T04:55:46.836Z
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None
