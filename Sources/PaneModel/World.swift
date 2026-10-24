@@ -2,10 +2,16 @@ import Foundation
 
 public struct Desk: Codable, Equatable, Sendable {
     public var tree: LayoutTree
+    public var desktop: DesktopLayer
 
-    public init(tree: LayoutTree = LayoutTree()) {
+    public init(tree: LayoutTree = LayoutTree(), desktop: DesktopLayer = DesktopLayer()) {
         self.tree = tree
+        self.desktop = desktop
     }
+
+    public func contains(_ window: WindowRef) -> Bool { false }
+
+    public func validate() throws(LayoutError) {}
 }
 
 /// All desks, keyed by display (and optionally Space), plus the ID source their node IDs come from.
