@@ -69,4 +69,10 @@ import Testing
         #expect(body.contains("tccutil stopped with code 64"))
         #expect(body.contains("\u{201C}Pane Debug\u{201D}"))
     }
+
+    @Test func exclusionCopyQuotesTheAppName() {
+        #expect(MenuCopy.dontArrange(appName: "Safari") == "Don't Arrange \u{201C}Safari\u{201D}")
+        #expect(MenuCopy.dontArrangeFallback == "Don't Arrange Frontmost App")
+        #expect(MenuCopy.noExclusions == "No apps excluded")
+    }
 }
