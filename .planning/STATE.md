@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-10-24T16:25:42.921Z"
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-10-24T16:39:58.698Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 428f667d552fc82a2f25edd402625feb8dacb76d
+state_head: e2aecd6a163b626fa3bfed40b5fdbfa10ef299f3
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 12
+  completed_plans: 13
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 (Window Control) — EXECUTING
-Plan: 7 of 13
+Plan: 8 of 13
 Status: Ready to execute
 Last activity: 2026-10-24 — Phase 2 execution started
 
@@ -68,6 +68,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P04 | 4 min | 2 tasks | 4 files |
 | Phase 2 P05 | 9 min | 3 tasks | 12 files |
 | Phase 2 P06 | 10 min | 2 tasks | 13 files |
+| Phase 2 P07 | 10 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,9 @@ Recent decisions affecting current work:
 - [Phase 2]: AppRegistry.onStop carries (pid, terminated) so appTerminated is emitted only for a quit, not for a policy change
 - [Phase 2]: refreshAll() re-reads displays and re-checks app eligibility before refreshing; the 5 s sweep and the 500 ms display refresh go through it
 - [Phase 2]: The AX hint loop starts only after the initial sweep; apps running at start() get threads but no appLaunched
+- [Phase 2]: 02-07: a degraded app is probed by its own 2 s loop, not the 5 s sweep, so a resumed app recovers within about 2 s
+- [Phase 2]: 02-07: observe() times the whole job, so one SIGSTOPped job (~2 s) degrades an app at once; production detection is at most the 5 s sweep plus about 2 s
+- [Phase 2]: 02-07: one in-flight AX job per pid with one coalesced follow-up; refreshes for a degraded app are dropped
 
 ### Pending Todos
 
@@ -141,6 +145,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T16:25:42.802Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-10-24T16:39:58.586Z
+Stopped at: Completed 02-07-PLAN.md
 Resume file: None
