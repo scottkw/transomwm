@@ -79,27 +79,31 @@ final class FixtureProcess: @unchecked Sendable {
     private let input = Pipe()
     private let lines = OSAllocatedUnfairLock(initialState: (buffer: "", lines: [String]()))
 
-    /// Launches the fixture with one `--window` per spec and waits for its `ready` and window lines.
+    /// Launches the fixture with one `--window` per spec, waits for `ready` and reads its windows with `list`.
     nonisolated(nonsending) static func launch(_ specs: [String], timeout: Duration = .seconds(10)) async throws -> FixtureProcess {
         let fixture = FixtureProcess()
         try fixture.start(specs)
-        let expected = specs.reduce(0) { $0 + expectedWindowLines($1) }
-        let ok = await waitUntil(timeout: timeout) {
-            fixture.readyPID != nil && fixture.windowLines().count >= expected
-        }
-        guard ok, let pid = fixture.readyPID else {
-            throw FixtureError(description: "fixture did not report ready with \(expected) windows: \(fixture.allLines())")
+        guard await waitUntil(timeout: timeout, { fixture.readyPID != nil }), let pid = fixture.readyPID else {
+            throw FixtureError(description: "fixture did not report ready: \(fixture.allLines())")
         }
         fixture.pid = pid
-        fixture.windows = fixture.windowLines()
+        _ = try await fixture.send("list")
         return fixture
     }
 
-    /// How many `window` lines one spec prints.
-    static func expectedWindowLines(_ spec: String) -> Int {
-        if spec == "sheet" { return 2 }
-        if spec.hasPrefix("tabs:"), let n = Int(spec.dropFirst(5)) { return n }
-        return 1
+    /// Sends one stdin command and returns the lines it printed, up to and including its `ok` line.
+    /// Throws on an `error` reply or no reply within `timeout`. `list` also refreshes `windows`.
+    nonisolated(nonsending) func send(_ command: String, timeout: Duration = .seconds(5)) async throws -> [String] {
+        let start = allLines().count
+        try input.fileHandleForWriting.write(contentsOf: Data((command + "\n").utf8))
+        let replied = await waitUntil(timeout: timeout) {
+            self.allLines().dropFirst(start).contains { $0 == "ok \(command)" || $0.hasPrefix("error \(command):") }
+        }
+        let reply = Array(allLines().dropFirst(start))
+        guard replied else { throw FixtureError(description: "no reply to \(command): \(reply)") }
+        if let error = reply.first(where: { $0.hasPrefix("error ") }) { throw FixtureError(description: error) }
+        if command == "list" { windows = reply.compactMap(FixtureWindow.init(line:)) }
+        return reply
     }
 
     private func start(_ specs: [String]) throws {
@@ -125,8 +129,6 @@ final class FixtureProcess: @unchecked Sendable {
     private var readyPID: Int32? {
         allLines().first { $0.hasPrefix("ready pid=") }.flatMap { Int32($0.dropFirst("ready pid=".count)) }
     }
-
-    private func windowLines() -> [FixtureWindow] { allLines().compactMap(FixtureWindow.init(line:)) }
 
     func stop() { kill(process.processIdentifier, SIGSTOP) }
     func resume() { kill(process.processIdentifier, SIGCONT) }
