@@ -33,6 +33,10 @@ import Testing
         #expect(try runCheck() == 0)
     }
 
+    @Test func testSupportAndPrivateAreClean() throws {
+        #expect(try runCheck(["Sources/PaneTestSupport", "Sources/PanePrivate"]) == 0)
+    }
+
     @Test(arguments: [
         "import AppKit",
         "@preconcurrency import SwiftUI",

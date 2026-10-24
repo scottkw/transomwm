@@ -8,6 +8,9 @@ permissions:
 jobs:
   test:
     runs-on: macos-26
+    # A runner that happens to be AX-trusted must still never run the fixture suite.
+    env:
+      PANE_SKIP_AX_INTEGRATION: "1"
     steps:
       - uses: actions/checkout@v5
       - run: swift --version

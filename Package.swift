@@ -22,7 +22,10 @@ let package = Package(
         .target(name: "PaneMac", dependencies: ["PaneEngine", "PanePrivate"], swiftSettings: macSettings),
         .executableTarget(name: "PaneApp", dependencies: ["PaneMac"], swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(name: "PaneFixtureApp", swiftSettings: [.defaultIsolation(MainActor.self)]),
+        .target(name: "PaneTestSupport", dependencies: ["PaneEngine"]),
         .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
+        .testTarget(name: "PaneEngineTests", dependencies: ["PaneEngine", "PaneTestSupport"]),
+        .testTarget(name: "PaneMacTests", dependencies: ["PaneMac", "PanePrivate"]),
         .testTarget(
             name: "PaneMacIntegrationTests",
             dependencies: ["PaneMac", "PanePrivate", "PaneFixtureApp"]
