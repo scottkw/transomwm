@@ -33,14 +33,14 @@ Pane is a free, open-source (MIT) macOS window manager where windows never overl
 |---|---|---|---|---|
 | Swift | **6.4** toolchain (Xcode 27.1 locally); package declares `swift-tools-version: 6.2`, Swift 6 language mode | Everything | AeroSpace does the same: tools-version 6.2 with `.swift-version` set to 6.4.0. Tools-version 6.2 is the floor for `.defaultIsolation(MainActor.self)` and `NonisolatedNonsendingByDefault`. It also lets the package build on GitHub's `macos-26` runners, which currently top out at Xcode 26.6. Don't declare 6.4 until CI has Xcode 27. | HIGH (local toolchain + runner-images README) |
 | Swift Package Manager | bundled with toolchain | Module graph, dependency resolution, headless build and test of Model and Engine | It enforces the Model / Engine / App split at module level, and `swift test` needs no Xcode project. Every new Swift WM (AeroSpace) keeps its real code in SPM targets. | HIGH |
-| XcodeGen | **2.46.0** (2026-07-16) | Generates `Pane.xcodeproj` from `project.yml` for release `.app` builds | AeroSpace's choice. The `.pbxproj` is never committed, so there are no merge conflicts and no hand-edited signing settings. Xcode builds the bundle, embeds Sparkle.framework, applies the entitlements and Info.plist keys, and handles signing. All code stays in SPM, so the project file has only one or two targets. 2.46 supports synced folders and package traits. | HIGH (release API) |
+| XcodeGen | **2.46.0** (2026-07-16) | Generates `Pane.xcodeproj` from `project.yml` for release `.app` builds | AeroSpace's choice. The `.pbxproj` is never committed, so there are no merge conflicts and no hand-edited signing settings. Xcode builds the bundle, applies the entitlements and Info.plist keys, and handles signing. All code stays in SPM, so the project file has only one or two targets. 2.46 supports synced folders and package traits. | HIGH (release API) |
 | AppKit | macOS 14 SDK floor, built with the latest SDK | Overlays (`NSPanel`), status item, event plumbing, window-level control | Click-through, full-screen, borderless, non-activating panels at custom window levels are only practical in AppKit. Every WM studied (AeroSpace, Amethyst, Rectangle, Loop) is AppKit-first. | HIGH |
 | ApplicationServices / HIServices (Accessibility API) | system | Enumerate, observe, move and resize other apps' windows | No other public API can move another process's windows. Use `AXUIElement`, `AXObserver` and `AXUIElementSetMessagingTimeout` directly. | HIGH |
 | ScreenCaptureKit | system, `SCScreenshotManager` (macOS **14.0**) | Window snapshots for the zoom stage | `SCScreenshotManager.captureImage(contentFilter:configuration:)` plus `SCContentFilter(desktopIndependentWindow:)` is available exactly at our floor (14.0). It captures one window even when occluded. `SCStreamConfiguration.ignoreShadowsSingleWindow` is also 14.0. The old `CGWindowListCreateImage` is **unavailable** when the deployment target is ≥15 (verified: compile error with `-target macos15`) and deprecated at 14. | HIGH (Apple doc JSON + local compile) |
 | Core Animation (QuartzCore) | system | Render the zoom "stage": one `CALayer` per window snapshot, camera as `sublayerTransform` / bounds | Hardware-composited, cheap to animate hundreds of textured layers, and setting `layer.contents = CGImage` (or an IOSurface) needs no copy. Drive the camera with `NSView.displayLink(target:selector:)` / `CADisplayLink`, both **macOS 14.0**, which match ProMotion. | HIGH (API availability) / MEDIUM (performance, needs a phase-4 spike) |
 | CoreGraphics event taps | system (`CGEvent.tapCreate`) | Watch title-bar drags, modifier state, ⌘⇧-drag rectangle zoom, Mission Control key interception | This is the only way to observe and *consume* global input. An active (`.defaultTap`) session tap needs the Accessibility permission we already request. | HIGH |
 | ServiceManagement `SMAppService.mainApp` | macOS **13.0** | Launch at login | `register()` / `unregister()` / `status` in three lines. It replaces helper-app login items and the `LaunchAtLogin` packages. | HIGH (Apple doc JSON) |
-| Sparkle | **2.10.0** (2026-09-13) | Auto-update | It is the de-facto updater for non-MAS Mac apps (Amethyst, Rectangle, and the reference app ships 2.10). 2.10 requires macOS 12+, fixes delta updates on macOS 27 and drops CocoaPods. It ships through SPM as a binary target. | HIGH (release notes + Package.swift) |
+| GitHub Releases update check (own code, gifsmith-style) | — | Auto-update (SHIP-04, Phase 9) | User decision 2026-10-24: port gifsmith's `internal/update` to Swift. Query `releases/latest` with ETag caching, notify on a newer version, Settings toggle + "Check for Updates" button, download the DMG and verify its sha256 digest and Team ID before opening. No Sparkle dependency. | HIGH (user decision) |
 
 ### Supporting Libraries
 
@@ -63,8 +63,7 @@ Pane is a free, open-source (MIT) macOS window manager where windows never overl
 | `swift format` (swift-format, bundled in the toolchain) | ships with Swift 6.4 (standalone 604.0.0) | Formatting and lint | No install needed (verified: `swift format --version` works locally). Add `.swift-format` and run `swift format lint --strict -r Sources Tests` in CI. Add SwiftLint 0.65.1 only if custom rules become necessary. |
 | xcbeautify | 3.2.1 | Readable `xcodebuild` logs in CI | `brew install xcbeautify`. |
 | `xcrun notarytool` + `xcrun stapler` | Xcode 27 | Notarise and staple the `.app` / `.dmg` | `notarytool store-credentials pane-notary` once, then `submit --keychain-profile pane-notary --wait`. |
-| Sparkle CLI tools (`generate_keys`, `generate_appcast`, `sign_update`) | 2.10.0 | EdDSA keys, appcast generation | Found under the SPM artifacts dir (`.../artifacts/sparkle/Sparkle/bin/`). Keep the private EdDSA key in the login keychain and back it up (`generate_keys -x`). |
-| create-dmg (optional) | 1.3.0 | Pretty DMG | A notarised **zip** is enough for Sparkle and Homebrew. Amethyst, Loop and AeroSpace ship zips. Add a DMG only for website downloads. |
+| create-dmg | 1.3.0 | Release DMG | Required: the GitHub Releases updater downloads `Pane-<version>-<arch>.dmg` and verifies its sha256 digest (gifsmith pattern). Homebrew can use the same notarised DMG. |
 | GitHub Actions | `macos-26` (arm64) | `swift test` on every PR, tag-triggered release job (build, sign, notarise, appcast, cask bump) | Import the Developer ID `.p12` into a temporary keychain in the job and use an App Store Connect API key for notarytool. |
 | Homebrew | 7.0.10 current | Cask distribution | Start with our own tap, `<org>/homebrew-tap`, and submit to `homebrew/cask` once notable (see Distribution). |
 
@@ -107,7 +106,7 @@ Pane is a free, open-source (MIT) macOS window manager where windows never overl
 | Local dev | A **stable** identity: an Apple Development cert, or a self-signed cert like AeroSpace's `aerospace-codesign-certificate` | TCC (Accessibility, Screen Recording) grants are keyed to the code signature's designated requirement. Ad-hoc signing (`-`) changes it on every rebuild, so permissions silently reset. This is the #1 dev-loop time sink for WMs. Use a separate debug bundle ID (`…pane.debug`) so dev and release grants don't collide. |
 | Release | **Developer ID Application** + hardened runtime + notarised + stapled | Required by Homebrew (below) and by Gatekeeper for downloaded apps. Costs USD 99/yr. AeroSpace skips this and strips quarantine in its own tap, a route Homebrew is closing. |
 - Homebrew 5.0 deprecated `--no-quarantine`. The policy (Acceptable Casks): *"apps … that Gatekeeper can assess must pass Homebrew's Gatekeeper checks"* and *"must not require … Gatekeeper to be disabled or bypassed."* Casks that failed Gatekeeper were scheduled to lose support on 2026-09-01. (HIGH for the policy text, from docs.brew.sh; MEDIUM for the date, from secondary sources)
-- `homebrew/cask` also applies notability thresholds that a brand-new repo won't meet. **Ship first via our own tap** (`brew install <org>/tap/pane`), then submit upstream. Model the cask on Rectangle's official one: `auto_updates true` (Sparkle owns updates), `depends_on macos: :sonoma`, `uninstall quit:` / `login_item:`, `zap trash:`, and a `livecheck` with `strategy :sparkle`. (HIGH: read from homebrew-cask today)
+- `homebrew/cask` also applies notability thresholds that a brand-new repo won't meet. **Ship first via our own tap** (`brew install <org>/tap/pane`), then submit upstream. Model the cask on Rectangle's official one: `depends_on macos: :sonoma`, `uninstall quit:` / `login_item:`, `zap trash:`, and a `livecheck` with `strategy :github_latest`. Leave out `auto_updates true`: Pane's updater only notifies and downloads, the user installs, so `brew upgrade` should keep managing the cask. (HIGH: read from homebrew-cask today)
 
 ## How the prior art does it (evidence, read 2026-10-23)
 
@@ -123,9 +122,7 @@ Pane is a free, open-source (MIT) macOS window manager where windows never overl
 
 # One-time dev tooling
 
-# Package.swift dependencies (the only two runtime deps)
-
-#   .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0"),
+# Package.swift dependencies (the only runtime dep)
 
 #   .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.1.0"),
 
@@ -143,7 +140,7 @@ Pane is a free, open-source (MIT) macOS window manager where windows never overl
 |---|---|---|
 | SPM + XcodeGen | **Plain committed `.xcodeproj`** with Xcode 16+ synchronized folders (Loop, Rectangle, Amethyst) | If contributors mostly work in Xcode and nobody minds `.pbxproj` diffs. Synced folders make it far less painful than before. Code should still live in SPM targets. |
 | SPM + XcodeGen | **Tuist 4.213** | When a multi-app or multi-extension workspace needs caching and graph tooling. That is overkill for one app target plus a local package, and it adds a `mise`-managed CLI and Swift manifests. |
-| SPM + XcodeGen | **Pure SPM with a hand-rolled bundle script** (`swift build` → copy into `Pane.app/Contents/MacOS`, write Info.plist, embed Sparkle.framework, fix rpaths, `codesign`) or swift-bundler | Only if Xcode must be avoided entirely. You'd re-implement framework embedding, asset catalogs (`actool`) and entitlements by hand. AeroSpace explicitly says "don't use this build for release". |
+| SPM + XcodeGen | **Pure SPM with a hand-rolled bundle script** (`swift build` → copy into `Pane.app/Contents/MacOS`, write Info.plist, fix rpaths, `codesign`) or swift-bundler | Only if Xcode must be avoided entirely. You'd re-implement asset catalogs (`actool`) and entitlements by hand. AeroSpace explicitly says "don't use this build for release". |
 | Swift Testing | XCTest | Only for `measure {}` performance baselines (Swift Testing has no perf-metric API) or for UI tests. Swift 6.4 adds XCTest↔Swift Testing interop, so both can coexist in one target. |
 | KeyboardShortcuts 3.1.0 | HotKey 0.2.1 (soffes; AeroSpace) | If hotkeys are only config-file defined with no recorder UI. Last push 2024-12, effectively frozen. |
 | KeyboardShortcuts | Hotkeys handled in our CGEventTap | For chords that Carbon can't express (modifier-only, or keys we must *suppress* such as Mission Control F3/⌃↑). Pane needs the tap anyway for those, so keep Carbon for normal rebindable shortcuts. |
@@ -151,7 +148,6 @@ Pane is a free, open-source (MIT) macOS window manager where windows never overl
 | Own AX wrapper | Silica (ianyh) | Never. It's shaped around Amethyst's needs and its last tag is v0.3.7. |
 | Own MT shim | OpenMultitouchSupport 3.0.x | If the shim proves fiddly: 3.0.x supported macOS 13+ (4.0 needs 15+). It's still a binary XCFramework, so pin the checksum. |
 | Core Animation stage | Metal (`CAMetalLayer`) | Only if Instruments shows CA can't hold 120 Hz with more than ~100 snapshot layers. Unlikely; defer. |
-| Sparkle | Custom updater (Loop) | Never. You would own EdDSA verification, delta updates and relaunch logic. |
 | Developer ID + notarisation | Unsigned + own tap with quarantine strip (AeroSpace) | Not viable for a public 2026 release. Homebrew is ending Gatekeeper bypasses, and macOS 15+ makes running unsigned downloads hard (System Settings → Open Anyway). |
 
 ## What NOT to Use
@@ -182,7 +178,6 @@ Pane is a free, open-source (MIT) macOS window manager where windows never overl
 
 | Package A | Compatible With | Notes |
 |---|---|---|
-| Sparkle 2.10.0 | macOS 12+ deployment, Xcode 26/27 | 2.10 dropped < 12 because Xcode 27 can't target older OSes. Fine for our 14 floor. |
 | KeyboardShortcuts 3.1.0 | swift-tools 6.2, macOS 10.15+ | Uses `.defaultIsolation(MainActor.self)`, so a 6.2+ toolchain is required. |
 | swift-tools-version 6.2 | Xcode 26.x (CI), Xcode 27.1 (local) | 6.4 tools-version would lock out the current GitHub runners. |
 | XcodeGen 2.46.0 | Xcode 27 project format via XcodeProj 9.14 | Pin it in CI (`brew install xcodegen` gets the latest; or use mint/mise with a version). |
