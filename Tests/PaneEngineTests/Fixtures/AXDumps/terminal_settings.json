@@ -1,0 +1,60 @@
+{
+  "app" : {
+    "activationPolicy" : "regular",
+    "bundleID" : "com.apple.Terminal",
+    "family" : "native",
+    "hidden" : false
+  },
+  "capturedOn" : {
+    "appVersion" : "2.15",
+    "date" : "2026-10-24",
+    "macOS" : "27.0.1"
+  },
+  "case" : "terminal_settings",
+  "expected" : {
+    "confirmedBy" : "executor-proposed",
+    "kind" : "neverDock"
+  },
+  "schemaVersion" : 1,
+  "title" : {
+    "length" : 8,
+    "redacted" : true
+  },
+  "window" : {
+    "cg" : {
+      "alpha" : 1,
+      "layer" : 0,
+      "onScreen" : true
+    },
+    "close" : {
+      "enabled" : true,
+      "present" : true
+    },
+    "frame" : {
+      "height" : 628,
+      "width" : 667,
+      "x" : 412,
+      "y" : 192
+    },
+    "fullScreen" : false,
+    "fullScreenButton" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "main" : false,
+    "minimize" : {
+      "enabled" : false,
+      "present" : true
+    },
+    "minimized" : false,
+    "modal" : false,
+    "role" : "AXWindow",
+    "schemaVersion" : 1,
+    "sheetAttached" : false,
+    "subrole" : "AXDialog",
+    "zoom" : {
+      "enabled" : false,
+      "present" : true
+    }
+  }
+}

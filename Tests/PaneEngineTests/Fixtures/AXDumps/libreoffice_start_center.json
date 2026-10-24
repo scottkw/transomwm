@@ -1,0 +1,60 @@
+{
+  "app" : {
+    "activationPolicy" : "regular",
+    "bundleID" : "org.libreoffice.script",
+    "family" : "office",
+    "hidden" : false
+  },
+  "capturedOn" : {
+    "appVersion" : "24.2.5.2",
+    "date" : "2026-10-24",
+    "macOS" : "27.0.1"
+  },
+  "case" : "libreoffice_start_center",
+  "expected" : {
+    "confirmedBy" : "executor-proposed",
+    "kind" : "dockable"
+  },
+  "schemaVersion" : 1,
+  "title" : {
+    "length" : 0,
+    "redacted" : true
+  },
+  "window" : {
+    "cg" : {
+      "alpha" : 1,
+      "layer" : 0,
+      "onScreen" : true
+    },
+    "close" : {
+      "enabled" : true,
+      "present" : true
+    },
+    "frame" : {
+      "height" : 762,
+      "width" : 1176,
+      "x" : 147,
+      "y" : 39
+    },
+    "fullScreen" : false,
+    "fullScreenButton" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "main" : true,
+    "minimize" : {
+      "enabled" : true,
+      "present" : true
+    },
+    "minimized" : false,
+    "modal" : false,
+    "role" : "AXWindow",
+    "schemaVersion" : 1,
+    "sheetAttached" : false,
+    "subrole" : "AXStandardWindow",
+    "zoom" : {
+      "enabled" : true,
+      "present" : true
+    }
+  }
+}

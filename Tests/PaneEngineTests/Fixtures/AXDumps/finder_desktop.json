@@ -1,0 +1,53 @@
+{
+  "app" : {
+    "activationPolicy" : "regular",
+    "bundleID" : "com.apple.finder",
+    "family" : "native",
+    "hidden" : false
+  },
+  "capturedOn" : {
+    "appVersion" : "27.0",
+    "date" : "2026-10-24",
+    "macOS" : "27.0.1"
+  },
+  "case" : "finder_desktop",
+  "expected" : {
+    "confirmedBy" : "executor-proposed",
+    "kind" : "notAWindow"
+  },
+  "schemaVersion" : 1,
+  "title" : {
+    "length" : 0,
+    "redacted" : true
+  },
+  "window" : {
+    "close" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "frame" : {
+      "height" : 1112,
+      "width" : 1710,
+      "x" : 0,
+      "y" : 0
+    },
+    "fullScreenButton" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "main" : false,
+    "minimize" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "minimized" : false,
+    "modal" : false,
+    "role" : "AXScrollArea",
+    "schemaVersion" : 1,
+    "sheetAttached" : false,
+    "zoom" : {
+      "enabled" : false,
+      "present" : false
+    }
+  }
+}

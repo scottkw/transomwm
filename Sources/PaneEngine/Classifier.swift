@@ -31,6 +31,7 @@ public struct ClassifierOverrides: Equatable, Sendable {
             "com.apple.ActivityMonitor",  // no fullscreen button on its main window
             "com.valvesoftware.steam",  // custom chrome
             "com.google.Chrome",  // button missing during tab drag-out
+            "org.libreoffice.script",  // Start Center has no fullscreen button (corpus: libreoffice_start_center)
         ],
         neverDockIdentifiers: [
             "com.mitchellh.ghostty.quickTerminal",  // Ghostty's drop-down terminal

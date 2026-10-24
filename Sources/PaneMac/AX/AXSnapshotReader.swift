@@ -5,7 +5,7 @@ import PanePrivate
 
 /// Builds `AppObservation`s and `WindowSnapshot`s from live AX elements. Every function here is AX IPC:
 /// call it only on the app's `AXAppThread`. AX errors map to `AXFailure`, never to nil (WIN-09).
-nonisolated enum AXSnapshotReader {
+public nonisolated enum AXSnapshotReader {
     /// The batched attributes, in the order `read(_:)` indexes them.
     private static let attributes: [String] = [
         kAXRoleAttribute, kAXSubroleAttribute, kAXModalAttribute, kAXMainAttribute, kAXMinimizedAttribute,
@@ -13,6 +13,12 @@ nonisolated enum AXSnapshotReader {
         kAXCloseButtonAttribute, kAXMinimizeButtonAttribute, kAXZoomButtonAttribute, kAXFullScreenButtonAttribute,
         kAXChildrenAttribute,
     ]
+
+    /// One app's windows, read on the calling thread (for `pane-dump`; the live system reads on the app's thread).
+    public static func observeApp(pid: Int32, bundleID: String) -> AppObservation {
+        let app = AXUIElementCreateApplication(pid)
+        return observeApp(app, pid: pid, bundleID: bundleID, hidden: isHidden(app))
+    }
 
     static func observeApp(_ app: AXUIElement, pid: Int32, bundleID: String, hidden: Bool) -> AppObservation {
         let start = ContinuousClock.now
