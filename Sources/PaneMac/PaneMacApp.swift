@@ -4,6 +4,9 @@ import PanePrivate
 
 /// Entry point shared by the PaneApp executable and the Xcode-built app bundle.
 public enum PaneMacApp {
+    /// Keeps the menu-bar item (and through it the window system) alive for the process lifetime.
+    private static var statusItem: StatusItemController?
+
     public static func run(arguments: [String]) -> Never {
         Capabilities.logReport()
         if arguments.contains("--print-inventory-summary") { printInventorySummary() }
@@ -11,10 +14,15 @@ public enum PaneMacApp {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let system = AXWindowSystem()
+        let controller = StatusItemController(system: system)
+        statusItem = controller
         if AXIsProcessTrusted() {
-            Task { await system.start() }
+            Task {
+                await system.start()
+                await controller.refresh()
+            }
         }
-        withExtendedLifetime(system) { app.run() }
+        app.run()
         exit(0)
     }
 
