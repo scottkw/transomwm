@@ -48,3 +48,7 @@ public enum DropZones {
         return .tile(id, .edge(fy < 0.5 ? .top : .bottom))
     }
 }
+
+extension LayoutTree {
+    public mutating func applyDrop(_ target: DropTarget, window: WindowRef, ids: inout IDSource) throws(LayoutError) {}
+}
