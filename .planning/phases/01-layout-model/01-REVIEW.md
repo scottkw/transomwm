@@ -1,7 +1,8 @@
 ---
 phase: 01-layout-model
-reviewed: 2026-10-24T06:15:30Z
+reviewed: 2026-10-24T07:20:23Z
 depth: standard
+iteration: 3
 files_reviewed: 28
 files_reviewed_list:
   - .github/workflows/ci.yml
@@ -33,195 +34,179 @@ files_reviewed_list:
   - Tests/PaneModelTests/UndoTests.swift
   - scripts/check-no-appkit.sh
 findings:
-  critical: 3
-  warning: 7
-  info: 7
-  total: 17
+  critical: 0
+  warning: 2
+  info: 10
+  total: 12
 status: issues_found
 ---
 
-# Phase 1: Code Review Report
+# Phase 1: Code Review Report (iteration 3, final)
 
-**Reviewed:** 2026-10-24T06:15:30Z
+**Reviewed:** 2026-10-24T07:20:23Z
 **Depth:** standard
-**Files Reviewed:** 28 (the prompt says 15 test files but lists 14 names. All 14 files in `Tests/PaneModelTests/` were reviewed.)
+**Files Reviewed:** 28
 **Status:** issues_found
 
 ## Summary
 
-The model is mostly careful. Every edit works on a copy, the water-filling and rounding arguments hold (I traced the floor/remainder bound and the pin monotonicity), decoding is cycle-safe and iterative, and the encoding is deterministic. The defects sit in three places:
+This pass re-reviewed the phase after the iteration-2 fix commits `971a691` (WR-01: a close purges undo history) and `ac3dabc` (WR-02: the ID headroom check runs at load only). It checked that both fixes are correct and complete, looked for regressions they introduced, and assessed the two edge cases the fixer left out of scope.
 
-1. **Guarantees that only hold in DEBUG.** `assertValid()` is the only post-edit check in `TreeEdits.swift`, and it compiles out in release. Two edit paths really do produce invalid trees: the depth guard checks the wrong node, and a lagging `IDSource` overwrites nodes. In debug builds these trap. In release they commit silently. CI only runs debug, so this is never seen.
-2. **Untrusted-file crash.** A saved file with `ids.next` at or near `UInt64.max` decodes and validates. The first edit then hits `preconditionFailure` and kills the process.
-3. **Lifecycle vs. undo.** Observed OS state (absent/closed) goes through the same snapshot-undo funnel as user edits. Undo can bring back closed windows, and one conflicting snapshot blocks the desk's whole undo stack.
+`swift test` and `swift test -c release -Xswiftc -enable-testing` both pass 139 tests in 14 suites (re-run for this review). Behavioural claims below were reproduced with a scratch probe package in release mode, where `assertValid()` is compiled out. The probe depends on this repo by path, lives in the session scratchpad, and is not part of the repo.
 
-Every BLOCKER and most WARNINGs were reproduced with a scratch probe package that depends on this repo by path (release and debug builds). WR-06 was shown with a mutation run: making `resolve` ignore weights entirely still passes all 125 tests.
+**Prior-fix verification**
+
+| Prior | Verdict | Evidence |
+|-------|---------|----------|
+| WR-01 (close/undo purge) | **Fixed for the reported sequences, with one remaining hole (see WR-02 below)** | `apply(.closed)` now finds the holder desk itself (`World.swift:123-126`) and always calls `history.forget` after a successful commit (`:132`). The public `LayoutTree.setState` (`TreeEdits.swift:136`), `Desk.setState` (through `DesktopLayer.setState:42`) and `DesktopLayer.setState` reject `.closed`, so a close can no longer be made inside `edit`. `Desk.close` is internal. `UndoHistory.forget`'s `try!` is still safe, because `Desk.close` on a snapshot that holds the window only throws `windowNotFound`. The ScenarioTests flow now goes through `apply`. No regression found in the `.absent`/`.fullscreen`/`.present` paths: they are still desk-scoped and still throw `windowNotFound`. |
+| WR-02 (load-only headroom) | **Fixed** | The bound `ids.next <= UInt64.max / 2` is in `World(ids:desks:)` (`World.swift:71`), which is the only constructor that takes an arbitrary `IDSource`, and `init(from:)` routes through it (`:179`). `validate()` no longer checks headroom, so `edit`, `apply` and `undo` stop only where `IDSource.make()` throws. The new corpus case (`.max / 2 + 1`) is rejected as `.invalidLayout`. |
+
+**Assessment of the fixer's out-of-scope edge cases**
+
+- **(a) Undo restores a stale lifecycle state for a window that is on no desk:** confirmed in both directions, and reachable with ordinary user actions (move a window across desks, then Cmd-Z). The result is a visible layout error that lasts until the OS happens to report that window again. Rated **Warning**, see WR-01.
+- **(b) Code inside `edit` can push the ID source past the load bound, so the saved World is refused at load:** confirmed (`ids = IDSource(next: .max / 2 + 10)` inside `edit` commits, and the saved bytes then fail `World.decode` with `invalidLayout`). The same hole also allows a *rewind*, which breaks the "NodeIDs are not reused" promise and makes undo snapshots unrestorable. Natural use cannot get there: it would take about 2^63 `make()` calls. It needs either API misuse or a hostile file already at the bound. Rated **Info**, see IN-10.
+
+The 9 earlier Info items (IN-01..IN-09) were out of fix scope. All 9 are still present and listed again below.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
-
-### CR-01: Hostile `ids.next` near `UInt64.max` passes validation, then crashes the process on the first edit
-
-**File:** `Sources/PaneModel/IDs.swift:48-52`, `Sources/PaneModel/World.swift:60-71`
-**Issue:** `IDSource.make()` calls `preconditionFailure("IDSource exhausted")` when `next == UInt64.max`. `World.validate()` only checks that every NodeID is below `ids.next`. It never bounds `ids.next` itself. JSONDecoder decodes the full UInt64 range, so this file decodes cleanly through `World.decode`:
-```json
-{"desks":[{"desk":{"desktop":{"windows":[]},"tree":{"nodes":{},"states":[]}},"key":{"displayUUID":"D1"}}],"ids":{"next":18446744073709551615},"schemaVersion":1}
-```
-Then `world.edit(k) { try $0.tree.insertRoot(w, ids: &$1) }` traps. This was reproduced: the release build exits with 133 (SIGTRAP), `IDs.swift:49: Fatal error: IDSource exhausted`. `next = UInt64.max - 1` crashes on the second insert. The file is never repaired, so the app crashes on the first drop of every session. This is exactly the corrupt/hostile-file class (T-01-09) the phase is meant to defend against, and the corpus in `PersistenceTests.swift:71-110` has no case for it.
-**Fix:** Make exhaustion a typed error instead of a trap, and reject absurd values at load:
-```swift
-// IDs.swift
-public mutating func make() throws(LayoutError) -> NodeID {
-    guard next < UInt64.max else { throw .invariantViolated("IDSource exhausted") }
-    defer { next += 1 }
-    return NodeID(raw: next)
-}
-// World.validate()
-guard ids.next <= UInt64.max - UInt64(LayoutTree.maxNodes) * 2 else {
-    throw .invariantViolated("ID source \(ids.next) is too close to exhaustion")
-}
-```
-Then add `"ids.next = UInt64.max"` to `corruptCorpus` (expect `.invalidLayout`), plus a test that `edit` throws rather than traps.
-
-### CR-02: `insert`'s depth guard measures the new leaf, not the subtree that rule 3 pushes one level deeper
-
-**File:** `Sources/PaneModel/TreeEdits.swift:46-59`
-**Issue:** When rule 3 wraps the **root** split (lines 52-53, `next.root = split`), every existing node moves one level deeper. The guard at line 59 checks only `next.depth(of: leaf)`, which is 1. A tree at the depth limit (deepest leaf at 64) whose root is horizontal accepts `insert(_, at: .top, of: root)`. That is exactly what `applyDrop(.layoutEdge(.top))` does (`DropZones.swift:61`), and it produces a 65-deep tree. Reproduced:
-- debug: `LayoutTree.swift:169: Fatal error: LayoutTree invariant violated: tooDeep(limit: 64)`. A normal user drop on the display edge crashes the debug app, and it crashes inside `World.edit` too, because `assertValid()` runs before `candidate.validate()`.
-- release: `insert` returns normally, and `validate()` afterwards fails with `tooDeep`. The documented "throwing edit leaves no trace / every edit ends valid" guarantee is broken.
-
-`InvariantTests.insertBeyondDepthLimitThrowsAndLeavesTreeUnchanged` (lines 151-166) only docks beside the deepest leaf, so it passes while this path is wrong. (A non-root split target can never reach rule 3, because alternating axes force rule 1 or 2. So the root wrap is the only bad case.)
-**Fix:** Before committing, validate the whole candidate instead of the single-node probe. The cost is O(nodes), and `World.edit` already pays it:
-```swift
-try next.normalize()
-try next.validate()   // replaces the nodes.count / depth(of: leaf) guards; throws tooDeep / tooManyNodes
-self = next
-ids = nextIDs
-```
-Add a test: a 64-deep chain with a horizontal root, `applyDrop(.layoutEdge(.top))` → `#expect(throws: LayoutError.tooDeep(limit: 64))`, and the tree is unchanged.
-
-### CR-03: A lagging `IDSource` makes `insert` overwrite existing nodes; in release a window is silently dropped from the tree
-
-**File:** `Sources/PaneModel/TreeEdits.swift:29-33, 47-48`, `Sources/PaneModel/LayoutTree.swift:32, 167-171`
-**Issue:** `insert` does `next.nodes[leaf] = .panel(window)` (and `next.nodes[split] = …`) without checking that the freshly made ID is unused. The public API takes any `IDSource`, and `IDSource(next:)` is public, so nothing ties the source to the tree outside `World`. Reproduced in release: build H[n1:w1, n2:w2] under n3, then `insert(w3, at: .right, of: n2, ids: &IDSource())`. The call returns successfully with `nodes = [n3: H[n1, n2, n1], n2: w2, n1: w3]`. Window w1 is gone from the nodes but still in `states`, and n1 is listed twice. Only a later explicit `validate()` notices. The type's doc comment says "Every way of building one (init, decoding, edits) ends in `validate()`", but for edits that is DEBUG-only (`assertValid`, lines 167-171). `World.edit` happens to catch it, because World's validate enforces `node.raw < ids.next`. Any standalone `LayoutTree` user (Phase 3 previews, saved views, tests built with `IDSource(next: 10)` as in `TreeEditTests.swift:151`) gets silent data loss.
-**Fix:** Refuse colliding IDs, and validate unconditionally (same change as CR-02):
-```swift
-let leaf = nextIDs.make()
-guard next.nodes[leaf] == nil else { throw .invariantViolated("ID source issued \(leaf), which is already in the tree") }
-// same guard after `let split = nextIDs.make()`
-```
-Also fix or drop the doc claim at `LayoutTree.swift:32`, or make the post-edit check run in release.
-
 ## Warnings
 
-### WR-01: A confirmed-closed window can be impossible to remove (`setState(.closed)` throws `splitFull`)
+### WR-01: Undo restores a window that is on no desk with whatever lifecycle state its snapshot held
 
-**File:** `Sources/PaneModel/TreeEdits.swift:130-131, 183-186`; `Sources/PaneModel/World.swift:21-29`
-**Issue:** `.closed` is defined as "removes the slot, exactly as `remove(_:)`", and `remove` refuses when the collapse would merge more than `maxChildren` children. Reproduced: H[50 panels, V[B, H[60 panels]]] followed by `setState(.closed, for: B)` throws `splitFull(n1, limit: 100)`, and B stays `.present`. The OS has already confirmed the window is gone (two sources), but the model cannot drop it. `resolve` keeps reserving a tile for a dead window, and the next phase will issue `setFrame` to it. No API offers a way to recover. The trigger needs more than 100 windows in one desk, so it is unlikely in practice, but it is a hard failure of a contract that must not fail.
-**Fix:** Make removal infallible. `maxNodes` already bounds hostile input, so keep `maxChildren` only for user-driven growth (`adding`) and let merges exceed it. Relax `validate`'s child cap to `2...maxNodes`, or to a separate larger bound, so a merged split still round-trips through JSON. Alternatively, when the merge overflows, keep the inner split by not collapsing it (store B's slot as removed and re-parent the remaining child under a fresh split on the other axis).
+**File:** `Sources/PaneModel/World.swift:141-152` (carry-over at lines 144-146), `Sources/PaneModel/World.swift:120-129`
+**Issue:** `undo` copies the current lifecycle state onto the snapshot only for windows that are on `key`'s desk right now (`current.state(of: window)`). Take a window that a move and an undo took off every desk. The model has nowhere to record OS facts about it: `apply(.absent/.present, w, on: anyKey)` throws `windowNotFound` (confirmed). When a later undo brings the window back, it keeps the state from the old snapshot, which may be stale. Both directions were reproduced in release:
 
-### WR-02: One un-restorable snapshot permanently blocks a desk's entire undo stack
+```
+// (1) A minimised window is given a tile: a visible hole.
+edit k1: dock a, w     edit k1: remove w     edit k2: insertRoot w      // move w from k1 to k2
+apply(.absent, w, on: k2)                                                // user minimises w
+undo k2                                                                  // w on no desk
+apply(.absent, w, on: k1) -> windowNotFound
+undo k1  -> state(w) == .present; resolve gives w x:500 w:500. a gets only half the screen, next to an empty tile.
 
-**File:** `Sources/PaneModel/World.swift:98-108`
-**Issue:** If the newest snapshot fails `candidate.validate()` (for example a window that has since moved to another desk), `undo` throws and leaves the history untouched. Every later undo on that desk hits the same snapshot and throws again, so all older entries are unreachable until the conflicting window leaves the other desk. Reproduced: `undo 1/2/3 threw duplicateWindow(window 9 …), depth 3`. `UndoTests.undoThatWouldPutAWindowOnTwoDesksThrowsAndChangesNothing` asserts this behaviour (depth stays 2). The test pins the bug in place rather than catching it.
-**Fix:** When a snapshot is no longer valid, discard it (commit `history = nextHistory`) and either report it (`throws` after popping, or return an enum `.restored / .nothing / .discarded(LayoutError)`) or keep popping until a valid snapshot is found. Update the test to expect the stale entry to be consumed.
-
-### WR-03: Observed lifecycle changes go on the user's undo stack, so undo brings back closed windows and overrides OS state
-
-**File:** `Sources/PaneModel/World.swift:80-92, 98-108` (exercised by `Tests/PaneModelTests/ScenarioTests.swift:133, 141, 146-150`)
-**Issue:** `edit` is documented as "the one way to change a desk", and it always pushes a full `Desk` snapshot that includes `states`. Lifecycle transitions (absent/fullscreen/closed, which are facts reported by the OS) must therefore go through it, as the scenario test does. Reproduced: dock w1 and w2, then `edit { setState(.closed, for: w2) }`, then `undo` → w2 is back as `.present`, although the window no longer exists. The same applies to sleep/wake churn. Each absent/present flip uses one of the 50 undo levels and evicts real user edits. The user's next Cmd-Z undoes a system event instead of their own edit. Restored snapshots also bring back stale `.present` for windows that are currently absent.
-**Fix:** Separate observed state from user intent. Add a validated, history-free mutation for lifecycle events, e.g. `public mutating func apply(_ key: DeskKey, _ change: …) throws(LayoutError)` that commits without `history.push`. In `undo`, carry the current lifecycle facts into the restored snapshot: drop windows that are no longer on the desk, and keep current `absent`/`fullscreen` states.
-
-### WR-04: A migration step that produces a non-JSON value crashes the process with an uncaught NSException
-
-**File:** `Sources/PaneModel/Persistence.swift:51-59`
-**Issue:** `JSONSerialization.data(withJSONObject:)` raises an Objective-C `NSInvalidArgumentException` for invalid objects, and Swift `do/catch` cannot catch it. Reproduced with a step that sets `object["stamp"] = Date()`: `*** Terminating app due to uncaught exception 'NSInvalidArgumentException', reason: 'Invalid type in JSON write (__NSTaggedDate)'`. A buggy migration then crashes every launch while loading the user's file, instead of returning `.corrupt`.
-**Fix:**
-```swift
-try migrations.migrate(&object, from: version, to: currentSchemaVersion)
-guard JSONSerialization.isValidJSONObject(object) else {
-    throw PersistenceError.corrupt("migration to schema \(currentSchemaVersion) produced a non-JSON value")
-}
+// (2) A visible window is not tiled.
+edit k1: dock a, w     apply(.absent, w, on: k1)     edit k1: remove w   // snapshot holds w as .absent
+edit k2: insertRoot w (w is .present, on screen)     undo k2     undo k1
+-> state(w) == .absent; resolve gives w no rect, though the window is on screen
 ```
 
-### WR-05: The no-AppKit gate (D-23) is easy to bypass
-
-**File:** `scripts/check-no-appkit.sh:11`
-**Issue:** The regex requires the module name to be followed by whitespace, `.`, or end-of-line, allows only attributes without arguments, and anchors to the start of the line. All of these compile and pass the check (verified, exit 0):
-- `import AppKit;`
-- `@_spi(Private) import AppKit`
-- `import Foundation; import AppKit` (second import on the same line)
-
-Umbrella frameworks that re-export AppKit (`import WebKit`, `import Quartz`, `import Carbon`) also pass, so the "headless-testable" property is not actually enforced.
-**Fix:** At minimum, extend the regex to `(^|;)[[:space:]]*(@[A-Za-z_]+(\([^)]*\))?[[:space:]]+)*import[[:space:]]+(…)?(AppKit|Cocoa|SwiftUI|WebKit|Quartz|Carbon)([^A-Za-z0-9_]|$)` and add those lines to `NoAppKitTests.violationFails`. For a robust check, build with `-Xswiftc -emit-loaded-module-trace` and fail if the trace for PaneModel/PaneEngine lists AppKit. That also catches transitive imports.
-
-### WR-06: Test gap — `resolve` can ignore split weights entirely and all 125 tests still pass
-
-**File:** `Tests/PaneModelTests/ResolveTests.swift:151-161`, `Tests/PaneModelTests/ResolveFuzzTests.swift:80-104` (code: `Sources/PaneModel/Resolve.swift:156`)
-**Issue:** Mutation run: replacing `share[i] = free * parts[i].weight / weight` with an equal share (`free / unpinnedCount`) gives `✔ Test run with 125 tests in 14 suites passed`. Every exact-rect assertion uses equal weights (0.5/0.5 or thirds). The only unequal-weight resolve test (`resolveIsDeterministicAndLaysChildrenOutInOrder`, 0.3/0.7 and 0.6/0.4) only checks adjacency. The fuzz properties P1-P8 never compare sizes against weights. The core layout behaviour, honouring the user's weights, has no test.
-**Fix:** Add an exact case and a fuzz property:
+Either way, the error lasts until the OS next reports an event for that window. For a minimised window that can be indefinitely. The undo doc comment (lines 135-136) is accurate about windows "still on the desk", but says nothing about this case, so the engine has no way to know it must re-sync. This is the stale-state half of the earlier WR-03/WR-01 concern. The closed-window half is fixed.
+**Fix:** The model cannot know the true state of a window it does not track, so it must tell the caller. Make `undo` report which windows it brought back without a current state, so the engine can re-query them:
 ```swift
-@Test func unequalWeightsSplitTheLengthProportionally() throws {
-    let r = try resolve(try pair(weights: [0.3, 0.7]), in: wide, mins: [:], gap: 0)
-    #expect(r.windowRects[a] == Rect(x: 0, y: 0, width: 300, height: 500))
-    #expect(r.windowRects[b] == Rect(x: 300, y: 0, width: 700, height: 500))
+/// Windows the restored snapshot holds that no desk held before the undo. Their lifecycle state
+/// comes from the snapshot and may be stale; the engine must re-report it through `apply`.
+public struct UndoResult { public let restored: Bool; public let revived: [WindowRef] }
+```
+At minimum, document the contract on `undo` and in the Phase 2 engine plan. Add a test for sequence (1).
+
+### WR-02: `apply(.closed)` requires an existing desk key it otherwise ignores; an unknown key throws before the history purge, so undo can still revive the closed window
+
+**File:** `Sources/PaneModel/World.swift:120-133`
+**Issue:** After the WR-01 fix, `.closed` is about the window, not the desk. The `key` argument is not used to find the window (line 124 searches every desk). It is still checked first, though: `guard desks[key] != nil else { throw .deskNotFound(key) }` (line 121). Pass a key that has no desk, and the call throws before `history.forget(window)` (line 132). The window stays in every snapshot. Reproduced in release:
+
+```
+edit k1: dock a, w     edit k1: remove w          // w is on no desk; k1's snapshot holds it
+apply(.closed, w, on: k2) -> deskNotFound(k2)     // k2 was never added
+undo k1  -> k1.contains(w) == true                // the closed window is back
+```
+
+This is exactly the case the fix was for: a window that no desk holds. For such a window the engine has no meaningful key to pass. `WindowEvent.windowDestroyed(WindowRef)` (`WindowSystem.swift:47`) carries no desk either. So the engine has to make a key up, for example the current display or Space, and a desk for that key may not exist yet. Then the confirmed close is lost. The test `applyToAnUnknownDeskOrWindowThrowsAndChangesNothing` only covers an unknown key for `.absent`.
+**Fix:** Do not let an argument that `.closed` ignores block the purge. Either check the key only for desk-scoped states:
+```swift
+public mutating func apply(_ state: WindowState, for window: WindowRef, on key: DeskKey, history: inout UndoHistory) throws(LayoutError) {
+    var candidate = self
+    if state == .closed {
+        if let holder = desks.first(where: { $0.value.contains(window) })?.key {
+            try candidate.desks[holder]?.close(window)
+        }
+    } else {
+        guard desks[key] != nil else { throw .deskNotFound(key) }
+        try candidate.desks[key]?.setState(state, for: window)
+    }
+    try candidate.validate()
+    self = candidate
+    if state == .closed { history.forget(window) }
 }
 ```
-In the fuzz test, for every split where no child is pinned (each length > its min), check `|length_i - weight_i/Σw · available| <= 1` for non-last children.
-
-### WR-07: CI never builds or tests release, so all DEBUG-only invariant enforcement is untested where it matters
-
-**File:** `.github/workflows/ci.yml:15-16`; `Sources/PaneModel/LayoutTree.swift:167-171`
-**Issue:** `swift build` / `swift test` run in debug only, so `assertValid()` is always active in CI. CR-02 and CR-03 behave differently in release (silent invalid commit vs. trap), and no pipeline ever sees the release behaviour. The suite therefore cannot detect "the edit committed an invalid tree".
-**Fix:** Add `swift build -c release` and `swift test -c release -Xswiftc -enable-testing` (needed for `@testable import`) to CI. Better still, apply the CR-02 fix (unconditional `try next.validate()` before commit) so the two configurations behave the same.
+or split it out as `public mutating func close(_ window: WindowRef, history: inout UndoHistory)` with no key at all, which is the shape the iteration-2 review suggested. Add a test: close a window that no desk holds, with a key that has no desk, then undo.
 
 ## Info
 
-### IN-01: Weight tolerance mismatch (validate 1e-9 vs. normalise 1e-12) rewrites unrelated splits on any edit
+### IN-01: Weight tolerance mismatch (validate 1e-9 vs. normalise 1e-12) rewrites unrelated splits on any edit (still present)
 
-**File:** `Sources/PaneModel/LayoutTree.swift:91`, `Sources/PaneModel/TreeEdits.swift:159-163, 202-204`
-**Issue:** `validate` accepts weights summing to within 1e-9, but `isNormalised` requires 1e-12. `normalize()` scans **every** split. A decoded or migrated file with slop between 1e-12 and 1e-9 is accepted, then the first insert/remove/resize anywhere renormalises those splits. That breaks D-07's "every other weight bit-identical" for the resized split and silently changes splits the user never touched.
-**Fix:** Use one tolerance constant for both checks, or canonicalise weights once at decode/init so later edits are bit-stable.
+**File:** `Sources/PaneModel/LayoutTree.swift:92`, `Sources/PaneModel/TreeEdits.swift:166-167, 206-207`
+**Issue:** A decoded file whose weight sums are off by 1e-12 to 1e-9 is accepted. The first edit anywhere then renormalises every such split, which breaks D-07's promise that weights the user did not touch stay bit-identical.
+**Fix:** Use one tolerance constant for both checks, or canonicalise weights once at decode.
 
-### IN-02: `resolve` rejects invalid minimums for windows that are not in the tree
+### IN-02: `resolve` rejects invalid minimums for windows not in the tree (still present)
 
 **File:** `Sources/PaneModel/Resolve.swift:34-38`
-**Issue:** Minimums for windows outside the tree are documented and tested as ignored (`minimumsForWindowsOutsideTheTreeAreIgnored`). An invalid one (NaN or negative) for such a window still throws `invalidMinimum`, so one stale learned-minimum entry for an unrelated window blocks every layout.
-**Fix:** Validate only the minimums of present tree windows, inside the candidate loop.
+**Issue:** One stale NaN or negative minimum for an unrelated window throws `invalidMinimum` and blocks every layout.
+**Fix:** Validate only the minimums of present tree windows, inside the candidate loop at lines 59-63.
 
-### IN-03: `World.edit` pushes an undo snapshot even when the change is a no-op
+### IN-03: No-op undo levels: `edit` pushes when nothing changed, and `forget` can turn a snapshot into a copy of the current desk (still present)
 
-**File:** `Sources/PaneModel/World.swift:83-92`
-**Issue:** `edit(k) { _, _ in }` uses one undo level, and the user then has to press undo once with nothing visibly happening.
-**Fix:** `guard desk != before else { return }` before `history.push`.
+**File:** `Sources/PaneModel/World.swift:104-113`, `Sources/PaneModel/Undo.swift:27-37`
+**Issue:** `edit(k) { _, _ in }` still uses one undo level. Re-confirmed in this pass: dock a, dock w, then `apply(.closed, w)`. The next `undo` returns `true` and leaves the World unchanged, so the user's Cmd-Z visibly does nothing.
+**Fix:** `guard desk != before else { return }` in `edit`. In `undo`, skip and pop snapshots equal to the current desk, or have `forget` drop a snapshot that becomes equal to the one after it.
 
-### IN-04: `UndoHistory` is not bound to a World
+### IN-04: `UndoHistory` is not bound to a World (still present)
 
-**File:** `Sources/PaneModel/Undo.swift:7-25`, `Sources/PaneModel/World.swift:98-108`
-**Issue:** Histories are keyed only by `DeskKey`. After a reload or a replaced World, an old history can restore a foreign snapshot over a desk, and it passes `validate()` whenever IDs happen to be below `ids.next`.
-**Fix:** Stamp each history with a World generation token, or have callers clear the history on reload. Document whichever you choose.
+**File:** `Sources/PaneModel/Undo.swift:7-24`, `Sources/PaneModel/World.swift:141-152`
+**Issue:** Histories are keyed only by `DeskKey`, so after a reload or a replaced World, a stale history can restore a foreign snapshot.
+**Fix:** Stamp each history with a World generation token, or document that callers must clear the history on reload.
 
-### IN-05: GitHub Action not pinned to a commit SHA
+### IN-05: GitHub Action not pinned to a commit SHA (still present)
 
 **File:** `.github/workflows/ci.yml:12`
 **Issue:** `actions/checkout@v5` is a mutable tag.
-**Fix:** Pin to the full commit SHA, with the version in a comment.
+**Fix:** Pin it to the full commit SHA, with the version in a comment.
 
-### IN-06: `WindowSystem.events` is a unicast `AsyncStream`
+### IN-06: `WindowSystem.events` is a unicast `AsyncStream` (still present)
 
-**File:** `Sources/PaneEngine/WindowSystem.swift:72-76`
-**Issue:** If more than one consumer iterates `events` (reconciler and UI, for example), events are split between them unpredictably. The draft protocol doesn't say there must be a single consumer.
-**Fix:** Document "single consumer", or expose a factory (`func makeEventStream() -> AsyncStream<WindowEvent>`).
+**File:** `Sources/PaneEngine/WindowSystem.swift:73`
+**Issue:** If more than one consumer iterates the stream, events are split between them unpredictably.
+**Fix:** Document "single consumer", or expose `func makeEventStream() -> AsyncStream<WindowEvent>`.
 
-### IN-07: No cap on windows per tab group / per tree
+### IN-07: No cap on windows per tab group / per tree (still present)
 
-**File:** `Sources/PaneModel/LayoutTree.swift:100-105`
-**Issue:** `maxNodes` bounds nodes, but one `.tabs` node can hold an unlimited number of windows (only `>= 2` is checked). A 16 MB hostile file can put tens of thousands of windows in one tab group. That undermines the stated purpose of the hostile-input limits, and several O(windows × nodes) paths (`leaf(containing:)`, the victim loop in `resolve`) then scale with it.
-**Fix:** Add `maxTabs` (e.g. 100) checked in `validate` and `group`, or a `maxWindows` limit per tree.
+**File:** `Sources/PaneModel/LayoutTree.swift:102-107`, `Sources/PaneModel/TreeEdits.swift:102-114`
+**Issue:** `.tabs` only checks `>= 2`. A 16 MB hostile file, or repeated `group` calls, can put tens of thousands of windows in one node.
+**Fix:** Add a `maxTabs` (or a per-tree `maxWindows`) limit, checked in `validate` and `group`.
+
+### IN-08: Bypasses of the no-AppKit gate (still present)
+
+**File:** `scripts/check-no-appkit.sh:14`
+**Issue:** These still compile and pass the gate: `/* x */ import AppKit`, `import` and `AppKit` on separate lines, and UI modules not on the list (`AVKit`, `MapKit`, `QuickLookUI`, `SwiftUICore`). The gate guards against accidental imports, not hostile ones.
+**Fix:** Do the module-trace upgrade the script already notes (`-Xswiftc -emit-loaded-module-trace`, then fail if the trace lists AppKit/SwiftUI for PaneModel/PaneEngine).
+
+### IN-09: The `LayoutTree` doc comment is slightly inaccurate (still present)
+
+**File:** `Sources/PaneModel/LayoutTree.swift:31-33`
+**Issue:** It says "the other edits add no nodes". `insertRoot` adds a node and `group` adds a window, and both rely only on `assertValid` (DEBUG). Both are safe today, but for other reasons than the one the comment gives.
+**Fix:** Change it to "the other edits cannot break an invariant (insertRoot only runs on an empty tree; group rejects duplicates) and check it in debug builds".
+
+### IN-10: The `edit` closure can replace the ID source freely: a jump makes the saved World unloadable, and a rewind breaks NodeID uniqueness and undo (fixer's edge case (b))
+
+**File:** `Sources/PaneModel/World.swift:104-113`, `Sources/PaneModel/World.swift:70-73`, `Tests/PaneModelTests/UndoTests.swift:152-155`
+**Issue:** `edit` passes `&candidate.ids` as `inout`, and `IDSource(next:)` is public, so the closure can assign any source. `World.validate()` only checks that existing node IDs are below `ids.next`. Reproduced in release:
+- Jump: `edit { ids = IDSource(next: .max / 2 + 10); dock(a) }` commits. `encoded()` succeeds, and `World.decode` then refuses the bytes with `invalidLayout("ID source … is too close to exhaustion")`. An engine that treats `invalidLayout` as "start fresh" would then overwrite the user's layout.
+- Rewind: dock a and b on k1 (`next = 4`), clear k1, then `edit(k2) { ids = IDSource(); dock(w) }` commits (`next = 2`). Then `undo(k1)` throws `node n3 is not below the ID source's next value 2`, and that snapshot is consumed. This breaks `undo`'s documented promise (line 137: "`ids` is never rewound, so NodeIDs are not reused").
+- A related, hostile-only path: a file at exactly `.max / 2` loads, and after one ordinary edit the saved file is refused at the next launch (confirmed). This is the accepted price of a load-only bound, and much milder than the iteration-2 soft-brick.
+
+Ordinary use cannot reach any of these: it would take about 2^63 `make()` calls. So this is Info. Still, the test `aWorldAtTheLoadHeadroomBoundStillEditsUntilTheIDSourceRunsOut` (UndoTests.swift:152-155) uses `ids = IDSource(next: .max - 2)` inside `edit`, which treats the misuse as supported behaviour.
+**Fix:** In `edit`, require the closure to draw from the source, not replace it. One edit never legitimately needs more than `2 * maxNodes` IDs:
+```swift
+let issued = candidate.ids.next &- ids.next
+guard candidate.ids.next >= ids.next, issued <= UInt64(LayoutTree.maxNodes) * 2 else {
+    throw .invariantViolated("edit replaced the ID source instead of drawing from it")
+}
+```
+Rewrite the headroom test to build its near-exhausted World through an internal, `@testable`-only initializer that skips the load bound (`World(ids:desks:)` itself rejects such values), not by assigning `ids` inside `edit`.
 
 ---
 
-_Reviewed: 2026-10-24T06:15:30Z_
+_Reviewed: 2026-10-24T07:20:23Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
