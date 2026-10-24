@@ -216,7 +216,7 @@ None - no external service configuration required.
 ## Self-Check: PASSED
 - All 7 created files exist; commits 57c1f7b, cdbdf93 and b8ce330 are on HEAD.
 - Task acceptance greps all at least 1. `scripts/check-no-appkit.sh` OK (18 files).
-- `swift test --filter "CoordinatesTests|TrackerDisplayTests|LiveTrackingTests"` passes (integration not skipped). Full `swift test` passes: 142 engine + 15 PaneMac + 10 integration (7 of them live) + 69 model tests.
+- `swift test --filter "CoordinatesTests|TrackerDisplayTests|LiveTrackingTests"` passes (integration not skipped). Full `swift test` passes: 142 model + 15 PaneMac + 10 integration (7 of them live) + 69 engine tests.
 
 ---
 *Phase: 02-window-control*
