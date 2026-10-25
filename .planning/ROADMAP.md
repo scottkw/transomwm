@@ -68,7 +68,7 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: 14/16 plans executed (3 gap-closure plans pending)
+**Plans**: 15/16 plans executed (3 gap-closure plans pending)
 
 Plans:
 **Wave 1**
@@ -102,7 +102,7 @@ Plans:
 
 **Gap closure** *(from 02-VERIFICATION, sequential: each plan shares files with the one before)*
 - [x] 02-14-PLAN.md — Read-only SkyLight Spaces capability; Space-aware tab groups, single-Space fallback rule and fold guard (WIN-06, WIN-09, SAFE-05)
-- [ ] 02-15-PLAN.md — Minimum-size learner: one clear refusal confirmed by time, no snaps, in-session hints (WIN-04)
+- [x] 02-15-PLAN.md — Minimum-size learner: one clear refusal confirmed by time, no snaps, in-session hints (WIN-04)
 - [ ] 02-16-PLAN.md — Window identity: per-element failure counting, fallback IDs re-checked and re-keyed with no destroy/create (SAFE-05, WIN-02)
 
 **Research**: Moderate. Patterns are documented (AeroSpace), but the window classifier corpus, native-tab heuristics and two-source close-confirmation rules need careful design
@@ -243,7 +243,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
-| 2. Window Control | 14/16 | In Progress | - |
+| 2. Window Control | 15/16 | In Progress | - |
 | 3. Tiling MVP | 0/TBD | Not started | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |

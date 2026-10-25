@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: verifying
-stopped_at: Completed 02-14-PLAN.md
-last_updated: "2026-10-25T19:36:49.649Z"
+stopped_at: Completed 02-15-PLAN.md
+last_updated: "2026-10-25T19:50:20.718Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: be47ef88e7565e801aa69557389a3940095890ae
+state_head: 26f3e95316891b4f9c61419c27bd801adf44d956
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 22
-  completed_plans: 20
+  completed_plans: 21
   percent: 11
 ---
 
@@ -76,6 +76,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P12 | 10 min | 2 tasks | 12 files |
 | Phase 2 P13 | 11 min | 3 tasks | 16 files |
 | Phase 2 P14 | 23 min | 3 tasks | 16 files |
+| Phase 2 P15 | 8 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,9 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-14: Live macOS 27 reports an empty Space set for a hidden native tab, so an unknown-Space candidate is never taken while a known other-Space window shares the frame slot
 - [Phase 2]: 02-14: A folded window is destroyed only after two consecutive refreshes with the same shown tab; a group whose tabs are all gone hands its identity only to a former tab (offscreen in its slot last refresh)
 - [Phase 2]: 02-14: Without Space data two same-frame tab groups on two Spaces may be one tracked window (accepted override); no live window is destroyed and no ID is tracked twice
+- [Phase 2]: 02-15: A refused size is learned only above a 32 pt margin and only after a refresh at least 1 s later still sees the window there (margin against grid snaps, time against late appliers)
+- [Phase 2]: 02-15: In-session bundle hints live in WindowTracker (per-axis max on learn); onLearnedMinimum fires from emit for every learned growth
+- [Phase 2]: 02-15: A due minimum candidate that no refresh decided is dropped at that pid's next refresh, so no app is refreshed every second forever
 
 ### Pending Todos
 
@@ -179,6 +183,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-25T19:36:49.551Z
-Stopped at: Completed 02-14-PLAN.md
+Last session: 2026-10-25T19:50:20.439Z
+Stopped at: Completed 02-15-PLAN.md
 Resume file: None
