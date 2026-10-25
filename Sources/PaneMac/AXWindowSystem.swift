@@ -16,6 +16,7 @@ import os
     let hints: AsyncStream<AXEventHint>
     private let hintContinuation: AsyncStream<AXEventHint>.Continuation
     private let appFilter: @MainActor (Int32, String) -> Bool
+    private let forceWindowIDFallback: Bool
     private let logger = Logger(subsystem: "com.eightabyte.pane", category: "ax")
     private var tracker = WindowTracker()
     private var threads: [Int32: AXAppThread] = [:]
@@ -44,10 +45,12 @@ import os
     static let resumeQuiet: Duration = .milliseconds(1500)
 
     /// `appFilter(pid, bundleKey)` limits which apps get a thread (tests track only the fixture).
-    public init(appFilter: @escaping @MainActor (Int32, String) -> Bool = { _, _ in true }) {
+    /// `forceWindowIDFallback` (test seam) identifies windows by frame even when `_AXUIElementGetWindow` works.
+    public init(appFilter: @escaping @MainActor (Int32, String) -> Bool = { _, _ in true }, forceWindowIDFallback: Bool = false) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1024))
         (hints, hintContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(256))
         self.appFilter = appFilter
+        self.forceWindowIDFallback = forceWindowIDFallback
     }
 
     isolated deinit {
@@ -58,6 +61,7 @@ import os
         hintContinuation.finish()
     }
 
+    /// Session-aware: a lookup switched off mid-session reads as off here, in the menu and in the footer.
     public var capabilityReport: [Capability: Bool] { Capabilities.report() }
 
     /// Sets the global AX timeout, starts a thread per regular app, runs the initial sweep, then follows
@@ -158,8 +162,9 @@ import os
         let cgWindows = cgWindows ?? CGWindowList.snapshot()
         record(pid, Self.outcome(of: observation), observation.duration)
         ingest(observation, cgWindows: cgWindows, initial: initial)
+        // Through the shown tab: a focus hint on a non-leader tab names the group's visible member, not its identity.
         if let windowID = pendingFocus.removeValue(forKey: pid),
-           let info = tracker.info(for: WindowIdentity(windowID: windowID, pid: pid, bundleID: thread.bundleID))
+           let info = tracker.sortedWindows().first(where: { $0.window.pid == pid && ($0.visibleMemberID ?? $0.window.windowID) == windowID })
         {
             continuation.yield(.windowFocused(info.window))
         }
@@ -213,7 +218,15 @@ import os
         if let failure = observation.listFailure {
             logger.info("pid \(observation.pid, privacy: .public) AXWindows failed: \(String(describing: failure), privacy: .public)")
         }
-        let context = ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !paused, initialSweep: initial, now: .now)
+        let shown = Dictionary(
+            observation.windows.compactMap { o -> (UInt32, Rect)? in
+                guard o.listedInAXWindows, let id = o.windowID, case .success(let snapshot) = o.read, let frame = snapshot.frame else { return nil }
+                return (id, frame)
+            },
+            uniquingKeysWith: { first, _ in first })
+        let context = ObservationContext(
+            cgWindows: withSyntheticPresence(cgWindows, shown: shown), displays: displays, sessionActive: !paused,
+            initialSweep: initial, now: .now)
         emit(tracker.ingest(observation, context: context))
         emit(tracker.recheckTerminated(context: context))
         // A new window is withheld until it settles, and a close AX reported waits for the CG list to agree:
@@ -221,6 +234,19 @@ import os
         if tracker.hasPendingWindows(pid: observation.pid) || tracker.needsQuickRecheck(pid: observation.pid) {
             scheduler?.schedule(pid: observation.pid, after: tracker.settleDelay)
         }
+    }
+
+    /// `cgWindows` plus a presence entry for each tracked synthetic ID, which no CG entry carries (D-15): such a window
+    /// closes only once AX reports it invalid and no same-pid CG window with its bounds is left. Windows AX lists now
+    /// (`shown`, with their current frames) claim entries first, so of two identical windows the closed one goes.
+    private func withSyntheticPresence(_ cgWindows: [CGWindowEntry], shown: [UInt32: Rect] = [:]) -> [CGWindowEntry] {
+        let tracked = tracker.sortedWindows().map { info in
+            let id = info.visibleMemberID ?? info.window.windowID
+            return (identity: WindowIdentity(windowID: id, pid: info.window.pid, bundleID: info.window.bundleID), frame: shown[id] ?? info.frame)
+        }
+        guard tracked.contains(where: { $0.identity.isSyntheticWindowID }) else { return cgWindows }
+        let ordered = tracked.filter { shown[$0.identity.windowID] != nil } + tracked.filter { shown[$0.identity.windowID] == nil }
+        return cgWindows + FallbackMatcher.syntheticPresence(ordered, cgWindows: cgWindows)
     }
 
     private func emit(_ events: [WindowEvent]) {
@@ -234,7 +260,8 @@ import os
             for _ in 0..<20 {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard let self, !self.tracker.knownWindowIDs(pid: pid).isEmpty else { return }
-                let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: self.displays, sessionActive: !self.paused, now: .now)
+                let context = ObservationContext(
+                    cgWindows: self.withSyntheticPresence(CGWindowList.snapshot()), displays: self.displays, sessionActive: !self.paused, now: .now)
                 self.emit(self.tracker.recheckTerminated(context: context))
             }
         }
@@ -252,7 +279,7 @@ import os
     private func appStarted(_ app: NSRunningApplication) {
         guard let key = bundleKey(app), appFilter(app.processIdentifier, key) else { return }
         let pid = app.processIdentifier
-        threads[pid] = AXAppThread(pid: pid, bundleID: key, hints: hintContinuation)
+        threads[pid] = AXAppThread(pid: pid, bundleID: key, hints: hintContinuation, forceWindowIDFallback: forceWindowIDFallback)
         guard followingLaunches else { return }
         continuation.yield(.appLaunched(pid: pid, bundleID: key))
         scheduler?.schedule(pid: pid)
@@ -270,7 +297,7 @@ import os
         followUp.remove(pid)
         guard terminated else { return }
         continuation.yield(.appTerminated(pid: pid))
-        let context = ObservationContext(cgWindows: CGWindowList.snapshot(), displays: displays, sessionActive: !paused, now: .now)
+        let context = ObservationContext(cgWindows: withSyntheticPresence(CGWindowList.snapshot()), displays: displays, sessionActive: !paused, now: .now)
         emit(tracker.appTerminated(pid: pid, context: context))
         if !tracker.knownWindowIDs(pid: pid).isEmpty { recheckTerminatedSoon(pid) }
     }

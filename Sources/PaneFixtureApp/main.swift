@@ -13,7 +13,7 @@ import AppKit
 //   ok <command> | error <message>                               ends every command's reply
 // stdin commands (one per line; any window lines a command prints come before its ok):
 //   open <spec> | close <i> | move <i> <x> <y> | resize <i> <w> <h> | minimize <i> | deminimize <i>
-//   select-tab <i> | hide-app | unhide-app | list | quit
+//   select-tab <i> | title <i> <text> | hide-app | unhide-app | list | quit
 // Closing stdin quits the fixture, so a crashed test never leaves it running.
 
 /// Global top-left -> AppKit bottom-left, computed here independently of PaneEngine (an oracle).
@@ -182,6 +182,9 @@ final class Fixture: NSObject, NSApplicationDelegate {
                 let target = try window(parts.dropFirst().first)
                 guard let group = target.tabGroup else { throw FixtureFailure(message: "window is not in a tab group") }
                 group.selectedWindow = target
+            case "title":
+                guard parts.count >= 3 else { throw FixtureFailure(message: "usage: title <i> <text>") }
+                try window(parts[1]).title = parts.dropFirst(2).joined(separator: " ")
             case "hide-app":
                 NSApp.hide(nil)
             case "unhide-app":

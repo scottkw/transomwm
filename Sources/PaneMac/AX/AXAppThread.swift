@@ -25,8 +25,10 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     // Thread-confined.
     private var app: AXUIElement?
     private var observer: AXObserver?
-    /// Window elements seen by `observe()`, each registered for the per-window notifications.
-    private var windows: [UInt32: AXUIElement] = [:]
+    /// Window elements seen by `observe()` with their assigned IDs, each registered for the per-window notifications.
+    private var windows: [UInt32: CachedWindow] = [:]
+    /// Test seam: identify windows by frame even when `_AXUIElementGetWindow` works.
+    private let forceWindowIDFallback: Bool
 
     private static let appNotifications = [
         kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification,
@@ -37,10 +39,11 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification, kAXTitleChangedNotification,
     ]
 
-    init(pid: Int32, bundleID: String, hints: AsyncStream<AXEventHint>.Continuation) {
+    init(pid: Int32, bundleID: String, hints: AsyncStream<AXEventHint>.Continuation, forceWindowIDFallback: Bool = false) {
         self.pid = pid
         self.bundleID = bundleID
         self.hints = hints
+        self.forceWindowIDFallback = forceWindowIDFallback
         let thread = Thread { [self] in
             runLoop = CFRunLoopGetCurrent()
             ready.signal()
@@ -71,7 +74,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             // The thread object outlives its observer: the thread's closure retains it until teardown.
             // Runs on this thread's run loop, so reading the cache is thread-confined; CFEqual is no IPC.
             let me = Unmanaged<AXAppThread>.fromOpaque(refcon).takeUnretainedValue()
-            let windowID = me.windows.first { CFEqual($0.value, element) }?.key
+            let windowID = me.windows.first { CFEqual($0.value.element, element) }?.key
             me.hints.yield(AXEventHint(pid: me.pid, windowID: windowID, notification: notification as String))
         }
         var created: AXObserver?
@@ -111,16 +114,18 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             let start = ContinuousClock.now
             let hidden = AXSnapshotReader.isHidden(app)
             guard !isStopped,
-                  let (listed, elements) = AXSnapshotReader.observeApp(app, pid: pid, bundleID: bundleID, hidden: hidden, isCancelled: { self.isStopped })
+                  let (listed, elements) = AXSnapshotReader.observeApp(
+                      app, pid: pid, bundleID: bundleID, hidden: hidden, cache: windows, forceFallback: forceWindowIDFallback,
+                      isCancelled: { self.isStopped })
             else { return nil }
             var observation = listed
             if var cache = elements {
                 for id in known where cache[id] == nil {
-                    guard let element = windows[id] else { continue }
+                    guard let cached = windows[id] else { continue }
                     if isStopped { return nil }
-                    cache[id] = element
+                    cache[id] = cached
                     observation.windows.append(WindowObservation(
-                        windowID: id, idSource: .axPrivate, read: Self.role(of: element), title: "", listedInAXWindows: false
+                        windowID: id, idSource: cached.source, read: Self.role(of: cached.element), title: "", listedInAXWindows: false
                     ))
                 }
                 updateWindows(cache)
@@ -157,14 +162,14 @@ nonisolated final class AXAppThread: @unchecked Sendable {
 
     /// Thread-confined. A window that left the cache (no longer listed or known) loses its registrations; it is
     /// re-added if it returns.
-    private func updateWindows(_ current: [UInt32: AXUIElement]) {
+    private func updateWindows(_ current: [UInt32: CachedWindow]) {
         guard let observer else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        for (id, element) in windows where current[id] == nil {
-            for name in Self.windowNotifications { _ = AXObserverRemoveNotification(observer, element, name as CFString) }
+        for (id, cached) in windows where current[id] == nil {
+            for name in Self.windowNotifications { _ = AXObserverRemoveNotification(observer, cached.element, name as CFString) }
         }
-        for (id, element) in current where windows[id] == nil {
-            for name in Self.windowNotifications { _ = AXObserverAddNotification(observer, element, name as CFString, refcon) }
+        for (id, cached) in current where windows[id] == nil {
+            for name in Self.windowNotifications { _ = AXObserverAddNotification(observer, cached.element, name as CFString, refcon) }
         }
         windows = current
     }

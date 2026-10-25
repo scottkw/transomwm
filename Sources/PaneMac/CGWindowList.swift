@@ -4,7 +4,7 @@ import PaneEngine
 import PaneModel
 import os
 
-/// The second window source: the public CG window list. No window names are read or logged (T-02-09).
+/// The second window source: the public CG window list. Window names are read only by `names(pid:)`, never logged (T-02-09).
 public nonisolated enum CGWindowList {
     private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "ax")
 
@@ -30,5 +30,19 @@ public nonisolated enum CGWindowList {
         }
         if skipped > 0 { logger.debug("CG window list: skipped \(skipped, privacy: .public) entries without number, pid or bounds") }
         return entries
+    }
+
+    /// `kCGWindowName` of `pid`'s windows, non-empty only with Screen Recording. Only for an ambiguous frame-fallback
+    /// match: compared in memory and dropped, never logged or stored (T-02-31).
+    static func names(pid: Int32) -> [UInt32: String] {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return [:] }
+        var names: [UInt32: String] = [:]
+        for info in list where (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid {
+            guard let number = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let name = info[kCGWindowName as String] as? String, !name.isEmpty
+            else { continue }
+            names[number] = name
+        }
+        return names
     }
 }

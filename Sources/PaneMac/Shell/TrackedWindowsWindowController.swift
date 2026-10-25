@@ -7,12 +7,12 @@ import SwiftUI
     let feed = TrackedWindowsFeed()
     private let permission: PermissionController
     private let exclusions: ExclusionStore
-    private let windowIDLookupAvailable: Bool
+    private let windowIDLookupAvailable: () -> Bool
     private let showSetup: () -> Void
     private var window: NSWindow?
 
     init(
-        permission: PermissionController, exclusions: ExclusionStore, windowIDLookupAvailable: Bool,
+        permission: PermissionController, exclusions: ExclusionStore, windowIDLookupAvailable: @escaping () -> Bool,
         showSetup: @escaping () -> Void
     ) {
         self.permission = permission

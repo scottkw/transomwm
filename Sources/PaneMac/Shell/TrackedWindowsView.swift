@@ -15,7 +15,8 @@ struct TrackedWindowsView: View {
     @ObservedObject var feed: TrackedWindowsFeed
     @ObservedObject var permission: PermissionController
     @ObservedObject var exclusions: ExclusionStore
-    let windowIDLookupAvailable: Bool
+    /// Read on every render: the lookup can be switched off mid-session (D-15).
+    let windowIDLookupAvailable: () -> Bool
     let showSetup: () -> Void
     @State private var selection: WindowIdentity?
 
@@ -60,7 +61,7 @@ struct TrackedWindowsView: View {
             HStack {
                 if state == .populated { Text(TrackedWindowsModel.footer(inventory, rows: rows)) }
                 Spacer()
-                Text(MenuCopy.capabilityItem(windowIDLookupAvailable: windowIDLookupAvailable))
+                Text(MenuCopy.capabilityItem(windowIDLookupAvailable: windowIDLookupAvailable()))
             }
             .font(.caption)
             .foregroundStyle(.secondary)

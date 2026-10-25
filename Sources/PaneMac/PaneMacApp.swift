@@ -27,7 +27,7 @@ public enum PaneMacApp {
         let exclusions = ExclusionStore()
         let trackedController = TrackedWindowsWindowController(
             permission: permissionController, exclusions: exclusions,
-            windowIDLookupAvailable: system.capabilityReport[.axWindowID] == true
+            windowIDLookupAvailable: { system.capabilityReport[.axWindowID] == true }
         ) { setupController.show() }
         let controller = StatusItemController(
             system: system, permission: permissionController, exclusions: exclusions, freezeTest: freezeTest,
