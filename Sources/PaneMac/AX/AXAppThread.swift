@@ -1,6 +1,7 @@
 import ApplicationServices
 import Foundation
 import PaneEngine
+import PaneModel
 import os
 
 /// An AX notification from one app. A hint only: it triggers a refresh, it never decides anything.
@@ -29,6 +30,28 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     private var windows: [UInt32: CachedWindow] = [:]
     /// Test seam: identify windows by frame even when `_AXUIElementGetWindow` works.
     private let forceWindowIDFallback: Bool
+    /// Latest-wins frame slots, one per window ID (D-16, T-02-34): a newer `enqueueFrame` overwrites a waiting one,
+    /// and at most one drain is scheduled at a time.
+    private let frames = OSAllocatedUnfairLock(initialState: FrameQueue())
+    /// Every finished frame write, read back (D-17). Finishes when the thread stops.
+    let frameResults: AsyncStream<FrameWriteResult>
+    private let frameContinuation: AsyncStream<FrameWriteResult>.Continuation
+    /// Bundles whose `AXEnhancedUserInterface` is left off after a write, because turning it back on is costly
+    /// (Rectangle stopped doing it for Chrome). Empty until a bundle needs it; every other bundle gets it back.
+    static let reenableEnhancedUIOverrides: [String: Bool] = [:]
+
+    private struct FrameQueue {
+        var slots: [UInt32: (rect: Rect, ref: PaneModel.WindowRef)] = [:]
+        var drainScheduled = false
+        var drainEnabled = true
+
+        /// True when the caller must schedule a drain: enabled, frames waiting, none scheduled yet.
+        mutating func claimDrain() -> Bool {
+            guard drainEnabled, !drainScheduled, !slots.isEmpty else { return false }
+            drainScheduled = true
+            return true
+        }
+    }
 
     private static let appNotifications = [
         kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification,
@@ -44,6 +67,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         self.bundleID = bundleID
         self.hints = hints
         self.forceWindowIDFallback = forceWindowIDFallback
+        (frameResults, frameContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         let thread = Thread { [self] in
             runLoop = CFRunLoopGetCurrent()
             ready.signal()
@@ -62,6 +86,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             windows = [:]
             app = nil
             CFRunLoopSourceInvalidate(keepAlive)
+            frameContinuation.finish()
         }
         thread.name = "AXAppThread \(pid)"
         thread.start()
@@ -155,6 +180,66 @@ nonisolated final class AXAppThread: @unchecked Sendable {
                 }
             return (outcome, start.duration(to: .now))
         } ?? (.otherFailure, .zero)
+    }
+
+    /// Puts `rect` in the window's slot, replacing any frame still waiting, and schedules a drain if none is.
+    func enqueueFrame(windowID: UInt32, rect: Rect, ref: PaneModel.WindowRef) {
+        let schedule = frames.withLock { queue in
+            queue.slots[windowID] = (rect, ref)
+            return queue.claimDrain()
+        }
+        if schedule { scheduleDrain() }
+    }
+
+    /// False while the app is degraded: frames wait in their slots. Back to true flushes the latest ones.
+    var drainEnabled: Bool {
+        get { frames.withLock { $0.drainEnabled } }
+        set {
+            let schedule = frames.withLock { queue in
+                queue.drainEnabled = newValue
+                return queue.claimDrain()
+            }
+            if schedule { scheduleDrain() }
+        }
+    }
+
+    private func scheduleDrain() {
+        stopped.withLock { isStopped in
+            guard !isStopped, let runLoop else { return }
+            CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { [self] in drainFrames() }
+            CFRunLoopWakeUp(runLoop)
+        }
+    }
+
+    /// Thread-confined. Writes every waiting frame against its cached element and yields each result. A write
+    /// the app did not answer (-25204) goes back in its slot with the rest, unless a newer frame is waiting, and
+    /// the drain stops: the app is not answering, and the responsiveness rule decides when to try again.
+    private func drainFrames() {
+        let batch = frames.withLock { queue -> [UInt32: (rect: Rect, ref: PaneModel.WindowRef)] in
+            queue.drainScheduled = false
+            guard queue.drainEnabled else { return [:] }
+            defer { queue.slots = [:] }
+            return queue.slots
+        }
+        let ordered = batch.sorted { $0.key < $1.key }
+        for (index, (windowID, slot)) in ordered.enumerated() {
+            guard !isStopped, let app else { return }
+            guard let element = windows[windowID]?.element else {
+                frameContinuation.yield(FrameWriteResult(window: slot.ref, requested: slot.rect, actual: nil, failure: .invalidElement))
+                continue
+            }
+            let (actual, failure) = FrameWriter.write(
+                slot.rect, window: element, app: app,
+                reenableEnhancedUI: Self.reenableEnhancedUIOverrides[bundleID] ?? true, isCancelled: { self.isStopped })
+            if isStopped { return }
+            if failure == .cannotComplete {
+                frames.withLock { queue in
+                    for (id, waiting) in ordered[index...] where queue.slots[id] == nil { queue.slots[id] = waiting }
+                }
+            }
+            frameContinuation.yield(FrameWriteResult(window: slot.ref, requested: slot.rect, actual: actual, failure: failure))
+            if failure == .cannotComplete { return }
+        }
     }
 
     /// The job token: true once `stop()` was called.

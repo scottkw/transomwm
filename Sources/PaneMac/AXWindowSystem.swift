@@ -122,9 +122,34 @@ import os
         )
     }
 
+    /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
+    /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
+    /// `Geometry.maxCoordinate`, and windows Pane does not track, are dropped and logged (T-02-32).
+    /// `park`, `focus`, `raise` and `setHidden` are logged and dropped: Phase 3 implements them.
     public func perform(_ commands: [WindowCommand]) async {
-        // shortcut: commands are dropped until the frame write pipeline lands (Plan 12).
-        logger.info("dropping \(commands.count, privacy: .public) commands: no write pipeline yet")
+        for command in commands {
+            guard case .setFrame(let ref, let rect) = command else {
+                logger.info("dropping a command other than setFrame: not implemented before Phase 3")
+                continue
+            }
+            guard rect.isValidGeometry else {
+                logger.error("dropping setFrame for \(ref.description, privacy: .public): rect not finite or out of range")
+                continue
+            }
+            guard let info = tracker.info(for: ref.identity), let thread = threads[ref.pid] else {
+                logger.info("dropping setFrame for \(ref.description, privacy: .public): window not tracked")
+                continue
+            }
+            thread.enqueueFrame(windowID: info.visibleMemberID ?? ref.windowID, rect: rect, ref: info.window)
+        }
+    }
+
+    /// One frame write finished on `thread`. A write the app did not answer counts toward degrading it.
+    private func frameWritten(_ result: FrameWriteResult, on thread: AXAppThread) {
+        guard threads[thread.pid] === thread else { return }
+        // FrameWriteResult carries no duration; the failure count alone degrades a hung app.
+        if result.failure == .cannotComplete { record(thread.pid, .cannotComplete, .zero) }
+        emit(tracker.applyFrameResult(result))
     }
 
     public func windowInfo(_ window: PaneModel.WindowRef) async -> WindowInfo? {
@@ -195,6 +220,8 @@ import os
         case nil:
             break
         }
+        // Held while degraded; true again retries a write the app did not answer, or flushes the latest frames.
+        threads[pid]?.drainEnabled = responsiveness.shouldRefresh(pid: pid)
     }
 
     /// Probes a degraded app's AXRole every `probeInterval` until it recovers or stops. Its own loop, not the
@@ -279,7 +306,11 @@ import os
     private func appStarted(_ app: NSRunningApplication) {
         guard let key = bundleKey(app), appFilter(app.processIdentifier, key) else { return }
         let pid = app.processIdentifier
-        threads[pid] = AXAppThread(pid: pid, bundleID: key, hints: hintContinuation, forceWindowIDFallback: forceWindowIDFallback)
+        let thread = AXAppThread(pid: pid, bundleID: key, hints: hintContinuation, forceWindowIDFallback: forceWindowIDFallback)
+        threads[pid] = thread
+        Task { [weak self] in
+            for await result in thread.frameResults { self?.frameWritten(result, on: thread) }
+        }
         guard followingLaunches else { return }
         continuation.yield(.appLaunched(pid: pid, bundleID: key))
         scheduler?.schedule(pid: pid)

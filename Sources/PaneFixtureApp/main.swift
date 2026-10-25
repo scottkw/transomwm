@@ -90,7 +90,8 @@ final class Fixture: NSObject, NSApplicationDelegate {
             let parts = spec.dropFirst("minsize:".count).split(separator: "x").compactMap { Double($0) }
             guard parts.count == 2 else { throw FixtureFailure(message: "bad minsize spec \(spec)") }
             let window = standardWindow(frame)
-            window.contentMinSize = NSSize(width: parts[0], height: parts[1])
+            // The frame minimum (title bar included): the size AX reads back when a smaller one is refused.
+            window.minSize = NSSize(width: parts[0], height: parts[1])
             return [add(window, spec)]
         case let spec where spec.hasPrefix("tabs:"):
             guard let count = Int(spec.dropFirst("tabs:".count)), count >= 1 else {

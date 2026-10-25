@@ -184,13 +184,13 @@ public nonisolated enum AXSnapshotReader {
         return ButtonFact(present: true, enabled: ok && enabled as? Bool == true)
     }
 
-    private static func point(_ value: CFTypeRef) -> CGPoint? {
+    static func point(_ value: CFTypeRef) -> CGPoint? {
         guard CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
         var point = CGPoint.zero
         return AXValueGetValue(value as! AXValue, .cgPoint, &point) ? point : nil
     }
 
-    private static func size(_ value: CFTypeRef) -> CGSize? {
+    static func size(_ value: CFTypeRef) -> CGSize? {
         guard CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
         var size = CGSize.zero
         return AXValueGetValue(value as! AXValue, .cgSize, &size) ? size : nil
