@@ -101,4 +101,22 @@ private func identity(_ id: UInt32, pid: Int32 = pid) -> WindowIdentity {
         #expect(tracker.ingest(app(), context: context).isEmpty)
         #expect(tracker.info(for: identity(7)) != nil)
     }
+
+    @Test func anAppThatStopsBeingTrackedLosesItsWindowsAndTheyComeBackAsNew() throws {
+        var tracker = WindowTracker()
+        _ = tracker.ingest(app(window(7), window(8)), context: context)
+        _ = tracker.ingest(AppObservation(pid: 300, bundleID: bundleID, windows: [window(1)]), context: context)
+        // A window still settling is dropped too.
+        _ = tracker.ingest(app(window(7), window(8), window(9)), context: ObservationContext(now: .now))
+        #expect(tracker.hasPendingWindows(pid: pid))
+
+        let events = tracker.appStopped(pid: pid)
+        #expect(events == [.windowDestroyed(WindowRef(identity: identity(7))), .windowDestroyed(WindowRef(identity: identity(8)))])
+        #expect(tracker.sortedWindows().map(\.window.identity) == [identity(1, pid: 300)])
+        #expect(!tracker.hasPendingWindows(pid: pid))
+        #expect(tracker.knownWindowIDs(pid: pid).isEmpty)
+
+        let again = tracker.ingest(app(window(7)), context: context)
+        #expect(again == [.windowCreated(try #require(tracker.info(for: identity(7))))])
+    }
 }

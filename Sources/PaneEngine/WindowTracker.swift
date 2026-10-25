@@ -169,6 +169,16 @@ public struct WindowTracker: Sendable {
         return decide(pid: pid, app: .terminated, context: context) { _ in .timedOut }
     }
 
+    /// `pid` stopped being tracked without quitting (it is no longer a regular app): its windows are dropped and
+    /// reported destroyed, so none waits forever on a thread that no longer refreshes it.
+    public mutating func appStopped(pid: Int32) -> [WindowEvent] {
+        for identity in pending.keys where identity.pid == pid { pending[identity] = nil }
+        terminatedPIDs.remove(pid)
+        tabGroups.forget(pid: pid)
+        let now = ContinuousClock.now
+        return windows.keys.filter { $0.pid == pid }.sorted().compactMap { remove($0, at: now).map { .windowDestroyed($0.window) } }
+    }
+
     /// Marks every tracked window of an excluded app (D-12); a windowChanged for each window whose flag flipped.
     public mutating func setExcluded(_ bundleIDs: Set<String>) -> [WindowEvent] {
         excluded = Set(bundleIDs.map { $0.lowercased() })

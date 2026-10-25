@@ -373,7 +373,8 @@ import os
         scheduler?.schedule(pid: pid)
     }
 
-    /// Stops the app's thread. On a quit, each of its windows closes once it has also left the CG list.
+    /// Stops the app's thread. On a quit, each of its windows closes once it has also left the CG list; an app that
+    /// only stopped being regular loses its windows at once, since no thread refreshes them any more (WR-02).
     private func appStopped(_ pid: Int32, terminated: Bool) {
         guard let thread = threads.removeValue(forKey: pid) else { return }
         thread.stop()
@@ -385,7 +386,10 @@ import os
         responsiveness.forget(pid: pid)
         inFlight.remove(pid)
         followUp.remove(pid)
-        guard terminated else { return }
+        guard terminated else {
+            emit(tracker.appStopped(pid: pid))
+            return
+        }
         continuation.yield(.appTerminated(pid: pid))
         let cgWindows = CGWindowList.snapshot()
         // Without the CG list nothing closes yet (an inactive context decides nothing); the rechecks below decide.

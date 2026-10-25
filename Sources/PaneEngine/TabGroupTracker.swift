@@ -110,6 +110,11 @@ public struct TabGroupTracker: Equatable, Sendable {
         groups[pid] = list.isEmpty ? nil : list
     }
 
+    public mutating func forget(pid: Int32) {
+        groups[pid] = nil
+        lastListed[pid] = nil
+    }
+
     public func isKnownMember(_ id: UInt32, pid: Int32) -> Bool {
         groups[pid]?.contains { $0.members.contains(id) } == true
     }
