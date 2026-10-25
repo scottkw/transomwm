@@ -241,15 +241,13 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         #expect(await fake.windows[1]?.frame == second)
     }
 
-    @Test func aClosedWindowsLearnedMinimumAndCandidateAreForgotten() async throws {
+    /// A learned minimum would seed a reused ID through the bundle hint anyway, so this checks the candidate; the
+    /// learner's own test checks that forget drops the minimum.
+    @Test func aClosedWindowsCandidateIsForgotten() async throws {
         let fake = await twoApps()
         let small = WindowCommand.setFrame(ref(1), Rect(x: 100, y: 120, width: 100, height: 80))
-        await fake.perform([small])
-        await fake.advance(by: MinimumSizeLearner.confirmDelay)
-        await fake.refreshAll()
-        #expect(await fake.inventory().windows.first { $0.window == ref(1) }?.learnedMinimum == Size(width: 250, height: 150))
         // A candidate waits when the window closes.
-        await fake.perform([.setFrame(ref(1), Rect(x: 100, y: 120, width: 100, height: 80))])
+        await fake.perform([small])
         await fake.close(1)
         await fake.refreshAll()
         // The ID comes back as a new window at the candidate's size, with a smaller minimum.

@@ -28,7 +28,7 @@ public struct WindowTracker: Sendable {
     private var learner = MinimumSizeLearner()
     /// The exclusion list, lowercased (D-12).
     private var excluded: Set<String> = []
-    /// Per-bundle minimums from earlier sessions (D-13).
+    /// Per-bundle minimums (D-13): the hints of earlier sessions plus the minimums learned in this one.
     private var bundleHints: [String: Size] = [:]
     /// The displays of the latest observation, so a frame write can place its window too.
     private var displays: [DisplayInfo] = []
@@ -146,6 +146,9 @@ public struct WindowTracker: Sendable {
                let minimum = learner.confirm(window: identity, observed: observed, at: context.now)
             {
                 info.learnedMinimum = minimum
+                // Later windows of this bundle start from it in this session too (REVIEW IN-04).
+                let hint = bundleHints[identity.bundleID] ?? minimum
+                bundleHints[identity.bundleID] = Size(width: max(hint.width, minimum.width), height: max(hint.height, minimum.height))
             }
             windows[identity] = info
 
