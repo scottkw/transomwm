@@ -120,7 +120,8 @@ import Testing
     }
 }
 
-/// D-13 in the tracker: a stored hint is a new window's starting minimum, and learning only raises it.
+/// D-13 in the tracker: a stored hint, or a minimum learned this session, is a new window's starting minimum, and
+/// learning only raises it.
 @Suite struct BundleHintTrackerTests {
     static let ref = WindowRef(identity: WindowIdentity(windowID: 7, pid: 700, bundleID: "com.example.app"))
 
@@ -128,12 +129,32 @@ import Testing
     static let start = Rect(x: 40, y: 80, width: 400, height: 300)
 
     static func observe(_ tracker: inout WindowTracker, frame: Rect = start, at time: ContinuousClock.Instant = t0) {
-        let snapshot = WindowSnapshot(
-            role: "AXWindow", subrole: "AXStandardWindow", minimized: false, fullScreen: false,
-            close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: frame
-        )
-        let app = AppObservation(pid: 700, bundleID: "com.example.app", windows: [WindowObservation(windowID: 7, idSource: .axPrivate, read: .success(snapshot), title: "")])
-        _ = tracker.ingest(app, context: ObservationContext(initialSweep: true, now: time))
+        observe(&tracker, [7: frame], at: time)
+    }
+
+    /// One refresh of the app listing `frames` (window ID to frame); first reports are seeded at once (initial sweep).
+    static func observe(
+        _ tracker: inout WindowTracker, _ frames: [UInt32: Rect], pid: Int32 = 700, bundleID: String = "com.example.app",
+        at time: ContinuousClock.Instant = t0
+    ) {
+        let windows = frames.sorted { $0.key < $1.key }.map { id, frame in
+            let snapshot = WindowSnapshot(
+                role: "AXWindow", subrole: "AXStandardWindow", minimized: false, fullScreen: false,
+                close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: frame
+            )
+            return WindowObservation(windowID: id, idSource: .axPrivate, read: .success(snapshot), title: "")
+        }
+        _ = tracker.ingest(AppObservation(pid: pid, bundleID: bundleID, windows: windows), context: ObservationContext(initialSweep: true, now: time))
+    }
+
+    static func minimum(_ tracker: WindowTracker, _ id: UInt32, pid: Int32 = 700, bundleID: String = "com.example.app") -> Size? {
+        tracker.info(for: WindowIdentity(windowID: id, pid: pid, bundleID: bundleID))?.learnedMinimum
+    }
+
+    /// Window 7 refuses `requested` with `actual` at t0, and a refresh a second later (listing `others` too) confirms it.
+    static func refuse(_ tracker: inout WindowTracker, _ requested: Rect, readsBack actual: Rect, others: [UInt32: Rect] = [:]) {
+        _ = tracker.applyFrameResult(FrameWriteResult(window: ref, requested: requested, actual: actual, failure: nil), at: t0)
+        observe(&tracker, others.merging([7: actual]) { $1 }, at: t0 + MinimumSizeLearner.confirmDelay)
     }
 
     @Test func aNewWindowStartsFromItsBundlesHintAndLearningOnlyRaisesIt() throws {
@@ -148,6 +169,52 @@ import Testing
         // One refused write, confirmed by a refresh a second later that still sees the window there.
         Self.observe(&tracker, frame: actual, at: Self.t0 + MinimumSizeLearner.confirmDelay)
         #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 350, height: 200))
+    }
+
+    /// REVIEW IN-04: what one window of an app teaches helps the next window of that app in the same session.
+    @Test func aMinimumLearnedThisSessionSeedsTheNextWindowOfThatBundle() {
+        var tracker = WindowTracker()
+        Self.observe(&tracker)
+        Self.refuse(&tracker, Rect(x: 40, y: 80, width: 100, height: 300), readsBack: Rect(x: 40, y: 80, width: 350, height: 300))
+        #expect(Self.minimum(tracker, 7) == Size(width: 350, height: 0))
+        Self.observe(&tracker, [7: Rect(x: 40, y: 80, width: 350, height: 300), 8: Self.start], at: Self.t0 + .seconds(2))
+        #expect(Self.minimum(tracker, 8) == Size(width: 350, height: 0))
+    }
+
+    @Test func aLearnedMinimumRaisesAStoredHintPerAxisAndOnlyForItsBundle() {
+        var tracker = WindowTracker()
+        tracker.setBundleHints(["com.example.app": Size(width: 300, height: 200)])
+        Self.observe(&tracker)
+        Self.refuse(&tracker, Rect(x: 40, y: 80, width: 100, height: 100), readsBack: Rect(x: 40, y: 80, width: 350, height: 180))
+        Self.observe(&tracker, [7: Rect(x: 40, y: 80, width: 350, height: 180), 9: Self.start], at: Self.t0 + .seconds(2))
+        #expect(Self.minimum(tracker, 9) == Size(width: 350, height: 200))
+        Self.observe(&tracker, [5: Self.start], pid: 701, bundleID: "com.other.app", at: Self.t0 + .seconds(2))
+        #expect(Self.minimum(tracker, 5, pid: 701, bundleID: "com.other.app") == nil)
+    }
+
+    @Test func aRefusalWithinTheMarginRaisesNoHint() {
+        var tracker = WindowTracker()
+        Self.observe(&tracker)
+        Self.refuse(&tracker, Rect(x: 40, y: 80, width: 300, height: 300), readsBack: Rect(x: 40, y: 80, width: 320, height: 300))
+        Self.observe(&tracker, [7: Rect(x: 40, y: 80, width: 320, height: 300), 8: Self.start], at: Self.t0 + .seconds(2))
+        #expect(Self.minimum(tracker, 8) == nil)
+    }
+
+    @Test func aWindowAlreadyTrackedKeepsItsOwnValue() {
+        var tracker = WindowTracker()
+        Self.observe(&tracker, [7: Self.start, 8: Self.start])
+        Self.refuse(&tracker, Rect(x: 40, y: 80, width: 100, height: 300), readsBack: Rect(x: 40, y: 80, width: 350, height: 300), others: [8: Self.start])
+        #expect(Self.minimum(tracker, 7) == Size(width: 350, height: 0))
+        #expect(Self.minimum(tracker, 8) == nil, "hints seed only first reports")
+    }
+
+    @Test func setBundleHintsReplacesTheSessionsHints() {
+        var tracker = WindowTracker()
+        Self.observe(&tracker)
+        Self.refuse(&tracker, Rect(x: 40, y: 80, width: 100, height: 300), readsBack: Rect(x: 40, y: 80, width: 350, height: 300))
+        tracker.setBundleHints([:])
+        Self.observe(&tracker, [7: Rect(x: 40, y: 80, width: 350, height: 300), 8: Self.start], at: Self.t0 + .seconds(2))
+        #expect(Self.minimum(tracker, 8) == nil)
     }
 
     @Test func anotherBundleGetsNoHint() {
