@@ -172,6 +172,10 @@ public struct WindowTracker: Sendable {
         return events
     }
 
+    /// Per-bundle minimums from earlier sessions (D-13): the learned minimum a window of that bundle starts from.
+    public mutating func setBundleHints(_ hints: [String: Size]) {
+    }
+
     /// A finished frame write (D-17): the read-back becomes the window's frame and teaches its minimum. A
     /// failed write changes nothing; a later refresh decides the window's state through CloseRule.
     public mutating func applyFrameResult(_ result: FrameWriteResult) -> [WindowEvent] {
