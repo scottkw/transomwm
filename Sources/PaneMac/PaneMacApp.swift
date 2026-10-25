@@ -25,6 +25,9 @@ public enum PaneMacApp {
         let permissionController = PermissionController(system: system)
         let setupController = SetupWindowController(permission: permissionController)
         let exclusions = ExclusionStore()
+        // The window system enforces the list (D-12); the store only validates and keeps it.
+        system.setExcludedBundleIDs(Set(exclusions.bundleIDs))
+        exclusions.onChange = { system.setExcludedBundleIDs(Set(exclusions.bundleIDs)) }
         let trackedController = TrackedWindowsWindowController(
             permission: permissionController, exclusions: exclusions,
             windowIDLookupAvailable: { system.capabilityReport[.axWindowID] == true }

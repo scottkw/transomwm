@@ -43,6 +43,9 @@ import os
     private var resumeTask: Task<Void, Never>?
     /// Quiet time after the last session signal before the post-resume full refresh.
     static let resumeQuiet: Duration = .milliseconds(1500)
+    /// The user's exclusion list (D-12), and the bundle IDs whose dropped commands were already logged.
+    private var excluded: Set<String> = []
+    private var loggedExcluded: Set<String> = []
 
     /// `appFilter(pid, bundleKey)` limits which apps get a thread (tests track only the fixture).
     /// `forceWindowIDFallback` (test seam) identifies windows by frame even when `_AXUIElementGetWindow` works.
@@ -124,14 +127,22 @@ import os
 
     /// The user's exclusion list (D-12): those apps' windows stay tracked, marked `isExcluded`, and never touched.
     public func setExcludedBundleIDs(_ bundleIDs: Set<String>) {
+        excluded = bundleIDs
+        loggedExcluded = loggedExcluded.filter { ExclusionFilter.isExcluded($0, in: bundleIDs) }
+        emit(tracker.setExcluded(bundleIDs))
     }
 
     /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
     /// `Geometry.maxCoordinate`, and windows Pane does not track, are dropped and logged (T-02-32).
     /// `park`, `focus`, `raise` and `setHidden` are logged and dropped: Phase 3 implements them.
+    /// Commands for an excluded app are dropped before anything else, logged once per bundle ID (D-12).
     public func perform(_ commands: [WindowCommand]) async {
-        for command in commands {
+        let split = ExclusionFilter.admit(commands, excluded: excluded)
+        for bundleID in Set(split.dropped.map(\.window.bundleID)) where loggedExcluded.insert(bundleID).inserted {
+            logger.notice("dropping commands for excluded app \(bundleID, privacy: .public)")
+        }
+        for command in split.admitted {
             guard case .setFrame(let ref, let rect) = command else {
                 logger.info("dropping a command other than setFrame: not implemented before Phase 3")
                 continue

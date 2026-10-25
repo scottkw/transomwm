@@ -23,6 +23,8 @@ public struct WindowTracker: Sendable {
     private var rechecks: [WindowIdentity: Int] = [:]
     private var tabGroups = TabGroupTracker()
     private var learner = MinimumSizeLearner()
+    /// The exclusion list, lowercased (D-12).
+    private var excluded: Set<String> = []
     /// Quick follow-ups per window before it is left to the sweep: WindowServer drops a closed window a few
     /// hundred ms after AX reports it invalid, so the decision must be retried soon, but not forever.
     public static let maxQuickRechecks = 8
@@ -106,6 +108,7 @@ public struct WindowTracker: Sendable {
             info.visibleMemberID = windowID
             info.tabCount = tabs.tabCount[identity] ?? 1
             info.displayUUID = Coordinates.displayUUID(for: frame, among: context.displays)
+            info.isExcluded = excluded.contains(identity.bundleID.lowercased())
             windows[identity] = info
 
             guard let old else {
@@ -156,7 +159,17 @@ public struct WindowTracker: Sendable {
 
     /// Marks every tracked window of an excluded app (D-12); a windowChanged for each window whose flag flipped.
     public mutating func setExcluded(_ bundleIDs: Set<String>) -> [WindowEvent] {
-        []
+        excluded = Set(bundleIDs.map { $0.lowercased() })
+        var events: [WindowEvent] = []
+        for identity in windows.keys.sorted() {
+            guard var info = windows[identity] else { continue }
+            let isExcluded = excluded.contains(identity.bundleID.lowercased())
+            guard info.isExcluded != isExcluded else { continue }
+            info.isExcluded = isExcluded
+            windows[identity] = info
+            events.append(.windowChanged(info))
+        }
+        return events
     }
 
     /// A finished frame write (D-17): the read-back becomes the window's frame and teaches its minimum. A

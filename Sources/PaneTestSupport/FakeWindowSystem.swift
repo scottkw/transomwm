@@ -76,6 +76,7 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var performed: [WindowCommand] = []
     /// Commands `ExclusionFilter` kept away from excluded apps.
     public private(set) var dropped: [WindowCommand] = []
+    private var excluded: Set<String> = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()
     /// Hung and slow apps go through the production responsiveness rule (D-14, D-16).
@@ -130,6 +131,8 @@ public actor FakeWindowSystem: WindowSystem {
 
     /// The user's exclusion list, as `AXWindowSystem.setExcludedBundleIDs` receives it.
     public func setExcluded(_ bundleIDs: Set<String>) {
+        excluded = bundleIDs
+        yield(tracker.setExcluded(bundleIDs))
     }
 
     public func setHung(pid: Int32, _ hung: Bool) {
@@ -273,10 +276,13 @@ public actor FakeWindowSystem: WindowSystem {
     }
 
     /// Applies `.setFrame` to tracked windows with valid rects; a hung or degraded app's latest frame per window
-    /// is held instead. Every command is recorded in `performed`; the other commands do nothing yet (Phase 3).
+    /// is held instead. Every command is recorded in `performed`; those for excluded apps go to `dropped` and
+    /// nowhere else (D-12). The other commands do nothing yet (Phase 3).
     public func perform(_ commands: [WindowCommand]) async {
         performed += commands
-        for case .setFrame(let ref, let rect) in commands where rect.isValidGeometry {
+        let split = ExclusionFilter.admit(commands, excluded: excluded)
+        dropped += split.dropped
+        for case .setFrame(let ref, let rect) in split.admitted where rect.isValidGeometry {
             guard let app = apps[ref.pid], !app.terminated else { continue }
             if app.hung || !responsiveness.shouldRefresh(pid: ref.pid) {
                 heldFrames[ref.identity] = (ref, rect)
