@@ -101,6 +101,29 @@ public actor FakeWindowSystem: WindowSystem {
         windows[id] = window
     }
 
+    /// A native tab group (D-08): standard windows sharing `frame`. Only `visible` is listed in AX and onscreen;
+    /// the other tabs exist only in the CG list, offscreen.
+    public func tabGroup(ids: [UInt32], frame: Rect, pid: Int32, visible: UInt32) {
+        for id in ids {
+            var tab = FakeWindow.standard(id: id, pid: pid, frame: frame, title: "Tab \(id)")
+            tab.snapshot.tabGroup = TabGroupFact(tabCount: ids.count)
+            windows[id] = tab
+        }
+        selectTab(visible)
+    }
+
+    /// Shows tab `id`, as AppKit does: it becomes the one listed, onscreen member and its `AXTabs` count is the
+    /// number of its group's tabs still in the CG list. The others go unlisted and offscreen.
+    public func selectTab(_ id: UInt32) {
+        guard let tab = windows[id] else { return }
+        let group = windows.values.filter { $0.pid == tab.pid && $0.frame == tab.frame && $0.snapshot.tabGroup != nil && $0.inCGList }
+        for member in group.map(\.id) {
+            windows[member]?.listedInAX = member == id
+            windows[member]?.onScreen = member == id
+            windows[member]?.snapshot.tabGroup = TabGroupFact(tabCount: group.count)
+        }
+    }
+
     public func setHung(pid: Int32, _ hung: Bool) {
         apps[pid]?.hung = hung
     }
