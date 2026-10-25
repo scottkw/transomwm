@@ -549,7 +549,8 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
     /// One full refresh: `listed` windows with their frame and AXTabs, the other known windows probed unlisted, and
     /// `onScreen`/`offScreen` CG entries at `frame`, except `away` which sits elsewhere.
     private func step(
-        _ tracker: inout WindowTracker, listed: [(UInt32, Int?)], onScreen: [UInt32], offScreen: [UInt32], initial: Bool = false
+        _ tracker: inout WindowTracker, listed: [(UInt32, Int?)], onScreen: [UInt32], offScreen: [UInt32], initial: Bool = false,
+        spaceChanged: Bool = false, spaces: [UInt32: Set<UInt64>]? = nil
     ) -> [WindowEvent] {
         let away = Rect(x: 800, y: 100, width: 500, height: 300)
         func bounds(_ id: UInt32) -> Rect { id == 20 && listed.contains { $0.0 == 20 && $0.1 == nil } ? away : frame }
@@ -559,7 +560,8 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
             + probed.map { WindowObservation(windowID: $0, idSource: .axPrivate, read: .success(snapshot(tabs: nil, frame: frame)), title: "", listedInAXWindows: false) }
         let cg = onScreen.map { CGWindowEntry(windowID: $0, pid: pid, bounds: bounds($0), layer: 0, onScreen: true, alpha: 1) }
             + offScreen.map { CGWindowEntry(windowID: $0, pid: pid, bounds: frame, layer: 0, onScreen: false, alpha: 1) }
-        return tracker.ingest(AppObservation(pid: pid, bundleID: bundleID, windows: windows), context: ObservationContext(cgWindows: cg, initialSweep: initial, now: clock.now))
+        return tracker.ingest(AppObservation(pid: pid, bundleID: bundleID, windows: windows), context: ObservationContext(
+            cgWindows: cg, initialSweep: initial, now: clock.now, windowSpaces: spaces, spaceChanged: spaceChanged))
     }
 
     /// A (10) and B (20, elsewhere) tracked; then Merge All Windows makes 20 a hidden tab of 10's three-tab group.
@@ -594,5 +596,21 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30])).isEmpty)
         #expect(tracker.info(for: ref(20).identity) != nil)
         #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30])) == [ref(20)])
+    }
+
+    /// Without Space data a flagged update (a Space switch) neither counts towards nor completes the fold guard.
+    @Test func withoutSpaceDataAFlaggedUpdateNeitherCountsNorDestroysAFold() {
+        var tracker = merged()
+        #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30])).isEmpty)
+        #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30], spaceChanged: true)).isEmpty)
+        #expect(tracker.info(for: ref(20).identity) != nil)
+        #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30])) == [ref(20)])
+    }
+
+    @Test func withSpaceDataAFlaggedUpdateCompletesTheFoldGuardAsUsual() {
+        var tracker = merged()
+        let spaces: [UInt32: Set<UInt64>] = [10: [1], 20: [1], 30: [1]]
+        #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30], spaces: spaces)).isEmpty)
+        #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30], spaceChanged: true, spaces: spaces)) == [ref(20)])
     }
 }

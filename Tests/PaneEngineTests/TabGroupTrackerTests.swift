@@ -249,7 +249,7 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
     /// no other member. Then 30 closes (or AX reports it invalid) and a window is listed: does it take G's identity?
     private func orphanHandoff(
         previous: CGWindowEntry = cg(31), listed: UInt32 = 31, listedSpace: Set<UInt64> = [1], tracked: [WindowIdentity] = [],
-        shownGone: Bool = true
+        shownGone: Bool = true, spaceChanged: Bool = false
     ) -> TabResolution {
         var tracker = TabGroupTracker()
         let first = tracker.update(
@@ -261,7 +261,8 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         return tracker.update(
             pid: pid, bundleID: bundleID, visible: [visible(listed, 1)],
             cgWindows: [cg(10), cg(listed, onScreen: true)] + (shownGone ? [] : [cg(30)]),
-            tracked: tracked + [identity(30)], spaces: [listed: listedSpace, 10: [2]], invalid: shownGone ? [] : [30]
+            tracked: tracked + [identity(30)], spaces: [listed: listedSpace, 10: [2]], invalid: shownGone ? [] : [30],
+            spaceChanged: spaceChanged
         )
     }
 
@@ -289,6 +290,91 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
     ) {
         let resolution = orphanHandoff(previous: previous, listed: listed, listedSpace: listedSpace, tracked: reported ? [identity(listed)] : [])
         #expect(resolution.groupFor.isEmpty, "\(reason)")
+    }
+
+    /// With Space data a Space switch changes nothing: the former tab still takes the identity.
+    @Test(arguments: [true, false])
+    func withSpaceDataAFlaggedUpdateStillHandsTheIdentityToAFormerTab(shownGone: Bool) {
+        #expect(orphanHandoff(shownGone: shownGone, spaceChanged: true).groupFor == [31: identity(30)])
+    }
+
+    /// Without Space data: G shows 30 (AXTabs 2) and takes 31, which ranks before 50; both sat offscreen in the slot.
+    /// Then 30 and 31 are gone and 50 is listed onscreen on its own.
+    private func fallbackOrphanHandoff(spaceChanged: Bool) -> (TabGroupTracker, TabResolution) {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(30, 2)], cgWindows: [cg(30, onScreen: true), cg(31), cg(50)])
+        #expect(tracker.members(of: identity(30)) == [30, 31])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(50, 1)], cgWindows: [cg(50, onScreen: true)], tracked: [identity(30)],
+            spaceChanged: spaceChanged
+        )
+        return (tracker, resolution)
+    }
+
+    @Test func withoutSpaceDataAnUnflaggedUpdateStillHandsTheIdentityToAFormerTab() {
+        #expect(fallbackOrphanHandoff(spaceChanged: false).1.groupFor == [50: identity(30)])
+    }
+
+    /// 50 may be another Space's twin the switch just showed, so the handoff waits for the next update.
+    @Test func withoutSpaceDataAFlaggedUpdateMakesNoOrphanHandoff() {
+        let resolution = fallbackOrphanHandoff(spaceChanged: true).1
+        #expect(resolution.groupFor.isEmpty)
+        #expect(resolution.tabCount[identity(30)] == nil)
+    }
+
+    /// Tracked standalone 10 and 20 (elsewhere) listed; then 10 shows AXTabs 2 and 20 sits offscreen in its slot.
+    private func fold(spaceChanged: Bool, spaces: [UInt32: Set<UInt64>]? = nil) -> (TabGroupTracker, TabResolution) {
+        var tracker = TabGroupTracker()
+        let away = Rect(x: 800, y: 100, width: 500, height: 300)
+        let tracked = [identity(10), identity(20)]
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 1), visible(20, 1, away)], cgWindows: [cg(10, onScreen: true), cg(20, away, onScreen: true)],
+            tracked: tracked, spaces: spaces
+        )
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 2)], cgWindows: [cg(10, onScreen: true), cg(20)], tracked: tracked, spaces: spaces,
+            spaceChanged: spaceChanged
+        )
+        return (tracker, resolution)
+    }
+
+    @Test func withoutSpaceDataAnUnflaggedUpdateFoldsATrackedWindowIntoAGroup() {
+        #expect(fold(spaceChanged: false).1.folded == [identity(20)])
+    }
+
+    /// 20 may be a live window left on the other Space: no new fold in a flagged update without Space data.
+    @Test func withoutSpaceDataAFlaggedUpdateFoldsNoTrackedWindow() {
+        let (tracker, resolution) = fold(spaceChanged: true)
+        #expect(resolution.folded.isEmpty)
+        #expect(tracker.members(of: identity(10)) == [10])
+    }
+
+    @Test func withSpaceDataAFlaggedUpdateStillFoldsATrackedWindowOnTheSameSpace() {
+        #expect(fold(spaceChanged: true, spaces: [10: [1], 20: [1]]).1.folded == [identity(20)])
+    }
+
+    /// A window folded at an unflagged update stays a member, and folded, at the next, flagged, update.
+    @Test func aFlaggedUpdateKeepsAWindowFoldedEarlier() {
+        var (tracker, _) = fold(spaceChanged: false)
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 2)], cgWindows: [cg(10, onScreen: true), cg(20)],
+            tracked: [identity(10), identity(20)], spaceChanged: true
+        )
+        #expect(resolution.folded == [identity(20)])
+        #expect(tracker.members(of: identity(10)) == [10, 20])
+    }
+
+    /// The Cmd-T rule holds in a flagged update without Space data: a Space switch cannot make a tab brand new.
+    @Test func aFlaggedUpdateStillLetsACmdTTabLeadTheGroupWithTheWindowItCameFrom() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(11, 2)], cgWindows: [cg(10), cg(11, onScreen: true)], tracked: [identity(10)],
+            spaceChanged: true
+        )
+        #expect(resolution.groupFor == [11: identity(10)])
+        #expect(resolution.memberIDs == [10, 11])
+        #expect(resolution.folded.isEmpty)
     }
 
     /// G1 shows 30 and took 10 as its hidden tab (bound with AXTabs 2). 10 is then listed with a tab bar.
