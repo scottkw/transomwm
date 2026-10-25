@@ -26,6 +26,11 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     // Thread-confined.
     private var app: AXUIElement?
     private var observer: AXObserver?
+    /// App-level notifications not registered yet: an app that is not AX-ready right after launch (Electron, Java)
+    /// refuses them for a moment, so each `observe()` retries them (WR-03).
+    private var unregistered: [String] = AXAppThread.appNotifications
+    private var loggedRegistrationFailure = false
+    private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "ax")
     /// Window elements seen by `observe()` with their assigned IDs, each registered for the per-window notifications.
     private var windows: [UInt32: CachedWindow] = [:]
     /// Test seam: identify windows by frame even when `_AXUIElementGetWindow` works.
@@ -102,14 +107,37 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             let windowID = me.windows.first { CFEqual($0.value.element, element) }?.key
             me.hints.yield(AXEventHint(pid: me.pid, windowID: windowID, notification: notification as String))
         }
-        var created: AXObserver?
-        guard AXObserverCreate(pid, callback, &created) == .success, let created, let app else { return }
+        guard let app else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        for name in Self.appNotifications {
-            _ = AXObserverAddNotification(created, app, name as CFString, refcon)
+        if observer == nil {
+            var created: AXObserver?
+            let error = AXObserverCreate(pid, callback, &created)
+            guard error == .success, let created else {
+                logRegistrationFailure("AXObserverCreate", error)
+                return
+            }
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(created), .defaultMode)
+            observer = created
+            // Created late: windows cached meanwhile get their per-window notifications now.
+            for cached in windows.values {
+                for name in Self.windowNotifications { _ = AXObserverAddNotification(created, cached.element, name as CFString, refcon) }
+            }
         }
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(created), .defaultMode)
-        observer = created
+        guard let observer else { return }
+        // shortcut: a notification an app never supports is retried on every observe (one IPC each); cap it if one shows up.
+        unregistered = unregistered.filter { name in
+            let error = AXObserverAddNotification(observer, app, name as CFString, refcon)
+            if error == .success || error == .notificationAlreadyRegistered { return false }
+            logRegistrationFailure(name, error)
+            return true
+        }
+    }
+
+    /// Logs the first failed registration only; the retries are silent.
+    private func logRegistrationFailure(_ what: String, _ error: AXError) {
+        guard !loggedRegistrationFailure else { return }
+        loggedRegistrationFailure = true
+        Self.logger.notice("pid \(self.pid, privacy: .public): \(what, privacy: .public) failed (\(error.rawValue, privacy: .public)); retrying on each refresh")
     }
 
     /// Runs `body` with the app element on this thread. Returns nil once the thread is stopped.
@@ -137,6 +165,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         await perform { [self] app -> AppObservation? in
             guard !isStopped else { return nil }
             let start = ContinuousClock.now
+            if observer == nil || !unregistered.isEmpty { installObserver() }
             let hidden = AXSnapshotReader.isHidden(app)
             guard !isStopped,
                   let (listed, elements) = AXSnapshotReader.observeApp(
