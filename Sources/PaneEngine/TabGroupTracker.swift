@@ -22,10 +22,15 @@ public struct TabResolution: Equatable, Sendable {
 /// Native AppKit tab groups (D-08, WIN-06). AX lists only the selected tab, which has an `AXTabGroup` child;
 /// the other tabs exist only in the CG list: same pid, layer 0, offscreen, bounds within `boundsTolerance`.
 ///
-/// Bounds alone cannot tell a hidden tab from a same-app twin with the same frame, so two kinds of window are never
-/// taken as hidden tabs: one listed in AXWindows without a tab bar of its own (a minimized twin), and a tracked
-/// standalone window that was not listed at the last refresh (a twin on another Space). Shortcut: an untracked
-/// twin on another Space still passes as a hidden tab; bound members by `AXTabs` if that shows up in practice.
+/// Bounds alone cannot tell a hidden tab from a same-app twin with the same frame (a twin on another Space: AX lists
+/// only the current Space's windows). So a group takes at most `AXTabs - 1` hidden tabs: its own members first, then
+/// untracked windows, and a tracked standalone window only to fill the count (Cmd-T). A window listed in AXWindows
+/// without a tab bar of its own is never a hidden tab, and leaves any group it was in unless it is the group's
+/// leader, its shown tab, or all that is left of it. A tracked standalone window not listed at the last refresh is
+/// never taken either.
+/// shortcut: an untracked same-frame twin on another Space can fill a free slot until it is first listed on its own
+/// Space; the Spaces API (`SLSCopySpacesForWindows`, not yet in PanePrivate) would rule it out. Also, a non-leader
+/// tab left alone by closing the shown tab only rebinds once WindowServer drops the closed one (within the settle delay).
 ///
 /// A group's identity is the `WindowIdentity` of its oldest already-tracked member, else of its first-seen visible
 /// member (the leader), for the group's whole life, even after the leader tab itself closes. Phases 3-4 must
@@ -37,6 +42,8 @@ public struct TabGroupTracker: Equatable, Sendable {
         var leader: WindowIdentity
         var members: Set<UInt32>
         var tabCount: Int
+        /// The member last bound as the listed tab.
+        var shown: UInt32
     }
 
     private var groups: [Int32: [Group]] = [:]
@@ -55,9 +62,11 @@ public struct TabGroupTracker: Equatable, Sendable {
         let cg = cgWindows.filter { $0.pid == pid }
         let inCG = Set(cg.map(\.windowID))
         let onScreen = Set(cg.filter(\.onScreen).map(\.windowID))
+        let listedSingles = Set(visible.filter { $0.tabCount < 2 }.map(\.id))
         var list = (groups[pid] ?? []).map { group in
             var group = group
             group.members.formIntersection(inCG)
+            if group.members.count > 1 { group.members.subtract(listedSingles.subtracting([group.leader.windowID, group.shown])) }
             group.tabCount = group.members.count
             return group
         }
@@ -75,18 +84,27 @@ public struct TabGroupTracker: Equatable, Sendable {
         }
         var groupFor: [UInt32: WindowIdentity] = [:]
         for v in visible.sorted(by: { rank($0).lexicographicallyPrecedes(rank($1)) }).reversed() {
-            let members = Set(cg.filter {
+            let candidates = cg.filter {
                 $0.windowID != v.id && $0.layer == 0 && !$0.onScreen && Self.matches($0.bounds, v.frame) && canBeHiddenTab($0.windowID)
-            }.map(\.windowID)).union([v.id])
+            }.map(\.windowID)
+            // A new tab joins the group whose members it finds, if they leave it room under its AXTabs count.
             let index = list.firstIndex { $0.members.contains(v.id) }
-                ?? (v.tabCount >= 2 ? list.firstIndex { !$0.members.isDisjoint(with: members) } : nil)
+                ?? (v.tabCount >= 2 ? list.firstIndex { $0.members.count < v.tabCount && !$0.members.isDisjoint(with: candidates) } : nil)
+            let own = index.map { list[$0].members } ?? []
+            func tier(_ id: UInt32) -> Int {
+                if own.contains(id) { return 0 }
+                return standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } ? 2 : 1
+            }
+            let hidden = candidates.sorted { (tier($0), $0) < (tier($1), $1) }.prefix(max(v.tabCount - 1, 0))
+            let members = Set(hidden).union([v.id])
             if let index {
                 list[index].members = members
                 list[index].tabCount = max(v.tabCount, 1)
+                list[index].shown = v.id
                 groupFor[v.id] = list[index].leader
             } else if v.tabCount >= 2 {
                 let leader = standalone.first { members.contains($0.windowID) } ?? WindowIdentity(windowID: v.id, pid: pid, bundleID: bundleID)
-                list.append(Group(leader: leader, members: members, tabCount: v.tabCount))
+                list.append(Group(leader: leader, members: members, tabCount: v.tabCount, shown: v.id))
                 groupFor[v.id] = leader
             }
         }

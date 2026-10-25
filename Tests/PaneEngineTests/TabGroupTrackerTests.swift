@@ -143,6 +143,20 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(resolution.folded.isEmpty)
     }
 
+    @Test func aSameFrameGroupOnAnotherSpaceIsAGroupOfItsOwn() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 2)], cgWindows: [cg(10, onScreen: true), cg(11)])
+        // Switched Space: 10 and 11 are offscreen in the same slot, but group 10 has no room under 30's AXTabs count.
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(30, 2)], cgWindows: [cg(10), cg(11), cg(30, onScreen: true), cg(31)],
+            tracked: [identity(10)]
+        )
+        #expect(resolution.groupFor == [30: identity(30)])
+        #expect(tracker.members(of: identity(10)) == [10, 11])
+        #expect(tracker.members(of: identity(30)) == [30, 31])
+        #expect(resolution.folded.isEmpty)
+    }
+
     @Test func aTrackedWindowListedLastRefreshThatGainsATabLeadsTheGroup() {
         var tracker = TabGroupTracker()
         _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)])
