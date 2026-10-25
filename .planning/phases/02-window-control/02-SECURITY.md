@@ -69,6 +69,17 @@ created: "2026-10-25"
 | T-02-35 | Tampering / DoS | MinimumHintsStore.load | medium | mitigate | 64 KiB cap, schema probe, validated values, bad file moved aside (MinimumHintsStore.swift:16-139) | closed |
 | T-02-36 | Tampering | MinimumHintsStore.save | low | mitigate | atomic write; only bundleID/width/height stored | closed |
 | T-02-37 | Elevation of privilege | perform on excluded apps | medium | mitigate | ExclusionFilter first in both perform paths; live test (ExclusionIntegrationTests.swift:10-45) | closed |
+| T-02-38 | Tampering | SkyLightSpaces.spaces | medium | mitigate | CFNumber-only, 0 dropped, ≤16 Spaces, NULL leaves window out; Space data only narrows candidates (SkyLightSpaces.swift:39-57) | closed |
+| T-02-39 | Denial of service | SkyLight symbol removal / signature change | high | mitigate | dlopen/dlsym optionals, forced-off flag, 5-failure session switch-off, nil → single Space (SkyLightSpaces.swift:18-44; Capabilities.swift:85-120) | closed |
+| T-02-40 | Spoofing | TabGroupTracker hidden-tab choice | high | mitigate | known other-Space windows never candidates; ambiguous unknowns not taken; fold destroyed only after 2 refreshes (TabGroupTracker.swift:132-176; WindowTracker.swift:80-98) | closed |
+| T-02-41 | Tampering | MinimumSizeLearner → hints store | medium | mitigate | 32 pt margin, 1 s confirmation, validated values, store validation intact (MinimumSizeLearner.swift:15-71) | closed |
+| T-02-42 | Spoofing | WindowIDResolver identity binding | high | mitigate | lookup's element owns the ID; holders re-identified; unique byID on insert; invariant asserted in every resolver test (WindowIDResolver.swift:73-132) | closed (residual AR-02-06) |
+| T-02-43 | Denial of service | CapabilitySession for `_AXUIElementGetWindow` | medium | mitigate | each element counted once (64-cap set); real success resets (WindowIDResolver.swift:48-86) | closed |
+| T-02-44 | Repudiation | WindowTracker.rekey | low | mitigate | `windowRekeyed` event, no destroy/create, only key-move site (WindowTracker.swift:215-250) | closed |
+| T-02-45 | Spoofing | Orphan handoff without Space data | medium | mitigate | former-tab evidence + Space-switch generation marks refuse handoff (TabGroupTracker.swift:89-153; SpaceSwitchMarks.swift) | closed (residual AR-02-07) |
+| T-02-46 | Tampering | Fold guard during Space switch | medium | mitigate | blind switch holds folds, no new hidden tabs (TabGroupTracker.swift:173-175; WindowTracker.swift:82-90) | closed |
+| T-02-47 | Spoofing | `activeSpaceDidChangeNotification` source | low | accept | in-process NSWorkspace center | closed |
+| T-02-48 | Denial of service | Rapid Space switching | low | accept | only defers folds; residual recorded in 02-17 SUMMARY | closed |
 | T-02-SC | Tampering | package installs | low | accept | no package dependencies in any plan | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
@@ -90,6 +101,10 @@ created: "2026-10-25"
 | AR-02-01 | T-02-25 | A forged `com.apple.screenIsLocked` only pauses reconciliation; nothing closes, unlock/wake triggers a full refresh | 02-09-PLAN threat model | 2026-10-24 |
 | AR-02-02 | T-02-28 | A tab group keeps its leader's identity after the leader tab closes; Phases 3-4 address windows via `visibleMemberID` | 02-10-PLAN threat model | 2026-10-25 |
 | AR-02-03 | T-02-SC | No package-manager installs in phase 2; XcodeGen covered by T-02-06 | all phase 2 plans | 2026-10-24 |
+| AR-02-04 | T-02-47 | NSWorkspace's notification center is in-process; a spurious mark only defers a handoff or fold by one update | 02-17-PLAN threat model | 2026-10-25 |
+| AR-02-05 | T-02-48 | Constant Space switching only defers folds; windows are never lost | 02-17-PLAN threat model | 2026-10-25 |
+| AR-02-06 | T-02-42 / T-02-44 | REVIEW IN-13: chained re-keys in one refresh, or an unlisted holder, can hand one window's tracked entry to another; needs two lookup failures in a row on a new window; nothing destroyed | project lead (deferred, Info) | 2026-10-25 |
+| AR-02-07 | T-02-45 | REVIEW IN-14 plus late notification: a partial Space map, or a notification reaching main after ingest, leaves the handoff unprotected; pinned by a known-limit test | project lead (deferred, Info) | 2026-10-25 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -100,6 +115,7 @@ created: "2026-10-25"
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-10-25 | 38 | 38 | 0 | gsd-security-auditor (ASVS L1) |
+| 2026-10-25 | 49 | 49 | 0 | gsd-security-auditor (ASVS L1), gap plans 02-14..02-17 |
 
 ---
 
