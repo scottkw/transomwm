@@ -1,8 +1,8 @@
 ---
 phase: 02-window-control
-verified: 2026-10-25T21:16:29Z
+verified: 2026-10-25T22:02:46Z
 status: human_needed
-score: 144/150 must-haves verified (5 backstops insufficient_spec, 1 present but behaviour-unverified; 1 via override)
+score: 144/150 must-haves verified (5 backstops insufficient_spec, 1 present but behaviour-unverified; 5 via override)
 covered_files:
   - ".github/workflows/ci.yml"
   - ".gitignore"
@@ -150,14 +150,30 @@ covered_files:
   - "scripts/run-debug.sh"
   - "xcode/Pane.entitlements"
   - "xcode/project.yml"
-covered_digest: "v3:sha256:2591440ce5bbe2d5c5d7d5cea8ac172767c9dbba28338ccfa20b47bddc5e97bf"
+covered_digest: "v3:sha256:85132e9a1ec592f9b1edeabc580810ddb700818496e880cb0108f2f7abc9ed8e"
 behavior_unverified: 1
-overrides_applied: 1
+overrides_applied: 5
 overrides:
   - must_have: "Without Space data (Spaces capability off or missing), two same-frame native tab groups of one app on two Spaces (scenario C5) are tracked as two separate windows"
     reason: "Project-lead decision 2026-10-25: when the read-only SkyLight Spaces lookup is unavailable, Pane falls back to single-Space behaviour. Without per-window Space data no rule can tell the two groups' hidden tabs apart (REVIEW iteration 3 CR-01: 'No ordering rule can choose between 31 and 10'), so in that mode the two groups may be tracked as one window. With Space data the case is handled and tested (02-14). In fallback, Pane still never reports a live window destroyed and never tracks one window ID under two identities, and 02-14's tests assert both."
     accepted_by: "project lead (Ken Scott), decision 2026-10-25"
     accepted_at: "2026-10-25T19:07:21Z"
+  - must_have: "A window already at its minimum learns: it opens at 500 wide, is asked for 300 once, reads back 500, and one refresh 1 s later teaches 500; a window shrunk once from 800 and then asked for 300 three more times teaches 500 after the next refresh (02-15 truth 2)"
+    reason: "Lead decision 2026-10-25 (commit 7c97838, after re-verification warning 1): a refusal candidate also needs the read-back to be more than 2 pt below the window's size before the write, so an app that applies a resize over 1 s late teaches nothing. A window first written while already at its minimum reads back unmoved, which cannot be told apart from a late applier, so it learns only once a later write moves it. The second clause still holds (Probe4c: 500). The first is replaced by aWindowThatOpensAtItsMinimumLearnsItOnceAWriteMovesIt."
+    accepted_by: "project lead (Ken Scott), decision 2026-10-25 (relayed by the orchestrator; recorded in commit 7c97838)"
+    accepted_at: "2026-10-25T21:58:59Z"
+  - must_have: "One rule, per axis: a frame write whose read-back is more than refusalMargin (32 pt) above the request is a refusal candidate; it becomes the learned minimum when an AX refresh at least confirmDelay (1 s) after that write, with no newer write in between, still sees the present window within 2 pt; anything else drops the candidate (02-15 truth 1)"
+    reason: "Lead decision 2026-10-25 (commit 7c97838, after re-verification warning 1): a refusal candidate also needs the read-back to be more than 2 pt below the window's size before the write, so an app that applies a resize over 1 s late teaches nothing. A window first written while already at its minimum reads back unmoved, which cannot be told apart from a late applier, so it learns only once a later write moves it. The rule gained the moved-below-before condition, and a later write read back at the same clamp keeps the candidate. The plan text was not revised."
+    accepted_by: "project lead (Ken Scott), decision 2026-10-25 (relayed by the orchestrator; recorded in commit 7c97838)"
+    accepted_at: "2026-10-25T21:58:59Z"
+  - must_have: "MinimumSizeLearner learns per axis: a read-back more than 32 pt above the request is a candidate, learned as max(old, read-back) once an AX refresh at least 1 s after that write still sees the present window within 2 pt of it (02-12 truth 4, revised by 02-15)"
+    reason: "Lead decision 2026-10-25 (commit 7c97838, after re-verification warning 1): a refusal candidate also needs the read-back to be more than 2 pt below the window's size before the write, so an app that applies a resize over 1 s late teaches nothing. A window first written while already at its minimum reads back unmoved, which cannot be told apart from a late applier, so it learns only once a later write moves it. Same rule change as 02-15 truth 1. The plan text was not revised."
+    accepted_by: "project lead (Ken Scott), decision 2026-10-25 (relayed by the orchestrator; recorded in commit 7c97838)"
+    accepted_at: "2026-10-25T21:58:59Z"
+  - must_have: "02-12-PLAN.md truths 4 and 5 state this rule (marked revised by 02-15), so the plan text matches the code (02-15 truth 7)"
+    reason: "Lead decision 2026-10-25 (commit 7c97838, after re-verification warning 1): a refusal candidate also needs the read-back to be more than 2 pt below the window's size before the write, so an app that applies a resize over 1 s late teaches nothing. A window first written while already at its minimum reads back unmoved, which cannot be told apart from a late applier, so it learns only once a later write moves it. 02-12 truth 4 no longer matches the code until its text gains the moved-below-before condition (see warnings)."
+    accepted_by: "project lead (Ken Scott), decision 2026-10-25 (relayed by the orchestrator; recorded in commit 7c97838)"
+    accepted_at: "2026-10-25T21:58:59Z"
 accepted_limits:
   # Documented Known limits of 02-14..02-17, accepted as lead decisions of 2026-10-25 (relayed in the re-verification brief).
   # None of them makes a must-have truth fail, so none needs an override. Listed so they are not re-raised as gaps.
@@ -167,6 +183,8 @@ accepted_limits:
     source: "02-14-SUMMARY Known limits 2"
   - limit: "Late Space notification: a notification that reaches main only after the update that already saw the new Space protects nothing; pinned by knownLimitWithoutTheSpaceNotificationTheShownTwinTakesTheClosedGroup"
     source: "02-17-SUMMARY Known limits (residual 1), plus residuals 2-4 (refused handoff is final, merge during a switch, rapid switching)"
+  - limit: "A window already at its minimum learns nothing from a write that does not move it, and learns once a write moves it: an unmoved read-back cannot be told apart from an app that applies the resize more than 1 s late"
+    source: "Lead decision 2026-10-25, commit 7c97838; test aWindowThatOpensAtItsMinimumLearnsItOnceAWriteMovesIt; Probe4c 'opens at its minimum: nil'. Also covered by the four learner overrides above, because 02-12 truth 4 and 02-15 truths 1, 2 and 7 state the old rule"
   - limit: "32 pt learner margin: a real minimum within 32 pt of the request is not learned from that write; cells larger than 32 pt can be learned; the 1 s confirm refresh can replace a pending refresh of the same pid"
     source: "02-15-SUMMARY Known limits"
   - limit: "02-16 identity residuals: a holder with no frame or no CG list loses its window to the owner; a tab re-keyed inside a group does not re-point pendingFocus"
@@ -182,19 +200,23 @@ re_verification:
     - "A window identified while the private lookup failed transiently is re-identified once the lookup works; no element keeps a synthetic or wrong frame-matched ID for life, and two elements never share one CGWindowID (02-11 truth 2 stickiness clause; WIN-02, SAFE-05; REVIEW WR-04)"
   gaps_remaining: []
   regressions: []
+resolved_warnings:
+  - finding: "Warning 1 (late applier more than 1 s learned its stale pre-write size as a minimum)"
+    resolved_by: "commits 1a5f2b1 (RED test aWindowStillAtItsPreWriteSizeAfterASecondLearnsNothing) and 7c97838 (candidate needs a read-back more than 2 pt below the pre-write size, MinimumSizeLearner.swift:35-51; WindowTracker.swift:297 passes before: info.frame.size)"
+    evidence: "Probe4c rebuilt at HEAD: 'late applier (>1 s): nil' (was 800.0x0.0). The suite (473 tests) is green"
+  - finding: "Warning 2 (02-SECURITY.md audited only T-02-01..37)"
+    resolved_by: "commit 3d8e390: 02-SECURITY.md now covers T-02-38..48 (49/49 closed, threats_open: 0)"
+  - finding: "Warning 3 (stale key-link patterns in 02-11 and 02-12)"
+    resolved_by: "commit dd7e231: 02-11 link now from WindowIDResolver.swift; 02-12 pattern learner\\.(recordWrite|confirm). verify.key-links exits 0 for both plans"
 warnings:
-  - finding: "A window that applies a resize more than 1 s late gets its stale pre-write size learned as its minimum, and the hint is persisted per bundle (max only, no decay)"
+  - finding: "Learner plan text is stale after 7c97838: 02-12 truth 4 and 02-15 truths 1 and 2 still state the old rule (no moved-below-before condition; an at-minimum window learning from one unmoved write)"
     category: other
-    evidence: "Probe4c at HEAD, scenario 'late applier (>1 s)': write 300 wide, read-back 800 (the app has not applied it yet), a refresh at 1.0 s still reads 800, so the learned minimum is 800.0x0.0. MinimumSizeLearner.swift:9-10 assumes every late applier has caught up within confirmDelay"
-    reason: "This matches the lead-approved 02-15 rule (truth 1: confirmed by 'an AX refresh at least 1 s after that write'), so no must-have fails. But no Known-limits section records it, and for an Electron or Chrome window under load it would block narrower tiles for that app in every later session. Lead decision requested: record it as an accepted limit, or harden it (for example, never learn a read-back equal to the pre-write frame unless a later refresh also follows a second, different request; or cap persisted hints)"
-  - finding: "02-SECURITY.md (status verified, threats_open 0) predates the gap closure and audits only T-02-01..T-02-37"
-    category: security
-    evidence: "The gap plans add T-02-38..T-02-48 (SkyLight Spaces input, symbol removal, hidden-tab spoofing, hint tampering, identity binding, capability DoS, rekey repudiation, orphan handoff, fold guard, notification source, rapid switching). 02-SECURITY.md was last changed in 519a40e, before 02-14. I spot-checked T-02-38 (CFNumber-only, 0 dropped, at most 16 Spaces per window at SkyLightSpaces.swift:52-61), T-02-39 (optional dlsym pointers) and T-02-43 (per-element counting at WindowIDResolver.swift:78-86): the code matches"
-    reason: "Run /gsd-secure-phase 2 to audit T-02-38..48 before /gsd-ship"
-  - finding: "Two plan key-link patterns are stale after the gap closure: 02-11 `FallbackMatcher\\.match` (AXSnapshotReader) and 02-12 `learner\\.learn` (WindowTracker). verify.key-links exits 1 for both plans"
+    evidence: "02-12-PLAN.md:31, 02-15-PLAN.md truths 1-2 unchanged since dd7e231; the code and tests follow the new rule"
+    reason: "Covered by overrides for now. Revise the four truths (mark them 'revised by 7c97838'), as 02-15 did for 02-12, so a later regression check needs no override"
+  - finding: "Live evidence for the one-write fixture truth (02-12 truth 5, 02-15 truth 5) predates 7c97838"
     category: other
-    evidence: "The intent holds: FallbackMatcher.match moved into WindowIDResolver.swift:103/106, which AXSnapshotReader.swift:59 calls through resolver.resolve; learner.learn became learner.recordWrite (WindowTracker.swift:297) plus learner.confirm (WindowTracker.swift:161)"
-    reason: "Documentation drift only. Update the two patterns so later regression checks stay green"
+    evidence: "aRefusedSizeIsReadBackAndLearned last passed in the fixer's live gate at 5a0894a. By code trace it still holds: the fixture opens at 320x232 (PaneFixtureApp/main.swift:63) with minSize 250x150, so the 100x80 write moves both axes more than 2 pt; the fake equivalent theFakeClampsToItsHiddenMinimumAndTheTrackerLearnsItFromOneWrite passes at HEAD"
+    reason: "Run 'caffeinate -d -i swift test --filter FrameWriteIntegrationTests' once (not run here, as instructed)"
 behavior_unverified_items:
   - truth: "AXWindowSystem observes `NSWorkspace.activeSpaceDidChangeNotification` and marks every tracked app through `SpaceSwitchMarks`; every update with a full AXWindows answer for a marked app carries `ObservationContext.spaceChanged == true` (02-17 truth 2)"
     test: "Launch `scripts/run-debug.sh --no-build --disable-private=Spaces`. Put a two-tab Safari window on Space 1 and a single same-frame Safari window on Space 2 (Window > Fill on each). On Space 1 close the whole tab group, then switch to Space 2 at once (Ctrl-Right). Open Tracked Windows. Repeat without the flag"
@@ -234,8 +256,8 @@ human_verification:
   - test: "Real Space switches with tab groups, with and without `--disable-private=Spaces`: a Terminal tab group on Space 1 and a same-frame Terminal window (and, separately, a same-frame tab group) on Space 2; switch back and forth; press Cmd-T in the Space 1 window while the twin sits on Space 2, then switch again; also the whole-group close plus immediate switch in behavior_unverified_items. Check `log show --predicate 'subsystem == \"com.eightabyte.pane\" AND category == \"private\"' --last 5m`"
     expected: "With Space data: one row per real window throughout, and Space switches and Cmd-T never add, remove or duplicate rows. Without Space data: the same, except two same-frame tab groups may share one row (accepted single-Space limit), and no row is ever lost. Log shows 'Spaces: available' or 'Spaces: off'"
     why_human: "Real Spaces cannot be created or switched from automation (02-14 D6, 02-17 D4)"
-  - test: "Frame writes and minimum-size hints on real apps via Nudge. First delete `~/Library/Application Support/Pane/min-size-hints.json`, which may hold snap hints learned under the old rule. Then try a Chrome or Electron window (AXEnhancedUserInterface toggled and restored), Terminal or iTerm2, and an app with a real minimum (Notes, Music); open a second window of that app; quit and relaunch Pane"
-    expected: "Enhanced UI restored; no terminal cell snap learned; Min Size shows the real minimum about a second after the refused write; the second window starts from it; after relaunch the hint is back; the hints file holds only bundle IDs and sizes. Also watch for the late-applier warning: a busy Chrome/Electron window must not learn its pre-write size as a minimum"
+  - test: "Frame writes and minimum-size hints on real apps via Nudge. First delete `~/Library/Application Support/Pane/min-size-hints.json`, which may hold snap hints learned under the old rule. Then try a Chrome or Electron window (AXEnhancedUserInterface toggled and restored), Terminal or iTerm2, and an app with a real minimum (Notes, Music) opened larger than its minimum; also one already sized to its minimum; open a second window of that app; quit and relaunch Pane"
+    expected: "Enhanced UI restored; no terminal cell snap learned; a busy Chrome/Electron window never learns its pre-write size; Min Size shows the real minimum about a second after a refused write that moved the window; a window already at its minimum shows nothing until a later write moves it (accepted limit); the second window starts from the learned value; after relaunch the hint is back; the hints file holds only bundle IDs and sizes"
     why_human: "Real third-party app behaviour (02-15 D6)"
   - test: "Exclusions in the real UI: Don't Arrange “TextEdit”, then Never Arrange submenu, then Nudge with TextEdit frontmost, then Nudge with System Settings frontmost"
     expected: "Checkmark; 'Excluded' badge; submenu lists and removes it; 'No apps excluded' when empty; 'Nudge Focused Window (app excluded)' and '(no window)' are shown disabled"
@@ -261,7 +283,7 @@ human_verification:
 
 **Phase Goal:** As a Mac user, I want to grant Pane access and have it track and move every window, so that no slow app or lock screen can freeze or lose them.
 **Mode:** mvp. The user-story format is valid. Outcome clause: *no slow app or lock screen can freeze or lose them*.
-**Verified:** 2026-10-25T21:16:29Z at HEAD `29242da` (code at `5a0894a`)
+**Verified:** 2026-10-25T22:02:46Z at HEAD `0605100` (code at `7c97838`). Refreshed after the slow-resize hardening (`1a5f2b1`, `7c97838`); first pass of this round at `29242da`
 **Status:** human_needed
 **Re-verification:** Yes. This follows gap-closure plans 02-14 to 02-17 and the review-fix round 7c3350f..5a0894a. Previous status: gaps_found, 108/121.
 
@@ -271,7 +293,7 @@ human_verification:
 |---|---|---|---|
 | Grant access | Guided grant; stale grant detected and explained | PermissionReducer, PermissionProbe, TCCReset, SetupView. PermissionReducerTests green | VERIFIED (automated); real TCC needs a human |
 | Track every window | Every standard window, live open and close, a tab group as one window | WindowTracker, TabGroupTracker (Space-aware, Cmd-T rule, fold guard), WindowIDResolver (re-check and re-key). Classifier corpus, SpaceTabScenarioTests (3 modes) and RekeyTests green; Probe3/4/5 one row per real window | VERIFIED. C5 without Space data is the accepted single-Space limit (override) |
-| Move every window | setFrame on any display; learn the real minimum; exclusions respected | FrameWriter size→pos→size; MinimumSizeLearner margin plus time rule; ExclusionFilter.admit in both paths | VERIFIED; multi-display and real apps need a human. One warning: an app that applies a resize more than 1 s late |
+| Move every window | setFrame on any display; learn the real minimum; exclusions respected | FrameWriter size→pos→size; MinimumSizeLearner margin plus time rule; ExclusionFilter.admit in both paths | VERIFIED (4 learner truths via the lead's 7c97838 override); multi-display and real apps need a human. A late applier no longer learns a wrong minimum |
 | No slow app freezes it | Hung app isolated per thread | ResponsivenessTracker, per-app AXAppThread, 1 s messaging timeout; scenario tests green | VERIFIED (automated); a real `kill -STOP` needs a human |
 | No lock screen loses them | Lock/sleep/timeout never close; two-source close; no live cross-Space window destroyed | CloseRule, SessionGate, two-refresh fold guard, Space-switch hold. Invariant "no live window reported destroyed" checked after every refresh in SpaceTabScenarioTests | VERIFIED (automated); a real lock and sleep need a human |
 
@@ -285,7 +307,7 @@ The outcome clause now holds in code and tests. The two ways a window could be l
 |---|---|---|---|---|
 | 1 | Tab group vs. same-frame twin on another Space (SC2, 02-10#1, WIN-06) | `SkyLightSpaces.swift` (dlopen/dlsym, `Capability.spaces`), `ObservationContext.windowSpaces` filled at `AXWindowSystem.swift:332-333`; `TabGroupTracker.swift`: Space exclusion and ambiguity rule (134, 162, 176), Cmd-T rule including a stale sweep CG list (127-136), rebind gate on Space proof only (119-121, 139-142), refused member never takes its old tabs or an existing leader (172, 188), orphan handoff needs former-tab evidence (152-159), blind-switch hold (89, 173-175) | Probe3 C2 (Z=5 and Z=50): `[(10,40,2),(Z,Z,1)]`, the twin created on its own, no DESTROYED. C7: `[(10,40,2),(30,30,2)]`, no phantom. Probe4 D1 (was exit 133): `[(10,10,3)]`, exit 0. D2: one row `[(10,50,4)]`. R1: one row, no `created 40`, no DESTROYED. Tests: `cmdTWithATwinOnAnotherSpaceTakesTheWindowItWasOpenedFrom` (6 cases), `twoSameFrameGroupsOnTwoSpacesStayTwoWindows`, `cmdTBesideAGroupOnAnotherSpaceLeadsItsOwnGroup`, D1/D2 in 3 modes, `cmdTSeenWithAStaleSweepCGListStaysOneWindow`: all pass | ✓ CLOSED. C5 in fallback: PASSED (override) |
 | 2 | A live cross-Space window reported destroyed (02-09#2, WIN-09) | `WindowTracker.swift:78-98`: a fold is destroyed only on the second consecutive full refresh with the same shown tab, and is held (neither counted nor destroyed) in a Space-switch update without Space data | Every SpaceTabScenarioTests refresh asserts that no tracked window disappears while its shown tab is AX-valid and in the CG list, and that no window ID is tracked under two identities (`TabScenarioTests.swift:55-80`). All modes pass. Probe4 C3b: a real Merge All Windows is still destroyed on the third refresh, as designed | ✓ CLOSED |
-| 3 | Minimum-size learning (SC3, 02-12#4/#5, WIN-04) | `MinimumSizeLearner.swift`: a candidate needs a read-back more than 32 pt above the request (37-39), confirmed by a refresh at least 1 s later within 2 pt (44-57); the pre-write skip is gone; in-session bundle hints in `WindowTracker.swift:164-166`; confirm refresh scheduled at `AXWindowSystem.swift:203, 345-347`; persisted through `onLearnedMinimum` (`AXWindowSystem.swift:367-373`) | Probe4c: 16-pt snap → nil; one shrink then static → 500; opens at its minimum → 500; lag-2 drag and back-and-forth → nil; early refresh waits, then 500 at 1.05 s. Tests `aWindowThatStaysClampedLearnsAfterTheNextRefresh`, `aWindowThatOpensAtItsMinimumLearnsIt`, `aGridSnapIsNeverLearnedButARealRefusalStillIs`, both slow-app tests, `theFakeClampsToItsHiddenMinimumAndTheTrackerLearnsItFromOneWrite`, `aMinimumLearnedThisSessionSeedsTheNextWindowOfThatBundle`: all pass. 02-12 truths 4/5 carry "revised by 02-15" | ✓ CLOSED (warning: late applier, see below) |
+| 3 | Minimum-size learning (SC3, 02-12#4/#5, WIN-04) | `MinimumSizeLearner.swift`: a candidate needs a read-back more than 32 pt above the request and, since `7c97838`, more than 2 pt below the pre-write size; a repeat write read back at the same clamp keeps it (35-51). It is confirmed by a refresh at least 1 s later within 2 pt (54-67); in-session bundle hints in `WindowTracker.swift:164-166`; confirm refresh scheduled at `AXWindowSystem.swift:203, 345-347`; persisted through `onLearnedMinimum` (`AXWindowSystem.swift:367-373`) | Probe4c (rebuilt after 7c97838): 16-pt snap → nil; one shrink then static → 500; opens at its minimum → nil (accepted limit; learns once a write moves it); lag-2 drag and back-and-forth → nil; early refresh waits, then 500 at 1.05 s; late applier → nil. Tests `aWindowThatStaysClampedLearnsAfterTheNextRefresh`, `aWindowStillAtItsPreWriteSizeAfterASecondLearnsNothing`, `aWindowThatOpensAtItsMinimumLearnsItOnceAWriteMovesIt`, `aGridSnapIsNeverLearnedButARealRefusalStillIs`, both slow-app tests, `theFakeClampsToItsHiddenMinimumAndTheTrackerLearnsItFromOneWrite`, `aMinimumLearnedThisSessionSeedsTheNextWindowOfThatBundle`: all pass. 02-12 truths 4/5 carry "revised by 02-15" | ✓ CLOSED. The at-minimum clause passes via the 7c97838 override |
 | 4 | One failing element switches `_AXUIElementGetWindow` off (02-11#4, SAFE-05) | `WindowIDResolver.swift:78-86`: one counted failure per element (`counted`, capped at 64, not pruned by listing); every real lookup success resets the count | `oneElementThatKeepsFailingNeverSwitchesTheLookupOff`, `roundTripsOfOneFailingElementNeverSwitchTheLookupOff(staysCached:)` (Space round trip and hidden tab), `aFailingElementCountsOnceEvenAfterItLeftAXWindows`, `fiveDistinctFailingElementsSwitchTheLookupOffOnce`, `aSuccessBetweenFailuresKeepsTheLookupOn`: all pass | ✓ CLOSED |
 | 5 | Fallback ID kept for life; two elements sharing an ID (02-11#2, WIN-02) | `WindowIDResolver.swift:67-77` looks up every non-`.axPrivate` element again and reports `replaces`; 98-113: no offscreen-only match on a first failure (`identityPending`); 123-132: unique IDs; `WindowTracker.rekey(from:to:)` (215-250) moves info, creation order, facts, learner and tab state, and emits one `windowRekeyed` | `aSyntheticWindowIsRekeyedToItsRealIDAndStaysOneWindow`, RekeyTests, RekeyGroupTests (including the wrong cross-Space frame match), WindowIDResolverTests: all pass. Live FallbackIntegrationTests passed in the fixer's gate (24 pass, 1 skip); I did not re-run it, as instructed | ✓ CLOSED |
 
@@ -295,7 +317,7 @@ The outcome clause now holds in code and tests. The two ways a window could be l
 |---|---|---|---|
 | SC1 | Guided Accessibility grant; stale grant detected and explained, no looping prompts | ✓ VERIFIED | PermissionReducerTests (14.9 s / 15 s boundary, 20-sequence no-repeat-prompt property) green. Real TCC in human_verification |
 | SC2 | Tracked list shows every standard window, updates live, counts a natively tabbed window as one, and excludes dialogs, sheets, popovers and PiP (corpus passes) | ✓ VERIFIED (C5 fallback via override) | The 11-case corpus is green. Tab groups: gap 1 evidence above. Without Space data, C5 is the accepted single-Space limit. Real-app tabs are a backstop for a human |
-| SC3 | Move/resize any window on any display; learn the real minimum on refusal; excluded apps never touched | ✓ VERIFIED | FrameScenarioTests, ExclusionScenarioTests and the learner tests are green, and Probe4c agrees. Multi-display and real apps go to a human. Late-applier warning below |
+| SC3 | Move/resize any window on any display; learn the real minimum on refusal; excluded apps never touched | ✓ VERIFIED | FrameScenarioTests, ExclusionScenarioTests and the learner tests are green, and Probe4c agrees. The late applier is now refused; a window already at its minimum learns once a write moves it (override). Multi-display and real apps go to a human |
 | SC4 | kill -STOP neither stalls Pane nor delays others; lock, sleep or AX timeout never marks a window closed | ✓ VERIFIED | `aHungAppDoesNotDelayAnotherAppsNewWindow`, `aHungAppNeverLosesAWindowOverFiveRefreshes`, `lockBlankingClosesNothing`, `blankingWithoutTheGateAlsoClosesNothingBecauseEveryReadTimesOut` green |
 | SC5 | With `_AXUIElementGetWindow` forced unavailable, Pane launches and tracks through its fallback | ✓ VERIFIED | dlopen/dlsym only; CapabilitiesTests and WindowIDResolverTests green; FallbackIntegrationTests passed in the fixer's live gate |
 
@@ -316,14 +338,14 @@ Every artifact passes `verify.artifacts` (all 17 plans exit 0; 02-14 to 02-17: 1
 | 02-09 | 9 | **9** | 0 | 0 | 0 | Truth 2 now holds (gap 2) |
 | 02-10 | 8 | **7** | 0 | 1 (real-app tabs) | 0 | Truth 1 now holds (gap 1) |
 | 02-11 | 7 | **7** | 0 | 0 | 0 | Truths 2 and 4 now hold (gaps 4, 5) |
-| 02-12 | 8 | **8** | 0 | 0 | 0 | Truths 4 and 5 (revised by 02-15) hold (gap 3) |
+| 02-12 | 8 | **8** | 0 | 0 | 0 | Truth 5 holds (gap 3). Truth 4 passes via the 7c97838 override (its rule text is stale) |
 | 02-13 | 9 | 8 | 0 | 1 (multi-display) | 0 | |
 | 02-14 | 10 | 10 | 0 | 0 | 0 | Truth 9 states the accepted C5 limit and its two safety invariants, which pass in fallback mode |
-| 02-15 | 7 | 7 | 0 | 0 | 0 | |
+| 02-15 | 7 | 7 | 0 | 0 | 0 | Truths 1, 2 and 7 pass via the 7c97838 override (old rule text; the at-min clause is now an accepted limit). Truth 5's live test predates 7c97838 (warning) |
 | 02-16 | 6 | 6 | 0 | 0 | 0 | Truth 5 is now stronger after the WR-02 fix (counted once per element for its lifetime, up to 64) |
 | 02-17 | 6 | 5 | 0 | 0 | **1** | Truth 2 (live notification observer): wired at `AXWindowSystem.swift:110-114, 223, 244, 335`, but no test posts a real notification |
 
-**Score:** 144/150 truths verified (5 roadmap SCs + 145 plan truths). 0 failed. 5 backstops routed to a human (insufficient_spec). 1 present and wired but behaviour-unverified. 1 truth passes via the C5 override.
+**Score:** 144/150 truths verified (5 roadmap SCs + 145 plan truths). 0 failed. 5 backstops routed to a human (insufficient_spec). 1 present and wired but behaviour-unverified. 5 truths pass via override: C5 (single-Space fallback) and the four learner truths whose text predates 7c97838.
 
 ### Prohibitions (judgment tier, mode-dependent soft gate)
 
@@ -364,20 +386,20 @@ The phase completes with 24 flagged prohibitions, none judged violated.
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Non-live suite green | `swift test --skip PaneMacIntegrationTests` (run once) | 142 + 97 + 231 = 470 tests passed, 0 failures, exit 0 | ✓ PASS |
+| Non-live suite green | `swift test --skip PaneMacIntegrationTests` (run once per pass) | At HEAD 0605100: 142 + 97 + 234 = 473 tests passed, 0 failures, exit 0 (470 at 29242da) | ✓ PASS |
 | Engine and Model AppKit-free | `bash scripts/check-no-appkit.sh` | `no-appkit: OK (25 files)` | ✓ PASS |
 | CR-01 (iter. 3) cross-Space cases | `swift run Probe3` (scratchpad/probe3, real trackers at HEAD) | C1-C7 as in the gap table; output identical to `scratchpad/final/probe3.txt` apart from the build banner | ✓ PASS (C5 under override) |
 | CR-01 (iter. 4) crash and duplicate | `.build/debug/Probe4 crash`, `dup` | D1 `[(10,10,3)]`, exit 0 (was 133); D2 one row throughout | ✓ PASS |
 | WR-01 stale sweep CG | `.build/debug/Probe4 race` | One row at every step; no `created 40`, no DESTROYED | ✓ PASS |
 | Merge fold guard | `.build/debug/Probe4 c3` | Merged 20 destroyed on the third refresh, by design | ✓ PASS |
 | Orphan handoff | `.build/debug/Probe4 orphan` | No Space data, and twin answered: group destroyed, twin created. Partial Space map: `[(30,50,1)]` (IN-14, Info) | ✓ PASS (IN-14 Info) |
-| Learner | `.build/debug/Probe4c` | snap nil; clamped 500; at-min 500; lag-2 nil; early then 1.05 s → 500; late applier (>1 s) → 800 | ✓ PASS (warning 1) |
+| Learner | `.build/debug/Probe4c` (rebuilt after 7c97838; binary newer than every PaneEngine source) | snap nil; clamped 500; at-min nil (accepted limit); lag-2 nil; early then 1.05 s → 500; late applier (>1 s) nil (was 800) | ✓ PASS |
 | Chained re-key | `.build/debug/Probe4d` | `rekeyed 900 -> 20 / rekeyed 20 -> 30 / created 20` (IN-13, Info) | ? Info |
 | My own adversarial cases | `scratchpad/reverify/probe5` (V1 two onscreen same-frame windows plus Cmd-T, stale and fresh CG; V2 Cmd-W on the shown tab; V3 Cmd-T plus Cmd-W in one refresh; V4 stale Cmd-T then Ctrl-Shift-Tab) | Every step keeps one row per real window, with no spurious create or destroy | ✓ PASS |
 | Debt markers in the 31 changed files | `grep -nwE 'TBD\|FIXME\|XXX'` and `TODO\|HACK\|PLACEHOLDER\|RED stub` | none | ✓ PASS |
 | Live integration suite | not run (instructed) | Fixer's gate at `5a0894a`: 24 passed, 1 skipped (needs 2 displays) | ? SKIP (gate evidence accepted) |
 
-All probe outputs are in `/private/tmp/claude-501/-Users-ken-dev-panewm/fa534412-df62-4443-994d-8e3bd65099ce/scratchpad/reverify/`. Every Probe4/4c/4d output is byte-identical to `scratchpad/final/`. The probe binaries are newer than every PaneEngine source they link (TabGroupTracker.swift 16:02:31, binaries 16:02:50; the later 5a0894a touched only PaneMac).
+All probe outputs are in `/private/tmp/claude-501/-Users-ken-dev-panewm/fa534412-df62-4443-994d-8e3bd65099ce/scratchpad/reverify/`. At 29242da, every Probe4/4c/4d output was byte-identical to `scratchpad/final/`. After 7c97838, `probe4c-2.txt` differs from it in exactly two rows: at-min and late applier, both now nil. Probe3, Probe4 and Probe5 do not exercise frame writes, and 7c97838 changed only the learner and its `recordWrite` call, so their results stand. The probe binaries are newer than every PaneEngine source they link (TabGroupTracker.swift 16:02:31, binaries 16:02:50; the later 5a0894a touched only PaneMac).
 
 ### Probe Execution
 
@@ -390,7 +412,7 @@ No `scripts/*/tests/probe-*.sh` is declared or present, so Step 7c does not appl
 | WIN-01 | 02, 05 | Guided grant; stale grant detected | ✓ SATISFIED (automated) | Real TCC needs a human |
 | WIN-02 | 01, 02, 06, 08, 09, 16 | Tracks every standard window | ✓ SATISFIED | Gap 5 closed: re-check and re-key, unique IDs |
 | WIN-03 | 07, 08, 12 | Hung app never freezes Pane | ✓ SATISFIED (automated) | Real kill -STOP needs a human |
-| WIN-04 | 06, 12, 13, 15 | Move/resize; learn minimum | ✓ SATISFIED | Gap 3 closed; late-applier warning |
+| WIN-04 | 06, 12, 13, 15 | Move/resize; learn minimum | ✓ SATISFIED | Gap 3 closed; late applier refused (7c97838); at-minimum window learns once a write moves it (accepted limit, override) |
 | WIN-05 | 03 | Dialogs, sheets, popovers, PiP never docked | ✓ SATISFIED | Corpus green; label review and PiP capture need a human |
 | WIN-06 | 10, 14, 17 | Native tabs count as one window | ✓ SATISFIED | Gap 1 closed; C5 fallback under override |
 | WIN-08 | 08, 13 | Exclusion list | ✓ SATISFIED | |
@@ -405,7 +427,7 @@ All 9 IDs are claimed by plans. REQUIREMENTS.md maps no other ID to Phase 2, so 
 |---|---|---|---|---|
 | (31 files changed since b63a0d4) | — | TBD/FIXME/XXX, TODO/HACK/placeholder | none found | — |
 | Sources/PaneEngine/TabGroupTracker.swift | 46-50 | `shortcut:` documenting the accepted single-Space and late-notification limits | ℹ️ Info | Accurate; matches the override and accepted_limits |
-| Sources/PaneEngine/MinimumSizeLearner.swift | 9-10 | Doc claims late appliers "have caught up by then" | ⚠️ Warning | Not true beyond 1 s (warning 1) |
+| Sources/PaneEngine/MinimumSizeLearner.swift | 5-14 | Doc rewritten by 7c97838; it states the moved rule and the at-minimum limit | ℹ️ Info | Resolved warning 1 |
 | Sources/PaneEngine/WindowTracker.swift | 396-398 | Misplaced doc comment (IN-15) | ℹ️ Info | — |
 | Sources/PaneEngine/WindowTracker.swift | 55-60 | Re-keys applied one at a time (IN-13, Probe4d) | ℹ️ Info | A chained correction can swap two windows' entries; needs two lookup failures in a row |
 | Sources/PaneEngine/TabGroupTracker.swift | 89 | Blind switch keyed on the batch, not on the window (IN-14, Probe4 orphan) | ℹ️ Info | A partial Space map can hand a closed group to a twin |
@@ -435,10 +457,14 @@ There are 18 items in the `human_verification` frontmatter, plus 1 `behavior_unv
 
 There are no gaps. All five previous gaps are closed in code and in committed tests, and the reviewer's harnesses confirm each one against HEAD. So do four extra tab-timing scenarios I wrote myself. The iteration-4 review findings (CR-01 crash and duplicate, WR-01 stale sweep, WR-02 per-listing count) are fixed, and the probes that exposed them now pass.
 
-Three warnings need a lead decision or a quick follow-up. None blocks the phase goal:
-1. **Late applier (more than 1 s):** the time rule learns a stale pre-write size as a minimum and persists it per bundle. Accept it as a limit, or harden it.
-2. **02-SECURITY.md is stale** for T-02-38..48. Run `/gsd-secure-phase 2` before shipping.
-3. **Two key-link patterns are stale** (02-11, 02-12). Update the plan text.
+All three warnings from the first pass of this round are resolved:
+1. **Late applier:** hardened by `1a5f2b1` and `7c97838` (lead decision). Probe4c now returns nil.
+2. **02-SECURITY.md:** audited by `3d8e390` (49/49 threats closed).
+3. **Key-link patterns:** fixed by `dd7e231`. Both plans exit 0.
+
+The hardening adds one accepted limit: a window already at its minimum learns only once a write moves it. Four learner truths still state the old rule, so they pass through overrides of that lead decision. Two small follow-ups remain:
+- revise the text of 02-12 truth 4 and 02-15 truths 1, 2 and 7;
+- run FrameWriteIntegrationTests once live, because its last live pass predates `7c97838`.
 
 The documented Known limits of 02-14..02-17 are recorded under `accepted_limits` and the C5 override. IN-13 and IN-14 stay Info.
 
@@ -446,5 +472,5 @@ The documented Known limits of 02-14..02-17 are recorded under `accepted_limits`
 
 ---
 
-_Verified: 2026-10-25T21:16:29Z_
+_Verified: 2026-10-25T22:02:46Z_
 _Verifier: Claude (gsd-verifier)_
