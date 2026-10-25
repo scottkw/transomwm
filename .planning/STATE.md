@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
-status: executing
-stopped_at: Completed 02-12-PLAN.md
-last_updated: "2026-10-25T16:51:54.367Z"
+status: verifying
+stopped_at: Completed 02-13-PLAN.md
+last_updated: "2026-10-25T17:07:18.925Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 3387f23178e0fca280c593936975367012bd22a3
+state_head: b13626de3022b03c9239205804d2f1e2b45de46e
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
   percent: 11
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 Phase: 2 (Window Control) — EXECUTING
 Plan: 13 of 13
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-24 — Phase 2 execution started
 
 Progress: [█░░░░░░░░░] 11%
@@ -74,6 +74,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P10 | 11 min | 2 tasks | 9 files |
 | Phase 2 P11 | 10 min | 2 tasks | 14 files |
 | Phase 2 P12 | 10 min | 2 tasks | 12 files |
+| Phase 2 P13 | 11 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,10 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-12: A frame write the app did not answer (-25204) goes back in its slot and the drain stops; record() sets drainEnabled = shouldRefresh(pid), giving one retry, a pause while degraded, and a flush on recovery
 - [Phase 2]: 02-12: The fixture minsize:WxH spec sets NSWindow.minSize (frame minimum), so a refused size reads back exactly WxH
 - [Phase 2]: 02-12: applyFrameResult leaves displayUUID to the refresh that the AX moved notification triggers (the tracker has no displays there)
+- [Phase 2]: 02-13: Exclusion is enforced in WindowSystem.perform via ExclusionFilter.admit (both systems); excluded windows stay tracked with isExcluded true
+- [Phase 2]: 02-13: Per-bundle minimum hints persist in ~/Library/Application Support/Pane/min-size-hints.json; a bad file is rejected whole, logged and moved aside as .corrupt
+- [Phase 2]: 02-13: Bundle hints seed only newly reported windows and learning only raises them; hints are keyed by exact bundle ID, unbundled keys never stored
+- [Phase 2]: 02-13: Nudge Focused Window is in every build; focusedWindow(of:) uses the latest windowFocused, else the AXMain visible window
 
 ### Pending Todos
 
@@ -169,6 +174,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-25T16:51:54.312Z
-Stopped at: Completed 02-12-PLAN.md
+Last session: 2026-10-25T17:07:18.872Z
+Stopped at: Completed 02-13-PLAN.md
 Resume file: None

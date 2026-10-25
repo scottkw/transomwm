@@ -68,7 +68,7 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: 12/13 plans executed
+**Plans**: 13/13 plans executed
 
 Plans:
 **Wave 1**
@@ -98,7 +98,7 @@ Plans:
 - [x] 02-12-PLAN.md — Latest-wins move/resize pipeline with read-back and learned minimums (WIN-04)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 02-13-PLAN.md — Exclusion enforcement, persisted minimum hints, Nudge Focused Window
+- [x] 02-13-PLAN.md — Exclusion enforcement, persisted minimum hints, Nudge Focused Window
 
 **Research**: Moderate. Patterns are documented (AeroSpace), but the window classifier corpus, native-tab heuristics and two-source close-confirmation rules need careful design
 **Scope notes**: Pulled forward per research: coordinate conversion at one tested boundary plus display-UUID matching (from Phase 6) and native-tab detection (from Phase 7). Also: per-app AX threads with ~1 s messaging timeouts, coalesced size-position-size writes with read-back, the `PanePrivate` dlsym pattern and capability registry, `FakeWindowSystem`, fullscreen state detection (tile return is verified in Phase 3 under WIN-07), stable dev signing identity and a separate debug bundle ID so TCC grants survive rebuilds.
@@ -231,7 +231,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
-| 2. Window Control | 12/13 | In Progress | - |
+| 2. Window Control | 13/13 | In Progress | - |
 | 3. Tiling MVP | 0/TBD | Not started | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |

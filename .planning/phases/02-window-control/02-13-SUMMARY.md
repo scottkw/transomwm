@@ -238,3 +238,7 @@ None. No external service configuration is required.
 ---
 *Phase: 02-window-control*
 *Completed: 2026-10-25*
+
+## Self-Check: PASSED
+- FOUND: all 8 created files. FOUND commits 5e1ea0e, 6d9b1cf, 0d34e7b, d291b26, 3f0fea0, 10cfe52 on HEAD (evaluation-scope resolved the plan's commits on this branch).
+- Acceptance greps for all three tasks pass; `scripts/build-debug.sh`, full `swift test` and `scripts/check-no-appkit.sh` exit 0.
