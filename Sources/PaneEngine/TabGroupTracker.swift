@@ -22,9 +22,14 @@ public struct TabResolution: Equatable, Sendable {
 /// Native AppKit tab groups (D-08, WIN-06). AX lists only the selected tab, which has an `AXTabGroup` child;
 /// the other tabs exist only in the CG list: same pid, layer 0, offscreen, bounds within `boundsTolerance`.
 ///
+/// Bounds alone cannot tell a hidden tab from a same-app twin with the same frame, so two kinds of window are never
+/// taken as hidden tabs: one listed in AXWindows without a tab bar of its own (a minimized twin), and a tracked
+/// standalone window that was not listed at the last refresh (a twin on another Space). Shortcut: an untracked
+/// twin on another Space still passes as a hidden tab; bound members by `AXTabs` if that shows up in practice.
+///
 /// A group's identity is the `WindowIdentity` of its oldest already-tracked member, else of its first-seen visible
-/// member (the leader), for the group's whole life, even after the leader tab itself closes. Phases 3-4 must therefore address the window through
-/// `WindowInfo.visibleMemberID`, never through the identity's window ID.
+/// member (the leader), for the group's whole life, even after the leader tab itself closes. Phases 3-4 must
+/// therefore address the window through `WindowInfo.visibleMemberID`, never through the identity's window ID.
 public struct TabGroupTracker: Equatable, Sendable {
     public static let boundsTolerance: Double = 1.0
 
@@ -35,6 +40,8 @@ public struct TabGroupTracker: Equatable, Sendable {
     }
 
     private var groups: [Int32: [Group]] = [:]
+    /// The IDs each app listed at its last update.
+    private var lastListed: [Int32: Set<UInt32>] = [:]
 
     public init() {}
 
@@ -56,14 +63,21 @@ public struct TabGroupTracker: Equatable, Sendable {
         }
         let leaders = Set(list.map(\.leader.windowID))
         let standalone = tracked.filter { identity in identity.pid == pid && !list.contains { $0.leader == identity } }
+        let listedTabCount = Dictionary(visible.map { ($0.id, $0.tabCount) }, uniquingKeysWith: max)
+        let wasListed = lastListed[pid] ?? []
+        func canBeHiddenTab(_ id: UInt32) -> Bool {
+            if let tabCount = listedTabCount[id], tabCount < 2 { return false }
+            return wasListed.contains(id) || !standalone.contains { $0.windowID == id }
+        }
         // Two listed members of one group (a tab being dragged out): the onscreen leader, then the tab bar, binds first.
         func rank(_ v: (id: UInt32, frame: Rect, tabCount: Int)) -> [Int] {
             [onScreen.contains(v.id) ? 1 : 0, leaders.contains(v.id) ? 1 : 0, v.tabCount, -Int(v.id)]
         }
         var groupFor: [UInt32: WindowIdentity] = [:]
         for v in visible.sorted(by: { rank($0).lexicographicallyPrecedes(rank($1)) }).reversed() {
-            let members = Set(cg.filter { $0.windowID != v.id && $0.layer == 0 && !$0.onScreen && Self.matches($0.bounds, v.frame) }.map(\.windowID))
-                .union([v.id])
+            let members = Set(cg.filter {
+                $0.windowID != v.id && $0.layer == 0 && !$0.onScreen && Self.matches($0.bounds, v.frame) && canBeHiddenTab($0.windowID)
+            }.map(\.windowID)).union([v.id])
             let index = list.firstIndex { $0.members.contains(v.id) }
                 ?? (v.tabCount >= 2 ? list.firstIndex { !$0.members.isDisjoint(with: members) } : nil)
             if let index {
@@ -78,6 +92,7 @@ public struct TabGroupTracker: Equatable, Sendable {
         }
         list.removeAll { $0.members.isEmpty }
         groups[pid] = list.isEmpty ? nil : list
+        lastListed[pid] = visible.isEmpty ? nil : Set(visible.map(\.id))
         let memberIDs = list.reduce(into: Set<UInt32>()) { $0.formUnion($1.members) }
         return TabResolution(
             groupFor: groupFor,

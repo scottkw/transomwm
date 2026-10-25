@@ -120,4 +120,37 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(resolution == TabResolution(groupFor: [:], memberIDs: [], tabCount: [:]))
         #expect(tracker.members(of: identity(10)).isEmpty)
     }
+
+    @Test func aListedMinimizedTwinWithTheSameFrameIsNeverAHiddenTab() {
+        for order in [[visible(20, 1), visible(10, 2)], [visible(10, 2), visible(20, 1)]] {
+            var tracker = TabGroupTracker()
+            let resolution = tracker.update(pid: pid, bundleID: bundleID, visible: order, cgWindows: [cg(10, onScreen: true), cg(11), cg(20)])
+            #expect(resolution.groupFor == [10: identity(10)])
+            #expect(resolution.memberIDs == [10, 11])
+            #expect(resolution.tabCount == [identity(10): 2])
+        }
+    }
+
+    @Test func aTrackedWindowOnAnotherSpaceWithTheSameFrameIsNeverAHiddenTab() {
+        var tracker = TabGroupTracker()
+        // 20 was tracked on another Space: unlisted and offscreen here, like a hidden tab, but not listed last refresh.
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 2)], cgWindows: [cg(10, onScreen: true), cg(11), cg(20)],
+            tracked: [identity(20)]
+        )
+        #expect(resolution.memberIDs == [10, 11])
+        #expect(resolution.tabCount == [identity(10): 2])
+        #expect(resolution.folded.isEmpty)
+    }
+
+    @Test func aTrackedWindowListedLastRefreshThatGainsATabLeadsTheGroup() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(11, 2)], cgWindows: [cg(10), cg(11, onScreen: true)], tracked: [identity(10)]
+        )
+        #expect(resolution.groupFor == [11: identity(10)])
+        #expect(resolution.memberIDs == [10, 11])
+        #expect(resolution.folded.isEmpty)
+    }
 }
