@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: verifying
-stopped_at: Completed 02-16-PLAN.md
-last_updated: "2026-10-25T20:12:52.661Z"
+stopped_at: Completed 02-17-PLAN.md
+last_updated: "2026-10-25T20:37:02.372Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 427cede38904a533f6e3a2d527c567e6fd8b000c
+state_head: 2a13fbab5a4e20e60d2265bad728310d9166d36e
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 23
+  completed_plans: 23
   percent: 11
 ---
 
@@ -78,6 +78,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P14 | 23 min | 3 tasks | 16 files |
 | Phase 2 P15 | 8 min | 2 tasks | 10 files |
 | Phase 2 P16 | 19 min | 3 tasks | 16 files |
+| Phase 2 P17 | 8 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,9 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-16: A lookup failure counts towards switching AXWindowID off at most once per listed element; the element the lookup names owns its ID and a frame-matched holder is re-identified and re-keyed
 - [Phase 2]: 02-16: Phase 3 obligation: WindowEvent.windowRekeyed(from:to:) is not applied by LifecycleSync; Phase 3 re-points desk WindowRefs from from to to.window
 - [Phase 2]: 02-16: A first lookup failure of a new element never takes an offscreen-only frame match; identityPending refreshes the app after the settle delay
+- [Phase 2]: 02-17: 'the hidden-tab fold or merge' is one rule, a tracked standalone window taken as a hidden tab; the room-rule join and the Cmd-T opener are not refused in a flagged update
+- [Phase 2]: 02-17: a Space-switch mark is consumed only by a full AXWindows answer whose reads began at or after the notification; a notification during the reads flags that update and the next one
+- [Phase 2]: 02-17: with Space data a flagged update resolves exactly as an unflagged one; the flag only matters in single-Space fallback
 
 ### Pending Todos
 
@@ -188,6 +192,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-25T20:12:52.560Z
-Stopped at: Completed 02-16-PLAN.md
+Last session: 2026-10-25T20:37:02.261Z
+Stopped at: Completed 02-17-PLAN.md
 Resume file: None
