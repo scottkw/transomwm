@@ -644,6 +644,21 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30])) == [ref(20)])
     }
 
+    /// Review WR-01 (R1): Cmd-T in A (10) lands between a sweep's CG snapshot and the AX read, so that update lists the
+    /// new tab 40 while its CG list still shows 10 onscreen and lacks 40. One window throughout, and 10 is never destroyed.
+    @Test func cmdTSeenWithAStaleSweepCGListStaysOneWindow() {
+        var tracker = WindowTracker(settleDelay: .zero)
+        var events = step(&tracker, listed: [(10, nil)], onScreen: [10], offScreen: [], initial: true)
+        events += step(&tracker, listed: [(10, nil)], onScreen: [10], offScreen: [])
+        events += step(&tracker, listed: [(40, 2)], onScreen: [10], offScreen: [])
+        #expect(tracker.sortedWindows().map { [$0.window.windowID, $0.visibleMemberID ?? 0, UInt32($0.tabCount)] } == [[10, 40, 2]])
+        for _ in 0..<3 { events += step(&tracker, listed: [(40, 2)], onScreen: [40], offScreen: [10]) }
+        for _ in 0..<2 { events += step(&tracker, listed: [(10, 2)], onScreen: [10], offScreen: [40]) }
+        #expect(tracker.sortedWindows().map { [$0.window.windowID, $0.visibleMemberID ?? 0, UInt32($0.tabCount)] } == [[10, 10, 2]])
+        #expect(destroyed(events).isEmpty)
+        #expect(created(events).map(\.window) == [ref(10)])
+    }
+
     /// Without Space data a flagged update (a Space switch) neither counts towards nor completes the fold guard.
     @Test func withoutSpaceDataAFlaggedUpdateNeitherCountsNorDestroysAFold() {
         var tracker = merged()

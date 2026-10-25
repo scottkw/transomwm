@@ -210,6 +210,24 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(resolution.folded.isEmpty)
     }
 
+    /// Review WR-01 (R1): a sweep's CG list taken before Cmd-T still shows A (10) onscreen and lacks the new tab 40.
+    /// The tab still takes A, and only A: an onscreen same-frame window that was not A stays out.
+    @Test func aNewTabMissingFromAStaleCGListStillTakesTheWindowItWasOpenedFrom() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(5, onScreen: true), cg(10, onScreen: true)],
+            tracked: [identity(10)]
+        )
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2)], cgWindows: [cg(5, onScreen: true), cg(10, onScreen: true)],
+            tracked: [identity(10)]
+        )
+        #expect(resolution.groupFor == [40: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+        #expect(resolution.memberIDs == [10, 40])
+        #expect(resolution.folded.isEmpty)
+    }
+
     /// S4 unchanged: a shown tab already in the previous CG list keeps today's ranking (untracked before standalone).
     @Test func aShownTabSeenBeforeKeepsTheUsualRanking() {
         var tracker = TabGroupTracker()
