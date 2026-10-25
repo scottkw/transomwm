@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: verifying
-stopped_at: Completed 02-15-PLAN.md
-last_updated: "2026-10-25T19:50:20.718Z"
+stopped_at: Completed 02-16-PLAN.md
+last_updated: "2026-10-25T20:12:52.661Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 26f3e95316891b4f9c61419c27bd801adf44d956
+state_head: 427cede38904a533f6e3a2d527c567e6fd8b000c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 22
-  completed_plans: 21
+  completed_plans: 22
   percent: 11
 ---
 
@@ -77,6 +77,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P13 | 11 min | 3 tasks | 16 files |
 | Phase 2 P14 | 23 min | 3 tasks | 16 files |
 | Phase 2 P15 | 8 min | 2 tasks | 10 files |
+| Phase 2 P16 | 19 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,10 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-15: A refused size is learned only above a 32 pt margin and only after a refresh at least 1 s later still sees the window there (margin against grid snaps, time against late appliers)
 - [Phase 2]: 02-15: In-session bundle hints live in WindowTracker (per-axis max on learn); onLearnedMinimum fires from emit for every learned growth
 - [Phase 2]: 02-15: A due minimum candidate that no refresh decided is dropped at that pid's next refresh, so no app is refreshed every second forever
+- [Phase 2]: 02-16: A lookup success counts only for real lookups (new elements and re-checks of fallback IDs); a cached axPrivate element is never looked up again, so a lookup that really broke mid-session still switches off
+- [Phase 2]: 02-16: A lookup failure counts towards switching AXWindowID off at most once per listed element; the element the lookup names owns its ID and a frame-matched holder is re-identified and re-keyed
+- [Phase 2]: 02-16: Phase 3 obligation: WindowEvent.windowRekeyed(from:to:) is not applied by LifecycleSync; Phase 3 re-points desk WindowRefs from from to to.window
+- [Phase 2]: 02-16: A first lookup failure of a new element never takes an offscreen-only frame match; identityPending refreshes the app after the settle delay
 
 ### Pending Todos
 
@@ -183,6 +188,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-25T19:50:20.439Z
-Stopped at: Completed 02-15-PLAN.md
+Last session: 2026-10-25T20:12:52.560Z
+Stopped at: Completed 02-16-PLAN.md
 Resume file: None

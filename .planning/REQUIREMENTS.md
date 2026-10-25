@@ -21,7 +21,7 @@
 ### Window Control
 
 - [x] **WIN-01**: User is guided through granting Accessibility permission, and a stale grant is detected and explained
-- [ ] **WIN-02**: Pane tracks every standard window of every running app, including windows opened or closed later
+- [x] **WIN-02**: Pane tracks every standard window of every running app, including windows opened or closed later
 - [x] **WIN-03**: A hung or slow app never freezes Pane or delays arranging other apps' windows
 - [x] **WIN-04**: Pane moves and resizes windows and learns an app's real minimum size when it refuses a size
 - [x] **WIN-05**: Dialogs, sheets, popovers and picture-in-picture windows are never docked (classifier tested against recorded AX dumps)
@@ -59,7 +59,7 @@
 - [ ] **SAFE-02**: After a crash or force-quit, the next launch restores stranded windows on-screen
 - [ ] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
 - [ ] **SAFE-04**: Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
-- [ ] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
+- [x] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
 - [ ] **SAFE-06**: Quitting and relaunching Pane while apps keep running restores each display's layout with the same windows in their tiles
 
 ### Zoom
@@ -164,7 +164,7 @@ Populated by the roadmapper on 2026-10-23.
 | MODEL-09 | Phase 1 | Complete |
 | MODEL-10 | Phase 1 | Complete |
 | WIN-01 | Phase 2 | Complete |
-| WIN-02 | Phase 2 | Gaps Found |
+| WIN-02 | Phase 2 | Complete |
 | WIN-03 | Phase 2 | Complete |
 | WIN-04 | Phase 2 | Complete |
 | WIN-05 | Phase 2 | Complete |
@@ -196,7 +196,7 @@ Populated by the roadmapper on 2026-10-23.
 | SAFE-02 | Phase 3 | Pending |
 | SAFE-03 | Phase 3 | Pending |
 | SAFE-04 | Phase 3 | Pending |
-| SAFE-05 | Phase 2 | Gaps Found |
+| SAFE-05 | Phase 2 | Complete |
 | SAFE-06 | Phase 3 | Pending |
 | ZOOM-01 | Phase 4 | Pending |
 | ZOOM-02 | Phase 4 | Pending |
