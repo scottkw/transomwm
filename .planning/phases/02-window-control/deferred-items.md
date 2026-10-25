@@ -7,3 +7,7 @@
 - Intermittent `CloseIntegrationTests.closeFreezeHideAndQuitAreDecidedByTwoSources` failure at line 58 ("unhidden window not .present within 2 s"), seen 1 time in about 37 unlocked runs
   status: open
   **Found by:** the debug session for the live move-test flake (`.planning/debug/live-move-test-flaky.md`). No session pause was logged and the Mac was unlocked. After the unhide, no refresh ran for 2 s. Either the "app shown" notification was lost after the freeze and resume, or it arrived before a coinciding refresh read the hidden flag. Next step: log the hidden flag on every refresh.
+
+- `AXWindowSystem` focus hints look a window up by its own CGWindowID, so a focus notification for a non-leader tab of a native tab group finds no tracked window and emits no `windowFocused`
+  status: open
+  **Found by:** 02-10. The tracker itself now emits `windowFocused(groupRef)` whenever a group's visible tab changes, so tab switches are covered; only the AX focus hint path misses. `AXWindowSystem.swift` belongs to 02-11 in this wave. Fix: resolve `pendingFocus` through the window whose `visibleMemberID` matches.
