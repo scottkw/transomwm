@@ -55,18 +55,34 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
 
 /// D-13, D-14, D-17 on the tracker and the fake: every write is read back, reported and learned from.
 @Suite struct FrameScenarioTests {
-    @Test func aReadBackFrameMovesResizesAndLearns() throws {
+    @Test func aReadBackFrameMovesAndResizesAndASecondAgreeingOneLearns() throws {
         var tracker = trackerWithOneWindow()
         let requested = Rect(x: 100, y: 120, width: 100, height: 80)
         let actual = Rect(x: 100, y: 120, width: 250, height: 150)
-        let events = tracker.applyFrameResult(FrameWriteResult(window: ref(7), requested: requested, actual: actual, failure: nil))
+        let result = FrameWriteResult(window: ref(7), requested: requested, actual: actual, failure: nil)
+        var events = tracker.applyFrameResult(result)
+        #expect(try #require(tracker.info(for: ref(7).identity)).frame == actual)
+        #expect(try #require(tracker.info(for: ref(7).identity)).learnedMinimum == nil)
+        #expect(events == [.frameApplied(ref(7), requested: requested, actual: actual), .windowMoved(ref(7), actual), .windowResized(ref(7), actual)])
+        events = tracker.applyFrameResult(result)
         let info = try #require(tracker.info(for: ref(7).identity))
-        #expect(info.frame == actual)
         #expect(info.learnedMinimum == Size(width: 250, height: 150))
-        #expect(events == [
-            .frameApplied(ref(7), requested: requested, actual: actual), .windowMoved(ref(7), actual), .windowResized(ref(7), actual),
-            .windowChanged(info),
-        ])
+        #expect(events == [.frameApplied(ref(7), requested: requested, actual: actual), .windowChanged(info)])
+    }
+
+    @Test func aFullscreenWindowLearnsNothing() throws {
+        var tracker = WindowTracker()
+        let snapshot = WindowSnapshot(
+            role: "AXWindow", subrole: "AXStandardWindow", minimized: false, fullScreen: true,
+            close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: start
+        )
+        let app = AppObservation(pid: pid, bundleID: bundleID, windows: [WindowObservation(windowID: 7, idSource: .axPrivate, read: .success(snapshot), title: "")])
+        _ = tracker.ingest(app, context: ObservationContext(initialSweep: true, now: .now))
+        #expect(tracker.info(for: ref(7).identity)?.state == .fullscreen)
+        let result = FrameWriteResult(window: ref(7), requested: Rect(x: 0, y: 0, width: 100, height: 80), actual: start, failure: nil)
+        _ = tracker.applyFrameResult(result)
+        _ = tracker.applyFrameResult(result)
+        #expect(try #require(tracker.info(for: ref(7).identity)).learnedMinimum == nil)
     }
 
     @Test func anHonouredWriteReportsNoWindowChanged() {
@@ -90,14 +106,15 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         let fake = await twoApps()
         let requested = Rect(x: 100, y: 120, width: 100, height: 80)
         await fake.perform([.setFrame(ref(1), requested)])
+        await fake.perform([.setFrame(ref(1), requested)])
         let writes = applied(await drain(fake.events))
-        #expect(writes.count == 1)
+        #expect(writes.count == 2)
         #expect(writes.first?.0 == ref(1))
         #expect(writes.first?.1 == requested)
         #expect(writes.first?.2 == Rect(x: 100, y: 120, width: 250, height: 150))
         let info = try #require(await fake.inventory().windows.first { $0.window == ref(1) })
         #expect(info.learnedMinimum == Size(width: 250, height: 150))
-        #expect(await fake.performed == [.setFrame(ref(1), requested)])
+        #expect(await fake.performed == [.setFrame(ref(1), requested), .setFrame(ref(1), requested)])
     }
 
     @Test func aHungAppHoldsOnlyItsLatestFrameAndAnotherAppIsWrittenAtOnce() async {
@@ -122,7 +139,9 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
 
     @Test func aClosedWindowsLearnedMinimumIsForgotten() async throws {
         let fake = await twoApps()
-        await fake.perform([.setFrame(ref(1), Rect(x: 100, y: 120, width: 100, height: 80))])
+        let small = WindowCommand.setFrame(ref(1), Rect(x: 100, y: 120, width: 100, height: 80))
+        await fake.perform([small, small])
+        #expect(await fake.inventory().windows.first { $0.window == ref(1) }?.learnedMinimum == Size(width: 250, height: 150))
         await fake.close(1)
         await fake.refreshAll()
         // The ID comes back as a new window with a smaller minimum.
@@ -132,7 +151,7 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         await fake.refreshAll()
         await fake.advance(by: .milliseconds(250))
         await fake.refreshAll()
-        await fake.perform([.setFrame(ref(1), Rect(x: 100, y: 120, width: 100, height: 80))])
+        await fake.perform([small, small])
         let info = try #require(await fake.inventory().windows.first { $0.window == ref(1) })
         #expect(info.learnedMinimum == Size(width: 120, height: 90))
     }

@@ -195,7 +195,8 @@ public struct WindowTracker: Sendable {
         let identity = result.window.identity
         guard result.failure == nil, let actual = result.actual, actual.isValidGeometry, var info = windows[identity] else { return [] }
         let old = info
-        _ = learner.learn(window: identity, requested: result.requested, actual: actual)
+        // A fullscreen or minimized window does not take the requested size, so it teaches nothing.
+        if info.state == .present { _ = learner.learn(window: identity, requested: result.requested, actual: actual) }
         info.frame = actual
         info.learnedMinimum = learner.minimum(for: identity)
         windows[identity] = info

@@ -69,10 +69,15 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         let (system, log, refs) = try await tracking([fixture])
         let ref = try #require(refs.first)
 
-        await system.perform([.setFrame(ref, Rect(x: 100, y: 120, width: 100, height: 80))])
+        let small = Rect(x: 100, y: 120, width: 100, height: 80)
+        await system.perform([.setFrame(ref, small)])
         #expect(await log.wait(.seconds(1)) { if case .frameApplied(ref, _, _) = $0 { true } else { false } }, "no frameApplied within 1 s")
         let actual = try #require(applied(log.events, ref).first).actual
         #expect(near(actual.width, 250) && near(actual.height, 150), "read back \(actual.size)")
+        #expect(await system.windowInfo(ref)?.learnedMinimum == nil, "one read-back is not learned")
+        // A second refused write that reads back the same size confirms it.
+        await system.perform([.setFrame(ref, small)])
+        _ = await waitUntil(timeout: .seconds(1)) { applied(log.events, ref).count >= 2 }
         let learned = try #require(await system.windowInfo(ref)?.learnedMinimum)
         #expect(near(learned.width, 250) && near(learned.height, 150), "learned \(learned)")
     }

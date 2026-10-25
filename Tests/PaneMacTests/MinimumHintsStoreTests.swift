@@ -140,7 +140,10 @@ import Testing
         #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 300, height: 200))
         let requested = Rect(x: 40, y: 80, width: 100, height: 100)
         let actual = Rect(x: 40, y: 80, width: 350, height: 180)
-        _ = tracker.applyFrameResult(FrameWriteResult(window: Self.ref, requested: requested, actual: actual, failure: nil))
+        let result = FrameWriteResult(window: Self.ref, requested: requested, actual: actual, failure: nil)
+        _ = tracker.applyFrameResult(result)
+        #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 300, height: 200), "one read-back is not learned")
+        _ = tracker.applyFrameResult(result)
         #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 350, height: 200))
     }
 

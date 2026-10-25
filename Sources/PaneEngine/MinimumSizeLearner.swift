@@ -2,14 +2,23 @@ import PaneModel
 
 /// Learns each window's real minimum size from what its app did with a smaller request (D-13, in memory).
 ///
-/// Apps refuse an undersized `AXSize` silently: the write succeeds and the read-back is clamped. So on each
-/// axis where the read-back exceeds the request by more than `tolerance`, the learned minimum becomes the
-/// larger of the old value and the read-back. An axis read back smaller than requested (terminals snapping
-/// to whole cells) teaches nothing. Learned values only grow; an unlearned axis reads 0.
+/// Apps refuse an undersized `AXSize` silently: the write succeeds and the read-back is clamped. An axis read
+/// back more than `tolerance` above the request is a refusal, but one read-back can also be stale (an app that
+/// applies size later) or a snap, and a learned value is persisted per bundle. So a refusal is learned only when
+/// the next write's read-back is also refused on that axis and agrees within `tolerance`; anything else on that
+/// axis starts over. An axis read back smaller than requested (terminals snapping to whole cells) teaches
+/// nothing. Learned values only grow; an unlearned axis reads 0.
 public struct MinimumSizeLearner: Equatable, Sendable {
     public static let tolerance: Double = 2
 
     private var minimums: [WindowIdentity: Size] = [:]
+    /// The last write's refused read-back per axis, waiting for the next write to confirm it.
+    private var unconfirmed: [WindowIdentity: Refusal] = [:]
+
+    private struct Refusal: Equatable, Sendable {
+        var width: Double?
+        var height: Double?
+    }
 
     public init() {}
 
@@ -19,8 +28,18 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         guard requested.isValidGeometry, actual.isValidGeometry else { return nil }
         let old = minimums[window] ?? Size(width: 0, height: 0)
         var new = old
-        if actual.width > requested.width + Self.tolerance { new.width = max(old.width, actual.width) }
-        if actual.height > requested.height + Self.tolerance { new.height = max(old.height, actual.height) }
+        var refusal = unconfirmed[window] ?? Refusal()
+        func axis(_ requested: Double, _ actual: Double, _ last: inout Double?, _ learned: inout Double) {
+            guard actual > requested + Self.tolerance else {
+                last = nil
+                return
+            }
+            if let last, abs(actual - last) <= Self.tolerance { learned = max(learned, actual) }
+            last = actual
+        }
+        axis(requested.width, actual.width, &refusal.width, &new.width)
+        axis(requested.height, actual.height, &refusal.height, &new.height)
+        unconfirmed[window] = refusal == Refusal() ? nil : refusal
         guard new != old else { return nil }
         minimums[window] = new
         return new
@@ -40,5 +59,6 @@ public struct MinimumSizeLearner: Equatable, Sendable {
 
     public mutating func forget(_ window: WindowIdentity) {
         minimums[window] = nil
+        unconfirmed[window] = nil
     }
 }
