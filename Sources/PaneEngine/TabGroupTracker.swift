@@ -32,10 +32,13 @@ public struct TabResolution: Equatable, Sendable {
 /// standalone window listed last refresh and leads a new group with it. A window listed in AXWindows without a tab
 /// bar of its own is never a hidden tab, and leaves any group it was in unless it is the group's leader, its shown
 /// tab, or all that is left of it. A tracked standalone window not listed at the last refresh is never taken either.
+/// A listed member with a tab bar rebinds its group only when the shown tab is gone or the AXTabs counts agree, and
+/// never across known different Spaces. A group whose shown tab and known members are all gone (out of the CG list or
+/// AX-invalid) passes its identity only to a former tab: a listed, unreported window that was offscreen in its slot
+/// at the last refresh. Nothing here destroys a window; CloseRule's two sources still decide that.
 /// shortcut: without Space data (capability off or missing) Pane runs single-Space behaviour, and two same-frame tab
 /// groups of one app on two Spaces can be tracked as one window; with Space data, an unknown-Space hidden tab can stay
-/// out of its group until a tab switch shows it. Also, a non-leader tab left alone by closing the shown tab only
-/// rebinds once WindowServer drops the closed one (within the settle delay).
+/// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected).
 ///
 /// A group's identity is the `WindowIdentity` of its oldest already-tracked member, else of its first-seen visible
 /// member (the leader), for the group's whole life, even after the leader tab itself closes. Phases 3-4 must
@@ -49,6 +52,10 @@ public struct TabGroupTracker: Equatable, Sendable {
         var tabCount: Int
         /// The member last bound as the listed tab.
         var shown: UInt32
+        /// The shown tab's frame, Spaces and AXTabs count when it last bound.
+        var frame: Rect
+        var spaces: Set<UInt64>
+        var boundTabCount: Int
     }
 
     private var groups: [Int32: [Group]] = [:]
@@ -62,7 +69,8 @@ public struct TabGroupTracker: Equatable, Sendable {
     /// Resolves one refresh of `pid`: `visible` are its listed windows with their `AXTabs` count. Members are
     /// recomputed from `cgWindows` every time; a group whose members all left the CG list ends. `tracked` are the
     /// app's tracked window identities, oldest first: a standalone one that gains a tab (Cmd-T) leads the new group.
-    /// `spaces` are the CG windows' Spaces; nil means no Space data (single-Space behaviour).
+    /// `spaces` are the CG windows' Spaces; nil means no Space data (single-Space behaviour). `invalid` are the
+    /// windows whose AX element reported -25202 this refresh: for a group they count as gone, never as destroyed.
     public mutating func update(
         pid: Int32, bundleID: String, visible: [(id: UInt32, frame: Rect, tabCount: Int)], cgWindows: [CGWindowEntry],
         tracked: [WindowIdentity] = [], spaces: [UInt32: Set<UInt64>]? = nil, invalid: Set<UInt32> = []
@@ -80,32 +88,60 @@ public struct TabGroupTracker: Equatable, Sendable {
         }
         let leaders = Set(list.map(\.leader.windowID))
         let standalone = tracked.filter { identity in identity.pid == pid && !list.contains { $0.leader == identity } }
+        let trackedIDs = Set(tracked.filter { $0.pid == pid }.map(\.windowID))
         let listedTabCount = Dictionary(visible.map { ($0.id, $0.tabCount) }, uniquingKeysWith: max)
         let wasListed = lastListed[pid] ?? []
         func canBeHiddenTab(_ id: UInt32) -> Bool {
             if let tabCount = listedTabCount[id], tabCount < 2 { return false }
-            return wasListed.contains(id) || !standalone.contains { $0.windowID == id }
+            // A window folded in earlier stays a member until the fold guard decides it.
+            return wasListed.contains(id) || !standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) }
         }
+        func gone(_ id: UInt32) -> Bool { !inCG.contains(id) || invalid.contains(id) }
         // Two listed members of one group (a tab being dragged out): the onscreen leader, then the tab bar, binds first.
         func rank(_ v: (id: UInt32, frame: Rect, tabCount: Int)) -> [Int] {
             [onScreen.contains(v.id) ? 1 : 0, leaders.contains(v.id) ? 1 : 0, v.tabCount, -Int(v.id)]
         }
         let previousCG = lastCG[pid]
         func space(_ id: UInt32) -> Set<UInt64> { spaces?[id] ?? [] }
+        /// A listed member other than the shown tab rebinds its group only if the shown tab is gone from the CG list
+        /// offscreen or the AXTabs counts agree, and never across known different Spaces (a same-slot twin group).
+        func mayRebind(_ group: Group, _ v: (id: UInt32, frame: Rect, tabCount: Int)) -> Bool {
+            let shownStillHidden = cg.contains { $0.windowID == group.shown && !$0.onScreen } && !gone(group.shown)
+            return (!shownStillHidden || v.tabCount == group.boundTabCount) && !Self.differ(space(v.id), group.spaces)
+        }
         var groupFor: [UInt32: WindowIdentity] = [:]
         for v in visible.sorted(by: { rank($0).lexicographicallyPrecedes(rank($1)) }).reversed() {
             let shownSpace = space(v.id)
             let slot = cg.filter { $0.windowID != v.id && $0.layer == 0 && Self.matches($0.bounds, v.frame) }
             let candidates = slot.filter {
-                !$0.onScreen && canBeHiddenTab($0.windowID) && !Self.differ(space($0.windowID), shownSpace)
+                !$0.onScreen && !invalid.contains($0.windowID) && canBeHiddenTab($0.windowID) && !Self.differ(space($0.windowID), shownSpace)
             }.map(\.windowID)
             // Brand new (Cmd-T, New Tab): the tracked standalone window listed last refresh is the one it was opened from.
             let isNew = previousCG.map { !$0.contains { $0.windowID == v.id } } ?? false
             let opener = isNew ? standalone.first { wasListed.contains($0.windowID) && candidates.contains($0.windowID) }?.windowID : nil
+            var index = list.firstIndex { $0.members.contains(v.id) }
+            var refused: Int?
+            if let member = index, list[member].shown != v.id, v.tabCount >= 2, !mayRebind(list[member], v) {
+                list[member].members.remove(v.id)
+                (refused, index) = (member, nil)
+            }
             // A new tab joins the group whose members it finds, if they leave it room under its AXTabs count.
-            let index = list.firstIndex { $0.members.contains(v.id) }
-                ?? (v.tabCount >= 2 && opener == nil
-                    ? list.firstIndex { $0.members.count < v.tabCount && !$0.members.isDisjoint(with: candidates) } : nil)
+            if index == nil, v.tabCount >= 2, opener == nil {
+                index = list.indices.first { i in
+                    i != refused && list[i].members.count < v.tabCount && !list[i].members.isDisjoint(with: candidates)
+                        && !Self.differ(shownSpace, list[i].spaces)
+                }
+            }
+            // Orphan handoff: a group whose shown tab and every known member are gone passes to a listed window only
+            // if it was an offscreen entry in the group's slot last refresh, so a former tab. A brand-new window never is.
+            if index == nil, !trackedIDs.contains(v.id),
+               let previous = previousCG?.first(where: { $0.windowID == v.id && !$0.onScreen })
+            {
+                index = list.firstIndex { group in
+                    gone(group.shown) && group.members.allSatisfy(gone) && Self.matches(previous.bounds, group.frame)
+                        && !Self.differ(shownSpace, group.spaces)
+                }
+            }
             let own = index.map { list[$0].members } ?? []
             // A hidden tab may report no Space, so it cannot be told from a hidden tab of a same-slot group on another Space.
             let ambiguous = slot.contains { Self.differ(space($0.windowID), shownSpace) }
@@ -123,10 +159,14 @@ public struct TabGroupTracker: Equatable, Sendable {
                 list[index].members = members
                 list[index].tabCount = max(v.tabCount, 1)
                 list[index].shown = v.id
+                (list[index].frame, list[index].spaces, list[index].boundTabCount) = (v.frame, shownSpace, v.tabCount)
                 groupFor[v.id] = list[index].leader
             } else if v.tabCount >= 2 {
                 let leader = standalone.first { members.contains($0.windowID) } ?? WindowIdentity(windowID: v.id, pid: pid, bundleID: bundleID)
-                list.append(Group(leader: leader, members: members, tabCount: v.tabCount, shown: v.id))
+                list.append(Group(
+                    leader: leader, members: members, tabCount: v.tabCount, shown: v.id, frame: v.frame, spaces: shownSpace,
+                    boundTabCount: v.tabCount
+                ))
                 groupFor[v.id] = leader
             }
         }
@@ -159,6 +199,11 @@ public struct TabGroupTracker: Equatable, Sendable {
 
     public func isKnownMember(_ id: UInt32, pid: Int32) -> Bool {
         groups[pid]?.contains { $0.members.contains(id) } == true
+    }
+
+    /// The shown tab of the group `id` is a member of.
+    public func shownTab(containing id: UInt32, pid: Int32) -> UInt32? {
+        groups[pid]?.first { $0.members.contains(id) }?.shown
     }
 
     /// The members of the group led by `leader`; empty when it is not a group.

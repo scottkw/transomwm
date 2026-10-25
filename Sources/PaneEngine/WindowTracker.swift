@@ -22,6 +22,9 @@ public struct WindowTracker: Sendable {
     /// Windows whose last decision was `.recheck`, with how many in a row.
     private var rechecks: [WindowIdentity: Int] = [:]
     private var tabGroups = TabGroupTracker()
+    /// Windows folded into another window's tab group, not destroyed yet: the group's shown tab and how many
+    /// consecutive full refreshes they stayed folded under it.
+    private var foldPending: [WindowIdentity: (shown: UInt32, refreshes: Int)] = [:]
     private var learner = MinimumSizeLearner()
     /// The exclusion list, lowercased (D-12).
     private var excluded: Set<String> = []
@@ -58,13 +61,26 @@ public struct WindowTracker: Sendable {
                 return (id: id, frame: frame, tabCount: snapshot.tabGroup?.tabCount ?? 1)
             }
             let tracked = windows.values.filter { $0.window.pid == app.pid }.sorted { $0.window.creationOrder < $1.window.creationOrder }.map(\.window.identity)
+            let invalid = Set(app.windows.compactMap { o -> UInt32? in
+                guard case .failure(.invalidElement) = o.read else { return nil }
+                return o.windowID
+            })
             tabs = tabGroups.update(pid: app.pid, bundleID: app.bundleID, visible: visible, cgWindows: context.cgWindows, tracked: tracked,
-                                     spaces: context.windowSpaces)
-            // Merged into another window's tab group: that window is gone as a separate window.
+                                     spaces: context.windowSpaces, invalid: invalid)
+            // Merged into another window's tab group: gone as a separate window once two consecutive refreshes with
+            // the same shown tab agree, so one wrong fold never removes a live window (D-09).
+            var folds: [WindowIdentity: (shown: UInt32, refreshes: Int)] = [:]
             for identity in tabs.folded {
-                guard let info = remove(identity, at: context.now) else { continue }
-                events.append(.windowDestroyed(info.window))
+                let shown = tabGroups.shownTab(containing: identity.windowID, pid: app.pid) ?? identity.windowID
+                let previous = foldPending[identity]
+                let refreshes = previous?.shown == shown ? (previous?.refreshes ?? 0) + 1 : 1
+                if refreshes >= 2, let info = remove(identity, at: context.now) {
+                    events.append(.windowDestroyed(info.window))
+                } else {
+                    folds[identity] = (shown, refreshes)
+                }
             }
+            foldPending = foldPending.filter { $0.key.pid != app.pid }.merging(folds) { $1 }
         }
         // Probes of windows that left AXWindows only feed the close decision below.
         for observation in app.windows where observation.listedInAXWindows {
@@ -290,6 +306,7 @@ public struct WindowTracker: Sendable {
         lastReliable[identity] = nil
         rechecks[identity] = nil
         learner.forget(identity)
+        foldPending[identity] = nil
         closedIDs.insert(identity, at: now)
         return info
     }
