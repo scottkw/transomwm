@@ -132,6 +132,14 @@ import os
         emit(tracker.setExcluded(bundleIDs))
     }
 
+    /// Per-bundle minimums from earlier sessions (D-13): a new window of that bundle starts from its hint.
+    public func setBundleHints(_ hints: [String: Size]) {
+        tracker.setBundleHints(hints)
+    }
+
+    /// Called with a window's bundle ID and its new learned minimum whenever a frame write raises it.
+    public var onLearnedMinimum: ((String, Size) -> Void)?
+
     /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
     /// `Geometry.maxCoordinate`, and windows Pane does not track, are dropped and logged (T-02-32).
@@ -164,7 +172,11 @@ import os
         guard threads[thread.pid] === thread else { return }
         // FrameWriteResult carries no duration; the failure count alone degrades a hung app.
         if result.failure == .cannotComplete { record(thread.pid, .cannotComplete, .zero) }
+        let before = tracker.info(for: result.window.identity)?.learnedMinimum
         emit(tracker.applyFrameResult(result))
+        if let after = tracker.info(for: result.window.identity)?.learnedMinimum, after != before {
+            onLearnedMinimum?(result.window.bundleID, after)
+        }
     }
 
     public func windowInfo(_ window: PaneModel.WindowRef) async -> WindowInfo? {

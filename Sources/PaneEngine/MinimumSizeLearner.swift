@@ -26,6 +26,14 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         return new
     }
 
+    /// Starts `window` from a minimum learned in an earlier session (D-13). Like learning, it only ever raises
+    /// the value; a stored size that is not finite or is out of range is ignored.
+    public mutating func seed(_ window: WindowIdentity, minimum: Size) {
+        guard [minimum.width, minimum.height].allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= Geometry.maxCoordinate }) else { return }
+        let old = minimums[window] ?? Size(width: 0, height: 0)
+        minimums[window] = Size(width: max(old.width, minimum.width), height: max(old.height, minimum.height))
+    }
+
     public func minimum(for window: WindowIdentity) -> Size? {
         minimums[window]
     }

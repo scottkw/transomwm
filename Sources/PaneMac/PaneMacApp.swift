@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import PaneEngine
 import PanePrivate
+import os
 
 /// Entry point shared by the PaneApp executable and the Xcode-built app bundle.
 public enum PaneMacApp {
@@ -11,6 +12,7 @@ public enum PaneMacApp {
     private static var setupWindow: SetupWindowController?
     private static var trackedWindows: TrackedWindowsWindowController?
     private static let freezeTest = FreezeTest()
+    private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "hints")
 
     public static func run(arguments: [String]) -> Never {
         // First, in every build: a crash or quit during a Debug freeze must never leave an app stopped.
@@ -28,6 +30,18 @@ public enum PaneMacApp {
         // The window system enforces the list (D-12); the store only validates and keeps it.
         system.setExcludedBundleIDs(Set(exclusions.bundleIDs))
         exclusions.onChange = { system.setExcludedBundleIDs(Set(exclusions.bundleIDs)) }
+        // Learned minimums survive relaunch per bundle (D-13); a rejected file is logged and set aside by load().
+        let hints = MinimumHintsStore(directory: MinimumHintsStore.defaultDirectory)
+        hints.load()
+        system.setBundleHints(hints.hints)
+        system.onLearnedMinimum = { bundleID, minimum in
+            guard hints.record(bundleID: bundleID, minimum: minimum) else { return }
+            do {
+                try hints.save()
+            } catch {
+                logger.error("could not save \(MinimumHintsStore.fileName, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+        }
         let trackedController = TrackedWindowsWindowController(
             permission: permissionController, exclusions: exclusions,
             windowIDLookupAvailable: { system.capabilityReport[.axWindowID] == true }

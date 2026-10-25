@@ -25,6 +25,8 @@ public struct WindowTracker: Sendable {
     private var learner = MinimumSizeLearner()
     /// The exclusion list, lowercased (D-12).
     private var excluded: Set<String> = []
+    /// Per-bundle minimums from earlier sessions (D-13).
+    private var bundleHints: [String: Size] = [:]
     /// Quick follow-ups per window before it is left to the sweep: WindowServer drops a closed window a few
     /// hundred ms after AX reports it invalid, so the decision must be retried soon, but not forever.
     public static let maxQuickRechecks = 8
@@ -109,6 +111,10 @@ public struct WindowTracker: Sendable {
             info.tabCount = tabs.tabCount[identity] ?? 1
             info.displayUUID = Coordinates.displayUUID(for: frame, among: context.displays)
             info.isExcluded = excluded.contains(identity.bundleID.lowercased())
+            if old == nil, let hint = bundleHints[identity.bundleID] {
+                learner.seed(identity, minimum: hint)
+                info.learnedMinimum = learner.minimum(for: identity)
+            }
             windows[identity] = info
 
             guard let old else {
@@ -174,6 +180,7 @@ public struct WindowTracker: Sendable {
 
     /// Per-bundle minimums from earlier sessions (D-13): the learned minimum a window of that bundle starts from.
     public mutating func setBundleHints(_ hints: [String: Size]) {
+        bundleHints = hints
     }
 
     /// A finished frame write (D-17): the read-back becomes the window's frame and teaches its minimum. A
