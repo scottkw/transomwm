@@ -33,6 +33,9 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "ax")
     /// Window elements seen by `observe()` with their assigned IDs, each registered for the per-window notifications.
     private var windows: [UInt32: CachedWindow] = [:]
+    /// Per-window notifications of cached windows not registered yet (no observer, or the window was not AX-ready);
+    /// each `observe()` retries them.
+    private var unregisteredWindows: [UInt32: [String]] = [:]
     /// Test seam: identify windows by frame even when `_AXUIElementGetWindow` works.
     private let forceWindowIDFallback: Bool
     /// Latest-wins frame slots, one per window ID (D-16, T-02-34): a newer `enqueueFrame` overwrites a waiting one,
@@ -120,10 +123,6 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             }
             CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(created), .defaultMode)
             observer = created
-            // Created late: windows cached meanwhile get their per-window notifications now.
-            for cached in windows.values {
-                for name in Self.windowNotifications { _ = AXObserverAddNotification(created, cached.element, name as CFString, refcon) }
-            }
         }
         guard let observer else { return }
         // shortcut: a notification an app never supports is retried on every observe (one IPC each); cap it if one shows up.
@@ -289,18 +288,30 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     /// The job token: true once `stop()` was called.
     private var isStopped: Bool { stopped.withLock { $0 } }
 
-    /// Thread-confined. A window that left the cache (no longer listed or known) loses its registrations; it is
-    /// re-added if it returns.
+    /// Thread-confined. The cache always takes `current`, so frame writes and probes work even without an observer.
+    /// A window that left the cache (no longer listed or known) loses its registrations; it is re-added if it
+    /// returns. Registrations that failed, or had no observer yet, are retried here on every observe.
     private func updateWindows(_ current: [UInt32: CachedWindow]) {
-        guard let observer else { return }
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
         for (id, cached) in windows where current[id] == nil {
+            unregisteredWindows[id] = nil
+            guard let observer else { continue }
             for name in Self.windowNotifications { _ = AXObserverRemoveNotification(observer, cached.element, name as CFString) }
         }
-        for (id, cached) in current where windows[id] == nil {
-            for name in Self.windowNotifications { _ = AXObserverAddNotification(observer, cached.element, name as CFString, refcon) }
-        }
+        for id in current.keys where windows[id] == nil { unregisteredWindows[id] = Self.windowNotifications }
         windows = current
+        guard let observer else { return }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        for (id, names) in unregisteredWindows {
+            guard let element = current[id]?.element else { continue }
+            let failed = names.filter { name in
+                let error = AXObserverAddNotification(observer, element, name as CFString, refcon)
+                // An element that does not support a notification never will.
+                if error == .success || error == .notificationAlreadyRegistered || error == .notificationUnsupported { return false }
+                logRegistrationFailure("\(name) on window \(id)", error)
+                return true
+            }
+            unregisteredWindows[id] = failed.isEmpty ? nil : failed
+        }
     }
 
     /// Stops the run loop after already-queued jobs; the thread then tears down its AX objects.
