@@ -44,14 +44,14 @@ Filled in by the planner/executor per task. Requirement → test map from RESEAR
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|----------|-----------|-------------------|-------------|--------|
 | WIN-01 | Permission reducer transitions; stale forms A/B; reset exit-code handling | unit | `swift test --filter PermissionReducerTests` | ✅ | ✅ green |
-| WIN-02 | Inventory + created/destroyed events; CG-only and non-AXWindow ignored | unit + integration | `swift test --filter "WindowTrackerTests\|ScenarioTests\|FixtureTrackingTests\|LiveTrackingTests"` | ✅ | ✅ green | ⬜ pending |
-| WIN-03 | Hung app doesn't block other apps' commands; degraded tracker | unit + integration | `swift test --filter "ResponsivenessTrackerTests\|ResponsivenessScenarioTests\|FreezeIntegrationTests"` | ✅ | ✅ green | ⬜ pending |
-| WIN-04 | Learned minimum; latest-wins coalescing; size→pos→size; display coordinates | unit + integration | `swift test --filter "MinimumSizeLearnerTests\|FrameScenarioTests\|FrameWriteIntegrationTests\|CoordinatesTests"` | ✅ | ✅ green | ❌ W0 | ⬜ pending |
+| WIN-02 | Inventory + created/destroyed events; CG-only and non-AXWindow ignored | unit + integration | `swift test --filter "WindowTrackerTests\|ScenarioTests\|FixtureTrackingTests\|LiveTrackingTests"` | ✅ | ✅ green |
+| WIN-03 | Hung app doesn't block other apps' commands; degraded tracker | unit + integration | `swift test --filter "ResponsivenessTrackerTests\|ResponsivenessScenarioTests\|FreezeIntegrationTests"` | ✅ | ✅ green |
+| WIN-04 | Learned minimum; latest-wins coalescing; size→pos→size; display coordinates | unit + integration | `swift test --filter "MinimumSizeLearnerTests\|FrameScenarioTests\|FrameWriteIntegrationTests\|CoordinatesTests"` | ✅ | ✅ green |
 | WIN-05 | Corpus classification matches labels | unit + integration | `swift test --filter "ClassifierCorpusTests\|TrackerClassificationTests"` | ✅ | ✅ green |
-| WIN-06 | Tab group = one window; switch rebinds without create/destroy | unit + integration | `swift test --filter "TabGroupTrackerTests\|TabScenarioTests\|TabsIntegrationTests"` | ✅ | ✅ green | ⬜ pending |
+| WIN-06 | Tab group = one window; switch rebinds without create/destroy | unit + integration | `swift test --filter "TabGroupTrackerTests\|TabScenarioTests\|TabsIntegrationTests"` | ✅ | ✅ green |
 | WIN-08 | Excluded bundle IDs: commands dropped, windows still listed | unit | `swift test --filter "ExclusionStoreTests\|ExclusionScenarioTests\|ExclusionIntegrationTests"` | ✅ | ✅ green |
-| WIN-09 | Close rule table incl. timeout/lock/terminated; closed-ID cache | unit + integration | `swift test --filter "CloseRuleTests\|CloseScenarioTests\|CloseIntegrationTests"` | ✅ | ✅ green (⚠️ rare unhide flake, deferred-items.md) | ⬜ pending |
-| SAFE-05 | Forced-off capability → fallback matcher; launch with flag | unit + integration | `swift test --filter "CapabilitiesTests\|FallbackMatcherTests\|FallbackIntegrationTests"` | ✅ | ✅ green | ⬜ pending |
+| WIN-09 | Close rule table incl. timeout/lock/terminated; closed-ID cache | unit + integration | `swift test --filter "CloseRuleTests\|CloseScenarioTests\|CloseIntegrationTests"` | ✅ | ✅ green (⚠️ rare unhide flake, deferred-items.md) |
+| SAFE-05 | Forced-off capability → fallback matcher; launch with flag | unit + integration | `swift test --filter "CapabilitiesTests\|FallbackMatcherTests\|FallbackIntegrationTests"` | ✅ | ✅ green |
 | P1 obligation | Undo-revived windows re-queried, reported via `World.apply` | unit | `swift test --filter LifecycleSyncTests` | ✅ | ✅ green |
 | guardrail | PaneEngine/PaneModel stay AppKit-free | unit | `swift test --filter NoAppKitTests` | ✅ | ✅ green |
 
