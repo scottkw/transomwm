@@ -2,10 +2,10 @@
 phase: "2"
 slug: "window-control"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: true) (#2117)
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-24"
 ---
 
@@ -43,17 +43,17 @@ Filled in by the planner/executor per task. Requirement → test map from RESEAR
 
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|----------|-----------|-------------------|-------------|--------|
-| WIN-01 | Permission reducer transitions; stale forms A/B; reset exit-code handling | unit | `swift test --filter PermissionReducerTests` | ❌ W0 | ⬜ pending |
-| WIN-02 | Inventory + created/destroyed events; CG-only and non-AXWindow ignored | unit + integration | `swift test --filter "TrackingTests\|FixtureTrackingTests"` | ❌ W0 | ⬜ pending |
-| WIN-03 | Hung app doesn't block other apps' commands; degraded tracker | unit + integration | `swift test --filter "ResponsivenessTests\|FreezeIntegrationTests"` | ❌ W0 | ⬜ pending |
-| WIN-04 | Learned minimum; latest-wins coalescing; size→pos→size; display coordinates | unit + integration | `swift test --filter "MinimumSizeLearnerTests\|FrameWriteIntegrationTests\|CoordinatesTests"` | ❌ W0 | ⬜ pending |
-| WIN-05 | Corpus classification matches labels | unit + integration | `swift test --filter ClassifierCorpusTests` | ❌ W0 | ⬜ pending |
-| WIN-06 | Tab group = one window; switch rebinds without create/destroy | unit + integration | `swift test --filter "TabGroupTrackerTests\|TabsIntegrationTests"` | ❌ W0 | ⬜ pending |
-| WIN-08 | Excluded bundle IDs: commands dropped, windows still listed | unit | `swift test --filter ExclusionTests` | ❌ W0 | ⬜ pending |
-| WIN-09 | Close rule table incl. timeout/lock/terminated; closed-ID cache | unit + integration | `swift test --filter "CloseRuleTests\|CloseIntegrationTests"` | ❌ W0 | ⬜ pending |
-| SAFE-05 | Forced-off capability → fallback matcher; launch with flag | unit + integration | `swift test --filter "CapabilitiesTests\|FallbackMatcherTests"` | ❌ W0 | ⬜ pending |
-| P1 obligation | Undo-revived windows re-queried, reported via `World.apply` | unit | `swift test --filter LifecycleSyncTests` | ❌ W0 | ⬜ pending |
-| guardrail | PaneEngine/PaneModel stay AppKit-free | unit | `swift test --filter NoAppKitTests` | ✅ | ⬜ pending |
+| WIN-01 | Permission reducer transitions; stale forms A/B; reset exit-code handling | unit | `swift test --filter PermissionReducerTests` | ✅ | ✅ green |
+| WIN-02 | Inventory + created/destroyed events; CG-only and non-AXWindow ignored | unit + integration | `swift test --filter "WindowTrackerTests\|ScenarioTests\|FixtureTrackingTests\|LiveTrackingTests"` | ✅ | ✅ green | ⬜ pending |
+| WIN-03 | Hung app doesn't block other apps' commands; degraded tracker | unit + integration | `swift test --filter "ResponsivenessTrackerTests\|ResponsivenessScenarioTests\|FreezeIntegrationTests"` | ✅ | ✅ green | ⬜ pending |
+| WIN-04 | Learned minimum; latest-wins coalescing; size→pos→size; display coordinates | unit + integration | `swift test --filter "MinimumSizeLearnerTests\|FrameScenarioTests\|FrameWriteIntegrationTests\|CoordinatesTests"` | ✅ | ✅ green | ❌ W0 | ⬜ pending |
+| WIN-05 | Corpus classification matches labels | unit + integration | `swift test --filter "ClassifierCorpusTests\|TrackerClassificationTests"` | ✅ | ✅ green |
+| WIN-06 | Tab group = one window; switch rebinds without create/destroy | unit + integration | `swift test --filter "TabGroupTrackerTests\|TabScenarioTests\|TabsIntegrationTests"` | ✅ | ✅ green | ⬜ pending |
+| WIN-08 | Excluded bundle IDs: commands dropped, windows still listed | unit | `swift test --filter "ExclusionStoreTests\|ExclusionScenarioTests\|ExclusionIntegrationTests"` | ✅ | ✅ green |
+| WIN-09 | Close rule table incl. timeout/lock/terminated; closed-ID cache | unit + integration | `swift test --filter "CloseRuleTests\|CloseScenarioTests\|CloseIntegrationTests"` | ✅ | ✅ green (⚠️ rare unhide flake, deferred-items.md) | ⬜ pending |
+| SAFE-05 | Forced-off capability → fallback matcher; launch with flag | unit + integration | `swift test --filter "CapabilitiesTests\|FallbackMatcherTests\|FallbackIntegrationTests"` | ✅ | ✅ green | ⬜ pending |
+| P1 obligation | Undo-revived windows re-queried, reported via `World.apply` | unit | `swift test --filter LifecycleSyncTests` | ✅ | ✅ green |
+| guardrail | PaneEngine/PaneModel stay AppKit-free | unit | `swift test --filter NoAppKitTests` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -61,12 +61,12 @@ Filled in by the planner/executor per task. Requirement → test map from RESEAR
 
 ## Wave 0 Requirements
 
-- [ ] `Package.swift`: targets `PanePrivate`, `PaneMac` (+ library product), `PaneApp`, `pane-dump`, `PaneFixtureApp`, `PaneTestSupport`; test targets `PaneEngineTests`, `PaneMacIntegrationTests`
-- [ ] `Sources/PaneTestSupport/FakeWindowSystem.swift` — shared fixture (actor)
-- [ ] `Sources/PaneFixtureApp/main.swift` — windows with tabs, sheet, utility panel, borderless floating, `fullScreenNone`, `minSize`; command channel to open/close windows
-- [ ] `Tests/PaneEngineTests/Fixtures/AXDumps/` — corpus directory + JSON schema doc
-- [ ] `xcode/project.yml`, `scripts/generate.sh`, `.gitignore` entries
-- [ ] XcodeGen installed (checkpoint) and signed Debug build + designated requirement verified
+- [x] `Package.swift`: targets `PanePrivate`, `PaneMac` (+ library product), `PaneApp`, `pane-dump`, `PaneFixtureApp`, `PaneTestSupport`; test targets `PaneEngineTests`, `PaneMacIntegrationTests`
+- [x] `Sources/PaneTestSupport/FakeWindowSystem.swift` — shared fixture (actor)
+- [x] `Sources/PaneFixtureApp/main.swift` — windows with tabs, sheet, utility panel, borderless floating, `fullScreenNone`, `minSize`; command channel to open/close windows
+- [x] `Tests/PaneEngineTests/Fixtures/AXDumps/` — corpus directory + JSON schema doc
+- [x] `xcode/project.yml`, `scripts/generate.sh`, `.gitignore` entries
+- [x] XcodeGen installed (checkpoint) and signed Debug build + designated requirement verified
 
 ---
 
@@ -85,11 +85,19 @@ Filled in by the planner/executor per task. Requirement → test map from RESEAR
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-10-25 (all 11 rows have automated suites; full `swift test` green incl. live integration in a trusted terminal)
+
+## Validation Audit 2026-10-25
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
