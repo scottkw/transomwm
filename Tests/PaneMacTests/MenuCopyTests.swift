@@ -76,3 +76,11 @@ import Testing
         #expect(MenuCopy.noExclusions == "No apps excluded")
     }
 }
+
+@Suite struct NudgeMenuCopyTests {
+    @Test func nudgeItemAndItsDisabledTitles() {
+        #expect(MenuCopy.nudgeItem == "Nudge Focused Window")
+        #expect(MenuCopy.nudgeExcluded == "Nudge Focused Window (app excluded)")
+        #expect(MenuCopy.nudgeNoWindow == "Nudge Focused Window (no window)")
+    }
+}
