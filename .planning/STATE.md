@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Completed 02-10-PLAN.md
-last_updated: "2026-10-25T16:25:34.609Z"
+stopped_at: Completed 02-11-PLAN.md
+last_updated: "2026-10-25T16:38:34.228Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 8e100b0d63728f03d75ad0fdfe2e7af00a819c9c
+state_head: cdfd5c20ec96859464371b59d8eb03b099168db9
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 16
+  completed_plans: 17
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 (Window Control) — EXECUTING
-Plan: 11 of 13
+Plan: 12 of 13
 Status: Ready to execute
 Last activity: 2026-10-24 — Phase 2 execution started
 
@@ -72,6 +72,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P08 | 10 min | 3 tasks | 13 files |
 | Phase 2 P09 | 19 min | 3 tasks | 16 files |
 | Phase 2 P10 | 11 min | 2 tasks | 9 files |
+| Phase 2 P11 | 10 min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,9 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-09: PaneFixtureApp frees a closed NSWindow; a kept NSWindow keeps its CG entry
 - [Phase 2]: 02-10: A native tab group is one tracked window under its first-seen tab's identity; visibleMemberID (set on every window) names the shown tab and is what Phases 3-4 must address
 - [Phase 2]: 02-10: Close decisions go through the shown tab; a group survives a closed tab while any member is still in the CG list and is destroyed only with its last member
+- [Phase 2]: 02-11: capability session state is a CapabilitySession instance (Capabilities.session shared); tests build their own so they never switch the lookup off for integration tests in the same process
+- [Phase 2]: 02-11: synthetic CG presence is one-to-one; windows AX lists this refresh claim same-bounds CG entries first, so the closed one of two identical synthetic windows closes
+- [Phase 2]: 02-11: in fallback mode a cached AX element keeps its ID and source for its cache life; synthetic IDs are session-only
 
 ### Pending Todos
 
@@ -161,6 +165,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-25T16:25:34.534Z
-Stopped at: Completed 02-10-PLAN.md
+Last session: 2026-10-25T16:38:34.174Z
+Stopped at: Completed 02-11-PLAN.md
 Resume file: None

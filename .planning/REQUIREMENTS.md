@@ -49,7 +49,7 @@
 - [ ] **SAFE-02**: After a crash or force-quit, the next launch restores stranded windows on-screen
 - [ ] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
 - [ ] **SAFE-04**: Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
-- [ ] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
+- [x] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
 - [ ] **SAFE-06**: Quitting and relaunching Pane while apps keep running restores each display's layout with the same windows in their tiles
 
 ### Zoom
@@ -165,7 +165,7 @@ Populated by the roadmapper on 2026-10-23.
 | SAFE-02 | Phase 3 | Pending |
 | SAFE-03 | Phase 3 | Pending |
 | SAFE-04 | Phase 3 | Pending |
-| SAFE-05 | Phase 2 | Pending |
+| SAFE-05 | Phase 2 | Complete |
 | SAFE-06 | Phase 3 | Pending |
 | ZOOM-01 | Phase 4 | Pending |
 | ZOOM-02 | Phase 4 | Pending |
