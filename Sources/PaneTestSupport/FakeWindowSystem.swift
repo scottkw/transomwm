@@ -104,6 +104,8 @@ public actor FakeWindowSystem: WindowSystem {
     private var currentSpace: UInt64?
     /// The selected tab of each tab group.
     private var selectedTabs: [UInt32: UInt32] = [:]
+    /// Space-switch notifications, consumed per app as `AXWindowSystem` does.
+    private var spaceSwitches = SpaceSwitchMarks()
 
     public init(now: ContinuousClock.Instant = .now) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -162,9 +164,11 @@ public actor FakeWindowSystem: WindowSystem {
     }
 
     /// A Space switch: AX lists, and WindowServer shows onscreen, exactly the open windows on `space` that are not
-    /// hidden tabs.
-    public func showSpace(_ space: UInt64) {
+    /// hidden tabs. With `notifies` the switch marks every app's next full update, as the live
+    /// `activeSpaceDidChangeNotification` does; without it the notification never arrived.
+    public func showSpace(_ space: UInt64, notifies: Bool = true) {
         currentSpace = space
+        if notifies { spaceSwitches.spaceDidChange(pids: apps.keys) }
         for (id, window) in windows {
             let shown = window.space == space && !isHiddenTab(window) && window.axValid && window.inCGList
             windows[id]?.listedInAX = shown
@@ -224,6 +228,7 @@ public actor FakeWindowSystem: WindowSystem {
     public func terminate(pid: Int32) {
         apps[pid]?.terminated = true
         responsiveness.forget(pid: pid)
+        spaceSwitches.forget(pid: pid)
         for (id, window) in windows where window.pid == pid {
             windows[id]?.axValid = false
         }
@@ -246,6 +251,8 @@ public actor FakeWindowSystem: WindowSystem {
             let change = record(pid, app.hung ? .cannotComplete : .success, app.hung ? Self.hungJobDuration : app.responseDelay)
             guard change == .recovered(pid) else { return }
         }
+        // Synchronous, so the reads always begin after any earlier `showSpace`.
+        let readGeneration = spaceSwitches.generation
         let observation: AppObservation
         if app.hung || (locked && !lockAXInvalid) {
             observation = AppObservation(pid: pid, bundleID: app.bundleID, appHidden: app.hidden, windows: [],
@@ -283,7 +290,8 @@ public actor FakeWindowSystem: WindowSystem {
         }
         record(pid, observation.listFailure == nil ? .success : .cannotComplete, observation.duration)
         // Like AXWindowSystem, a hung app's failed observation reaches the tracker: CloseRule must keep its windows (WIN-09).
-        yield(tracker.ingest(observation, context: context()))
+        let spaceChanged = observation.listFailure == nil && spaceSwitches.take(pid: pid, readGeneration: readGeneration)
+        yield(tracker.ingest(observation, context: context(spaceChanged: spaceChanged)))
         guard !app.hung else { return }
         for (identity, held) in heldFrames.filter({ $0.key.pid == pid }).sorted(by: { $0.key < $1.key }) {
             heldFrames[identity] = nil
@@ -311,7 +319,7 @@ public actor FakeWindowSystem: WindowSystem {
 
     /// The CG list (empty while locked), displays, session state, clock and, while Spaces are available, each CG
     /// window's Space (a hidden tab's is empty unless hidden tabs report it) of the simulation right now.
-    private func context() -> ObservationContext {
+    private func context(spaceChanged: Bool = false) -> ObservationContext {
         let cgWindows = locked ? [] : windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
@@ -319,7 +327,8 @@ public actor FakeWindowSystem: WindowSystem {
             window.space.map { (window.id, isHiddenTab(window) && !hiddenTabsReportSpace ? Set<UInt64>() : [$0]) }
         }) : nil
         return ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !(locked && lockGate),
-                                  initialSweep: !initialSweepDone, now: clock, windowSpaces: windowSpaces)
+                                  initialSweep: !initialSweepDone, now: clock, windowSpaces: windowSpaces,
+                                  spaceChanged: spaceChanged)
     }
 
     private func yield(_ events: [WindowEvent]) {

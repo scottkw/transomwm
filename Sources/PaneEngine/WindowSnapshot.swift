@@ -183,13 +183,17 @@ public struct ObservationContext: Sendable {
     /// Each CG window's Spaces (SkyLight); nil means no Space data (the Spaces capability is off or missing).
     /// A window with no Space reported maps to an empty set.
     public var windowSpaces: [UInt32: Set<UInt64>]?
+    /// The active Space changed since this app's previous full update (live: `NSWorkspace.activeSpaceDidChangeNotification`,
+    /// through `SpaceSwitchMarks`). It matters only without Space data.
+    public var spaceChanged: Bool
 
     public init(
         cgWindows: [CGWindowEntry] = [], displays: [DisplayInfo] = [], sessionActive: Bool = true, initialSweep: Bool = false,
-        now: ContinuousClock.Instant, windowSpaces: [UInt32: Set<UInt64>]? = nil
+        now: ContinuousClock.Instant, windowSpaces: [UInt32: Set<UInt64>]? = nil, spaceChanged: Bool = false
     ) {
         self.cgWindows = cgWindows
         self.windowSpaces = windowSpaces
+        self.spaceChanged = spaceChanged
         self.displays = displays
         self.sessionActive = sessionActive
         self.initialSweep = initialSweep

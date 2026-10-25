@@ -488,6 +488,49 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events) == [ref(30)])
         #expect(created(events).map(\.window) == [ref(30), ref(50)])
     }
+
+    /// G = 30 + 31 on Space 1 (shown 30) and an untracked same-frame standard window Z (50) on Space 2, after two refreshes.
+    private func groupBesideATwinOnSpace2(_ spacesAvailable: Bool, _ hiddenTabsReportSpace: Bool) async -> FakeWindowSystem {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        await fake.tabGroup(ids: [30, 31], frame: frame, pid: pid, visible: 30, space: 1)
+        await fake.open(.standard(id: 50, pid: pid, frame: frame, space: 2))
+        await fake.showSpace(1)
+        await refresh(fake)
+        await refresh(fake, advancing: true)
+        return fake
+    }
+
+    /// 02-14 known limit 3: the whole group closes in the same update as a switch to Space 2, which shows Z. Z was
+    /// offscreen in G's slot at the last refresh, but the switch's notification flags the update, so Z never inherits G.
+    @Test(arguments: modes)
+    func aSpaceSwitchAsAWholeGroupClosesNeverHandsTheGroupToTheShownTwin(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await groupBesideATwinOnSpace2(spacesAvailable, hiddenTabsReportSpace)
+        await fake.close(30)
+        await fake.close(31)
+        await fake.showSpace(2)
+        for _ in 0..<3 {
+            await refresh(fake, advancing: true)
+            #expect(await fake.windowInfo(ref(30))?.visibleMemberID != 50)
+        }
+        #expect(await summary(fake) == [[50, 50, 1]])
+        let events = await drain(fake.events)
+        #expect(destroyed(events) == [ref(30)])
+        #expect(created(events).map(\.window) == [ref(30), ref(50)])
+    }
+
+    /// Asserts a known limit, NOT desired behaviour: without Space data and without the Space-switch notification
+    /// (it reached main only after the ingest of the update that already saw the new Space), the shown twin Z wrongly
+    /// inherits the closed group. It shows the race scenario exercises the handoff and that the flag is what closes it.
+    /// Invert the expectation to the race's (`[[50, 50, 1]]`, G destroyed) when this residual limit closes.
+    @Test func knownLimitWithoutTheSpaceNotificationTheShownTwinTakesTheClosedGroup() async {
+        let fake = await groupBesideATwinOnSpace2(false, false)
+        await fake.close(30)
+        await fake.close(31)
+        await fake.showSpace(2, notifies: false)
+        for _ in 0..<3 { await refresh(fake, advancing: true) }
+        #expect(await summary(fake) == [[30, 50, 1]])
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+    }
 }
 
 /// The fold guard (D-09, WIN-09): a window folded into another window's tab group is reported destroyed only after it
