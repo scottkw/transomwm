@@ -1,5 +1,7 @@
+import ApplicationServices
 import PaneEngine
-import PaneMac
+@testable import PaneMac
+import PanePrivate
 import PaneModel
 import Testing
 
@@ -69,5 +71,27 @@ import Testing
         let remaining = await tracked()
         #expect(remaining.count == 1)
         #expect(remaining.first.map { $0.window.identity } != destroyed().first?.identity)
+    }
+
+    /// WR-02 (re-review): an element first given a synthetic ID keeps it once the private lookup works for it, so
+    /// the window is never seen again under its real ID as a second window.
+    @Test(.timeLimit(.minutes(1)))
+    func anElementCachedUnderAFallbackIDKeepsItWhenTheLookupLaterSucceeds() async throws {
+        try #require(Capabilities.isAvailable(.axWindowID), "needs the private lookup")
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let realID = try #require(fixture.windows.first).id
+        let app = AXUIElementCreateApplication(fixture.pid)
+        var value: CFTypeRef?
+        #expect(AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success)
+        let element = try #require((value as? [AXUIElement])?.first)
+        let synthetic = WindowIdentity.syntheticIDBase | 1
+        let read = try #require(AXSnapshotReader.observeApp(
+            app, pid: fixture.pid, bundleID: "test.fallback", hidden: false,
+            cache: [synthetic: CachedWindow(element: element, source: .synthetic)]
+        ))
+        #expect(read.observation.windows.map(\.windowID) == [synthetic], "the lookup's \(realID) replaced the cached ID")
+        #expect(read.observation.windows.map(\.idSource) == [.synthetic])
+        #expect(read.elements.map { Array($0.keys) } == [synthetic])
     }
 }
