@@ -35,16 +35,26 @@ public enum Capabilities {
         launchFlags.disabled.contains(capability)
     }
 
-    /// Whether each capability is usable in this process.
+    /// Whether each capability is usable right now (session-aware).
     public static func report() -> [Capability: Bool] {
         Dictionary(uniqueKeysWithValues: Capability.allCases.map { ($0, isAvailable($0)) })
     }
 
-    static func isAvailable(_ capability: Capability) -> Bool {
+    /// The process-wide session. Forced off at launch, missing, or switched off for the session all mean unavailable.
+    static let session = CapabilitySession(loaded: { capability in
         switch capability {
         case .axWindowID: AXWindowID.function != nil
         }
-    }
+    })
+
+    public static func isAvailable(_ capability: Capability) -> Bool { session.isAvailable(capability) }
+
+    /// An unexpected failure of the capability's private function (D-15 call-time degradation).
+    public static func recordFailure(_ capability: Capability) { session.recordFailure(capability) }
+
+    public static func recordSuccess(_ capability: Capability) { session.recordSuccess(capability) }
+
+    public static var failureLimit: Int { CapabilitySession.failureLimit }
 
     /// Logs `name: available|off` per capability, and each unknown `--disable-private` name as an error.
     public static func logReport() {
@@ -58,17 +68,48 @@ public enum Capabilities {
     }
 }
 
-/// Call-time degradation state for the capabilities (stub).
+/// Call-time degradation (D-15): a capability whose private function exists but keeps failing is switched off for
+/// the rest of the session. Safe from any AX thread; state sits behind one lock (`Mutex` needs macOS 15).
 public final class CapabilitySession: Sendable {
-    private let loaded: @Sendable (Capability) -> Bool
+    /// Consecutive unexpected failures that switch a capability off.
+    public static let failureLimit = 5
 
+    private struct State {
+        var failures: [Capability: Int] = [:]
+        var disabled: Set<Capability> = []
+    }
+
+    private let loaded: @Sendable (Capability) -> Bool
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    /// `loaded` says whether the capability's private function resolved (and was not forced off at launch).
     public init(loaded: @escaping @Sendable (Capability) -> Bool) {
         self.loaded = loaded
     }
 
-    public func isAvailable(_ capability: Capability) -> Bool { loaded(capability) }
+    public func isAvailable(_ capability: Capability) -> Bool {
+        loaded(capability) && !state.withLock { $0.disabled.contains(capability) }
+    }
 
-    @discardableResult public func recordFailure(_ capability: Capability) -> Bool { false }
+    /// Counts one unexpected failure. Returns true only for the call that switched the capability off, which logs it.
+    @discardableResult public func recordFailure(_ capability: Capability) -> Bool {
+        guard loaded(capability) else { return false }
+        let switchedOff = state.withLock { state -> Bool in
+            guard !state.disabled.contains(capability) else { return false }
+            state.failures[capability, default: 0] += 1
+            guard state.failures[capability, default: 0] >= Self.failureLimit else { return false }
+            state.disabled.insert(capability)
+            return true
+        }
+        if switchedOff {
+            Capabilities.logger.error(
+                "\(capability.rawValue, privacy: .public) failed \(Self.failureLimit, privacy: .public) times in a row; off for this session, matching by frame"
+            )
+        }
+        return switchedOff
+    }
 
-    public func recordSuccess(_ capability: Capability) {}
+    public func recordSuccess(_ capability: Capability) {
+        state.withLock { $0.failures[capability] = 0 }
+    }
 }
