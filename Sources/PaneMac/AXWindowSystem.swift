@@ -68,6 +68,11 @@ import os
         hintContinuation.finish()
     }
 
+    /// Test seam: identify windows by frame (true) or through `_AXUIElementGetWindow` again (false), for every app.
+    func setForceWindowIDFallback(_ force: Bool) {
+        // RED stub (02-16 Task 1)
+    }
+
     /// Session-aware: a lookup switched off mid-session reads as off here, in the menu and in the footer.
     public var capabilityReport: [Capability: Bool] { Capabilities.report() }
 

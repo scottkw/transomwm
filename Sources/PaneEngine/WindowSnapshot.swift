@@ -112,13 +112,20 @@ public struct WindowObservation: Equatable, Sendable {
     public var read: Result<WindowSnapshot, AXFailure>
     public var title: String
     public var listedInAXWindows: Bool
+    /// The ID this element was known by until this refresh corrected it (a fallback ID the private lookup replaced,
+    /// or one another element turned out to own). The tracker re-keys that window to `windowID` before anything else.
+    public var replacesWindowID: UInt32?
 
-    public init(windowID: UInt32?, idSource: WindowIDSource, read: Result<WindowSnapshot, AXFailure>, title: String, listedInAXWindows: Bool = true) {
+    public init(
+        windowID: UInt32?, idSource: WindowIDSource, read: Result<WindowSnapshot, AXFailure>, title: String, listedInAXWindows: Bool = true,
+        replacesWindowID: UInt32? = nil
+    ) {
         self.windowID = windowID
         self.idSource = idSource
         self.read = read
         self.title = title
         self.listedInAXWindows = listedInAXWindows
+        self.replacesWindowID = replacesWindowID
     }
 }
 

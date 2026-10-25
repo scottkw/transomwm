@@ -120,3 +120,49 @@ private func identity(_ id: UInt32, pid: Int32 = pid) -> WindowIdentity {
         #expect(again == [.windowCreated(try #require(tracker.info(for: identity(7))))])
     }
 }
+
+private let synthetic = WindowIdentity.syntheticIDBase | 1
+private let real: UInt32 = 42
+
+private func listed(_ id: UInt32, _ source: WindowIDSource, replaces: UInt32? = nil) -> WindowObservation {
+    WindowObservation(windowID: id, idSource: source, read: .success(snapshot()), title: "Secret Plan.txt", replacesWindowID: replaces)
+}
+
+/// D-15, lead decision 2026-10-25: a fallback ID corrected by the lookup is re-keyed, never closed and reopened.
+@Suite struct RekeyTests {
+    @Test func aSyntheticWindowIsRekeyedToItsRealIDAndStaysOneWindow() throws {
+        var tracker = WindowTracker()
+        tracker.setBundleHints([bundleID: Size(width: 200, height: 150)])
+        _ = tracker.ingest(app(listed(synthetic, .synthetic)), context: context)
+        let before = try #require(tracker.info(for: identity(synthetic)))
+        #expect(before.learnedMinimum == Size(width: 200, height: 150))
+
+        let events = tracker.ingest(app(listed(real, .axPrivate, replaces: synthetic)), context: context)
+        #expect(tracker.windows.count == 1)
+        let after = try #require(tracker.info(for: identity(real)))
+        #expect(after.window.creationOrder == before.window.creationOrder)
+        #expect(after.window.titleHint == before.window.titleHint)
+        #expect(after.idSource == .axPrivate)
+        #expect(after.visibleMemberID == real)
+        #expect(after.learnedMinimum == Size(width: 200, height: 150))
+        #expect(events == [.windowRekeyed(from: before.window, to: after)])
+        #expect(tracker.ingest(app(listed(real, .axPrivate)), context: context).isEmpty)
+    }
+
+    @Test func aPendingWindowRekeyedMovesSilentlyAndIsReportedOnceAfterItsSettleDelay() throws {
+        let start = ContinuousClock.now
+        var tracker = WindowTracker()
+        #expect(tracker.ingest(app(listed(synthetic, .synthetic)), context: ObservationContext(now: start)).isEmpty)
+        #expect(tracker.ingest(app(listed(real, .axPrivate, replaces: synthetic)), context: ObservationContext(now: start + .milliseconds(100))).isEmpty)
+        let events = tracker.ingest(app(listed(real, .axPrivate)), context: ObservationContext(now: start + .milliseconds(250)))
+        #expect(events == [.windowCreated(try #require(tracker.info(for: identity(real))))])
+        #expect(tracker.windows.count == 1)
+    }
+
+    @Test func aRekeyOfAnUnknownWindowDoesNothing() {
+        var tracker = WindowTracker()
+        #expect(tracker.rekey(from: identity(synthetic), to: identity(real)).isEmpty)
+        #expect(tracker.windows.isEmpty)
+        #expect(!tracker.hasPendingWindows(pid: pid))
+    }
+}

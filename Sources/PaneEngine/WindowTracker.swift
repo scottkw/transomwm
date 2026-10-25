@@ -192,6 +192,11 @@ public struct WindowTracker: Sendable {
         return events
     }
 
+    /// The window known as `from` is the same window as `to` (a corrected ID, D-15).
+    public mutating func rekey(from: WindowIdentity, to: WindowIdentity) -> [WindowEvent] {
+        []  // RED stub (02-16 Task 1)
+    }
+
     /// NSWorkspace says `pid` quit. AX can no longer answer for it, so each window closes once it leaves the CG list.
     public mutating func appTerminated(pid: Int32, context: ObservationContext) -> [WindowEvent] {
         terminatedPIDs.insert(pid)

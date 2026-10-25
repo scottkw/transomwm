@@ -103,6 +103,9 @@ public enum WindowEvent: Equatable, Sendable {
     case windowStateChanged(WindowRef, WindowState)
     /// Title, kind, tab or exclusion changed. Titles are never logged.
     case windowChanged(WindowInfo)
+    /// The same window, only its ID changed (a fallback ID corrected, D-15): never a close and a reopen. Consumers
+    /// re-point every reference to `from` at `to.window`.
+    case windowRekeyed(from: WindowRef, to: WindowInfo)
     /// A frame write finished; `actual` is the read-back frame.
     case frameApplied(WindowRef, requested: Rect, actual: Rect)
     case appResponsiveness(pid: Int32, degraded: Bool)

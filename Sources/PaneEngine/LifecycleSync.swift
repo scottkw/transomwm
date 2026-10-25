@@ -31,7 +31,8 @@ public enum LifecycleSync {
             }
             try world.apply(state, for: window, on: key, history: &history)
             return true
-        case .windowCreated, .windowMoved, .windowResized, .windowFocused, .windowChanged, .frameApplied,
+        // windowRekeyed is not a lifecycle fact: Phase 3 re-points desk refs from `from` to `to.window`.
+        case .windowCreated, .windowMoved, .windowResized, .windowFocused, .windowChanged, .windowRekeyed, .frameApplied,
              .appResponsiveness, .sessionPaused, .appLaunched, .appTerminated, .displaysChanged, .spaceChanged:
             return false
         }

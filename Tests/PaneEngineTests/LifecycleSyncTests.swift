@@ -151,6 +151,8 @@ private func fake(knowing known: [WindowRef], minimised: [WindowRef] = []) async
         .windowResized(ref(1), frame),
         .windowFocused(ref(1)),
         .windowChanged(WindowInfo(window: ref(1), frame: frame, state: .absent, displayUUID: "D1")),
+        // Phase 3 re-points desk refs; LifecycleSync applies nothing for it.
+        .windowRekeyed(from: ref(1), to: WindowInfo(window: ref(9), frame: frame, state: .present, displayUUID: "D1")),
         .frameApplied(ref(1), requested: frame, actual: frame),
         .appResponsiveness(pid: pid, degraded: true),
         .sessionPaused(true),

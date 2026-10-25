@@ -82,6 +82,11 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         minimums[window]
     }
 
+    /// The window's ID was corrected (WindowTracker.rekey): its minimum and candidate move to `to`.
+    public mutating func rekey(from: WindowIdentity, to: WindowIdentity) {
+        // RED stub (02-16 Task 1)
+    }
+
     public mutating func forget(_ window: WindowIdentity) {
         minimums[window] = nil
         candidates[window] = nil
