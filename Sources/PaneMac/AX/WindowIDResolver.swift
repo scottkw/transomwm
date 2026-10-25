@@ -9,11 +9,12 @@ import PanePrivate
 /// A cached fallback ID (frame match or synthetic) is looked up again on every resolve while the lookup works, and is
 /// replaced when the answer differs; a holder whose ID another element's lookup claims is re-identified by frame.
 /// So no two elements ever share an ID, and every change is reported as `replaces` for the tracker to re-key.
-/// A lookup failure counts towards switching the capability off at most once per element while it stays listed, and
-/// every real lookup that succeeds (new elements and re-checks) counts as a success; a cached `.axPrivate` element
-/// does not, so a lookup that really broke mid-session still switches off. A new element whose lookup fails for the
-/// first time never takes an offscreen-only frame match: it may be a same-frame twin on another Space or a hidden tab,
-/// so the element waits one refresh (`identityPending`) for its own CG entry.
+/// A lookup failure counts towards switching the capability off at most once per element, even when a tab or Space
+/// switch takes the element out of AXWindows and brings the same element back, and every real lookup that succeeds
+/// (new elements and re-checks) counts as a success; a cached `.axPrivate` element does not, so a lookup that really
+/// broke mid-session still switches off. A new element whose lookup fails for the first time while listed never takes
+/// an offscreen-only frame match: it may be a same-frame twin on another Space or a hidden tab, so the element waits
+/// one refresh (`identityPending`) for its own CG entry.
 nonisolated struct WindowIDResolver {
     struct Item {
         let element: AXUIElement
@@ -39,8 +40,13 @@ nonisolated struct WindowIDResolver {
     }
 
     let pid: Int32
-    /// Elements whose lookup failure was already counted; pruned to the listed elements on each resolve.
+    /// Elements whose lookup failed while listed; pruned to the listed elements on each resolve, so one that returns
+    /// waits for its own CG entry again.
     private var failed: [AXUIElement] = []
+    /// Elements whose failure was counted. Never pruned by listing (a hidden tab or a window on another Space comes
+    /// back as the same element); the oldest go past `countedCap`, so closed windows' elements cannot pile up.
+    private var counted: [AXUIElement] = []
+    private static let countedCap = 64
 
     init(pid: Int32) {
         self.pid = pid
@@ -67,12 +73,17 @@ nonisolated struct WindowIDResolver {
             if let id = lookup(item.element) {
                 session.recordSuccess(.axWindowID)
                 failed.removeAll { CFEqual($0, item.element) }
+                counted.removeAll { CFEqual($0, item.element) }
                 ids[i] = Resolved(id: id, source: .axPrivate, replaces: cached[i].flatMap { $0.key == id ? nil : $0.key })
             } else if item.isReadableWindow, !failed.contains(where: { CFEqual($0, item.element) }) {
                 // -25201 on a non-window (Finder's desktop) is expected; only a readable AXWindow counts.
-                session.recordFailure(.axWindowID)
                 failed.append(item.element)
                 firstFailure.insert(i)
+                if !counted.contains(where: { CFEqual($0, item.element) }) {
+                    session.recordFailure(.axWindowID)
+                    counted.append(item.element)
+                    if counted.count > Self.countedCap { counted.removeFirst() }
+                }
             }
         }
 
