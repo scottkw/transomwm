@@ -133,6 +133,8 @@ import os
     public func setExcludedBundleIDs(_ bundleIDs: Set<String>) {
         excluded = bundleIDs
         loggedExcluded = loggedExcluded.filter { ExclusionFilter.isExcluded($0, in: bundleIDs) }
+        // Frames already queued, or held while an app was degraded, must not be written either (WR-04).
+        for thread in threads.values { thread.excluded = ExclusionFilter.isExcluded(thread.bundleID, in: bundleIDs) }
         emit(tracker.setExcluded(bundleIDs))
     }
 
@@ -364,6 +366,7 @@ import os
         guard let key = bundleKey(app), appFilter(app.processIdentifier, key) else { return }
         let pid = app.processIdentifier
         let thread = AXAppThread(pid: pid, bundleID: key, hints: hintContinuation, forceWindowIDFallback: forceWindowIDFallback)
+        thread.excluded = ExclusionFilter.isExcluded(key, in: excluded)
         threads[pid] = thread
         Task { [weak self] in
             for await result in thread.frameResults { self?.frameWritten(result, on: thread) }

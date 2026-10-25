@@ -49,10 +49,12 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         var slots: [UInt32: (rect: Rect, ref: PaneModel.WindowRef)] = [:]
         var drainScheduled = false
         var drainEnabled = true
+        /// The app is on the exclusion list (D-12): nothing waits in a slot and nothing more is written.
+        var excluded = false
 
         /// True when the caller must schedule a drain: enabled, frames waiting, none scheduled yet.
         mutating func claimDrain() -> Bool {
-            guard drainEnabled, !drainScheduled, !slots.isEmpty else { return false }
+            guard drainEnabled, !excluded, !drainScheduled, !slots.isEmpty else { return false }
             drainScheduled = true
             return true
         }
@@ -214,10 +216,23 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     /// Puts `rect` in the window's slot, replacing any frame still waiting, and schedules a drain if none is.
     func enqueueFrame(windowID: UInt32, rect: Rect, ref: PaneModel.WindowRef) {
         let schedule = frames.withLock { queue in
+            guard !queue.excluded else { return false }
             queue.slots[windowID] = (rect, ref)
             return queue.claimDrain()
         }
         if schedule { scheduleDrain() }
+    }
+
+    /// True while the app is excluded (D-12): setting it drops every waiting frame, including ones held while the
+    /// app was degraded, and stops a drain already under way before its next write.
+    var excluded: Bool {
+        get { frames.withLock { $0.excluded } }
+        set {
+            frames.withLock { queue in
+                queue.excluded = newValue
+                if newValue { queue.slots = [:] }
+            }
+        }
     }
 
     /// False while the app is degraded: frames wait in their slots. Back to true flushes the latest ones.
@@ -252,7 +267,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         }
         let ordered = batch.sorted { $0.key < $1.key }
         for (index, (windowID, slot)) in ordered.enumerated() {
-            guard !isStopped, let app else { return }
+            guard !isStopped, !excluded, let app else { return }
             guard let element = windows[windowID]?.element else {
                 frameContinuation.yield(FrameWriteResult(window: slot.ref, requested: slot.rect, actual: nil, failure: .invalidElement))
                 continue
@@ -263,7 +278,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             if isStopped { return }
             if failure == .cannotComplete {
                 frames.withLock { queue in
-                    for (id, waiting) in ordered[index...] where queue.slots[id] == nil { queue.slots[id] = waiting }
+                    for (id, waiting) in ordered[index...] where !queue.excluded && queue.slots[id] == nil { queue.slots[id] = waiting }
                 }
             }
             frameContinuation.yield(FrameWriteResult(window: slot.ref, requested: slot.rect, actual: actual, failure: failure))

@@ -112,6 +112,18 @@ private func twoApps() async -> FakeWindowSystem {
         #expect(created.map(\.isExcluded) == [true])
     }
 
+    @Test func aFrameHeldForAHungAppIsNeverWrittenOnceTheAppIsExcluded() async {
+        let fake = await twoApps()
+        await fake.setHung(pid: excludedPID, true)
+        await fake.perform([.setFrame(ref(1), target)])
+        await fake.setExcluded([excludedBundle])
+        await fake.setHung(pid: excludedPID, false)
+        await fake.advance(by: .seconds(2))
+        await fake.refreshAll()
+        #expect(applied(await drain(fake.events)).isEmpty)
+        #expect(await fake.windows[1]?.frame == start)
+    }
+
     @Test func settingTheSameListAgainReportsNothing() async {
         let fake = await twoApps()
         await fake.setExcluded([excludedBundle])

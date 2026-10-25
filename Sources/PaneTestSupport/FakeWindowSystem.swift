@@ -132,6 +132,7 @@ public actor FakeWindowSystem: WindowSystem {
     /// The user's exclusion list, as `AXWindowSystem.setExcludedBundleIDs` receives it.
     public func setExcluded(_ bundleIDs: Set<String>) {
         excluded = bundleIDs
+        heldFrames = heldFrames.filter { !ExclusionFilter.isExcluded($0.key.bundleID, in: bundleIDs) }
         yield(tracker.setExcluded(bundleIDs))
     }
 
