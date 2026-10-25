@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: executing
-stopped_at: Completed 02-09-PLAN.md
-last_updated: "2026-10-24T17:19:55.714Z"
+stopped_at: Completed 02-10-PLAN.md
+last_updated: "2026-10-25T16:25:34.609Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: cc621b9e8f60b1ed835a7eceb9590d0156540553
+state_head: 8e100b0d63728f03d75ad0fdfe2e7af00a819c9c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 19
-  completed_plans: 15
+  completed_plans: 16
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 (Window Control) — EXECUTING
-Plan: 10 of 13
+Plan: 11 of 13
 Status: Ready to execute
 Last activity: 2026-10-24 — Phase 2 execution started
 
@@ -71,6 +71,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P07 | 10 min | 2 tasks | 9 files |
 | Phase 2 P08 | 10 min | 3 tasks | 13 files |
 | Phase 2 P09 | 19 min | 3 tasks | 16 files |
+| Phase 2 P10 | 11 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,8 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-09: a quit app's windows are rechecked every 250 ms for 5 s, then after every refresh
 - [Phase 2]: 02-09: A3 confirmed on macOS 27 while locked: CGSSessionScreenIsLocked = 1, frontmost com.apple.loginwindow
 - [Phase 2]: 02-09: PaneFixtureApp frees a closed NSWindow; a kept NSWindow keeps its CG entry
+- [Phase 2]: 02-10: A native tab group is one tracked window under its first-seen tab's identity; visibleMemberID (set on every window) names the shown tab and is what Phases 3-4 must address
+- [Phase 2]: 02-10: Close decisions go through the shown tab; a group survives a closed tab while any member is still in the CG list and is destroyed only with its last member
 
 ### Pending Todos
 
@@ -158,6 +161,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-24T17:19:55.587Z
-Stopped at: Completed 02-09-PLAN.md
+Last session: 2026-10-25T16:25:34.534Z
+Stopped at: Completed 02-10-PLAN.md
 Resume file: None

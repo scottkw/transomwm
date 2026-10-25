@@ -68,7 +68,7 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: 9/13 plans executed
+**Plans**: 10/13 plans executed
 
 Plans:
 **Wave 1**
@@ -91,7 +91,7 @@ Plans:
 - [x] 02-09-PLAN.md — Two-source close confirmation and lock/sleep session gate (WIN-09)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 02-10-PLAN.md — Native tab groups count as one window (WIN-06)
+- [x] 02-10-PLAN.md — Native tab groups count as one window (WIN-06)
 - [ ] 02-11-PLAN.md — Window-ID fallback matching and capability degradation (SAFE-05)
 
 **Wave 7** *(blocked on Wave 6 completion)*
@@ -231,7 +231,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
-| 2. Window Control | 9/13 | In Progress | - |
+| 2. Window Control | 10/13 | In Progress | - |
 | 3. Tiling MVP | 0/TBD | Not started | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
