@@ -328,4 +328,32 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(resolution.groupFor == [10: identity(10)])
         #expect(tracker.members(of: identity(30)) == [30])
     }
+
+    // MARK: 02-16: a corrected window ID (WindowTracker.rekey)
+
+    @Test func aRekeyedLeaderRenamesTheIDAndHandsTheGroupToTheNewLeader() {
+        var (tracker, _) = threeTabs()
+        var other = TabGroupTracker()
+        _ = other.update(pid: pid + 1, bundleID: bundleID, visible: [visible(10, 3)], cgWindows: [cg(10, onScreen: true, pid: pid + 1), cg(11, pid: pid + 1), cg(12, pid: pid + 1)])
+        tracker.rekey(pid: pid + 1, from: 10, to: 20, newLeader: nil)
+        #expect(tracker.members(of: identity(10)) == [10, 11, 12], "another pid's rekey changes nothing here")
+
+        tracker.rekey(pid: pid, from: 10, to: 20, newLeader: identity(20))
+        #expect(tracker.members(of: identity(20)) == [20, 11, 12])
+        #expect(tracker.members(of: identity(10)).isEmpty)
+        #expect(tracker.shownTab(containing: 20, pid: pid) == 20)
+        #expect(!tracker.isKnownMember(10, pid: pid))
+        let resolution = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(20, 3)], cgWindows: [cg(20, onScreen: true), cg(11), cg(12)])
+        #expect(resolution.groupFor == [20: identity(20)])
+        #expect(resolution.memberIDs == [20, 11, 12])
+    }
+
+    @Test func aRekeyedHiddenTabIsRenamedAndTheLeaderStays() {
+        var (tracker, _) = threeTabs()
+        tracker.rekey(pid: pid, from: 11, to: 21, newLeader: identity(21))
+        #expect(tracker.members(of: identity(10)) == [10, 21, 12])
+        #expect(tracker.isKnownMember(21, pid: pid))
+        #expect(!tracker.isKnownMember(11, pid: pid))
+        #expect(tracker.shownTab(containing: 21, pid: pid) == 10)
+    }
 }

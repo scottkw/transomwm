@@ -191,6 +191,12 @@ public struct TabGroupTracker: Equatable, Sendable {
         groups[pid] = list.isEmpty ? nil : list
     }
 
+    /// A window's ID was corrected (`WindowTracker.rekey`): `from` becomes `to` in `pid`'s groups and history, and a
+    /// group led by `from` is led by `newLeader` when it is given.
+    public mutating func rekey(pid: Int32, from: UInt32, to: UInt32, newLeader: WindowIdentity?) {
+        // RED stub (02-16 Task 3)
+    }
+
     public mutating func forget(pid: Int32) {
         groups[pid] = nil
         lastListed[pid] = nil
