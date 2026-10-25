@@ -195,3 +195,11 @@ Items acknowledged and deferred at milestone close, most recent first:
 Last session: 2026-10-25T20:37:02.261Z
 Stopped at: Completed 02-17-PLAN.md
 Resume file: None
+
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 2 | verification_deferred_human | /gsd-verify-work 2 |
+
+Phase 2 automated verification: human_needed (144/150, no gaps, 02-VERIFICATION.md). 18 hands-on items in 02-UAT.md. Lead chose on 2026-10-25 to defer UAT and continue with Phase 3.
