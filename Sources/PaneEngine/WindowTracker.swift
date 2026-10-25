@@ -54,7 +54,13 @@ public struct WindowTracker: Sendable {
                 guard o.listedInAXWindows, case .success(let snapshot) = o.read, let id = o.windowID, let frame = snapshot.frame else { return nil }
                 return (id: id, frame: frame, tabCount: snapshot.tabGroup?.tabCount ?? 1)
             }
-            tabs = tabGroups.update(pid: app.pid, bundleID: app.bundleID, visible: visible, cgWindows: context.cgWindows)
+            let tracked = windows.values.filter { $0.window.pid == app.pid }.sorted { $0.window.creationOrder < $1.window.creationOrder }.map(\.window.identity)
+            tabs = tabGroups.update(pid: app.pid, bundleID: app.bundleID, visible: visible, cgWindows: context.cgWindows, tracked: tracked)
+            // Merged into another window's tab group: that window is gone as a separate window.
+            for identity in tabs.folded {
+                guard let info = remove(identity, at: context.now) else { continue }
+                events.append(.windowDestroyed(info.window))
+            }
         }
         // Probes of windows that left AXWindows only feed the close decision below.
         for observation in app.windows where observation.listedInAXWindows {
@@ -244,10 +250,7 @@ public struct WindowTracker: Sendable {
                     continue
                 }
                 for member in tabGroups.members(of: identity) { tabGroups.memberClosed(member, pid: pid) }
-                guard let info = windows.removeValue(forKey: identity) else { continue }
-                lastReliable[identity] = nil
-                learner.forget(identity)
-                closedIDs.insert(identity, at: context.now)
+                guard let info = remove(identity, at: context.now) else { continue }
                 events.append(.windowDestroyed(info.window))
             case .state(let state):
                 guard var info = windows[identity], info.state != state else { continue }
@@ -260,6 +263,16 @@ public struct WindowTracker: Sendable {
         }
         if app == .terminated, !windows.keys.contains(where: { $0.pid == pid }) { terminatedPIDs.remove(pid) }
         return events
+    }
+
+    /// Drops a window and everything learned about it; the caller reports it destroyed.
+    private mutating func remove(_ identity: WindowIdentity, at now: ContinuousClock.Instant) -> WindowInfo? {
+        guard let info = windows.removeValue(forKey: identity) else { return nil }
+        lastReliable[identity] = nil
+        rechecks[identity] = nil
+        learner.forget(identity)
+        closedIDs.insert(identity, at: now)
+        return info
     }
 
     /// Sticky kinds: a reliable observation re-classifies only a provisional kind (`changed == nil`) or one whose

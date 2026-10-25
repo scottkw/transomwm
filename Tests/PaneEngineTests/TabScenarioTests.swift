@@ -101,6 +101,55 @@ private func threeTabs() async -> FakeWindowSystem {
         #expect(created(events).map(\.window) == [ref(10)])
     }
 
+    @Test func aStandaloneWindowThatGainsATabStaysOneWindowLedByItself() async {
+        let fake = FakeWindowSystem()
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await fake.open(.standard(id: 10, pid: pid, frame: frame))
+        await fake.refreshAll()
+        // Cmd-T: AppKit opens tab 11 in window 10's frame and shows it; 10 becomes a hidden tab.
+        await fake.update(10) { $0.snapshot.tabGroup = TabGroupFact(tabCount: 2) }
+        var tab = FakeWindow.standard(id: 11, pid: pid, frame: frame)
+        tab.snapshot.tabGroup = TabGroupFact(tabCount: 2)
+        await fake.open(tab)
+        await fake.selectTab(11)
+        for _ in 0..<3 {
+            await fake.advance(by: .milliseconds(250))
+            await fake.refreshAll()
+        }
+        var inventory = await fake.inventory().windows
+        #expect(inventory.map(\.window) == [ref(10)])
+        #expect(inventory.map(\.tabCount) == [2])
+        #expect(inventory.map(\.visibleMemberID) == [11])
+
+        await fake.selectTab(10)
+        await fake.refreshAll()
+        inventory = await fake.inventory().windows
+        #expect(inventory.map(\.window) == [ref(10)])
+        #expect(inventory.map(\.visibleMemberID) == [10])
+        #expect(inventory.map(\.tabCount) == [2])
+        let events = await drain(fake.events)
+        #expect(created(events).map(\.window) == [ref(10)])
+        #expect(destroyed(events).isEmpty)
+    }
+
+    @Test func mergingTwoTrackedWindowsLeavesOneGroupAndReportsTheOtherGone() async {
+        let fake = FakeWindowSystem()
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await fake.open(.standard(id: 10, pid: pid, frame: frame))
+        await fake.open(.standard(id: 20, pid: pid, frame: Rect(x: 800, y: 100, width: 500, height: 300)))
+        await fake.refreshAll()
+        // Window > Merge All Windows: 20 joins 10's frame as its hidden tab.
+        await fake.update(20) { $0.frame = frame }
+        for id: UInt32 in [10, 20] { await fake.update(id) { $0.snapshot.tabGroup = TabGroupFact(tabCount: 2) } }
+        await fake.selectTab(10)
+        await fake.refreshAll()
+        await fake.refreshAll()
+        let inventory = await fake.inventory().windows
+        #expect(inventory.map(\.window) == [ref(10)])
+        #expect(inventory.map(\.tabCount) == [2])
+        #expect(destroyed(await drain(fake.events)) == [ref(20)])
+    }
+
     @Test func anUntabbedWindowOfTheSameAppIsItsOwnWindow() async {
         let fake = FakeWindowSystem()
         await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
