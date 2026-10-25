@@ -4,7 +4,8 @@ import PaneModel
 ///
 /// Shared by `AXWindowSystem` and `FakeWindowSystem`, so scenario tests run the production decisions.
 /// Every known window's state and removal is decided by `CloseRule` (two sources, D-09); a window with no
-/// answer counts as timed out and is left untouched. Windows are keyed by ID, never merged by frame.
+/// answer counts as timed out and is left untouched. Windows are keyed by ID, never merged by frame, except that the
+/// tabs of a native tab group are one window under its leader's identity (`TabGroupTracker`, D-08).
 public struct WindowTracker: Sendable {
     /// How long a window first seen outside the initial sweep settles before it is reported and classified.
     public let settleDelay: Duration
@@ -20,6 +21,7 @@ public struct WindowTracker: Sendable {
     private var terminatedPIDs: Set<Int32> = []
     /// Windows whose last decision was `.recheck`, with how many in a row.
     private var rechecks: [WindowIdentity: Int] = [:]
+    private var tabGroups = TabGroupTracker()
     /// Quick follow-ups per window before it is left to the sweep: WindowServer drops a closed window a few
     /// hundred ms after AX reports it invalid, so the decision must be retried soon, but not forever.
     public static let maxQuickRechecks = 8
@@ -40,6 +42,15 @@ public struct WindowTracker: Sendable {
         var seen: Set<WindowIdentity> = []
         var created: Set<WindowIdentity> = []
         let cgByID = Dictionary(context.cgWindows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+        // A failed AXWindows says nothing about which tab is showing, so groups are only re-resolved on a full answer.
+        var tabs = TabResolution()
+        if app.listFailure == nil {
+            let visible = app.windows.compactMap { o -> (id: UInt32, frame: Rect, tabCount: Int)? in
+                guard o.listedInAXWindows, case .success(let snapshot) = o.read, let id = o.windowID, let frame = snapshot.frame else { return nil }
+                return (id: id, frame: frame, tabCount: snapshot.tabGroup?.tabCount ?? 1)
+            }
+            tabs = tabGroups.update(pid: app.pid, bundleID: app.bundleID, visible: visible, cgWindows: context.cgWindows)
+        }
         // Probes of windows that left AXWindows only feed the close decision below.
         for observation in app.windows where observation.listedInAXWindows {
             // Fallback IDs (nil windowID) arrive in Plan 11.
@@ -50,8 +61,10 @@ public struct WindowTracker: Sendable {
             // Non-windows such as Finder's desktop are never tracked.
             guard case .window(let classified, let reliable) = Classifier.classify(snapshot, bundleID: app.bundleID, appHidden: app.appHidden)
             else { continue }
-            let identity = WindowIdentity(windowID: windowID, pid: app.pid, bundleID: app.bundleID)
-            seen.insert(identity)
+            // A listed tab is its group's window (identity = leader); hidden tabs are never separate windows.
+            let identity = tabs.groupFor[windowID] ?? WindowIdentity(windowID: windowID, pid: app.pid, bundleID: app.bundleID)
+            // shortcut: two listed tabs of one group (mid drag-out) keep AX order, not the tracker's ranking; fine for one refresh.
+            guard seen.insert(identity).inserted else { continue }
             let old = windows[identity]
             // A window whose frame could not be read is picked up by a later refresh.
             guard let frame = snapshot.frame ?? old?.frame else { continue }
@@ -89,7 +102,8 @@ public struct WindowTracker: Sendable {
             info.state = state
             info.kind = kind
             info.idSource = observation.idSource
-            info.tabCount = snapshot.tabGroup?.tabCount ?? 1
+            info.visibleMemberID = windowID
+            info.tabCount = tabs.tabCount[identity] ?? 1
             info.displayUUID = Coordinates.displayUUID(for: frame, among: context.displays)
             windows[identity] = info
 
@@ -100,6 +114,8 @@ public struct WindowTracker: Sendable {
                 events.append(.windowCreated(info))
                 continue
             }
+            // A tab switch: the group follows the shown tab and is never reported as closed and reopened.
+            if old.visibleMemberID != windowID { events.append(.windowFocused(ref)) }
             if old.frame.origin != frame.origin { events.append(.windowMoved(ref, frame)) }
             if old.frame.size != frame.size { events.append(.windowResized(ref, frame)) }
             if old.window.titleHint != ref.titleHint || old.kind != kind || old.tabCount != info.tabCount
@@ -110,8 +126,8 @@ public struct WindowTracker: Sendable {
         }
         let byID = Dictionary(app.windows.compactMap { o in o.windowID.map { ($0, o) } }, uniquingKeysWith: { a, b in a.listedInAXWindows ? a : b })
         let liveness: AppLiveness = terminatedPIDs.contains(app.pid) ? .terminated : .alive
-        events += decide(pid: app.pid, app: liveness, context: context, skipping: created) { identity in
-            guard app.listFailure == nil, let observation = byID[identity.windowID] else { return .timedOut }
+        events += decide(pid: app.pid, app: liveness, context: context, skipping: created) { windowID in
+            guard app.listFailure == nil, let observation = byID[windowID] else { return .timedOut }
             switch observation.read {
             case .success(let snapshot):
                 return .valid(listed: observation.listedInAXWindows, minimized: snapshot.minimized == true,
@@ -146,26 +162,41 @@ public struct WindowTracker: Sendable {
         return events
     }
 
-    /// The tracked window IDs of `pid`, ascending: the ones its app thread probes when they leave AXWindows.
+    /// The window IDs of `pid` currently shown (a tab group's visible tab), ascending: the ones its app thread
+    /// probes when they leave AXWindows.
     public func knownWindowIDs(pid: Int32) -> [UInt32] {
-        windows.keys.filter { $0.pid == pid }.map(\.windowID).sorted()
+        windows.filter { $0.key.pid == pid }.map { $0.value.visibleMemberID ?? $0.key.windowID }.sorted()
     }
 
-    /// Applies `CloseRule` to every tracked window of `pid` except `skipping` (reported this pass).
+    /// Applies `CloseRule` to every tracked window of `pid` except `skipping` (reported this pass), through the
+    /// window ID it shows: for a tab group, the visible tab, which `fact` describes.
     private mutating func decide(
         pid: Int32, app: AppLiveness, context: ObservationContext, skipping: Set<WindowIdentity> = [],
-        fact: (WindowIdentity) -> AXWindowFact
+        fact: (UInt32) -> AXWindowFact
     ) -> [WindowEvent] {
         let inCG = Set(context.cgWindows.map(\.windowID))
         var events: [WindowEvent] = []
         for identity in windows.keys.sorted() where identity.pid == pid && !skipping.contains(identity) {
+            let shown = windows[identity]?.visibleMemberID ?? identity.windowID
             let decision = CloseRule.decide(
-                sessionActive: context.sessionActive, app: app, ax: fact(identity),
-                inCGList: inCG.contains(identity.windowID), isKnownTabMember: false
+                sessionActive: context.sessionActive, app: app, ax: fact(shown),
+                inCGList: inCG.contains(shown), isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid)
             )
             if decision == .recheck { rechecks[identity, default: 0] += 1 } else { rechecks[identity] = nil }
             switch decision {
             case .closed:
+                // The shown tab closed but others are still in the CG list: the group lives on, and the next
+                // listed tab rebinds it. It closes only when its last member is gone.
+                tabGroups.memberClosed(shown, pid: pid)
+                let remaining = tabGroups.members(of: identity).intersection(inCG)
+                if !remaining.isEmpty {
+                    guard var info = windows[identity], info.tabCount != remaining.count else { continue }
+                    info.tabCount = remaining.count
+                    windows[identity] = info
+                    events.append(.windowChanged(info))
+                    continue
+                }
+                for member in tabGroups.members(of: identity) { tabGroups.memberClosed(member, pid: pid) }
                 guard let info = windows.removeValue(forKey: identity) else { continue }
                 lastReliable[identity] = nil
                 closedIDs.insert(identity, at: context.now)
