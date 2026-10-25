@@ -81,6 +81,8 @@ public actor FakeWindowSystem: WindowSystem {
     private var displays: [DisplayInfo] = []
     /// Like `AXWindowSystem.start()`, the first `refreshAll()` is the initial sweep; later new windows settle first.
     private var initialSweepDone = false
+    /// The latest frame per window of a hung or degraded app, applied after its next successful refresh (D-16).
+    private var heldFrames: [WindowIdentity: (ref: WindowRef, rect: Rect)] = [:]
 
     public init(now: ContinuousClock.Instant = .now) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -206,6 +208,28 @@ public actor FakeWindowSystem: WindowSystem {
         // A hung app's observation never reaches the tracker, so its windows keep their last values (WIN-09).
         guard !app.hung else { return }
         yield(tracker.ingest(observation, context: context()))
+        for (identity, held) in heldFrames.filter({ $0.key.pid == pid }).sorted(by: { $0.key < $1.key }) {
+            heldFrames[identity] = nil
+            write(held.rect, to: held.ref)
+        }
+    }
+
+    /// Like `FrameWriter`: the write clamps to the window's hidden minimum and is read back into the tracker.
+    /// Goes to a tab group's visible member, and the group's other tabs follow it, as AppKit's do.
+    private func write(_ rect: Rect, to ref: WindowRef) {
+        guard let info = tracker.info(for: ref.identity), let target = windows[info.visibleMemberID ?? ref.windowID] else { return }
+        guard target.axValid else {
+            yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: nil, failure: .invalidElement)))
+            return
+        }
+        let minimum = target.hiddenMinimum ?? Size(width: 0, height: 0)
+        let actual = Rect(x: rect.x, y: rect.y, width: max(rect.width, minimum.width), height: max(rect.height, minimum.height))
+        for (id, window) in windows where id == target.id
+            || (target.snapshot.tabGroup != nil && window.snapshot.tabGroup != nil && window.pid == target.pid && window.frame == target.frame)
+        {
+            windows[id]?.frame = actual
+        }
+        yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: actual, failure: nil)))
     }
 
     /// The CG list (empty while locked), displays, session state and clock of the simulation right now.
@@ -242,8 +266,18 @@ public actor FakeWindowSystem: WindowSystem {
         WindowInventory(displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded, sessionPaused: locked && lockGate, initialRefreshComplete: true)
     }
 
+    /// Applies `.setFrame` to tracked windows with valid rects; a hung or degraded app's latest frame per window
+    /// is held instead. Every command is recorded in `performed`; the other commands do nothing yet (Phase 3).
     public func perform(_ commands: [WindowCommand]) async {
         performed += commands
+        for case .setFrame(let ref, let rect) in commands where rect.isValidGeometry {
+            guard let app = apps[ref.pid], !app.terminated else { continue }
+            if app.hung || !responsiveness.shouldRefresh(pid: ref.pid) {
+                heldFrames[ref.identity] = (ref, rect)
+            } else {
+                write(rect, to: ref)
+            }
+        }
     }
 
     public func windowInfo(_ window: WindowRef) async -> WindowInfo? {

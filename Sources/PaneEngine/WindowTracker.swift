@@ -22,6 +22,7 @@ public struct WindowTracker: Sendable {
     /// Windows whose last decision was `.recheck`, with how many in a row.
     private var rechecks: [WindowIdentity: Int] = [:]
     private var tabGroups = TabGroupTracker()
+    private var learner = MinimumSizeLearner()
     /// Quick follow-ups per window before it is left to the sweep: WindowServer drops a closed window a few
     /// hundred ms after AX reports it invalid, so the decision must be retried soon, but not forever.
     public static let maxQuickRechecks = 8
@@ -153,8 +154,22 @@ public struct WindowTracker: Sendable {
         return decide(pid: pid, app: .terminated, context: context) { _ in .timedOut }
     }
 
-    /// RED stub (02-12).
-    public mutating func applyFrameResult(_ result: FrameWriteResult) -> [WindowEvent] { [] }
+    /// A finished frame write (D-17): the read-back becomes the window's frame and teaches its minimum. A
+    /// failed write changes nothing; a later refresh decides the window's state through CloseRule.
+    public mutating func applyFrameResult(_ result: FrameWriteResult) -> [WindowEvent] {
+        let identity = result.window.identity
+        guard result.failure == nil, let actual = result.actual, actual.isValidGeometry, var info = windows[identity] else { return [] }
+        let old = info
+        _ = learner.learn(window: identity, requested: result.requested, actual: actual)
+        info.frame = actual
+        info.learnedMinimum = learner.minimum(for: identity)
+        windows[identity] = info
+        var events: [WindowEvent] = [.frameApplied(info.window, requested: result.requested, actual: actual)]
+        if old.frame.origin != actual.origin { events.append(.windowMoved(info.window, actual)) }
+        if old.frame.size != actual.size { events.append(.windowResized(info.window, actual)) }
+        if old.learnedMinimum != info.learnedMinimum { events.append(.windowChanged(info)) }
+        return events
+    }
 
     /// Decides the windows of terminated apps again against a fresh CG list (WindowServer lags behind the quit).
     public mutating func recheckTerminated(context: ObservationContext) -> [WindowEvent] {
@@ -202,6 +217,7 @@ public struct WindowTracker: Sendable {
                 for member in tabGroups.members(of: identity) { tabGroups.memberClosed(member, pid: pid) }
                 guard let info = windows.removeValue(forKey: identity) else { continue }
                 lastReliable[identity] = nil
+                learner.forget(identity)
                 closedIDs.insert(identity, at: context.now)
                 events.append(.windowDestroyed(info.window))
             case .state(let state):
