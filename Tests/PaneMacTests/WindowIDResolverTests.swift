@@ -133,14 +133,33 @@ private struct Harness {
         #expect(countedFailures(h.session) == 1)
     }
 
-    @Test func aFailingElementCountsAgainOnlyAfterItLeftAXWindows() {
+    /// Review WR-02 (iteration 4): a hidden tab or a window on another Space leaves AXWindows and comes back as the
+    /// same element, so its failure counts once, not once per listing.
+    @Test func aFailingElementCountsOnceEvenAfterItLeftAXWindows() {
         var h = Harness()
         let b = element(3)
         _ = h.resolve([item(b, frame: nil)])
         _ = h.resolve([item(b, frame: nil)])
         _ = h.resolve([])
         _ = h.resolve([item(b, frame: nil)])
-        #expect(countedFailures(h.session) == 2)
+        #expect(countedFailures(h.session) == 1)
+    }
+
+    /// Five tab switches or Space round trips back to one failing element never switch the lookup off, whether the
+    /// element stayed cached (a window on another Space) or left the cache too (a hidden tab).
+    @Test(arguments: [true, false])
+    func roundTripsOfOneFailingElementNeverSwitchTheLookupOff(staysCached: Bool) {
+        var h = Harness()
+        let b = element(3)
+        for _ in 0..<5 {
+            _ = h.resolve([item(b)])
+            let cached = h.cache
+            _ = h.resolve([])
+            if staysCached { h.cache = cached }
+        }
+        _ = h.resolve([item(b)])
+        #expect(h.session.isAvailable(.axWindowID))
+        #expect(countedFailures(h.session) == 1)
     }
 
     @Test func aNonWindowElementsFailureIsNeverCounted() {
