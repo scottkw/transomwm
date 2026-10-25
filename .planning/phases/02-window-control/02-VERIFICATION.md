@@ -1,8 +1,8 @@
 ---
 phase: 02-window-control
-verified: 2026-10-25T18:34:53Z
-status: gaps_found
-score: 108/121 must-haves verified (8 failed, 5 backstops insufficient_spec)
+verified: 2026-10-25T21:16:29Z
+status: human_needed
+score: 144/150 must-haves verified (5 backstops insufficient_spec, 1 present but behaviour-unverified; 1 via override)
 covered_files:
   - ".github/workflows/ci.yml"
   - ".gitignore"
@@ -32,6 +32,14 @@ covered_files:
   - ".planning/phases/02-window-control/02-12-SUMMARY.md"
   - ".planning/phases/02-window-control/02-13-PLAN.md"
   - ".planning/phases/02-window-control/02-13-SUMMARY.md"
+  - ".planning/phases/02-window-control/02-14-PLAN.md"
+  - ".planning/phases/02-window-control/02-14-SUMMARY.md"
+  - ".planning/phases/02-window-control/02-15-PLAN.md"
+  - ".planning/phases/02-window-control/02-15-SUMMARY.md"
+  - ".planning/phases/02-window-control/02-16-PLAN.md"
+  - ".planning/phases/02-window-control/02-16-SUMMARY.md"
+  - ".planning/phases/02-window-control/02-17-PLAN.md"
+  - ".planning/phases/02-window-control/02-17-SUMMARY.md"
   - "Package.swift"
   - "Sources/PaneApp/main.swift"
   - "Sources/PaneEngine/Classifier.swift"
@@ -44,6 +52,7 @@ covered_files:
   - "Sources/PaneEngine/MinimumSizeLearner.swift"
   - "Sources/PaneEngine/PermissionReducer.swift"
   - "Sources/PaneEngine/ResponsivenessTracker.swift"
+  - "Sources/PaneEngine/SpaceSwitchMarks.swift"
   - "Sources/PaneEngine/TabGroupTracker.swift"
   - "Sources/PaneEngine/WindowSnapshot.swift"
   - "Sources/PaneEngine/WindowSystem.swift"
@@ -54,6 +63,7 @@ covered_files:
   - "Sources/PaneMac/AX/AppRegistry.swift"
   - "Sources/PaneMac/AX/FrameWriter.swift"
   - "Sources/PaneMac/AX/SyntheticWindowIDs.swift"
+  - "Sources/PaneMac/AX/WindowIDResolver.swift"
   - "Sources/PaneMac/AXWindowSystem.swift"
   - "Sources/PaneMac/CGWindowList.swift"
   - "Sources/PaneMac/Displays.swift"
@@ -76,6 +86,7 @@ covered_files:
   - "Sources/PaneMac/Shell/TrackedWindowsWindowController.swift"
   - "Sources/PanePrivate/AXWindowID.swift"
   - "Sources/PanePrivate/Capabilities.swift"
+  - "Sources/PanePrivate/SkyLightSpaces.swift"
   - "Sources/PaneTestSupport/FakeWindowSystem.swift"
   - "Sources/pane-dump/main.swift"
   - "Tests/PaneEngineTests/ClassifierCorpusTests.swift"
@@ -104,6 +115,7 @@ covered_files:
   - "Tests/PaneEngineTests/PermissionReducerTests.swift"
   - "Tests/PaneEngineTests/ResponsivenessScenarioTests.swift"
   - "Tests/PaneEngineTests/ResponsivenessTrackerTests.swift"
+  - "Tests/PaneEngineTests/SpaceSwitchMarksTests.swift"
   - "Tests/PaneEngineTests/TabGroupTrackerTests.swift"
   - "Tests/PaneEngineTests/TabScenarioTests.swift"
   - "Tests/PaneEngineTests/TrackerClassificationTests.swift"
@@ -120,6 +132,7 @@ covered_files:
   - "Tests/PaneMacIntegrationTests/IntegrationSupport.swift"
   - "Tests/PaneMacIntegrationTests/LiveTrackingTests.swift"
   - "Tests/PaneMacIntegrationTests/NudgeIntegrationTests.swift"
+  - "Tests/PaneMacIntegrationTests/SpacesIntegrationTests.swift"
   - "Tests/PaneMacIntegrationTests/TabsIntegrationTests.swift"
   - "Tests/PaneMacTests/CapabilitiesTests.swift"
   - "Tests/PaneMacTests/ExclusionStoreTests.swift"
@@ -130,95 +143,63 @@ covered_files:
   - "Tests/PaneMacTests/SessionGateTests.swift"
   - "Tests/PaneMacTests/TCCResetTests.swift"
   - "Tests/PaneMacTests/TrackedWindowsModelTests.swift"
+  - "Tests/PaneMacTests/WindowIDResolverTests.swift"
   - "Tests/PaneModelTests/NoAppKitTests.swift"
   - "scripts/build-debug.sh"
   - "scripts/generate.sh"
   - "scripts/run-debug.sh"
   - "xcode/Pane.entitlements"
   - "xcode/project.yml"
-covered_digest: "v3:sha256:ba1b84fafb0c3ccea883469ca226e7008e7e80aea566b11abf2fdc9b4d76b33a"
-behavior_unverified: 0
-overrides_applied: 0
+covered_digest: "v3:sha256:8f7eba2849c47e8b376757b01378906f139e7f1683523515d9f9c1b2ff5c861f"
+behavior_unverified: 1
+overrides_applied: 1
 overrides:
   - must_have: "Without Space data (Spaces capability off or missing), two same-frame native tab groups of one app on two Spaces (scenario C5) are tracked as two separate windows"
     reason: "Project-lead decision 2026-10-25: when the read-only SkyLight Spaces lookup is unavailable, Pane falls back to single-Space behaviour. Without per-window Space data no rule can tell the two groups' hidden tabs apart (REVIEW iteration 3 CR-01: 'No ordering rule can choose between 31 and 10'), so in that mode the two groups may be tracked as one window. With Space data the case is handled and tested (02-14). In fallback, Pane still never reports a live window destroyed and never tracks one window ID under two identities, and 02-14's tests assert both."
     accepted_by: "project lead (Ken Scott), decision 2026-10-25"
     accepted_at: "2026-10-25T19:07:21Z"
-gaps:
-  - truth: "A natively tabbed window counts as one tracked window, and a same-frame window of the same app on another Space is never taken as its hidden tab (ROADMAP SC2; 02-10 truth 1; REVIEW CR-01)"
-    status: failed
-    requirement: WIN-06
-    reason: "TabGroupTracker.update ranks hidden-tab candidates as own members (0), untracked windows (1), then tracked standalone windows and other groups' members (2), with ties broken by window ID. AX lists only the current Space, so a same-frame twin on a Space Pane has not visited yet is untracked and wins the slot over the window that really just became a tab. S4 (fixed in iteration 2) and C2 give update() the same inputs and need different answers, so reordering the tiers cannot fix both. I re-ran the reviewer's harness (scratchpad/probe3, Probe3) against HEAD and reproduced every case. C2, Cmd-T with an untracked twin: `[(10,10,1),(40,40,2)]`, so one real window is tracked twice. After a visit to Space 2 and a return, `DESTROYED 5` (or `DESTROYED 50`) is reported for a live window. C5, two same-frame groups on two Spaces: G1's visibleMemberID alternates 30 -> 10 -> 30 across Space switches, and G2 is never tracked. C7: Cmd-T joins a group from the other Space, and A stays tracked as a phantom."
-    artifacts:
-      - path: "Sources/PaneEngine/TabGroupTracker.swift"
-        issue: "lines 87-98: tier() prefers untracked candidates over a tracked standalone window that was listed last refresh, even for a brand-new shown tab (Cmd-T). Line 91 binds a listed tabCount>=2 window to an existing group by membership alone, so G1 swallows G2 permanently. The shortcut comment at lines 31-33 claims the error 'corrects itself once the twin is listed'. That holds only for a twin without a tab bar"
-      - path: "Sources/PaneEngine/WindowTracker.swift"
-        issue: "lines 63-66: every TabResolution.folded identity is removed and reported windowDestroyed on CG bounds alone. This bypasses CloseRule, so a wrong fold destroys a live window"
-      - path: "Sources/PanePrivate"
-        issue: "has no Spaces lookup (only AXWindowID.swift and Capabilities.swift), so per-window Space membership cannot be used to rule out cross-Space twins"
-      - path: "Tests/PaneEngineTests/TabScenarioTests.swift"
-        issue: "no scenario presses Cmd-T while a same-frame twin is untracked (C2), and none has a twin that is itself a tab group (C5, C7). All three existing Space tests use standalone twins only"
-    missing:
-      - "Project-lead decision: pull forward from Phase 6 a READ-ONLY SkyLight Spaces lookup in its own PanePrivate file (e.g. Sources/PanePrivate/SkyLightSpaces.swift). It uses dlopen of /System/Library/PrivateFrameworks/SkyLight.framework/SkyLight plus dlsym into optional @convention(c) pointers: SLSMainConnectionID, SLSCopySpacesForWindows, and SLSGetActiveSpace or SLSManagedDisplayGetCurrentSpace as needed. Never link it at link time"
-      - "Register it as a new Capability (e.g. `.spaces`) in Capabilities.swift: reported once in the launch capability log and in the Debug menu, forceable off with `--disable-private=Spaces`, with call-time degradation through CapabilitySession. SAFE-05: when it is missing or off, Pane falls back to single-Space behaviour and nothing else is disabled"
-      - "Carry per-window Space IDs into PaneEngine without AppKit (e.g. an optional `spaceIDs: [UInt32: UInt64]` or a `spaceID` on CGWindowEntry in ObservationContext, filled on the app thread or once per refresh in AXWindowSystem). TabGroupTracker must exclude hidden-tab candidates whose Space differs from the shown tab's. With no Space data, it keeps today's behaviour plus the CG-history rule below"
-      - "Pure single-Space fallback rule (REVIEW CR-01 fix 1): keep the previous refresh's CG ID set per pid. When a shown tab was not in the CG list before (a brand-new window: Cmd-T or New Tab), prefer a tracked standalone window that was listed last refresh over untracked candidates"
-      - "Limit the damage of a wrong fold (REVIEW CR-01 fix 3). Only destroy a `folded` window once it has stayed a member across two refreshes in which it was not listed and the group's shown tab did not change. A listed tabCount>=2 window that matches an existing group only through line 91 rebinds only if the counts agree or that group's previous shown tab is no longer present offscreen"
-      - "Add C2, C5 and C7 as TabScenarioTests driven through `showSpace`, both with Space data (the fake supplies Space IDs) and without it (fallback). Each test asserts the right tracked-window count, visibleMemberID and tabCount, no duplicate tracking, and no windowDestroyed for a window that is still alive. Keep S4/S5/S6, Cmd-T, merge and minimised-twin passing. Write the tests first and confirm they fail on the current code"
-      - "Fake support: FakeWindowSystem models per-window Space membership and the Spaces capability being on or off"
-  - truth: "A window is removed (windowDestroyed) only when two sources agree; a window alive on another Space is never reported destroyed (02-09 truth 2; WIN-09 core rule)"
-    status: failed
-    requirement: WIN-09
-    reason: "Same root cause as the gap above. The folded path in WindowTracker.ingest (lines 63-66) emits windowDestroyed for a window that is alive and unchanged on another Space (probe3 C2: `DESTROYED 5`). Neither AX nor NSWorkspace said it was gone. Phase 3 would remove its tile from the user's layout"
-    artifacts:
-      - path: "Sources/PaneEngine/WindowTracker.swift"
-        issue: "folded identities are destroyed without CloseRule"
-    missing:
-      - "This gap closes with the CR-01 fix above: the Space-aware candidate filter plus the two-refresh guard before a fold is destroyed. Add one assertion that a cross-Space twin is never destroyed while its CG entry exists"
-  - truth: "When an app refuses a size, Pane learns its real minimum, including the common case of a window left clamped in a too-small tile and a window that is already at its minimum; a deterministic snap is never learned as a minimum (ROADMAP SC3; 02-12 truths 4 and 5; REVIEW WR-01, WR-02)"
-    status: failed
-    requirement: WIN-04
-    reason: "Re-running the reviewer's learner harness (scratchpad/probe3, Probe3c) against HEAD gives: 'at-min static: learned nil' and 'one shrink then static: learned nil', so a window asked five times for a size it refuses never learns anything. WindowTracker.applyFrameResult (lines 211-215) skips every read-back that equals the pre-write frame, and that is exactly the read-back that confirms a clamp. 'snap req h 510 -> 518, 790 -> 790, 510 -> 518: learned (0, 518)', so a 16-pt row snap that rounds up is learned and then persisted per bundle by MinimumHintsStore (max only, no decay), which blocks splits below 518 pt for that app for good. A single refused write teaches nothing at all, which contradicts 02-12 truth 4 (a refusal of more than 2 pt learns max(old, actual)) and truth 5 (fixture minSize 250x150 asked for 100x80 learns 250x150). The live test was rewritten to a refuse, honour, refuse sequence to pass"
-    artifacts:
-      - path: "Sources/PaneEngine/WindowTracker.swift"
-        issue: "lines 211-215: the `unchanged` pre-write-frame skip throws away the confirming read-back of a clamped window"
-      - path: "Sources/PaneEngine/MinimumSizeLearner.swift"
-        issue: "lines 34-41: confirmation needs two agreeing refusals but not two different requests, so a deterministic snap confirms itself. 'An honoured write at or above keeps it' lets an honoured write sit between the two snaps. The doc comments at lines 5-12 and 17 are stale"
-      - path: "Sources/PaneMac/PaneMacApp.swift"
-        issue: "IN-04: learned hints reach the tracker only at launch (setBundleHints once), and onLearnedMinimum does not push them back"
-    missing:
-      - "Project-lead decision: simplify the learner. Separate a stale read-back from a clamped one by TIME, not by the pre-write frame. Keep a refused read-back pending, and confirm it when a later AX refresh at least `settleDelay` after the write still reads the window at that size (e.g. `WindowTracker.ingest` calls `learner.confirmPending(identity, observed:, at:)`). Remove the pre-write `unchanged` skip"
-      - "Treat a refusal as a minimum only when it holds against requests that differ by at least 2 * tolerance, with the read-back above both. Or cap any persisted hint at (smallest honoured size for that window - tolerance). Either way a round-up snap must not be learned"
-      - "Rewrite the 02-12 truths 4 and 5 contract to the new rule (or record an override), so the plan text matches the code"
-      - "Tests (write first, see them fail): a window that stays clamped through three identical writes and one later refresh learns; a window that opens already at its minimum learns after one refused write plus one refresh; the 16-pt snap grid (510->518, 790->790, 510->518) learns nothing; a lag-2 slow app learns nothing; the fixture minSize 250x150 asked once for 100x80 learns 250x150 in FrameWriteIntegrationTests"
-      - "After the learner fix, push learned hints to the tracker within the session (IN-04: call system.setBundleHints(hints.hints) after hints.record)"
-  - truth: "Call-time degradation switches `_AXUIElementGetWindow` off only after 5 consecutive failures across real windows, not because one unplaceable element fails repeatedly while cached windows record no successes (02-11 truth 4; SAFE-05; REVIEW WR-03)"
-    status: failed
-    requirement: SAFE-05
-    reason: "AXSnapshotReader.windowID(of:) (line 81) returns a cached element's ID before the private lookup runs, so in steady state Capabilities.recordSuccess is never called. CapabilitySession.recordFailure (Capabilities.swift:95-114) resets only on recordSuccess. An AXWindow element whose lookup fails and that Fallback.identify cannot place is not cached: its frame is unreadable (line 111) or the CG list is nil (line 113). It therefore fails again on every refresh, and after 5 sweeps (about 25 s) the lookup is switched off process-wide for the rest of the session. 'In a row' no longer means anything. This was confirmed by reading the code. The WR-02 fix's own report records the side effect. No test covers it"
-    artifacts:
-      - path: "Sources/PaneMac/AX/AXSnapshotReader.swift"
-        issue: "lines 81-92: cache-first return means no recordSuccess; failures are counted per lookup attempt, not per distinct element"
-      - path: "Sources/PanePrivate/Capabilities.swift"
-        issue: "lines 95-114: the consecutive-failure counter resets only on recordSuccess"
-    missing:
-      - "Count at most one failure per element: keep a per-app-thread negative cache of elements that already failed, matched with CFEqual. Or record one success per refresh whenever a cached `.axPrivate` element exists. Or switch off only when failures outnumber successes over a window of distinct elements"
-      - "Add a CapabilitySession / reader-level test: one element fails 5+ times while other elements stay cached under `.axPrivate`, and the capability must stay on. Five distinct failing elements must still switch it off exactly once"
-  - truth: "A window identified while the private lookup failed transiently is re-identified once the lookup works; no element keeps a synthetic or wrong frame-matched ID for life, and two elements never share one CGWindowID (02-11 truth 2 stickiness clause; WIN-02, SAFE-05; REVIEW WR-04)"
-    status: failed
-    requirement: SAFE-05
-    reason: "The WR-02 fix makes the cache authoritative: an element keeps whatever ID it was first given for as long as it is cached, and its source is never re-checked. A synthetic ID then keeps only bounds-based presence for life, and Phase 4 can never map it to an SCWindow. Worse, a new window E whose lookup fails before E appears in the CG snapshot can frame-match a same-frame, offscreen, untracked twin (on another Space, or a hidden tab). E then carries the twin's real CGWindowID permanently. Once the twin is listed, two elements share one ID in byID, E takes on the twin's frame and title, and E's own window is later tracked a second time. This was confirmed by reading AXSnapshotReader.swift:79-81 and 115-123 and FallbackMatcher.swift:17-30. No test covers it"
-    artifacts:
-      - path: "Sources/PaneMac/AX/AXSnapshotReader.swift"
-        issue: "lines 79-81: the cache-first check never re-checks `.synthetic` or `.cgFrameMatch` elements while the lookup is available; lines 115-123: a frame match accepted on the first pass may be an offscreen-only twin"
-      - path: "Sources/PaneEngine/WindowTracker.swift"
-        issue: "no re-key API exists to move a WindowInfo, its learner state and its tab membership to a corrected ID without emitting created/destroyed"
-    missing:
-      - "For cached elements whose source is not `.axPrivate`, keep calling the lookup while the capability is available. If it returns R and R differs from the cached ID, re-key explicitly with a new tracker API (e.g. `WindowTracker.rekey(from:to:)`) that moves WindowInfo, learner state, tab membership and close bookkeeping and emits no windowCreated or windowDestroyed"
-      - "When the lookup is available but failed for a NEW element, do not accept an offscreen-only frame match on that pass. Wait one refresh, which the 250 ms settle hold already allows"
-      - "Tests: a synthetic-ID element re-keys to its real ID when the lookup recovers (one window, no create/destroy); a wrong `.cgFrameMatch` to a cross-Space twin re-keys and the twin is tracked separately; no two cached elements ever share one ID"
-      - "Note: the orchestrator brief grouped WR-03/WR-04 with WIN-04. In the code they belong to window identity (SAFE-05 fallback, WIN-02 tracking), not to move/resize"
-deferred: []
+accepted_limits:
+  # Documented Known limits of 02-14..02-17, accepted as lead decisions of 2026-10-25 (relayed in the re-verification brief).
+  # None of them makes a must-have truth fail, so none needs an override. Listed so they are not re-raised as gaps.
+  - limit: "Single-Space fallback: without Space data, C5 may track two same-frame tab groups as one window (the override above)"
+    source: "02-14-SUMMARY Known limits 1; Probe3 C5 at HEAD: G2 never tracked, no destroy"
+  - limit: "With Space data, a hidden tab of unknown Space is left out of its group while a window known to be on another Space shares the frame slot, until a tab switch shows it (visibleMemberID and tabCount unaffected)"
+    source: "02-14-SUMMARY Known limits 2"
+  - limit: "Late Space notification: a notification that reaches main only after the update that already saw the new Space protects nothing; pinned by knownLimitWithoutTheSpaceNotificationTheShownTwinTakesTheClosedGroup"
+    source: "02-17-SUMMARY Known limits (residual 1), plus residuals 2-4 (refused handoff is final, merge during a switch, rapid switching)"
+  - limit: "32 pt learner margin: a real minimum within 32 pt of the request is not learned from that write; cells larger than 32 pt can be learned; the 1 s confirm refresh can replace a pending refresh of the same pid"
+    source: "02-15-SUMMARY Known limits"
+  - limit: "02-16 identity residuals: a holder with no frame or no CG list loses its window to the owner; a tab re-keyed inside a group does not re-point pendingFocus"
+    source: "02-16-SUMMARY Known limits"
+re_verification:
+  previous_status: gaps_found
+  previous_score: 108/121
+  gaps_closed:
+    - "A natively tabbed window counts as one tracked window, and a same-frame window of the same app on another Space is never taken as its hidden tab (ROADMAP SC2; 02-10 truth 1; REVIEW CR-01)"
+    - "A window is removed (windowDestroyed) only when two sources agree; a window alive on another Space is never reported destroyed (02-09 truth 2; WIN-09 core rule)"
+    - "When an app refuses a size, Pane learns its real minimum, including the common case of a window left clamped in a too-small tile and a window that is already at its minimum; a deterministic snap is never learned as a minimum (ROADMAP SC3; 02-12 truths 4 and 5; REVIEW WR-01, WR-02)"
+    - "Call-time degradation switches `_AXUIElementGetWindow` off only after 5 consecutive failures across real windows, not because one unplaceable element fails repeatedly while cached windows record no successes (02-11 truth 4; SAFE-05; REVIEW WR-03)"
+    - "A window identified while the private lookup failed transiently is re-identified once the lookup works; no element keeps a synthetic or wrong frame-matched ID for life, and two elements never share one CGWindowID (02-11 truth 2 stickiness clause; WIN-02, SAFE-05; REVIEW WR-04)"
+  gaps_remaining: []
+  regressions: []
+warnings:
+  - finding: "A window that applies a resize more than 1 s late gets its stale pre-write size learned as its minimum, and the hint is persisted per bundle (max only, no decay)"
+    category: other
+    evidence: "Probe4c at HEAD, scenario 'late applier (>1 s)': write 300 wide, read-back 800 (the app has not applied it yet), a refresh at 1.0 s still reads 800, so the learned minimum is 800.0x0.0. MinimumSizeLearner.swift:9-10 assumes every late applier has caught up within confirmDelay"
+    reason: "This matches the lead-approved 02-15 rule (truth 1: confirmed by 'an AX refresh at least 1 s after that write'), so no must-have fails. But no Known-limits section records it, and for an Electron or Chrome window under load it would block narrower tiles for that app in every later session. Lead decision requested: record it as an accepted limit, or harden it (for example, never learn a read-back equal to the pre-write frame unless a later refresh also follows a second, different request; or cap persisted hints)"
+  - finding: "02-SECURITY.md (status verified, threats_open 0) predates the gap closure and audits only T-02-01..T-02-37"
+    category: security
+    evidence: "The gap plans add T-02-38..T-02-48 (SkyLight Spaces input, symbol removal, hidden-tab spoofing, hint tampering, identity binding, capability DoS, rekey repudiation, orphan handoff, fold guard, notification source, rapid switching). 02-SECURITY.md was last changed in 519a40e, before 02-14. I spot-checked T-02-38 (CFNumber-only, 0 dropped, at most 16 Spaces per window at SkyLightSpaces.swift:52-61), T-02-39 (optional dlsym pointers) and T-02-43 (per-element counting at WindowIDResolver.swift:78-86): the code matches"
+    reason: "Run /gsd-secure-phase 2 to audit T-02-38..48 before /gsd-ship"
+  - finding: "Two plan key-link patterns are stale after the gap closure: 02-11 `FallbackMatcher\\.match` (AXSnapshotReader) and 02-12 `learner\\.learn` (WindowTracker). verify.key-links exits 1 for both plans"
+    category: other
+    evidence: "The intent holds: FallbackMatcher.match moved into WindowIDResolver.swift:103/106, which AXSnapshotReader.swift:59 calls through resolver.resolve; learner.learn became learner.recordWrite (WindowTracker.swift:297) plus learner.confirm (WindowTracker.swift:161)"
+    reason: "Documentation drift only. Update the two patterns so later regression checks stay green"
+behavior_unverified_items:
+  - truth: "AXWindowSystem observes `NSWorkspace.activeSpaceDidChangeNotification` and marks every tracked app through `SpaceSwitchMarks`; every update with a full AXWindows answer for a marked app carries `ObservationContext.spaceChanged == true` (02-17 truth 2)"
+    test: "Launch `scripts/run-debug.sh --no-build --disable-private=Spaces`. Put a two-tab Safari window on Space 1 and a single same-frame Safari window on Space 2 (Window > Fill on each). On Space 1 close the whole tab group, then switch to Space 2 at once (Ctrl-Right). Open Tracked Windows. Repeat without the flag"
+    expected: "The group's row is gone, and the Space 2 window has its own row with a new creation order. It is never shown under the closed group's entry"
+    why_human: "SpaceSwitchMarks and the engine rule are unit-tested, and FakeWindowSystem mimics the wiring. But no test posts a real activeSpaceDidChangeNotification to AXWindowSystem (lines 110-114, 223, 244, 335), and real Spaces cannot be switched from automation"
 human_verification:
   - test: "Accessibility grant flow: `tccutil reset Accessibility com.eightabyte.pane.debug`, then `scripts/run-debug.sh --no-build`; follow the setup window"
     expected: "S1 with a default 'Open System Settings'; the macOS prompt appears exactly once; after enabling 'Pane Debug' the window shows 'Pane is ready' with no click; the glyph changes from exclamationmark.triangle to rectangle.split.2x1"
@@ -232,8 +213,8 @@ human_verification:
   - test: "TCC grant survives a rebuild: grant Pane Debug, rebuild with `scripts/build-debug.sh`, relaunch"
     expected: "No new prompt; tracking starts"
     why_human: "Designated-requirement stability needs a real signed build and TCC"
-  - test: "Menu-bar glyph in light, dark and tinted menu bars; header 'Tracking N windows in M apps'; Debug shows 'Window ID lookup: available'"
-    expected: "Glyph legible in every appearance; plausible counts (backstop 02-02)"
+  - test: "Menu-bar glyph in light, dark and tinted menu bars; header 'Tracking N windows in M apps'; Debug shows 'Window ID lookup: available' and 'Spaces lookup: available' (and 'Spaces lookup: off, single Space' with `--disable-private=Spaces`)"
+    expected: "Glyph legible in every appearance; plausible counts; both Debug lines correct (backstop 02-02, 02-14 D5)"
     why_human: "Visual rendering"
   - test: "Lock and sleep: with 10 windows in several apps and Tracked Windows open, lock (Ctrl-Cmd-Q) for 30 s and unlock; sleep for a minute from the Apple menu and wake; optionally switch users"
     expected: "All 10 rows remain after each cycle; footer briefly shows 'Refreshing after wake · '; nothing moved or forgotten"
@@ -246,19 +227,22 @@ human_verification:
     why_human: "Alert key handling and SIGSTOP of a user app"
   - test: "Multi-display Nudge: on the built-in display, Debug ▸ Nudge Focused Window twice on a TextEdit window; attach an external display (or Sidecar) above, then left (and below), and nudge a window on it; unplug and replug while Pane runs"
     expected: "+32/+32 and -64x-64, then an exact restore; the same on the external display in each arrangement; the Display column follows; one displaysChanged then one refresh about 500 ms later on hot-plug"
-    why_human: "Needs physical display arrangements (backstop 02-13; the live second-display test was skipped on the last run with 1 display)"
-  - test: "Real native tabs: Finder, Terminal and Safari windows with three tabs each (Cmd-T); click between tabs; then repeat with a same-frame window of the same app on a second Space and switch Spaces (after the CR-01 gap closes)"
-    expected: "One row per app reading '3 tabs'; tab clicks change Title but never add or remove rows; Space switches never add or remove rows; note which apps report AXTabGroup (Safari may not)"
-    why_human: "Real apps' tab implementations differ (RESEARCH A1/A2) (backstop 02-10)"
-  - test: "Frame writes on real apps via Nudge: a Chrome or Electron window (AXEnhancedUserInterface toggled and restored), Terminal or iTerm2, and an app with a real minimum size; then quit and relaunch Pane"
-    expected: "Enhanced UI restored; terminal cell snapping not learned as a minimum; Min Size shows the real minimum; after relaunch the hint is back and `~/Library/Application Support/Pane/min-size-hints.json` holds only bundle IDs and sizes"
-    why_human: "Real third-party app behaviour (re-run after the learner gap closes)"
+    why_human: "Needs physical display arrangements (backstop 02-13; the live second-display test is skipped with 1 display)"
+  - test: "Real native tabs: Finder, Terminal and Safari windows with three tabs each (Cmd-T); click between tabs. Then, quickly, Cmd-T followed at once by Ctrl-Shift-Tab; and Cmd-T followed by a click on an older tab. Also Cmd-W on the shown tab"
+    expected: "One row per app window; the tab count and shown title follow every action; tab clicks change Title but never add or remove rows; the quick Cmd-T sequences never add a second row or crash Pane (REVIEW-FIX CR-01, WR-01); note which apps report AXTabGroup (Safari may not)"
+    why_human: "Real apps' tab implementations and timings differ (RESEARCH A1/A2; backstop 02-10). The engine cases are covered by D1/D2/R1 tests and Probe4/Probe5, but not against real apps"
+  - test: "Real Space switches with tab groups, with and without `--disable-private=Spaces`: a Terminal tab group on Space 1 and a same-frame Terminal window (and, separately, a same-frame tab group) on Space 2; switch back and forth; press Cmd-T in the Space 1 window while the twin sits on Space 2, then switch again; also the whole-group close plus immediate switch in behavior_unverified_items. Check `log show --predicate 'subsystem == \"com.eightabyte.pane\" AND category == \"private\"' --last 5m`"
+    expected: "With Space data: one row per real window throughout, and Space switches and Cmd-T never add, remove or duplicate rows. Without Space data: the same, except two same-frame tab groups may share one row (accepted single-Space limit), and no row is ever lost. Log shows 'Spaces: available' or 'Spaces: off'"
+    why_human: "Real Spaces cannot be created or switched from automation (02-14 D6, 02-17 D4)"
+  - test: "Frame writes and minimum-size hints on real apps via Nudge. First delete `~/Library/Application Support/Pane/min-size-hints.json`, which may hold snap hints learned under the old rule. Then try a Chrome or Electron window (AXEnhancedUserInterface toggled and restored), Terminal or iTerm2, and an app with a real minimum (Notes, Music); open a second window of that app; quit and relaunch Pane"
+    expected: "Enhanced UI restored; no terminal cell snap learned; Min Size shows the real minimum about a second after the refused write; the second window starts from it; after relaunch the hint is back; the hints file holds only bundle IDs and sizes. Also watch for the late-applier warning: a busy Chrome/Electron window must not learn its pre-write size as a minimum"
+    why_human: "Real third-party app behaviour (02-15 D6)"
   - test: "Exclusions in the real UI: Don't Arrange “TextEdit”, then Never Arrange submenu, then Nudge with TextEdit frontmost, then Nudge with System Settings frontmost"
     expected: "Checkmark; 'Excluded' badge; submenu lists and removes it; 'No apps excluded' when empty; 'Nudge Focused Window (app excluded)' and '(no window)' are shown disabled"
     why_human: "Menu rendering and interaction"
-  - test: "Signed app with the private API forced off: `scripts/run-debug.sh --no-build --disable-private=AXWindowID`; open Tracked Windows and the Debug menu; open and close windows; check `log show --predicate 'subsystem == \"com.eightabyte.pane\" AND category == \"private\"' --last 5m` (also with `--disable-private=AXWindowID,Bogus`)"
-    expected: "'Window ID lookup: off, matching by frame' in menu and footer; windows appear and disappear normally; ambiguous matches show 'by frame'; the log shows the capability report and an error line for 'Bogus'"
-    why_human: "ROADMAP SC5 in the signed app launched through LaunchServices; unified-log output is not asserted by any test"
+  - test: "Signed app, private lookup: run Pane Debug for 10 minutes of normal use across several apps (open and close windows, switch tabs and Spaces), then `log show --predicate 'subsystem == \"com.eightabyte.pane\" AND category == \"private\"' --last 15m`. Then relaunch with `scripts/run-debug.sh --no-build --disable-private=AXWindowID` (and once with `--disable-private=AXWindowID,Bogus`), open and close windows, and watch Tracked Windows and the Debug menu"
+    expected: "No 'AXWindowID failed 5 times' line in normal use, and Debug still shows 'Window ID lookup: available'. With the flag: 'Window ID lookup: off, matching by frame' in menu and footer; rows show 'by frame', appear and disappear normally and never duplicate; the log has the capability report and an error line for 'Bogus'"
+    why_human: "ROADMAP SC5 in the signed app launched through LaunchServices; real-app lookup failures cannot be provoked from the fixture (02-16 D6)"
   - test: "Corpus review before pushing publicly (SECURITY T-02-08): read every JSON in Tests/PaneEngineTests/Fixtures/AXDumps (`git log -p -- Tests/PaneEngineTests/Fixtures/AXDumps`), especially libreoffice_start_center and android_studio_welcome; then set confirmedBy to 'developer'"
     expected: "No title, path, URL or account name; every label matches the window. All 11 cases currently read confirmedBy 'executor-proposed'"
     why_human: "Labels must come from a person (Pitfall 6); privacy review is a judgment call"
@@ -268,7 +252,7 @@ human_verification:
   - test: "UI-REVIEW visual items: GroupBox callout inner padding (12 pt vs about 2x); Tracked Windows table background and alternating rows; long CFBundleName wraps at 480 pt in the setup window; the 'Looking for windows…' font; reset-failed state with duplicated 'Open System Settings' buttons and callouts B and E at once; menu header vs footer counts and missing loading state; table behaviour at 720 pt (horizontal scroll, pinned header, middle-truncated titles with tooltips)"
     expected: "Confirm or file each against 02-UI-REVIEW.md Top 3 fixes and needs_human_review items"
     why_human: "No screenshots were captured (native AppKit, no dev server); code-derived findings need a rendered check"
-  - test: "Prohibition review (judgment tier, non-authoritative LLM verdicts below): confirm no TrellisWM material and no code copied from AeroSpace, Amethyst, yabai or Loop"
+  - test: "Prohibition review (judgment tier, non-authoritative LLM verdicts in the report): confirm no TrellisWM material and no code copied from AeroSpace, Amethyst, yabai or Loop (Loop is GPL-3.0; the SkyLight shim must be an independent reimplementation)"
     expected: "Developer confirms clean-room status"
     why_human: "Provenance cannot be verified from the code"
 ---
@@ -277,161 +261,190 @@ human_verification:
 
 **Phase Goal:** As a Mac user, I want to grant Pane access and have it track and move every window, so that no slow app or lock screen can freeze or lose them.
 **Mode:** mvp. The user-story format is valid. Outcome clause: *no slow app or lock screen can freeze or lose them*.
-**Verified:** 2026-10-25T18:34:53Z
-**Status:** gaps_found
-**Re-verification:** No. This is the initial verification (no earlier 02-VERIFICATION.md existed).
+**Verified:** 2026-10-25T21:16:29Z at HEAD `29242da` (code at `5a0894a`)
+**Status:** human_needed
+**Re-verification:** Yes. This follows gap-closure plans 02-14 to 02-17 and the review-fix round 7c3350f..5a0894a. Previous status: gaps_found, 108/121.
 
 ## User Flow Coverage (MVP)
 
 | Step | Expected | Evidence in codebase | Status |
 |---|---|---|---|
-| Grant access | Guided grant; stale grant detected and explained | PermissionReducer (prompt only on the first click of a cycle, `PermissionReducer.swift:82,88`), PermissionProbe, TCCReset with fixed argv `/usr/bin/tccutil`, SetupView/Controller; PermissionReducerTests green | VERIFIED (automated); real TCC needs a human |
-| Track every window | Inventory of every standard window, live open and close | WindowTracker/AXWindowSystem/RefreshScheduler/AppRegistry; the classifier corpus passes | VERIFIED, except tab groups (gap 1) and fallback identity (gap 5) |
-| Move every window | setFrame on any display; learn minimum; exclusions respected | FrameWriter size→pos→size, latest-wins slot, ExclusionFilter.admit in both `perform` paths | Move: VERIFIED. Learn minimum: FAILED (gap 3) |
-| No slow app freezes it | Hung app isolated per thread; degraded probing | ResponsivenessTracker, per-app AXAppThread, 1 s system-wide messaging timeout (`AXWindowSystem.swift:80`), scenario tests green | VERIFIED (automated); a real `kill -STOP` needs a human |
-| No lock screen loses them | Lock/sleep/timeout never close; two-source close | CloseRule table, SessionGate, lock-blanking scenario tests green | Lock/sleep/timeout: VERIFIED. The "never lose" outcome FAILED for cross-Space twins (gap 2: folded path destroys a live window) |
+| Grant access | Guided grant; stale grant detected and explained | PermissionReducer, PermissionProbe, TCCReset, SetupView. PermissionReducerTests green | VERIFIED (automated); real TCC needs a human |
+| Track every window | Every standard window, live open and close, a tab group as one window | WindowTracker, TabGroupTracker (Space-aware, Cmd-T rule, fold guard), WindowIDResolver (re-check and re-key). Classifier corpus, SpaceTabScenarioTests (3 modes) and RekeyTests green; Probe3/4/5 one row per real window | VERIFIED. C5 without Space data is the accepted single-Space limit (override) |
+| Move every window | setFrame on any display; learn the real minimum; exclusions respected | FrameWriter size→pos→size; MinimumSizeLearner margin plus time rule; ExclusionFilter.admit in both paths | VERIFIED; multi-display and real apps need a human. One warning: an app that applies a resize more than 1 s late |
+| No slow app freezes it | Hung app isolated per thread | ResponsivenessTracker, per-app AXAppThread, 1 s messaging timeout; scenario tests green | VERIFIED (automated); a real `kill -STOP` needs a human |
+| No lock screen loses them | Lock/sleep/timeout never close; two-source close; no live cross-Space window destroyed | CloseRule, SessionGate, two-refresh fold guard, Space-switch hold. Invariant "no live window reported destroyed" checked after every refresh in SpaceTabScenarioTests | VERIFIED (automated); a real lock and sleep need a human |
 
-The outcome clause does not hold yet. A same-frame window of the same app on another Space can be reported destroyed while it is alive (gap 2), or tracked twice (gap 1). That is a lost window, which the phase goal says must never happen.
+The outcome clause now holds in code and tests. The two ways a window could be lost (gap 2: a fold destroying a live cross-Space twin; gap 1: a cross-Space twin tracked twice or taken as a hidden tab) are closed. With Space data that holds in every scenario; without it, in every scenario except the accepted C5 limit, where two groups may share one row but neither is ever destroyed.
 
 ## Goal Achievement
+
+### Previous gaps (all closed)
+
+| # | Gap (previous truth) | Fix in code | Behavioural evidence (run by me at HEAD) | Status |
+|---|---|---|---|---|
+| 1 | Tab group vs. same-frame twin on another Space (SC2, 02-10#1, WIN-06) | `SkyLightSpaces.swift` (dlopen/dlsym, `Capability.spaces`), `ObservationContext.windowSpaces` filled at `AXWindowSystem.swift:332-333`; `TabGroupTracker.swift`: Space exclusion and ambiguity rule (134, 162, 176), Cmd-T rule including a stale sweep CG list (127-136), rebind gate on Space proof only (119-121, 139-142), refused member never takes its old tabs or an existing leader (172, 188), orphan handoff needs former-tab evidence (152-159), blind-switch hold (89, 173-175) | Probe3 C2 (Z=5 and Z=50): `[(10,40,2),(Z,Z,1)]`, the twin created on its own, no DESTROYED. C7: `[(10,40,2),(30,30,2)]`, no phantom. Probe4 D1 (was exit 133): `[(10,10,3)]`, exit 0. D2: one row `[(10,50,4)]`. R1: one row, no `created 40`, no DESTROYED. Tests: `cmdTWithATwinOnAnotherSpaceTakesTheWindowItWasOpenedFrom` (6 cases), `twoSameFrameGroupsOnTwoSpacesStayTwoWindows`, `cmdTBesideAGroupOnAnotherSpaceLeadsItsOwnGroup`, D1/D2 in 3 modes, `cmdTSeenWithAStaleSweepCGListStaysOneWindow`: all pass | ✓ CLOSED. C5 in fallback: PASSED (override) |
+| 2 | A live cross-Space window reported destroyed (02-09#2, WIN-09) | `WindowTracker.swift:78-98`: a fold is destroyed only on the second consecutive full refresh with the same shown tab, and is held (neither counted nor destroyed) in a Space-switch update without Space data | Every SpaceTabScenarioTests refresh asserts that no tracked window disappears while its shown tab is AX-valid and in the CG list, and that no window ID is tracked under two identities (`TabScenarioTests.swift:55-80`). All modes pass. Probe4 C3b: a real Merge All Windows is still destroyed on the third refresh, as designed | ✓ CLOSED |
+| 3 | Minimum-size learning (SC3, 02-12#4/#5, WIN-04) | `MinimumSizeLearner.swift`: a candidate needs a read-back more than 32 pt above the request (37-39), confirmed by a refresh at least 1 s later within 2 pt (44-57); the pre-write skip is gone; in-session bundle hints in `WindowTracker.swift:164-166`; confirm refresh scheduled at `AXWindowSystem.swift:203, 345-347`; persisted through `onLearnedMinimum` (`AXWindowSystem.swift:367-373`) | Probe4c: 16-pt snap → nil; one shrink then static → 500; opens at its minimum → 500; lag-2 drag and back-and-forth → nil; early refresh waits, then 500 at 1.05 s. Tests `aWindowThatStaysClampedLearnsAfterTheNextRefresh`, `aWindowThatOpensAtItsMinimumLearnsIt`, `aGridSnapIsNeverLearnedButARealRefusalStillIs`, both slow-app tests, `theFakeClampsToItsHiddenMinimumAndTheTrackerLearnsItFromOneWrite`, `aMinimumLearnedThisSessionSeedsTheNextWindowOfThatBundle`: all pass. 02-12 truths 4/5 carry "revised by 02-15" | ✓ CLOSED (warning: late applier, see below) |
+| 4 | One failing element switches `_AXUIElementGetWindow` off (02-11#4, SAFE-05) | `WindowIDResolver.swift:78-86`: one counted failure per element (`counted`, capped at 64, not pruned by listing); every real lookup success resets the count | `oneElementThatKeepsFailingNeverSwitchesTheLookupOff`, `roundTripsOfOneFailingElementNeverSwitchTheLookupOff(staysCached:)` (Space round trip and hidden tab), `aFailingElementCountsOnceEvenAfterItLeftAXWindows`, `fiveDistinctFailingElementsSwitchTheLookupOffOnce`, `aSuccessBetweenFailuresKeepsTheLookupOn`: all pass | ✓ CLOSED |
+| 5 | Fallback ID kept for life; two elements sharing an ID (02-11#2, WIN-02) | `WindowIDResolver.swift:67-77` looks up every non-`.axPrivate` element again and reports `replaces`; 98-113: no offscreen-only match on a first failure (`identityPending`); 123-132: unique IDs; `WindowTracker.rekey(from:to:)` (215-250) moves info, creation order, facts, learner and tab state, and emits one `windowRekeyed` | `aSyntheticWindowIsRekeyedToItsRealIDAndStaysOneWindow`, RekeyTests, RekeyGroupTests (including the wrong cross-Space frame match), WindowIDResolverTests: all pass. Live FallbackIntegrationTests passed in the fixer's gate (24 pass, 1 skip); I did not re-run it, as instructed | ✓ CLOSED |
 
 ### Roadmap Success Criteria (contract)
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| SC1 | Guided Accessibility grant; stale grant detected and explained, no looping prompts | ✓ VERIFIED | Reducer transitions, the 14.9 s / 15 s form-B boundary and the 20-sequence no-repeat-prompt property are covered by PermissionReducerTests (green in my run). Real TCC flow is in human_verification |
-| SC2 | Tracked list shows every standard window, updates live, counts a natively tabbed window as one, and excludes dialogs, sheets, popovers and PiP (corpus passes) | ✗ FAILED | Tracking and classification hold: the 11-case corpus covers Finder, Safari, Terminal, System Settings, Electron (VS Code), Java (Android Studio) and office (LibreOffice), with 7 dockable, 3 neverDock and 1 notAWindow case, and ClassifierCorpusTests is green. **Tabs fail:** probe3 C2/C5/C7 reproduced against HEAD (gap 1) |
-| SC3 | Move/resize any window on any display; learn the real minimum on refusal; excluded apps never touched | ✗ FAILED | Move/resize and exclusions hold: `ExclusionFilter.admit` is at `AXWindowSystem.swift:155` and `FakeWindowSystem.swift:296`, and FrameScenarioTests and ExclusionScenarioTests are green. **Learning fails:** probe3c 'at-min static: learned nil', snap learned 518 (gap 3). Multi-display needs a human |
-| SC4 | kill -STOP neither stalls Pane nor delays others; lock, sleep or AX timeout never marks a window closed | ✓ VERIFIED | `aHungAppDoesNotDelayAnotherAppsNewWindow`, `aHungAppNeverLosesAWindowOverFiveRefreshes`, `blankingWithoutTheGateAlsoClosesNothingBecauseEveryReadTimesOut` and the CloseRule `.timedOut → noChange` case are green. FreezeIntegrationTests passed in the orchestrator's live gate (I did not re-run it). A real app and a real lock/sleep need a human |
-| SC5 | With `_AXUIElementGetWindow` forced unavailable, Pane launches and tracks through its fallback | ✓ VERIFIED | dlopen/dlsym only (`AXWindowID.swift:15-16`); no link-time private symbol anywhere; FallbackMatcherTests and CapabilitiesTests green; FallbackIntegrationTests passed in the orchestrator's live gate. Call-time degradation and identity stickiness have their own gaps (4, 5) |
+| SC1 | Guided Accessibility grant; stale grant detected and explained, no looping prompts | ✓ VERIFIED | PermissionReducerTests (14.9 s / 15 s boundary, 20-sequence no-repeat-prompt property) green. Real TCC in human_verification |
+| SC2 | Tracked list shows every standard window, updates live, counts a natively tabbed window as one, and excludes dialogs, sheets, popovers and PiP (corpus passes) | ✓ VERIFIED (C5 fallback via override) | The 11-case corpus is green. Tab groups: gap 1 evidence above. Without Space data, C5 is the accepted single-Space limit. Real-app tabs are a backstop for a human |
+| SC3 | Move/resize any window on any display; learn the real minimum on refusal; excluded apps never touched | ✓ VERIFIED | FrameScenarioTests, ExclusionScenarioTests and the learner tests are green, and Probe4c agrees. Multi-display and real apps go to a human. Late-applier warning below |
+| SC4 | kill -STOP neither stalls Pane nor delays others; lock, sleep or AX timeout never marks a window closed | ✓ VERIFIED | `aHungAppDoesNotDelayAnotherAppsNewWindow`, `aHungAppNeverLosesAWindowOverFiveRefreshes`, `lockBlankingClosesNothing`, `blankingWithoutTheGateAlsoClosesNothingBecauseEveryReadTimesOut` green |
+| SC5 | With `_AXUIElementGetWindow` forced unavailable, Pane launches and tracks through its fallback | ✓ VERIFIED | dlopen/dlsym only; CapabilitiesTests and WindowIDResolverTests green; FallbackIntegrationTests passed in the fixer's live gate |
 
-### Plan must-have truths (116 across 13 plans)
+### Plan must-have truths (145 across 17 plans)
 
-All key links (38/38) and artifacts (57/57) pass `verify.key-links` and `verify.artifacts`. Truths per plan:
+Every artifact passes `verify.artifacts` (all 17 plans exit 0; 02-14 to 02-17: 19/19). Key links: plans 02-14 to 02-17 pass 13/13. 02-11 and 02-12 now each report one failing link, because the pattern went stale (warning 3). I checked the wiring by hand, and it holds.
 
-| Plan | Truths | Verified | Failed | Backstop (insufficient_spec → human) | Notes |
-|---|---|---|---|---|---|
-| 02-01 tracer | 11 | 11 | 0 | 0 | dlopen path, 1.0 s timeout at `AXWindowSystem.swift:80`, own pid and loginwindow skipped (`AppRegistry.swift:58`), FakeWindowSystem over the shared tracker. FixtureTrackingTests comes from the orchestrator's live gate |
-| 02-02 shell/signing | 9 | 8 | 0 | 1 (glyph legibility) | project.yml: manual Developer ID, team S2K7P43927; no Sparkle |
-| 02-03 classifier/corpus | 10 | 9 | 0 | 1 (PiP capture) | Corpus labels are `executor-proposed`, so the developer-label confirmation is in human_verification |
-| 02-04 LifecycleSync | 5 | 5 | 0 | 0 | LifecycleSyncTests green |
-| 02-05 permission | 12 | 11 | 0 | 1 (long CFBundleName wrap) | |
-| 02-06 live tracking/displays | 9 | 9 | 0 | 0 | CoordinatesTests and TrackerDisplayTests green; LiveTrackingTests from the gate |
-| 02-07 hung apps | 7 | 7 | 0 | 0 | ResponsivenessTracker and scenario tests green |
-| 02-08 Tracked Windows/exclusions/freeze | 12 | 12 | 0 | 0 | UI-REVIEW warnings are cosmetic (see human_verification) |
-| 02-09 two-source close/session gate | 9 | 8 | **1** | 0 | Truth 2 fails: the folded path destroys a live cross-Space twin (gap 2). Truth 6 (reused ID is a new window) holds through removal (`aReusedIDIsANewWindow`), but ClosedIDCache is dead state (IN-01) |
-| 02-10 native tabs | 8 | 6 | **1** | 1 (real-app tabs) | Truth 1 fails (gap 1) |
-| 02-11 ID fallback | 7 | 5 | **2** | 0 | Truth 2's "keeps its ID for life" clause is the WR-04 defect (gap 5); truth 4 fails, because the consecutive-failure count is meaningless without successes (gap 4) |
-| 02-12 frame writes/learning | 8 | 6 | **2** | 0 | Truths 4 and 5 fail: one refusal teaches nothing, and a clamped window never learns (gap 3) |
-| 02-13 exclusions/hints/nudge | 9 | 8 | 0 | 1 (multi-display) | |
+| Plan | Truths | Verified | Failed | Backstop (→ human) | Behaviour-unverified | Notes |
+|---|---|---|---|---|---|---|
+| 02-01 | 11 | 11 | 0 | 0 | 0 | Regression: unchanged areas, suites green |
+| 02-02 | 9 | 8 | 0 | 1 (glyph) | 0 | |
+| 02-03 | 10 | 9 | 0 | 1 (PiP) | 0 | |
+| 02-04 | 5 | 5 | 0 | 0 | 0 | LifecycleSync ignores `windowRekeyed` (Phase 3 obligation, 02-16) |
+| 02-05 | 12 | 11 | 0 | 1 (CFBundleName wrap) | 0 | |
+| 02-06 | 9 | 9 | 0 | 0 | 0 | |
+| 02-07 | 7 | 7 | 0 | 0 | 0 | |
+| 02-08 | 12 | 12 | 0 | 0 | 0 | |
+| 02-09 | 9 | **9** | 0 | 0 | 0 | Truth 2 now holds (gap 2) |
+| 02-10 | 8 | **7** | 0 | 1 (real-app tabs) | 0 | Truth 1 now holds (gap 1) |
+| 02-11 | 7 | **7** | 0 | 0 | 0 | Truths 2 and 4 now hold (gaps 4, 5) |
+| 02-12 | 8 | **8** | 0 | 0 | 0 | Truths 4 and 5 (revised by 02-15) hold (gap 3) |
+| 02-13 | 9 | 8 | 0 | 1 (multi-display) | 0 | |
+| 02-14 | 10 | 10 | 0 | 0 | 0 | Truth 9 states the accepted C5 limit and its two safety invariants, which pass in fallback mode |
+| 02-15 | 7 | 7 | 0 | 0 | 0 | |
+| 02-16 | 6 | 6 | 0 | 0 | 0 | Truth 5 is now stronger after the WR-02 fix (counted once per element for its lifetime, up to 64) |
+| 02-17 | 6 | 5 | 0 | 0 | **1** | Truth 2 (live notification observer): wired at `AXWindowSystem.swift:110-114, 223, 244, 335`, but no test posts a real notification |
 
-**Score:** 108/121 truths verified (5 roadmap SCs + 116 plan truths). 8 failed (SC2, SC3, 02-09#2, 02-10#1, 02-11#2, 02-11#4, 02-12#4, 02-12#5). 5 are backstops routed to a human. 0 are present but behaviour-unverified.
+**Score:** 144/150 truths verified (5 roadmap SCs + 145 plan truths). 0 failed. 5 backstops routed to a human (insufficient_spec). 1 present and wired but behaviour-unverified. 1 truth passes via the C5 override.
 
 ### Prohibitions (judgment tier, mode-dependent soft gate)
 
-All 23 prohibitions are judgment tier (no wired negative test). The verdicts below are **non-authoritative LLM-judge verdicts** and are flagged `unverified-prohibition: human review recommended`.
+There are 24 prohibitions: 23 from 02-01..13 and 1 new in 02-14. All are judgment tier with no wired negative test. The verdicts are **non-authoritative LLM-judge verdicts**, flagged `unverified-prohibition: human review recommended`.
 
 | Prohibition (plan) | LLM verdict | Evidence |
 |---|---|---|
-| No link-time private symbols (01) | holds | No `@_silgen_name`, C header or `-framework SkyLight`; dlopen/dlsym only |
-| Titles never logged (01, 08) | holds | No logger call carries a title |
-| No TrellisWM material or copied code (01) | cannot judge | Provenance needs a human (see human_verification) |
-| No ad-hoc signing (02) | holds | `CODE_SIGN_IDENTITY: "Developer ID Application"`; no `codesign -s -` in scripts |
-| No Sparkle (02) | holds | Not in Package.swift or project.yml |
-| No TrellisWM text or icons in the menu (02) | holds (weak) | No 'trellis' string in Sources, xcode or scripts |
-| Corpus has no personal data; labels never auto-filled (03) | holds | Leak test; titles redacted; pane-dump requires `--label`. Developer review pending |
-| Lifecycle never through World.edit (04) | holds | LifecycleSync calls only apply/undo |
-| No reset of foreign TCC entries; no looping prompt or reopen (05) | holds | Fixed argv with own bundle ID; prompt only on the first click |
-| AX notification alone never closes (06) | holds | Hints only schedule refreshes |
-| MainActor never blocks on one app (07) | holds | One in-flight job per pid; degraded apps are probed only |
-| Freeze never stops critical processes or leaves an app stopped (08) | holds | Refuse list, Debug only, auto-resume, resume at launch (IN-09 PID-reuse risk noted) |
-| No default exclusions (08) | holds | ExclusionStore has no defaults |
-| **Never discard a tracked window on one source (09)** | **violated** | The folded path destroys on CG bounds alone (gap 2) |
-| A tab switch never looks like close+open (10) | holds for a tab switch | Space-switch churn is covered by gap 1 |
-| Private-API failure never stops launch (11) | holds | Optional pointers; session switch-off |
-| CG names never logged or stored (11) | holds | Names read only for an ambiguous match, then dropped |
-| Pane never arranges on its own in Phase 2 (12) | holds | The only `perform` caller is the Nudge item (`StatusItemController.swift:201`) |
-| Never touch excluded apps' windows (13) | holds | ExclusionFilter first in both paths; WR-04 (iteration 1) excluded flag under the frame lock |
-| Hints file stores only bundle IDs and sizes (13) | holds | MinimumHintsStore schema |
+| SkyLight never linked at link time (14, new) | holds | `grep SkyLight Package.swift xcode/project.yml` finds nothing; no `@_silgen_name` anywhere; `SkyLightSpaces.swift:19-25` uses dlopen/dlsym only |
+| No link-time private symbols (01) | holds | dlopen/dlsym only |
+| Titles never logged (01, 08) | holds | No logger call in the gap-closure diff carries a title |
+| No TrellisWM material or copied code (01) | cannot judge | Provenance needs a human |
+| **Never discard a tracked window on one source (09)** | **holds (was violated)** | A fold now needs two consecutive refreshes with the same shown tab (AX tab bar plus CG offscreen slot), and is held during a blind Space switch. The scenario invariant passes in all modes |
+| A tab switch never looks like close+open (10) | holds | D1/D2/R1 and my Probe5 V2-V4 report no create or destroy |
+| Private-API failure never stops launch (11) | holds | Optional pointers; Spaces degrades on its own |
+| CG names never logged or stored (11) | holds | `WindowIDResolver.swift:104-107`: names used for one ambiguous match only |
+| Hints file stores only bundle IDs and sizes (13) | holds | MinimumHintsStore schema unchanged |
+| The other 15 (02, 03, 04, 05, 06, 07, 08, 12, 13) | hold | Unchanged since the previous verification; the code they cover was not touched by the gap closure, or was touched only additively |
 
-Status: complete with 23 flagged prohibitions, 1 judged violated (it is the same defect as gap 2).
+The phase completes with 24 flagged prohibitions, none judged violated.
 
 ### Key Link Verification
 
-38/38 links verified by `verify.key-links`. Every plan's links pass, including `tracker.ingest`, `AXWindowID.function`, `Classifier.classify`, `CloseRule.decide`, `tabGroups.update`, `FallbackMatcher.match`, `recordFailure`, `enqueueFrame`, `FrameWriter.write`, `learner.learn`, `ExclusionFilter.admit`, `setExcludedBundleIDs`, `MinimumHintsStore` and `NudgePlanner`.
+02-14: 3/3, 02-15: 3/3, 02-16: 3/3, 02-17: 4/4. Plans 02-01..10 and 02-13 all exit 0. 02-11 (`FallbackMatcher\.match` in AXSnapshotReader) and 02-12 (`learner\.learn` in WindowTracker) fail on patterns the gap closure renamed. The manual trace: `AXSnapshotReader.swift:59` → `WindowIDResolver.resolve` → `FallbackMatcher.match` (`WindowIDResolver.swift:103, 106`); `WindowTracker.applyFrameResult` → `learner.recordWrite` (297) and `ingest` → `learner.confirm` (161). The links are WIRED.
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data | Source | Real data | Status |
 |---|---|---|---|---|
-| StatusItemController header | inventory counts | `await system.inventory()` ← WindowTracker ← AXAppThread observations | yes | ✓ FLOWING (IN-02: header and footer use different filters) |
+| StatusItemController header | inventory counts | `system.inventory()` ← WindowTracker ← AXAppThread | yes | ✓ FLOWING (IN-02 filter mismatch carried) |
 | TrackedWindowsView rows | WindowInfo list | TrackedWindowsModel ← inventory + exclusions | yes | ✓ FLOWING |
-| WindowInfo.learnedMinimum | learned size | MinimumSizeLearner ← applyFrameResult read-back | flows, but the learner rarely produces a value | ⚠️ semantics defect (gap 3) |
-| Bundle hints | per-bundle minimums | MinimumHintsStore → setBundleHints at launch only | flows at launch only | ⚠️ IN-04 |
-| Capability caption | AXWindowID state | CapabilitySession | yes | ✓ FLOWING (gap 4 affects when it flips) |
+| WindowInfo.learnedMinimum | learned size | MinimumSizeLearner.confirm ← ingest ← AX refresh ≥1 s after the write | yes | ✓ FLOWING |
+| Bundle hints | per-bundle minimums | MinimumHintsStore → setBundleHints at launch; in-session raise in WindowTracker; `onLearnedMinimum` → `hints.record` / `save` | yes | ✓ FLOWING (IN-04 resolved) |
+| Window Spaces | `[UInt32: Set<UInt64>]` | `SkyLightSpaces.spaces(of:)` ← this pid's layer-0 CG IDs → ObservationContext → TabGroupTracker | yes (live SpacesIntegrationTests, fixer's gate) | ✓ FLOWING |
+| Space-switch flag | `spaceChanged` | NSWorkspace notification → SpaceSwitchMarks → ObservationContext | wired; real notification untested | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED (02-17#2) |
+| Debug menu captions | AXWindowID and Spaces state | CapabilitySession | yes | ✓ FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Non-live suite green | `swift test --skip PaneMacIntegrationTests` (run once) | 142 + 74 + 166 = 382 tests passed, exit 0 | ✓ PASS |
-| Engine and Model AppKit-free | `bash scripts/check-no-appkit.sh` | `no-appkit: OK (24 files)` | ✓ PASS |
-| CR-01 still reproduces | `swift run Probe3` (scratchpad/probe3, real TabGroupTracker and WindowTracker at HEAD) | C2 `[(10,10,1),(40,40,2)]` … `DESTROYED 5` / `DESTROYED 50`; C5 visible member alternates 30/10; C7 phantom A | ✗ FAIL (gap 1, 2) |
-| WR-01/WR-02 still reproduce | `swift run Probe3c` | 'at-min static: learned nil', 'one shrink then static: learned nil', snap → `learned (0, 518)` | ✗ FAIL (gap 3) |
-| Live integration suite | not run (instructed) | Orchestrator gate: 22 passed, 1 skipped (needs 2 displays) | ? SKIP (gate evidence accepted, not re-run) |
+| Non-live suite green | `swift test --skip PaneMacIntegrationTests` (run once) | 142 + 97 + 231 = 470 tests passed, 0 failures, exit 0 | ✓ PASS |
+| Engine and Model AppKit-free | `bash scripts/check-no-appkit.sh` | `no-appkit: OK (25 files)` | ✓ PASS |
+| CR-01 (iter. 3) cross-Space cases | `swift run Probe3` (scratchpad/probe3, real trackers at HEAD) | C1-C7 as in the gap table; output identical to `scratchpad/final/probe3.txt` apart from the build banner | ✓ PASS (C5 under override) |
+| CR-01 (iter. 4) crash and duplicate | `.build/debug/Probe4 crash`, `dup` | D1 `[(10,10,3)]`, exit 0 (was 133); D2 one row throughout | ✓ PASS |
+| WR-01 stale sweep CG | `.build/debug/Probe4 race` | One row at every step; no `created 40`, no DESTROYED | ✓ PASS |
+| Merge fold guard | `.build/debug/Probe4 c3` | Merged 20 destroyed on the third refresh, by design | ✓ PASS |
+| Orphan handoff | `.build/debug/Probe4 orphan` | No Space data, and twin answered: group destroyed, twin created. Partial Space map: `[(30,50,1)]` (IN-14, Info) | ✓ PASS (IN-14 Info) |
+| Learner | `.build/debug/Probe4c` | snap nil; clamped 500; at-min 500; lag-2 nil; early then 1.05 s → 500; late applier (>1 s) → 800 | ✓ PASS (warning 1) |
+| Chained re-key | `.build/debug/Probe4d` | `rekeyed 900 -> 20 / rekeyed 20 -> 30 / created 20` (IN-13, Info) | ? Info |
+| My own adversarial cases | `scratchpad/reverify/probe5` (V1 two onscreen same-frame windows plus Cmd-T, stale and fresh CG; V2 Cmd-W on the shown tab; V3 Cmd-T plus Cmd-W in one refresh; V4 stale Cmd-T then Ctrl-Shift-Tab) | Every step keeps one row per real window, with no spurious create or destroy | ✓ PASS |
+| Debt markers in the 31 changed files | `grep -nwE 'TBD\|FIXME\|XXX'` and `TODO\|HACK\|PLACEHOLDER\|RED stub` | none | ✓ PASS |
+| Live integration suite | not run (instructed) | Fixer's gate at `5a0894a`: 24 passed, 1 skipped (needs 2 displays) | ? SKIP (gate evidence accepted) |
+
+All probe outputs are in `/private/tmp/claude-501/-Users-ken-dev-panewm/fa534412-df62-4443-994d-8e3bd65099ce/scratchpad/reverify/`. Every Probe4/4c/4d output is byte-identical to `scratchpad/final/`. The probe binaries are newer than every PaneEngine source they link (TabGroupTracker.swift 16:02:31, binaries 16:02:50; the later 5a0894a touched only PaneMac).
 
 ### Probe Execution
 
-No `scripts/*/tests/probe-*.sh` is declared or present. Step 7c: not applicable.
+No `scripts/*/tests/probe-*.sh` is declared or present, so Step 7c does not apply. The reviewer's Swift harnesses were run as behavioural spot-checks (above).
 
 ### Requirements Coverage
 
 | Requirement | Source plans | Description | Status | Evidence |
 |---|---|---|---|---|
-| WIN-01 | 02, 05 | Guided grant; stale grant detected | ✓ SATISFIED (automated) | Reducer, probe, reset; human UAT pending |
-| WIN-02 | 01, 02, 06, 08, 09 | Tracks every standard window | ⚠️ PARTIAL | Holds with the private lookup. Under fallback, gap 5 can merge or duplicate identities; gap 1 can track one window twice |
-| WIN-03 | 07, 08, 12 | Hung app never freezes Pane | ✓ SATISFIED (automated) | ResponsivenessTracker and per-app threads; real kill -STOP needs a human |
-| WIN-04 | 06, 12, 13 | Move/resize; learn minimum | ✗ BLOCKED | Gap 3 |
-| WIN-05 | 03 | Dialogs, sheets, popovers, PiP never docked | ✓ SATISFIED | Corpus green; developer label review and PiP capture are human items |
-| WIN-06 | 10 | Native tabs count as one window | ✗ BLOCKED | Gap 1 |
-| WIN-08 | 08, 13 | Exclusion list | ✓ SATISFIED | ExclusionFilter in both perform paths; scenario and store tests green |
-| WIN-09 | 04, 09 | Close only on two sources; lock, sleep, timeouts never close | ✗ BLOCKED | Lock, sleep and timeout hold, but the folded path closes a live window on one source (gap 2) |
-| SAFE-05 | 01, 02, 11 | Broken private API disables only its feature | ⚠️ PARTIAL | Forced-off launch and fallback hold; call-time degradation miscounts (gap 4); fallback IDs stick (gap 5) |
+| WIN-01 | 02, 05 | Guided grant; stale grant detected | ✓ SATISFIED (automated) | Real TCC needs a human |
+| WIN-02 | 01, 02, 06, 08, 09, 16 | Tracks every standard window | ✓ SATISFIED | Gap 5 closed: re-check and re-key, unique IDs |
+| WIN-03 | 07, 08, 12 | Hung app never freezes Pane | ✓ SATISFIED (automated) | Real kill -STOP needs a human |
+| WIN-04 | 06, 12, 13, 15 | Move/resize; learn minimum | ✓ SATISFIED | Gap 3 closed; late-applier warning |
+| WIN-05 | 03 | Dialogs, sheets, popovers, PiP never docked | ✓ SATISFIED | Corpus green; label review and PiP capture need a human |
+| WIN-06 | 10, 14, 17 | Native tabs count as one window | ✓ SATISFIED | Gap 1 closed; C5 fallback under override |
+| WIN-08 | 08, 13 | Exclusion list | ✓ SATISFIED | |
+| WIN-09 | 04, 09, 14, 17 | Close only on two sources; lock, sleep, timeouts never close | ✓ SATISFIED | Gap 2 closed; fold guard and Space-switch hold |
+| SAFE-05 | 01, 02, 11, 14, 16 | Broken private API disables only its feature | ✓ SATISFIED | Gap 4 closed; Spaces is its own capability with a single-Space fallback |
 
-All 9 phase requirement IDs appear in at least one plan's `requirements` field. REQUIREMENTS.md maps no other ID to Phase 2, so nothing is orphaned. **Traceability note:** REQUIREMENTS.md marks all nine `[x] Complete`. WIN-04, WIN-06, WIN-09 and SAFE-05 should not be considered complete until gaps 1-5 close.
+All 9 IDs are claimed by plans. REQUIREMENTS.md maps no other ID to Phase 2, so nothing is orphaned. REQUIREMENTS.md marks all nine complete. That is now consistent with the code, pending the human UAT.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |---|---|---|---|---|
-| (all phase files) | — | TBD/FIXME/XXX | none found | — |
-| Sources/PaneEngine/TabGroupTracker.swift | 31-33 | `shortcut:` comment claims cross-Space twins self-correct | 🛑 Blocker (tied to gap 1) | The claim is false for twins with a tab bar (C5) and for Cmd-T (C2) |
-| Sources/PaneEngine/WindowTracker.swift | 63-66 | Destroy without CloseRule | 🛑 Blocker (gap 2) | A live window is reported destroyed |
-| Sources/PaneMac/AX/AXSnapshotReader.swift | 81 | Cache-first return skips recordSuccess | ⚠️ Warning (gap 4) | Session-wide switch-off |
-| Sources/PaneEngine/CloseRule.swift | 60-85 | ClosedIDCache dead state, doc comments swapped (IN-01) | ℹ️ Info | — |
-| Sources/PaneEngine/PermissionReducer.swift | 110 | `where` guards only the second pattern (IN-03, deferred-items) | ℹ️ Info | Release warning |
-| Sources/PaneMac/AXWindowSystem.swift | 107-115 | Starting while locked marks the initial refresh complete (IN-06) | ℹ️ Info | Existing windows reported as new after unlock |
-| Sources/PaneMac/Permission/PermissionController.swift | 55-73 | Accessibility revoke not detected (IN-08) | ℹ️ Info | Glyph still shows ready |
-| Sources/PaneMac/AX/AXAppThread.swift | 128, 294-315 | Retry loop does not check isStopped; no cap; unsupported retried at app level (IN-11) | ℹ️ Info | Slow observes on a misbehaving app |
-| Tests/PaneMacIntegrationTests/CloseIntegrationTests.swift | 58 | Rare unhide flake (deferred-items) | ℹ️ Info | 1 in ~37 runs |
-
-IN-02, IN-05, IN-07, IN-09, IN-10 and IN-12 from 02-REVIEW.md are still open as Info. They are not blockers.
+| (31 files changed since b63a0d4) | — | TBD/FIXME/XXX, TODO/HACK/placeholder | none found | — |
+| Sources/PaneEngine/TabGroupTracker.swift | 46-50 | `shortcut:` documenting the accepted single-Space and late-notification limits | ℹ️ Info | Accurate; matches the override and accepted_limits |
+| Sources/PaneEngine/MinimumSizeLearner.swift | 9-10 | Doc claims late appliers "have caught up by then" | ⚠️ Warning | Not true beyond 1 s (warning 1) |
+| Sources/PaneEngine/WindowTracker.swift | 396-398 | Misplaced doc comment (IN-15) | ℹ️ Info | — |
+| Sources/PaneEngine/WindowTracker.swift | 55-60 | Re-keys applied one at a time (IN-13, Probe4d) | ℹ️ Info | A chained correction can swap two windows' entries; needs two lookup failures in a row |
+| Sources/PaneEngine/TabGroupTracker.swift | 89 | Blind switch keyed on the batch, not on the window (IN-14, Probe4 orphan) | ℹ️ Info | A partial Space map can hand a closed group to a twin |
+| Probe3 C3 / Probe4 C3b | — | Merge All Windows shows the merged window twice for one refresh before the fold guard destroys it | ℹ️ Info | The intended cost of the two-refresh guard |
+| IN-01..03, IN-06..12 | — | Carried from 02-REVIEW.md | ℹ️ Info | Not gaps (lead instruction) |
 
 ### Human Verification Required
 
-17 items are listed in the `human_verification` frontmatter: the grant flows, lock/sleep, a real kill -STOP, the Freeze test, multi-display Nudge, real Finder/Terminal/Safari tabs, real-app frame writes, the exclusions UI, the menu glyph in light and dark, the signed app with `--disable-private=AXWindowID` and its unified log, the corpus label and privacy review before a public push (SECURITY T-02-08), the PiP capture, the UI-REVIEW visual items, and clean-room provenance. Run the tab and real-app frame-write items again after gaps 1 and 3 close.
+There are 18 items in the `human_verification` frontmatter, plus 1 `behavior_unverified_items` entry (a real Space switch reaching AXWindowSystem). The items:
+- the grant flows (4)
+- the menu glyph and Debug lines
+- lock/sleep
+- kill -STOP
+- the Freeze test
+- multi-display Nudge
+- real Finder/Terminal/Safari tabs, including quick Cmd-T then Ctrl-Shift-Tab, and Cmd-T then clicking an older tab
+- real Space switches with tab groups, with and without `--disable-private=Spaces`
+- Chrome/Electron/Terminal frame writes and the minimum-size hints, after deleting `min-size-hints.json` first
+- exclusions in the real UI
+- the signed app over 10 minutes of normal use and with `--disable-private=AXWindowID`
+- the corpus label review before the public push
+- the PiP capture
+- the UI-REVIEW visual items
+- clean-room provenance
 
 ### Gaps Summary
 
-There are five gaps, from three root causes. Every one is a finding the code review left open after the loop cap, and I confirmed each one myself against HEAD: CR-01, WR-01 and WR-02 by re-running the reviewer's harness, WR-03 and WR-04 by reading the code.
+There are no gaps. All five previous gaps are closed in code and in committed tests, and the reviewer's harnesses confirm each one against HEAD. So do four extra tab-timing scenarios I wrote myself. The iteration-4 review findings (CR-01 crash and duplicate, WR-01 stale sweep, WR-02 per-listing count) are fixed, and the probes that exposed them now pass.
 
-1. **Tab group vs. same-frame twin on another Space (gaps 1 and 2, WIN-06 and WIN-09).** Without Space membership, S4 and C2 are the same input and need different answers. Per the project lead's decision, pull a **read-only SkyLight Spaces lookup** forward from Phase 6. It goes in its own PanePrivate file with dlopen/dlsym, registers as a new Capability that can be forced off, and falls back to a single Space. Add the pure CG-history rule for brand-new shown tabs, and add a two-refresh guard before a folded window is destroyed. Add C2, C5 and C7 scenario tests, both with and without Space data.
-2. **Minimum-size learner semantics (gap 3, WIN-04).** Simplify the learner. Confirm a refusal by time (a later refresh at least settleDelay after the write still reads the clamped size) instead of skipping pre-write-size read-backs. Require refusals against requests that differ, so a deterministic snap is never learned. Align the 02-12 truth text, and push hints to the tracker within the session (IN-04).
-3. **Window-ID cache and capability count (gaps 4 and 5, SAFE-05 and WIN-02).** Count failures per distinct element, or record a success for cached `.axPrivate` elements. Re-check the lookup for cached non-`.axPrivate` elements and re-key through a new `WindowTracker.rekey(from:to:)`. Don't accept an offscreen-only frame match on the first pass after a lookup failure.
+Three warnings need a lead decision or a quick follow-up. None blocks the phase goal:
+1. **Late applier (more than 1 s):** the time rule learns a stale pre-write size as a minimum and persists it per bundle. Accept it as a limit, or harden it.
+2. **02-SECURITY.md is stale** for T-02-38..48. Run `/gsd-secure-phase 2` before shipping.
+3. **Two key-link patterns are stale** (02-11, 02-12). Update the plan text.
 
-**Deferral check (Step 9b):** Phase 6's scope note includes a "Read-only SkyLight `SpacesProvider` with a single-Space fallback". It could have absorbed part of gap 1, but the project lead has decided to pull it forward to close the gap in Phase 2, so nothing is deferred. Phase 6 can reuse the shim.
+The documented Known limits of 02-14..02-17 are recorded under `accepted_limits` and the C5 override. IN-13 and IN-14 stay Info.
+
+**Deferral check (Step 9b):** there are no gaps to defer. Phase 6's co-visibility window-to-Space map is the stated upgrade path for the late-notification and single-Space limits.
 
 ---
 
-_Verified: 2026-10-25T18:34:53Z_
+_Verified: 2026-10-25T21:16:29Z_
 _Verifier: Claude (gsd-verifier)_
