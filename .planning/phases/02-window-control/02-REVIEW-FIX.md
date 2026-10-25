@@ -1,154 +1,139 @@
 ---
 phase: 02-window-control
-fixed_at: 2026-10-25T17:53:19Z
+fixed_at: 2026-10-25T18:16:11Z
 review_path: .planning/phases/02-window-control/02-REVIEW.md
-iteration: 1
-findings_in_scope: 12
-fixed: 12
+iteration: 2
+findings_in_scope: 4
+fixed: 4
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 2: Code Review Fix Report
 
-**Fixed at:** 2026-10-25T17:53:19Z
-**Source review:** .planning/phases/02-window-control/02-REVIEW.md
-**Iteration:** 1
+**Fixed at:** 2026-10-25T18:16:11Z
+**Source review:** .planning/phases/02-window-control/02-REVIEW.md (re-review, iteration 2)
+**Iteration:** 2
 
 **Summary:**
-- Findings in scope: 12 (CR-01..04, WR-01..08; fix scope critical_warning)
-- Fixed: 12
+- Findings in scope: 4 (CR-01, WR-01..03; fix scope critical_warning; IN-01..10 not in scope)
+- Fixed: 4
 - Skipped: 0
 
-**Where the fixes and the checks ran:** in the main checkout (`/Users/ken/dev/panewm`, branch `gsd/phase-01-layout-model`), not in an isolated worktree. The orchestrator's root-pin guard (`rootpin.sh`) has to pass before every commit, and it requires `git rev-parse --show-toplevel` to equal the pinned main checkout, which a worktree cannot satisfy. Every number below can be reproduced from that tree.
+**Where the fixes and the checks ran:** in the main checkout (`/Users/ken/dev/panewm`, branch `gsd/phase-01-layout-model`), not in an isolated worktree. As in iteration 1, the root-pin guard (`rootpin.sh`) must pass before every commit, and it requires the main checkout as the git toplevel. Every number below can be reproduced from that tree.
 
 **Verification (main checkout, after the last fix):**
 - `swift build`: complete.
-- `swift test --skip PaneMacIntegrationTests`: 376 tests pass (142 + 74 + 160 across the three runs).
+- `swift test --skip PaneMacIntegrationTests`: 382 tests pass (142 + 74 + 166). Iteration 1 ended at 376.
 - `scripts/check-no-appkit.sh`: OK (24 files).
-- `caffeinate -d -i swift test --filter PaneMacIntegrationTests`: 21 tests in 11 suites pass. One is skipped: `aWindowMovedOntoTheSecondDisplayReportsThatDisplay` needs two displays. The lockstate check said `locked: nil`. Afterwards no `PaneFixtureApp` process was left running.
-- The new tests were run against the unfixed code. Where a unit test was feasible (CR-02, CR-03, CR-04, WR-04, WR-06), it failed there and passes with the fix. For CR-01 and WR-02 the test calls a new API, so it cannot compile against the old code (see those sections). WR-07 and WR-08 were checked by deliberately breaking the code under test (mutation checks, below).
+- `caffeinate -d -i swift test --filter PaneMacIntegrationTests`: 22 tests in 11 suites pass. One is skipped: `aWindowMovedOntoTheSecondDisplayReportsThatDisplay` needs two displays. The lockstate check said `locked: nil`. Afterwards `pgrep -fl PaneFixtureApp` found nothing.
+- Every new test was run against the unfixed code first and failed there (CR-01, WR-01, WR-02). For two pieces of the CR-01 fix I also did mutation checks: each time I removed one rule, its test failed, and I restored the code afterwards. WR-03 has no test (see that section).
 
 ## Fixed Issues
 
-### CR-01: The probe loop exits on its first "not due yet" check
+### CR-01: A Space switch folds an unrelated same-frame window into a tab group
 
-**Files modified:** `Sources/PaneEngine/ResponsivenessTracker.swift`, `Sources/PaneMac/AXWindowSystem.swift`, `Tests/PaneEngineTests/ResponsivenessTrackerTests.swift`
-**Commit:** 37f4e40
+**Files modified:** `Sources/PaneEngine/TabGroupTracker.swift`, `Tests/PaneEngineTests/TabScenarioTests.swift`, `Tests/PaneEngineTests/TabGroupTrackerTests.swift`
+**Commit:** dfc57d1
 **Status:** fixed: requires human verification (logic)
-**Applied fix:** Added `ResponsivenessTracker.probeStep(pid:at:)`, which returns `.stop`, `.wait` or `.probe`. The probe loop in `startProbing` now stops only when the app is no longer degraded, and continues when a probe is not due yet. Test: `aLateResultAfterTheDegradeMakesTheProbeLoopWaitNotStop`. The loop itself is live-only code, so the test checks the decision it now uses. Because `probeStep` is new, the test cannot run against the old code.
+**Applied fix:** `TabGroupTracker.update` changes in three ways:
+- **Hidden tabs are capped by `AXTabs`.** A group takes at most `tabCount - 1` hidden tabs. They are picked in tiers:
+  1. the group's own known members;
+  2. untracked windows that belong to no group;
+  3. tracked standalone windows and members of other groups, only to fill the count.
 
-### CR-02: An existing window that gains a native tab is tracked twice
+  This is why Cmd-T still adopts the original window: with tabCount 2 and no other candidate, it is the only way to fill the slot.
+- **The binding check at line 81 now depends on `tabCount`.** Before binding, a window listed with `tabCount < 2` is removed from any group that still has other members, unless it is that group's leader or its last-shown tab. Each group now records its shown tab in a new `Group.shown` field. So a single listed window no longer takes over a group's identity.
+- **A new tab joins an existing group only if that group has room** under the tab's `AXTabs` count. Two same-frame tab groups on different Spaces therefore stay two groups.
 
-**Files modified:** `Sources/PaneEngine/TabGroupTracker.swift`, `Sources/PaneEngine/WindowTracker.swift`, `Tests/PaneEngineTests/TabScenarioTests.swift`
-**Commit:** d648966
-**Status:** fixed: requires human verification (logic)
-**Applied fix:** `TabGroupTracker.update` now takes the app's tracked identities, oldest first, through a new `tracked:` parameter. A new group adopts its oldest tracked standalone member as leader, so after Cmd-T the original window stays the group's identity: one window, `tabCount 2`, no create/destroy. A tracked standalone window that becomes a member of a group led by another identity (Merge All Windows, or dragging a window into an existing group) is returned in the new `TabResolution.folded`. `WindowTracker` then removes it and emits `windowDestroyed`. I chose a destroy event over a silent drop so that Phase 3 layout never keeps a tile for a window that no longer exists on its own. Please confirm this is the event you want. The window-removal code is now one shared `remove(_:at:)` helper. Tests: `aStandaloneWindowThatGainsATabStaysOneWindowLedByItself` (Cmd-T, then switching back to the original tab) and `mergingTwoTrackedWindowsLeavesOneGroupAndReportsTheOtherGone`.
+The "not listed at the last refresh" rule from iteration 1 is kept as an extra filter.
 
-### CR-03: Tab membership by bounds alone absorbs same-app twins
+**Tests:** Review scenarios S4, S5 and S6 now run on the fake through real Space switches. A new `showSpace` helper lists, and shows onscreen, only the windows of the current Space. Each scenario runs several refreshes and settle delays:
+- `aTrackedWindowNeverLeadsAGroupOnAnotherSpaceWithTheSameFrame` (S4)
+- `aWindowOnAnotherSpaceWithTheSameFrameIsNeverFoldedIntoAGroup` (S6)
+- `anUntrackedTwinOnAnotherSpaceLeavesTheGroupOnceItIsListed` (S5)
 
-**Files modified:** `Sources/PaneEngine/TabGroupTracker.swift`, `Tests/PaneEngineTests/TabGroupTrackerTests.swift`
-**Commit:** 5acd0e6
-**Status:** fixed: requires human verification (logic)
-**Applied fix:** A same-frame CG window can no longer become a hidden tab in two cases:
-- It is listed in AXWindows without its own tab bar (`tabCount < 2`). This is the minimized twin.
-- It is a tracked standalone window that was not listed in the previous update. This is the twin on another Space. The tracker now remembers each app's listed IDs from its last update (`lastListed`).
+Each one asserts two tracked windows with the right `visibleMemberID` and `tabCount`, and no `windowDestroyed`. A new unit test, `aSameFrameGroupOnAnotherSpaceIsAGroupOfItsOwn`, covers the "room under the count" rule.
 
-The review's suggested fix was to exclude every tracked standalone window. That would have undone CR-02, because the original window in the Cmd-T case is exactly that. The previous-refresh rule tells the two apart. Tests: `aListedMinimizedTwinWithTheSameFrameIsNeverAHiddenTab` (both AX orders), `aTrackedWindowOnAnotherSpaceWithTheSameFrameIsNeverAHiddenTab`, and `aTrackedWindowListedLastRefreshThatGainsATabLeadsTheGroup`. Known limit, recorded in a `Shortcut:` comment: a twin on another Space that was never tracked still passes as a hidden tab.
+The CR-02 Cmd-T test, the merge test and the CR-03 minimized-twin test still pass unchanged. The reviewer's harness (`probe2`) now prints two stable windows at every step of S4, S5 and S6.
 
-### CR-04: Any larger read-back is learned as a minimum and persisted per bundle
+**Mutation checks:**
+- Dropping the room check fails the new unit test.
+- Dropping the strip of listed single windows fails S5.
 
-**Files modified:** `Sources/PaneEngine/MinimumSizeLearner.swift`, `Sources/PaneEngine/WindowTracker.swift`, `Tests/PaneEngineTests/MinimumSizeLearnerTests.swift`, `Tests/PaneEngineTests/FrameScenarioTests.swift`, `Tests/PaneMacTests/MinimumHintsStoreTests.swift`, `Tests/PaneMacIntegrationTests/FrameWriteIntegrationTests.swift`
-**Commit:** 328d40d
-**Status:** fixed: requires human verification (logic)
-**Design choice:** a refusal is learned only once two consecutive read-backs agree.
-- The learner keeps the last refused read-back for each window and axis, unconfirmed. A refused axis is one read back more than 2 pt above the request.
-- That value is learned only if the next write's read-back is also refused on that axis and lands within 2 pt of it.
-- Any other read-back on that axis clears the unconfirmed value.
-- `applyFrameResult` skips learning entirely when the window is not `.present` (fullscreen or minimized).
-- `onLearnedMinimum` fires only when the learned value changes, so the persisted per-bundle hint now needs two agreeing writes.
+**Residual limits** (recorded in a `shortcut:` comment):
+- The Spaces API is not in PanePrivate (it contains only `AXWindowID` and `Capabilities`). So an untracked same-frame twin on another Space can still fill a free slot of a group seen first. This is S5's first step. It corrects itself the first time the twin is listed on its own Space.
+- Suppose a 2-tab group has lost its leader, and the user closes the shown tab. The remaining tab rebinds only once WindowServer drops the closed tab from the CG list. If that takes longer than the 250 ms settle delay, the remaining tab is briefly reported as a window of its own.
 
-What this covers: a single stale read-back (an app that applies its size later), a snapped read-back that the next write contradicts, and writes to fullscreen windows. I did not add a cap at display bounds. Agreement is the simpler rule, and it also catches stale values smaller than the display. One limit remains: an app that snaps the same request to the same larger size every time still teaches that size after two identical writes.
+### WR-01: Two back-to-back stale read-backs still teach a permanent per-bundle minimum
 
-**Tests:** `aRefusedSizeIsLearnedOnceASecondWriteAgreesAndAnHonouredOneChangesNothing`, `aStaleReadBackThatTheNextWriteContradictsTeachesNothing`, `twoRefusalsThatDisagreeTeachNothing`, `aFullscreenWindowLearnsNothing`. The tests that relied on single-write learning now write twice, including the live `aRefusedSizeIsReadBackAndLearned`, which now also checks that one read-back is not learned.
+**Files modified:** `Sources/PaneEngine/WindowTracker.swift`, `Sources/PaneEngine/MinimumSizeLearner.swift`, `Tests/PaneEngineTests/FrameScenarioTests.swift`, `Tests/PaneEngineTests/MinimumSizeLearnerTests.swift`, `Tests/PaneMacTests/MinimumHintsStoreTests.swift`, `Tests/PaneMacIntegrationTests/FrameWriteIntegrationTests.swift`
+**Commit:** 0c148fb
+**Status:** fixed: requires human verification (logic, and a behaviour choice)
+**Applied fix:** `applyFrameResult` no longer learns from a read-back whose size equals the window's size before the write (both axes, within 2 pt). That read-back comes from a busy or late-applying app.
 
-### WR-01: A failed CG window list silently becomes "no windows"
+**Design choice: please confirm.** A read-back still at the pre-write size looks exactly like a window that is already at its minimum. So the confirming refusal now has to come from a larger frame. Under the iteration 1 rule, any honoured read-back dropped the unconfirmed refusal. With the new skip, Pane-driven layout would almost never learn: every refusal episode yields one usable read-back, and the honoured write between episodes erased it.
 
-**Files modified:** `Sources/PaneMac/CGWindowList.swift`, `Sources/PaneMac/AXWindowSystem.swift`, `Sources/PaneMac/AX/AXSnapshotReader.swift`, `Sources/pane-dump/main.swift`, `Tests/PaneMacIntegrationTests/FallbackIntegrationTests.swift`
-**Commit:** 69b3bb3
-**Applied fix:** `CGWindowList.snapshot()` now returns `[CGWindowEntry]?` and logs when it returns nil. The callers handle nil as follows:
-- `refresh` still records responsiveness, then skips the ingest (no close decision, no tab update) and reschedules the pid after the settle delay.
-- A sweep whose snapshot failed lets each refresh read its own.
-- `appStopped(terminated:)` marks the app terminated with an inactive context, so nothing closes, and leaves the decision to `recheckTerminatedSoon`, which skips any iteration with no list.
-- The frame fallback leaves the element unidentified instead of giving it a synthetic ID.
-- `pane-dump` exits with code 69.
+So the learner now drops an unconfirmed refusal only when a read-back contradicts it:
+- a refusal at a different size, or
+- an honoured size below it.
 
-There is no unit test: `CGWindowListCopyWindowInfo` cannot be made to fail from a test.
+An honoured write at or above it keeps it. The sequence that teaches is now: refuse, honour a larger frame, refuse again at the same size.
 
-### WR-02: An app that stops being `.regular` without quitting leaves its windows tracked
+I did not add the review's optional cap of the persisted hint at the display size.
 
-**Files modified:** `Sources/PaneEngine/WindowTracker.swift`, `Sources/PaneEngine/TabGroupTracker.swift`, `Sources/PaneMac/AXWindowSystem.swift`, `Tests/PaneEngineTests/WindowTrackerTests.swift`
-**Commit:** 8021d0a
-**Status:** fixed: requires human verification (behaviour choice)
-**Applied fix:** New `WindowTracker.appStopped(pid:)`. It drops the app's windows and emits `windowDestroyed` for each. It also clears the app's pending windows, rechecks, terminated mark and tab groups (new `TabGroupTracker.forget(pid:)`). `AXWindowSystem.appStopped` calls it on a non-terminated stop, so if the app becomes `.regular` again its windows come back as new ones. Test: `anAppThatStopsBeingTrackedLosesItsWindowsAndTheyComeBackAsNew`.
+**Tests:**
+- New: `readBacksStillAtThePreWriteSizeTeachNothing` (failed before the fix) and `anHonouredWriteAtOrAboveARefusalKeepsItAndOneBelowDropsIt`.
+- Changed to the refuse, honour, refuse sequence, because they confirmed with two identical back-to-back writes: `aReadBackFrameMovesAndResizesAndASecondAgreeingOneLearns`, `theFakeClampsToItsHiddenMinimumAndTheTrackerLearnsIt`, `aClosedWindowsLearnedMinimumIsForgotten`, `aNewWindowStartsFromItsBundlesHintAndLearningOnlyRaisesIt`, and the live `aRefusedSizeIsReadBackAndLearned`.
 
-### WR-03: AX observer registration errors are ignored and never retried
+The live test passes against the fixture.
+
+### WR-02: A window first identified by the fallback changes identity when the private lookup next succeeds
+
+**Files modified:** `Sources/PaneMac/AX/AXSnapshotReader.swift`, `Tests/PaneMacIntegrationTests/FallbackIntegrationTests.swift`
+**Commit:** f43f5fd
+**Applied fix:** `windowID(of:)` now checks the app thread's element cache (`CFEqual`) before it calls `_AXUIElementGetWindow`. An element keeps whatever ID it was first given (synthetic, CG match or private) for as long as it stays cached. So a fallback ID never turns into the real ID, which would add a second window. The cache check inside `Fallback.identify` was moved up into `windowID(of:)`.
+
+**Side effect:** a cached element no longer calls the private lookup, so it no longer calls `Capabilities.recordSuccess` either. Failures are still counted for every new element.
+
+**Test:** the fake cannot model AX elements or the private lookup, so the new test is a live, reader-level one: `anElementCachedUnderAFallbackIDKeepsItWhenTheLookupLaterSucceeds` in `FallbackIntegrationTests`, which now uses `@testable import PaneMac`. It works like this:
+1. Seeds the cache with the fixture's real window element under a synthetic ID.
+2. Calls `AXSnapshotReader.observeApp` with the private lookup available.
+3. Asserts that the element is still reported, and cached, under the synthetic ID.
+
+Before the fix, it returned the real ID.
+
+### WR-03: Per-window AX registrations are unchecked, and without an observer the element cache never fills
 
 **Files modified:** `Sources/PaneMac/AX/AXAppThread.swift`
-**Commit:** ce05cb9
-**Applied fix:** `installObserver` now checks every result. A failed `AXObserverCreate` leaves the observer nil, and app-level notifications that fail stay in an `unregistered` list. `.notificationAlreadyRegistered` counts as success. Both are retried at the start of every `observe()` until they succeed, and only the first failure is logged. An observer created late also registers the per-window notifications for windows already in the cache. Known limit, recorded in a `shortcut:` comment: a notification an app never supports is retried on every observe, at one IPC call each. There is no unit test because this needs a live app that is not AX-ready yet. The live suite exercised the normal registration path.
+**Commit:** 604f6f3
+**Applied fix:** `updateWindows` now always stores the new cache. So frame writes, and probes of known windows that left AXWindows, work while `AXObserverCreate` keeps failing.
 
-### WR-04: Frames already queued for an app are written after the app is excluded
+Each newly cached window starts with all six per-window notifications pending, in a new `unregisteredWindows` map. Once an observer exists, `updateWindows` registers the pending ones on every `observe()`. A notification leaves the list on `.success`, `.notificationAlreadyRegistered` or `.notificationUnsupported`; an unsupported one never will register. Any other error stays pending and is retried on the next observe. Only the first failure is logged, through the existing `logRegistrationFailure`. A window that leaves the cache drops its pending list.
 
-**Files modified:** `Sources/PaneMac/AX/AXAppThread.swift`, `Sources/PaneMac/AXWindowSystem.swift`, `Sources/PaneTestSupport/FakeWindowSystem.swift`, `Tests/PaneEngineTests/ExclusionScenarioTests.swift`
-**Commit:** fc1a8e1
-**Applied fix:** `AXAppThread` now has an `excluded` flag, kept under the frame lock. Setting it:
-- empties the slots, including frames held while the app was degraded;
-- makes `enqueueFrame` refuse new frames, and `claimDrain` refuse to schedule a drain;
-- makes `drainFrames` stop before its next write.
+This replaces the "observer created late" loop in `installObserver`. That loop only ever saw an empty cache, because the cache never filled without an observer.
 
-It also stops a write the app did not answer from being put back in its slot. `setExcludedBundleIDs` sets the flag on every thread, and new threads start with it. `FakeWindowSystem.setExcluded` drops held frames the same way. Test: `aFrameHeldForAHungAppIsNeverWrittenOnceTheAppIsExcluded`, which failed before the fake fix. The live half of the fix has no unit-level test.
+**Test:** none. Making `AXObserverCreate` or a per-window registration fail needs a live app that is not AX-ready yet, so this fix is checked by reading the code only. The live suite exercised the normal registration path: close, move and tab tests all pass.
 
-### WR-05: Windows whose `_AXUIElementGetWindow` fails are silently never tracked
+## Iteration 1 (summary)
 
-**Files modified:** `Sources/PaneMac/AX/AXSnapshotReader.swift`, `Sources/PaneEngine/WindowTracker.swift`
-**Commit:** c6718a8
-**Applied fix:** When the private lookup fails for an element and the capability is still on, the element now goes through the frame fallback: cache, then CG frame match, then a synthetic ID. Before, it got no ID. Non-windows still get nil from the fallback's role check, and the failure still counts towards switching the capability off. IDs the lookup does return are bound, so the fallback cannot reuse them. The stale "Plan 11" comment in `WindowTracker` is updated. Known limit, recorded in a `shortcut:` comment: only IDs bound before the failing element are excluded from its match. There is no unit test because the private API cannot be made to fail for one element from a test.
+The first pass fixed 12 findings: CR-01..04 and WR-01..08 of the original review. The commits were 37f4e40, d648966, 5acd0e6, 328d40d, 69b3bb3, 8021d0a, ce05cb9, fc1a8e1, c6718a8, 0138c57, d410714 and 95f1d91.
 
-### WR-06: `applyFrameResult` updates the frame but not `displayUUID`
-
-**Files modified:** `Sources/PaneEngine/WindowTracker.swift`, `Tests/PaneEngineTests/TrackerDisplayTests.swift`
-**Commit:** 0138c57
-**Applied fix:** The tracker keeps the displays from the latest `ingest` context. `applyFrameResult` recomputes `displayUUID` from the read-back and emits `windowChanged` when it changes. Test: `aWriteThatMovesTheWindowToBReportsBAtOnce`, which failed before the fix.
-
-### WR-07: The lock and hang scenario tests cannot catch a broken gate or tracker path
-
-**Files modified:** `Sources/PaneTestSupport/FakeWindowSystem.swift`, `Tests/PaneEngineTests/CloseScenarioTests.swift`
-**Commit:** d410714
-**Applied fix:**
-- New fake mode `setLocked(_:gate:axInvalid:)`. The CG list is blank, AXWindows answers with no windows, and every known window answers -25202.
-- `lockBlankingClosesNothing` now runs in both the timeout mode and the -25202 mode.
-- New test `withoutTheGateABlankingThatAnswersInvalidClosesEverything`: with `gate: false`, all 10 windows are destroyed.
-- The fake now ingests a hung app's failed observation, as `AXWindowSystem` does. Held frames are still flushed only once the app is responsive.
-
-**Mutation check:** I broke the code under test twice. Each time the right tests failed, and the original code was restored afterwards.
-- Removing `CloseRule`'s `guard sessionActive` makes `lockBlankingClosesNothing(axInvalid:)` fail.
-- Making a timeout return `.closed` makes `aHungAppNeverLosesAWindowOverFiveRefreshes` fail. Before this fix, that test would still have passed under the same change.
-
-### WR-08: The burst-coalescing integration test cannot fail on coalescing
-
-**Files modified:** `Tests/PaneMacIntegrationTests/FrameWriteIntegrationTests.swift`
-**Commit:** 95f1d91
-**Applied fix:** `aBurstOfFramesEndsAtTheLatest` is replaced by `aBurstQueuedWhileTheDrainIsHeldWritesOnlyTheLatest`. It drives the fixture's `AXAppThread` directly through `@testable import PaneMac`, with no new production seam. The test:
-1. observes, to fill the element cache;
-2. sets `drainEnabled = false` and enqueues 10 frames;
-3. re-enables the drain;
-4. expects exactly one `FrameWriteResult`, whose `requested` is the last frame, and the fixture ending at x ≈ 190.
-
-**Mutation check:** I gave every frame its own slot, which removes latest-wins, and ran the live test. It failed on `results.count == 1`, and the original code was restored afterwards.
+- **CR-01:** the probe loop no longer exits on its first "not due yet" check (`probeStep`).
+- **CR-02:** Cmd-T keeps one window led by the original. A merged window is reported destroyed through `TabResolution.folded`.
+- **CR-03:** a same-frame twin is rejected as a hidden tab if it is listed without a tab bar, or if it is tracked but was not listed at the last refresh. Iteration 2's CR-01 above completes this.
+- **CR-04:** a refusal is learned only when two read-backs agree, and never for a non-present window. Iteration 2's WR-01 above tightens this.
+- **WR-01:** a failed CG list is nil and never "no windows".
+- **WR-02:** a stopped app's windows are dropped (`appStopped`).
+- **WR-03:** app-level AX registrations are checked and retried. Iteration 2's WR-03 above completes this.
+- **WR-04:** an `excluded` flag under the frame lock stops queued writes.
+- **WR-05:** a failed private lookup falls back to the frame match. Iteration 2's WR-02 above fixes the identity flip this caused.
+- **WR-06:** a frame write updates `displayUUID`.
+- **WR-07:** the lock and hang tests can now fail: there is a -25202 lock mode, and the hung app's observation is ingested.
+- **WR-08:** the burst test holds the drain and expects exactly one write.
 
 ---
 
-_Fixed: 2026-10-25T17:53:19Z_
+_Fixed: 2026-10-25T18:16:11Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
