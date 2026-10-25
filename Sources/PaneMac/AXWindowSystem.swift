@@ -179,7 +179,7 @@ import os
         // FrameWriteResult carries no duration; the failure count alone degrades a hung app.
         if result.failure == .cannotComplete { record(thread.pid, .cannotComplete, .zero) }
         let before = tracker.info(for: result.window.identity)?.learnedMinimum
-        emit(tracker.applyFrameResult(result))
+        emit(tracker.applyFrameResult(result, at: .now))
         if let after = tracker.info(for: result.window.identity)?.learnedMinimum, after != before {
             onLearnedMinimum?(result.window.bundleID, after)
         }

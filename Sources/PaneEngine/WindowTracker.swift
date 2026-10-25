@@ -221,7 +221,7 @@ public struct WindowTracker: Sendable {
 
     /// A finished frame write (D-17): the read-back becomes the window's frame and teaches its minimum. A
     /// failed write changes nothing; a later refresh decides the window's state through CloseRule.
-    public mutating func applyFrameResult(_ result: FrameWriteResult) -> [WindowEvent] {
+    public mutating func applyFrameResult(_ result: FrameWriteResult, at now: ContinuousClock.Instant) -> [WindowEvent] {
         let identity = result.window.identity
         guard result.failure == nil, let actual = result.actual, actual.isValidGeometry, var info = windows[identity] else { return [] }
         let old = info
@@ -229,7 +229,7 @@ public struct WindowTracker: Sendable {
         // size is an app that has not applied the write yet (busy, or applies it later): neither teaches anything.
         let unchanged = abs(actual.width - old.frame.width) <= MinimumSizeLearner.tolerance
             && abs(actual.height - old.frame.height) <= MinimumSizeLearner.tolerance
-        if info.state == .present, !unchanged { _ = learner.learn(window: identity, requested: result.requested, actual: actual) }
+        if info.state == .present, !unchanged { learner.recordWrite(window: identity, requested: result.requested, actual: actual, at: now) }
         info.frame = actual
         info.learnedMinimum = learner.minimum(for: identity)
         info.displayUUID = Coordinates.displayUUID(for: actual, among: displays)
@@ -330,6 +330,8 @@ public struct WindowTracker: Sendable {
     }
 
     /// True while a window of `pid` is withheld waiting for its settle delay; the caller refreshes again then.
+    public func awaitsMinimumConfirmation(pid: Int32) -> Bool { false }  // RED stub (02-15)
+
     public func hasPendingWindows(pid: Int32) -> Bool {
         pending.keys.contains { $0.pid == pid }
     }

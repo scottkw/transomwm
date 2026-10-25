@@ -50,7 +50,7 @@ private func context(initial: Bool = false) -> ObservationContext {
         _ = tracker.ingest(app(frame: Rect(x: 100, y: 100, width: 600, height: 400)), context: context(initial: true))
         let ref = try #require(tracker.sortedWindows().first).window
         let onB = Rect(x: 1200, y: 100, width: 600, height: 400)
-        let events = tracker.applyFrameResult(FrameWriteResult(window: ref, requested: onB, actual: onB, failure: nil))
+        let events = tracker.applyFrameResult(FrameWriteResult(window: ref, requested: onB, actual: onB, failure: nil), at: .now)
         let info = try #require(tracker.info(for: ref.identity))
         #expect(info.displayUUID == "B")
         #expect(events.contains(.windowChanged(info)))

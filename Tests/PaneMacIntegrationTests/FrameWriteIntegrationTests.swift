@@ -41,7 +41,7 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
 }
 
 /// WIN-04 / D-16 / D-17 live: Pane moves and resizes fixture windows (only ones these tests launched), reads every
-/// write back, learns a refused size, keeps only the latest of a burst, and a frozen app delays only itself.
+/// write back, learns a refused size from one write, keeps only the latest of a burst, and a frozen app delays only itself.
 @Suite(.serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"))
 @MainActor struct FrameWriteIntegrationTests {
     @Test(.timeLimit(.minutes(1)))
@@ -74,14 +74,14 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         #expect(await log.wait(.seconds(1)) { if case .frameApplied(ref, _, _) = $0 { true } else { false } }, "no frameApplied within 1 s")
         let actual = try #require(applied(log.events, ref).first).actual
         #expect(near(actual.width, 250) && near(actual.height, 150), "read back \(actual.size)")
-        #expect(await system.windowInfo(ref)?.learnedMinimum == nil, "one read-back is not learned")
-        // Back to a larger frame (honoured), then a second refused write that reads back the same size confirms it.
-        await system.perform([.setFrame(ref, Rect(x: 100, y: 120, width: 400, height: 300))])
-        _ = await waitUntil(timeout: .seconds(1)) { applied(log.events, ref).count >= 2 }
-        await system.perform([.setFrame(ref, small)])
-        _ = await waitUntil(timeout: .seconds(1)) { applied(log.events, ref).count >= 3 }
-        let learned = try #require(await system.windowInfo(ref)?.learnedMinimum)
-        #expect(near(learned.width, 250) && near(learned.height, 150), "learned \(learned)")
+        // One refused write: the confirming refresh about a second later teaches it, with no second write.
+        let learned = await waitUntil(timeout: .seconds(2)) {
+            guard let learned = await system.windowInfo(ref)?.learnedMinimum else { return false }
+            return near(learned.width, 250) && near(learned.height, 150)
+        }
+        let minimum = await system.windowInfo(ref)?.learnedMinimum
+        #expect(learned, "learned \(String(describing: minimum)) within 2 s, not 250 × 150")
+        #expect(applied(log.events, ref).count == 1, "Pane wrote the window again")
     }
 
     @Test(.timeLimit(.minutes(1)))

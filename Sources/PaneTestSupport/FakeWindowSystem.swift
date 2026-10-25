@@ -296,7 +296,7 @@ public actor FakeWindowSystem: WindowSystem {
     private func write(_ rect: Rect, to ref: WindowRef) {
         guard let info = tracker.info(for: ref.identity), let target = windows[info.visibleMemberID ?? ref.windowID] else { return }
         guard target.axValid else {
-            yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: nil, failure: .invalidElement)))
+            yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: nil, failure: .invalidElement), at: clock))
             return
         }
         let minimum = target.hiddenMinimum ?? Size(width: 0, height: 0)
@@ -306,7 +306,7 @@ public actor FakeWindowSystem: WindowSystem {
         {
             windows[id]?.frame = actual
         }
-        yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: actual, failure: nil)))
+        yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: actual, failure: nil), at: clock))
     }
 
     /// The CG list (empty while locked), displays, session state, clock and, while Spaces are available, each CG

@@ -124,13 +124,16 @@ import Testing
 @Suite struct BundleHintTrackerTests {
     static let ref = WindowRef(identity: WindowIdentity(windowID: 7, pid: 700, bundleID: "com.example.app"))
 
-    static func observe(_ tracker: inout WindowTracker) {
+    static let t0 = ContinuousClock.now
+    static let start = Rect(x: 40, y: 80, width: 400, height: 300)
+
+    static func observe(_ tracker: inout WindowTracker, frame: Rect = start, at time: ContinuousClock.Instant = t0) {
         let snapshot = WindowSnapshot(
             role: "AXWindow", subrole: "AXStandardWindow", minimized: false, fullScreen: false,
-            close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: Rect(x: 40, y: 80, width: 400, height: 300)
+            close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: frame
         )
         let app = AppObservation(pid: 700, bundleID: "com.example.app", windows: [WindowObservation(windowID: 7, idSource: .axPrivate, read: .success(snapshot), title: "")])
-        _ = tracker.ingest(app, context: ObservationContext(initialSweep: true, now: .now))
+        _ = tracker.ingest(app, context: ObservationContext(initialSweep: true, now: time))
     }
 
     @Test func aNewWindowStartsFromItsBundlesHintAndLearningOnlyRaisesIt() throws {
@@ -140,13 +143,10 @@ import Testing
         #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 300, height: 200))
         let requested = Rect(x: 40, y: 80, width: 100, height: 100)
         let actual = Rect(x: 40, y: 80, width: 350, height: 180)
-        let result = FrameWriteResult(window: Self.ref, requested: requested, actual: actual, failure: nil)
-        _ = tracker.applyFrameResult(result)
-        #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 300, height: 200), "one read-back is not learned")
-        // Back to the start (honoured), then the same refusal from the larger frame confirms it.
-        let start = Rect(x: 40, y: 80, width: 400, height: 300)
-        _ = tracker.applyFrameResult(FrameWriteResult(window: Self.ref, requested: start, actual: start, failure: nil))
-        _ = tracker.applyFrameResult(result)
+        _ = tracker.applyFrameResult(FrameWriteResult(window: Self.ref, requested: requested, actual: actual, failure: nil), at: Self.t0)
+        #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 300, height: 200), "nothing is learned at write time")
+        // One refused write, confirmed by a refresh a second later that still sees the window there.
+        Self.observe(&tracker, frame: actual, at: Self.t0 + MinimumSizeLearner.confirmDelay)
         #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 350, height: 200))
     }
 

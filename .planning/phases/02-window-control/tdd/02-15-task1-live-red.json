@@ -1,0 +1,10 @@
+{
+ "command": "NO_COLOR=1 caffeinate -d -i swift test --filter \"FrameWriteIntegrationTests/aRefusedSizeIsReadBackAndLearned\"",
+ "exitCode": 1,
+ "output": "Building for debugging...\n[Computing dependencies]\n[1\u2009/\u200922] PaneModelTests-product\nBuild complete! (0.57 sec)\n\u25c7 Test run started.\n\u21b3 Testing Library Version: 2084\n\u21b3 Target Platform: arm64e-apple-macos14.0\n\u25c7 Suite FrameWriteIntegrationTests started.\n\u25c7 Test aRefusedSizeIsReadBackAndLearned() started.\n\u2718 Test aRefusedSizeIsReadBackAndLearned() recorded an issue at FrameWriteIntegrationTests.swift:83:9: Expectation failed: learned\n\u21b3 learned nil within 2 s, not 250 \u00d7 150\n\u21b3 learned \u2192 <not evaluated>\n\u2718 Test aRefusedSizeIsReadBackAndLearned() failed after 3.000 seconds with 1 issue.\n\u2718 Suite FrameWriteIntegrationTests failed after 3.001 seconds with 1 issue.\n\u21b3 /// WIN-04 / D-16 / D-17 live: Pane moves and resizes fixture windows (only ones these tests launched), reads every\n\u21b3 /// write back, learns a refused size from one write, keeps only the latest of a burst, and a frozen app delays only itself.\n\u2718 Test run with 1 test in 1 suite failed after 3.001 seconds with 1 issue.\nNote: Some test targets reported failures:\n  - PaneMacIntegrationTests (Swift Testing)\n",
+ "targetTest": "aRefusedSizeIsReadBackAndLearned()",
+ "targetFile": "Tests/PaneMacIntegrationTests/FrameWriteIntegrationTests.swift",
+ "expected": "one setFrame to 100 x 80 reads back 250 x 150 and learnedMinimum becomes 250 x 150 within 2 s, with no second write",
+ "actual": "learnedMinimum stayed nil for 2 s: one refused write teaches nothing on the 02-14 rule",
+ "semanticAssessment": "The live fixture test ran (trusted process), got its frameApplied with the 250 x 150 read-back, and failed only on the planned learned expectation. No fixture or launch fault."
+}

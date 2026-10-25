@@ -12,6 +12,8 @@ import PaneModel
 /// Learned values only grow; an unlearned axis reads 0.
 public struct MinimumSizeLearner: Equatable, Sendable {
     public static let tolerance: Double = 2
+    public static let refusalMargin: Double = 32
+    public static let confirmDelay: Duration = .seconds(1)
 
     private var minimums: [WindowIdentity: Size] = [:]
     /// The last write's refused read-back per axis, waiting for the next write to confirm it.
@@ -46,6 +48,15 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         minimums[window] = new
         return new
     }
+
+    // RED stub (02-15): the old agreement rule behind the new interface.
+    public mutating func recordWrite(window: WindowIdentity, requested: Rect, actual: Rect, at: ContinuousClock.Instant) {
+        _ = learn(window: window, requested: requested, actual: actual)
+    }
+
+    public mutating func confirm(window: WindowIdentity, observed: Size, at: ContinuousClock.Instant) -> Size? { nil }
+
+    public func awaitsConfirmation(_ window: WindowIdentity) -> Bool { false }
 
     /// Starts `window` from a minimum learned in an earlier session (D-13). Like learning, it only ever raises
     /// the value; a stored size that is not finite or is out of range is ignored.
