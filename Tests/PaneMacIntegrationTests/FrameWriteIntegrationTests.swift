@@ -1,6 +1,6 @@
 import CoreGraphics
 import PaneEngine
-import PaneMac
+@testable import PaneMac
 import PaneModel
 import Testing
 
@@ -83,20 +83,34 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func aBurstOfFramesEndsAtTheLatest() async throws {
+    func aBurstQueuedWhileTheDrainIsHeldWritesOnlyTheLatest() async throws {
         let fixture = try await FixtureProcess.launch(["standard"])
         defer { fixture.terminate() }
-        let (system, log, refs) = try await tracking([fixture])
-        let ref = try #require(refs.first)
-        let last = Rect(x: 190, y: 200, width: 400, height: 300)
+        let id = try #require(fixture.windows.first).id
+        let (_, hints) = AsyncStream<AXEventHint>.makeStream()
+        // The app thread on its own: its latest-wins slots (T-02-34) are what is under test.
+        let thread = AXAppThread(pid: fixture.pid, bundleID: "test.burst", hints: hints)
+        defer { thread.stop() }
+        let observed = await thread.observe()
+        #expect(observed?.windows.contains { $0.windowID == id } == true, "the window is not in the thread's element cache")
+        let ref = PaneModel.WindowRef(identity: WindowIdentity(windowID: id, pid: fixture.pid, bundleID: "test.burst"))
+        let burst = (0..<10).map { Rect(x: 100 + Double($0) * 10, y: 200, width: 400, height: 300) }
 
-        await system.perform((0..<10).map { .setFrame(ref, Rect(x: 100 + Double($0) * 10, y: 200, width: 400, height: 300)) })
-        #expect(await log.wait(.seconds(2)) { if case .frameApplied(ref, last, _) = $0 { true } else { false } }, "the last frame was not written")
-        try? await Task.sleep(for: .milliseconds(300))
-        #expect(applied(log.events, ref).count <= 10)
-        #expect(applied(log.events, ref).last?.requested == last)
+        thread.drainEnabled = false
+        for rect in burst { thread.enqueueFrame(windowID: id, rect: rect, ref: ref) }
+        let reader = Task {
+            var results: [FrameWriteResult] = []
+            for await result in thread.frameResults { results.append(result) }
+            return results
+        }
+        thread.drainEnabled = true
+        try? await Task.sleep(for: .milliseconds(500))
+        reader.cancel()
+        let results = await reader.value
+        #expect(results.count == 1, "the held burst was written \(results.count) times")
+        #expect(results.first?.requested == burst.last)
         _ = try await fixture.send("list")
-        let reported = try #require(fixture.windows.first { $0.id == ref.windowID }).frame
+        let reported = try #require(fixture.windows.first { $0.id == id }).frame
         #expect(near(reported.x, 190), "the fixture ends at \(reported)")
     }
 
