@@ -141,6 +141,12 @@ public struct WindowTracker: Sendable {
                 learner.seed(identity, minimum: hint)
                 info.learnedMinimum = learner.minimum(for: identity)
             }
+            // A refused write is learned once a refresh a second later still sees the window at its read-back size.
+            if state == .present, let observed = snapshot.frame?.size,
+               let minimum = learner.confirm(window: identity, observed: observed, at: context.now)
+            {
+                info.learnedMinimum = minimum
+            }
             windows[identity] = info
 
             guard let old else {
@@ -155,11 +161,12 @@ public struct WindowTracker: Sendable {
             if old.frame.origin != frame.origin { events.append(.windowMoved(ref, frame)) }
             if old.frame.size != frame.size { events.append(.windowResized(ref, frame)) }
             if old.window.titleHint != ref.titleHint || old.kind != kind || old.tabCount != info.tabCount
-                || old.displayUUID != info.displayUUID
+                || old.displayUUID != info.displayUUID || old.learnedMinimum != info.learnedMinimum
             {
                 events.append(.windowChanged(info))
             }
         }
+        learner.dropDue(pid: app.pid, at: context.now)
         let byID = Dictionary(app.windows.compactMap { o in o.windowID.map { ($0, o) } }, uniquingKeysWith: { a, b in a.listedInAXWindows ? a : b })
         let liveness: AppLiveness = terminatedPIDs.contains(app.pid) ? .terminated : .alive
         events += decide(pid: app.pid, app: liveness, context: context, skipping: created) { windowID in
@@ -219,25 +226,22 @@ public struct WindowTracker: Sendable {
         bundleHints = hints
     }
 
-    /// A finished frame write (D-17): the read-back becomes the window's frame and teaches its minimum. A
-    /// failed write changes nothing; a later refresh decides the window's state through CloseRule.
+    /// A finished frame write (D-17): the read-back becomes the window's frame, and a refused size becomes a minimum
+    /// candidate that a refresh `MinimumSizeLearner.confirmDelay` later confirms. A failed write changes nothing; a
+    /// later refresh decides the window's state through CloseRule.
     public mutating func applyFrameResult(_ result: FrameWriteResult, at now: ContinuousClock.Instant) -> [WindowEvent] {
         let identity = result.window.identity
         guard result.failure == nil, let actual = result.actual, actual.isValidGeometry, var info = windows[identity] else { return [] }
         let old = info
-        // A fullscreen or minimized window does not take the requested size, and a read-back still at the pre-write
-        // size is an app that has not applied the write yet (busy, or applies it later): neither teaches anything.
-        let unchanged = abs(actual.width - old.frame.width) <= MinimumSizeLearner.tolerance
-            && abs(actual.height - old.frame.height) <= MinimumSizeLearner.tolerance
-        if info.state == .present, !unchanged { learner.recordWrite(window: identity, requested: result.requested, actual: actual, at: now) }
+        // A fullscreen or minimized window does not take the requested size, so it teaches nothing.
+        if info.state == .present { learner.recordWrite(window: identity, requested: result.requested, actual: actual, at: now) }
         info.frame = actual
-        info.learnedMinimum = learner.minimum(for: identity)
         info.displayUUID = Coordinates.displayUUID(for: actual, among: displays)
         windows[identity] = info
         var events: [WindowEvent] = [.frameApplied(info.window, requested: result.requested, actual: actual)]
         if old.frame.origin != actual.origin { events.append(.windowMoved(info.window, actual)) }
         if old.frame.size != actual.size { events.append(.windowResized(info.window, actual)) }
-        if old.learnedMinimum != info.learnedMinimum || old.displayUUID != info.displayUUID { events.append(.windowChanged(info)) }
+        if old.displayUUID != info.displayUUID { events.append(.windowChanged(info)) }
         return events
     }
 
@@ -330,7 +334,11 @@ public struct WindowTracker: Sendable {
     }
 
     /// True while a window of `pid` is withheld waiting for its settle delay; the caller refreshes again then.
-    public func awaitsMinimumConfirmation(pid: Int32) -> Bool { false }  // RED stub (02-15)
+    /// True while a refused write to a window of `pid` awaits its confirming refresh; the caller refreshes again
+    /// after `MinimumSizeLearner.confirmDelay`.
+    public func awaitsMinimumConfirmation(pid: Int32) -> Bool {
+        windows.keys.contains { $0.pid == pid && learner.awaitsConfirmation($0) }
+    }
 
     public func hasPendingWindows(pid: Int32) -> Bool {
         pending.keys.contains { $0.pid == pid }

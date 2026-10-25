@@ -143,8 +143,10 @@ import os
         tracker.setBundleHints(hints)
     }
 
-    /// Called with a window's bundle ID and its new learned minimum whenever a frame write raises it.
+    /// Called with a window's bundle ID and its new learned minimum whenever it grows.
     public var onLearnedMinimum: ((String, Size) -> Void)?
+    /// The learned minimum last reported (or seeded) per window, so each growth reaches `onLearnedMinimum` once.
+    private var reportedMinimums: [WindowIdentity: Size] = [:]
 
     /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
@@ -178,11 +180,9 @@ import os
         guard threads[thread.pid] === thread else { return }
         // FrameWriteResult carries no duration; the failure count alone degrades a hung app.
         if result.failure == .cannotComplete { record(thread.pid, .cannotComplete, .zero) }
-        let before = tracker.info(for: result.window.identity)?.learnedMinimum
         emit(tracker.applyFrameResult(result, at: .now))
-        if let after = tracker.info(for: result.window.identity)?.learnedMinimum, after != before {
-            onLearnedMinimum?(result.window.bundleID, after)
-        }
+        // A refused size is learned only by a refresh a second later that still sees the window there.
+        if tracker.awaitsMinimumConfirmation(pid: thread.pid) { scheduler?.schedule(pid: thread.pid, after: MinimumSizeLearner.confirmDelay) }
     }
 
     public func windowInfo(_ window: PaneModel.WindowRef) async -> WindowInfo? {
@@ -318,6 +318,9 @@ import os
         // refresh again soon.
         if tracker.hasPendingWindows(pid: observation.pid) || tracker.needsQuickRecheck(pid: observation.pid) {
             scheduler?.schedule(pid: observation.pid, after: tracker.settleDelay)
+        } else if tracker.awaitsMinimumConfirmation(pid: observation.pid) {
+            // This refresh came too soon to confirm a refused write.
+            scheduler?.schedule(pid: observation.pid, after: MinimumSizeLearner.confirmDelay)
         }
     }
 
@@ -336,7 +339,18 @@ import os
 
     private func emit(_ events: [WindowEvent]) {
         for event in events {
-            if case .windowFocused(let ref) = event { focusedIdentities[ref.pid] = ref.identity }
+            switch event {
+            case .windowFocused(let ref): focusedIdentities[ref.pid] = ref.identity
+            // A seeded minimum came from the store, so it is never reported back.
+            case .windowCreated(let info): reportedMinimums[info.window.identity] = info.learnedMinimum
+            case .windowChanged(let info):
+                if let minimum = info.learnedMinimum, minimum != reportedMinimums[info.window.identity] {
+                    reportedMinimums[info.window.identity] = minimum
+                    onLearnedMinimum?(info.window.bundleID, minimum)
+                }
+            case .windowDestroyed(let ref): reportedMinimums[ref.identity] = nil
+            default: break
+            }
             continuation.yield(event)
         }
     }

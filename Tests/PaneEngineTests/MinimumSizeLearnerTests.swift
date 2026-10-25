@@ -58,10 +58,16 @@ private func refuseAndConfirm(_ learner: inout MinimumSizeLearner, requested: Re
         var learner = MinimumSizeLearner()
         learner.recordWrite(window: window, requested: rect(100, 80), actual: rect(250, 150), at: t0)
         // The app applied the size late, or the user resized the window: it is no longer at the read-back size.
-        #expect(learner.confirm(window: window, observed: size(252.5, 150), at: later) == nil)
+        #expect(learner.confirm(window: window, observed: size(252.5, 152.5), at: later) == nil)
         #expect(!learner.awaitsConfirmation(window), "the candidate is dropped")
         #expect(learner.confirm(window: window, observed: size(250, 150), at: later + .seconds(1)) == nil)
         #expect(learner.minimum(for: window) == nil)
+    }
+
+    @Test func eachAxisIsConfirmedOnItsOwn() {
+        var learner = MinimumSizeLearner()
+        learner.recordWrite(window: window, requested: rect(100, 80), actual: rect(250, 150), at: t0)
+        #expect(learner.confirm(window: window, observed: size(400, 150), at: later) == size(0, 150))
     }
 
     @Test func withinTwoPointsAtConfirmTimeStillCounts() {

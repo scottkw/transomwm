@@ -254,7 +254,7 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         await fake.refreshAll()
         // The ID comes back as a new window at the candidate's size, with a smaller minimum.
         var reused = FakeWindow.standard(id: 1, pid: pid, frame: Rect(x: 100, y: 120, width: 250, height: 150))
-        reused.hiddenMinimum = Size(width: 120, height: 90)
+        reused.hiddenMinimum = Size(width: 160, height: 130)
         await fake.open(reused)
         await fake.refreshAll()
         await fake.advance(by: .milliseconds(250))
@@ -266,7 +266,7 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         await fake.advance(by: MinimumSizeLearner.confirmDelay)
         await fake.refreshAll()
         let info = try #require(await fake.inventory().windows.first { $0.window == ref(1) })
-        #expect(info.learnedMinimum == Size(width: 120, height: 90))
+        #expect(info.learnedMinimum == Size(width: 160, height: 130))
     }
 
     @Test func invalidRectsAndUntrackedWindowsAreNotWritten() async {
