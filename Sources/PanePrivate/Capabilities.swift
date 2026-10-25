@@ -5,7 +5,13 @@ public enum Capability: String, CaseIterable, Sendable {
     case axWindowID = "AXWindowID"
     case spaces = "Spaces"
 
-    public var fallback: String { "" }
+    /// What Pane does instead while the capability is off.
+    public var fallback: String {
+        switch self {
+        case .axWindowID: "matching by frame"
+        case .spaces: "single Space"
+        }
+    }
 }
 
 /// Registry of private-API capabilities (D-15, SAFE-05). Each capability is either loaded or off;
@@ -107,7 +113,7 @@ public final class CapabilitySession: Sendable {
         }
         if switchedOff {
             Capabilities.logger.error(
-                "\(capability.rawValue, privacy: .public) failed \(Self.failureLimit, privacy: .public) times in a row; off for this session, matching by frame"
+                "\(capability.rawValue, privacy: .public) failed \(Self.failureLimit, privacy: .public) times in a row; off for this session, \(capability.fallback, privacy: .public)"
             )
         }
         return switchedOff

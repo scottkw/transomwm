@@ -306,9 +306,12 @@ import os
                 return (id, frame)
             },
             uniquingKeysWith: { first, _ in first })
+        // WindowServer IPC, not AX: fine on main. Nil while the Spaces capability is off (single-Space behaviour).
+        let windowSpaces = observation.listFailure == nil
+            ? SkyLightSpaces.spaces(of: cgWindows.filter { $0.pid == observation.pid && $0.layer == 0 }.map(\.windowID)) : nil
         let context = ObservationContext(
             cgWindows: withSyntheticPresence(cgWindows, shown: shown), displays: displays, sessionActive: !paused,
-            initialSweep: initial, now: .now)
+            initialSweep: initial, now: .now, windowSpaces: windowSpaces)
         emit(tracker.ingest(observation, context: context))
         emit(tracker.recheckTerminated(context: context))
         // A new window is withheld until it settles, and a close AX reported waits for the CG list to agree:

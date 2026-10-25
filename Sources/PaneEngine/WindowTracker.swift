@@ -58,7 +58,8 @@ public struct WindowTracker: Sendable {
                 return (id: id, frame: frame, tabCount: snapshot.tabGroup?.tabCount ?? 1)
             }
             let tracked = windows.values.filter { $0.window.pid == app.pid }.sorted { $0.window.creationOrder < $1.window.creationOrder }.map(\.window.identity)
-            tabs = tabGroups.update(pid: app.pid, bundleID: app.bundleID, visible: visible, cgWindows: context.cgWindows, tracked: tracked)
+            tabs = tabGroups.update(pid: app.pid, bundleID: app.bundleID, visible: visible, cgWindows: context.cgWindows, tracked: tracked,
+                                     spaces: context.windowSpaces)
             // Merged into another window's tab group: that window is gone as a separate window.
             for identity in tabs.folded {
                 guard let info = remove(identity, at: context.now) else { continue }
