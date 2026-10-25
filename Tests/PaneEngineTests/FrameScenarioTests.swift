@@ -64,10 +64,24 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         #expect(try #require(tracker.info(for: ref(7).identity)).frame == actual)
         #expect(try #require(tracker.info(for: ref(7).identity)).learnedMinimum == nil)
         #expect(events == [.frameApplied(ref(7), requested: requested, actual: actual), .windowMoved(ref(7), actual), .windowResized(ref(7), actual)])
+        // Back to the start (honoured), then the same refusal from the larger frame confirms it.
+        _ = tracker.applyFrameResult(FrameWriteResult(window: ref(7), requested: start, actual: start, failure: nil))
         events = tracker.applyFrameResult(result)
         let info = try #require(tracker.info(for: ref(7).identity))
         #expect(info.learnedMinimum == Size(width: 250, height: 150))
-        #expect(events == [.frameApplied(ref(7), requested: requested, actual: actual), .windowChanged(info)])
+        #expect(events == [
+            .frameApplied(ref(7), requested: requested, actual: actual), .windowMoved(ref(7), actual), .windowResized(ref(7), actual),
+            .windowChanged(info),
+        ])
+    }
+
+    @Test func readBacksStillAtThePreWriteSizeTeachNothing() throws {
+        var tracker = trackerWithOneWindow()
+        // A busy app answers every write with the frame it had before, until it catches up.
+        let result = FrameWriteResult(window: ref(7), requested: Rect(x: 40, y: 80, width: 100, height: 80), actual: start, failure: nil)
+        _ = tracker.applyFrameResult(result)
+        _ = tracker.applyFrameResult(result)
+        #expect(try #require(tracker.info(for: ref(7).identity)).learnedMinimum == nil)
     }
 
     @Test func aFullscreenWindowLearnsNothing() throws {
@@ -105,16 +119,17 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
     @Test func theFakeClampsToItsHiddenMinimumAndTheTrackerLearnsIt() async throws {
         let fake = await twoApps()
         let requested = Rect(x: 100, y: 120, width: 100, height: 80)
-        await fake.perform([.setFrame(ref(1), requested)])
-        await fake.perform([.setFrame(ref(1), requested)])
+        // Refused, back to the start, refused again from the larger frame: confirmed.
+        let writes3 = [WindowCommand.setFrame(ref(1), requested), .setFrame(ref(1), start), .setFrame(ref(1), requested)]
+        await fake.perform(writes3)
         let writes = applied(await drain(fake.events))
-        #expect(writes.count == 2)
+        #expect(writes.count == 3)
         #expect(writes.first?.0 == ref(1))
         #expect(writes.first?.1 == requested)
         #expect(writes.first?.2 == Rect(x: 100, y: 120, width: 250, height: 150))
         let info = try #require(await fake.inventory().windows.first { $0.window == ref(1) })
         #expect(info.learnedMinimum == Size(width: 250, height: 150))
-        #expect(await fake.performed == [.setFrame(ref(1), requested), .setFrame(ref(1), requested)])
+        #expect(await fake.performed == writes3)
     }
 
     @Test func aHungAppHoldsOnlyItsLatestFrameAndAnotherAppIsWrittenAtOnce() async {
@@ -140,7 +155,8 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
     @Test func aClosedWindowsLearnedMinimumIsForgotten() async throws {
         let fake = await twoApps()
         let small = WindowCommand.setFrame(ref(1), Rect(x: 100, y: 120, width: 100, height: 80))
-        await fake.perform([small, small])
+        let back = WindowCommand.setFrame(ref(1), start)
+        await fake.perform([small, back, small])
         #expect(await fake.inventory().windows.first { $0.window == ref(1) }?.learnedMinimum == Size(width: 250, height: 150))
         await fake.close(1)
         await fake.refreshAll()
@@ -151,7 +167,7 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         await fake.refreshAll()
         await fake.advance(by: .milliseconds(250))
         await fake.refreshAll()
-        await fake.perform([small, small])
+        await fake.perform([small, back, small])
         let info = try #require(await fake.inventory().windows.first { $0.window == ref(1) })
         #expect(info.learnedMinimum == Size(width: 120, height: 90))
     }

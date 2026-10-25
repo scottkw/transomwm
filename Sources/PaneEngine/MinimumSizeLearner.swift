@@ -5,9 +5,11 @@ import PaneModel
 /// Apps refuse an undersized `AXSize` silently: the write succeeds and the read-back is clamped. An axis read
 /// back more than `tolerance` above the request is a refusal, but one read-back can also be stale (an app that
 /// applies size later) or a snap, and a learned value is persisted per bundle. So a refusal is learned only when
-/// the next write's read-back is also refused on that axis and agrees within `tolerance`; anything else on that
-/// axis starts over. An axis read back smaller than requested (terminals snapping to whole cells) teaches
-/// nothing. Learned values only grow; an unlearned axis reads 0.
+/// a later write's read-back is also refused on that axis and agrees within `tolerance`. A read-back that contradicts
+/// it (refused at another size, or honoured below it) starts over; an honoured one at or above it does not, since
+/// `WindowTracker` skips read-backs still at the pre-write size and the confirming refusal must then come from a
+/// later shrink. An axis read back smaller than requested (terminals snapping to whole cells) teaches nothing.
+/// Learned values only grow; an unlearned axis reads 0.
 public struct MinimumSizeLearner: Equatable, Sendable {
     public static let tolerance: Double = 2
 
@@ -31,7 +33,7 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         var refusal = unconfirmed[window] ?? Refusal()
         func axis(_ requested: Double, _ actual: Double, _ last: inout Double?, _ learned: inout Double) {
             guard actual > requested + Self.tolerance else {
-                last = nil
+                if let refused = last, actual < refused - Self.tolerance { last = nil }
                 return
             }
             if let last, abs(actual - last) <= Self.tolerance { learned = max(learned, actual) }

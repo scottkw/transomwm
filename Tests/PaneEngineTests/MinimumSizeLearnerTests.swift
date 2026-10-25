@@ -34,6 +34,17 @@ private func learnTwice(_ learner: inout MinimumSizeLearner, requested: Rect, ac
         #expect(learner.minimum(for: window) == nil)
     }
 
+    @Test func anHonouredWriteAtOrAboveARefusalKeepsItAndOneBelowDropsIt() {
+        var learner = MinimumSizeLearner()
+        #expect(learner.learn(window: window, requested: rect(100, 80), actual: rect(250, 150)) == nil)
+        #expect(learner.learn(window: window, requested: rect(400, 300), actual: rect(400, 300)) == nil)
+        #expect(learner.learn(window: window, requested: rect(100, 80), actual: rect(250, 150)) == Size(width: 250, height: 150))
+        var other = MinimumSizeLearner()
+        _ = other.learn(window: window, requested: rect(100, 80), actual: rect(250, 150))
+        _ = other.learn(window: window, requested: rect(200, 120), actual: rect(200, 120))
+        #expect(other.learn(window: window, requested: rect(100, 80), actual: rect(250, 150)) == nil, "200 × 120 fits, so 250 × 150 is no minimum")
+    }
+
     @Test func twoRefusalsThatDisagreeTeachNothing() {
         var learner = MinimumSizeLearner()
         #expect(learner.learn(window: window, requested: rect(100, 80), actual: rect(250, 150)) == nil)

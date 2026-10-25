@@ -208,8 +208,11 @@ public struct WindowTracker: Sendable {
         let identity = result.window.identity
         guard result.failure == nil, let actual = result.actual, actual.isValidGeometry, var info = windows[identity] else { return [] }
         let old = info
-        // A fullscreen or minimized window does not take the requested size, so it teaches nothing.
-        if info.state == .present { _ = learner.learn(window: identity, requested: result.requested, actual: actual) }
+        // A fullscreen or minimized window does not take the requested size, and a read-back still at the pre-write
+        // size is an app that has not applied the write yet (busy, or applies it later): neither teaches anything.
+        let unchanged = abs(actual.width - old.frame.width) <= MinimumSizeLearner.tolerance
+            && abs(actual.height - old.frame.height) <= MinimumSizeLearner.tolerance
+        if info.state == .present, !unchanged { _ = learner.learn(window: identity, requested: result.requested, actual: actual) }
         info.frame = actual
         info.learnedMinimum = learner.minimum(for: identity)
         info.displayUUID = Coordinates.displayUUID(for: actual, among: displays)

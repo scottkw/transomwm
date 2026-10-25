@@ -143,6 +143,9 @@ import Testing
         let result = FrameWriteResult(window: Self.ref, requested: requested, actual: actual, failure: nil)
         _ = tracker.applyFrameResult(result)
         #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 300, height: 200), "one read-back is not learned")
+        // Back to the start (honoured), then the same refusal from the larger frame confirms it.
+        let start = Rect(x: 40, y: 80, width: 400, height: 300)
+        _ = tracker.applyFrameResult(FrameWriteResult(window: Self.ref, requested: start, actual: start, failure: nil))
         _ = tracker.applyFrameResult(result)
         #expect(tracker.info(for: Self.ref.identity)?.learnedMinimum == Size(width: 350, height: 200))
     }
