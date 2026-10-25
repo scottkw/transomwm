@@ -32,10 +32,11 @@ public struct TabResolution: Equatable, Sendable {
 /// standalone window listed last refresh and leads a new group with it. A window listed in AXWindows without a tab
 /// bar of its own is never a hidden tab, and leaves any group it was in unless it is the group's leader, its shown
 /// tab, or all that is left of it. A tracked standalone window not listed at the last refresh is never taken either.
-/// A listed member with a tab bar rebinds its group only when the shown tab is gone or the AXTabs counts agree, and
-/// never across known different Spaces. A group whose shown tab and known members are all gone (out of the CG list or
-/// AX-invalid) passes its identity only to a former tab: a listed, unreported window that was offscreen in its slot
-/// at the last refresh. Nothing here destroys a window; CloseRule's two sources still decide that.
+/// A listed member with a tab bar rebinds its group unless the two are on known different Spaces (a changed AXTabs
+/// count is Cmd-T, a background tab or a closed tab); a refused member never takes its old group's tabs, and no group
+/// is ever founded under an identity a group already holds. A group whose shown tab and known members are all gone
+/// (out of the CG list or AX-invalid) passes its identity only to a former tab: a listed, unreported window that was
+/// offscreen in its slot at the last refresh. Nothing here destroys a window; CloseRule's two sources still decide that.
 /// Without Space data, the first full update after a Space switch (`spaceChanged`) makes no orphan handoff and no new
 /// fold (a tracked standalone window taken as a hidden tab, as in Merge All Windows): a window the switch shows may be
 /// another Space's twin that sat offscreen in the slot, and a window left on the other Space looks like a hidden tab.
@@ -59,10 +60,9 @@ public struct TabGroupTracker: Equatable, Sendable {
         var tabCount: Int
         /// The member last bound as the listed tab.
         var shown: UInt32
-        /// The shown tab's frame, Spaces and AXTabs count when it last bound.
+        /// The shown tab's frame and Spaces when it last bound.
         var frame: Rect
         var spaces: Set<UInt64>
-        var boundTabCount: Int
     }
 
     private var groups: [Int32: [Group]] = [:]
@@ -114,11 +114,9 @@ public struct TabGroupTracker: Equatable, Sendable {
         }
         let previousCG = lastCG[pid]
         func space(_ id: UInt32) -> Set<UInt64> { spaces?[id] ?? [] }
-        /// A listed member other than the shown tab rebinds its group only if the shown tab is gone from the CG list
-        /// offscreen or the AXTabs counts agree, and never across known different Spaces (a same-slot twin group).
+        /// Only proof of different Spaces (a same-slot twin group) refuses a listed member's rebind of its group.
         func mayRebind(_ group: Group, _ v: (id: UInt32, frame: Rect, tabCount: Int)) -> Bool {
-            let shownStillHidden = cg.contains { $0.windowID == group.shown && !$0.onScreen } && !gone(group.shown)
-            return (!shownStillHidden || v.tabCount == group.boundTabCount) && !Self.differ(space(v.id), group.spaces)
+            !Self.differ(space(v.id), group.spaces)
         }
         var groupFor: [UInt32: WindowIdentity] = [:]
         for v in visible.sorted(by: { rank($0).lexicographicallyPrecedes(rank($1)) }).reversed() {
@@ -164,9 +162,11 @@ public struct TabGroupTracker: Equatable, Sendable {
                 return standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } ? 4 : 3
             }
             // Blind switch: no tracked standalone window becomes a new hidden tab (the opener and earlier folds excepted).
+            // A refused member never takes its old group's tabs.
+            let pool = refused.map { r in candidates.filter { !list[r].members.contains($0) } } ?? candidates
             let foldable = blindSwitch
-                ? candidates.filter { id in id == opener || !standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } }
-                : candidates
+                ? pool.filter { id in id == opener || !standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } }
+                : pool
             let eligible = foldable.filter { !ambiguous || own.contains($0) || $0 == opener || confirmed($0) }
             let hidden = eligible.sorted { (tier($0), $0) < (tier($1), $1) }.prefix(max(v.tabCount - 1, 0))
             let members = Set(hidden).union([v.id])
@@ -174,15 +174,15 @@ public struct TabGroupTracker: Equatable, Sendable {
                 list[index].members = members
                 list[index].tabCount = max(v.tabCount, 1)
                 list[index].shown = v.id
-                (list[index].frame, list[index].spaces, list[index].boundTabCount) = (v.frame, shownSpace, v.tabCount)
+                (list[index].frame, list[index].spaces) = (v.frame, shownSpace)
                 groupFor[v.id] = list[index].leader
             } else if v.tabCount >= 2 {
                 let leader = standalone.first { members.contains($0.windowID) } ?? WindowIdentity(windowID: v.id, pid: pid, bundleID: bundleID)
-                list.append(Group(
-                    leader: leader, members: members, tabCount: v.tabCount, shown: v.id, frame: v.frame, spaces: shownSpace,
-                    boundTabCount: v.tabCount
-                ))
-                groupFor[v.id] = leader
+                // One group per identity: a listed leader of another group (refused above) stays that group's window.
+                if !list.contains(where: { $0.leader == leader || $0.leader.windowID == v.id }) {
+                    list.append(Group(leader: leader, members: members, tabCount: v.tabCount, shown: v.id, frame: v.frame, spaces: shownSpace))
+                    groupFor[v.id] = leader
+                }
             }
         }
         list.removeAll { $0.members.isEmpty }
@@ -193,7 +193,7 @@ public struct TabGroupTracker: Equatable, Sendable {
         return TabResolution(
             groupFor: groupFor,
             memberIDs: memberIDs,
-            tabCount: Dictionary(uniqueKeysWithValues: list.map { ($0.leader, $0.tabCount) }),
+            tabCount: Dictionary(list.map { ($0.leader, $0.tabCount) }, uniquingKeysWith: max),
             folded: standalone.filter { identity in memberIDs.contains(identity.windowID) && !list.contains { $0.leader == identity } }
         )
     }
