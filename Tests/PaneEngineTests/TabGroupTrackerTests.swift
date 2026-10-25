@@ -392,11 +392,38 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         return (tracker, resolution)
     }
 
-    @Test func aMemberWhoseTabCountDiffersFromItsGroupsLeavesItWhileTheShownTabIsStillThere() {
+    /// A changed AXTabs count is Cmd-T, a background tab or a closed tab, so it alone never refuses a rebind (review CR-01).
+    @Test func aMemberWhoseTabCountChangedStillRebindsItsGroupWhileTheShownTabIsStillThere() {
         let (tracker, resolution) = rebind(tabCount: 3)
+        #expect(resolution.groupFor == [10: identity(30)])
+        #expect(tracker.members(of: identity(30)).isSuperset(of: [10, 30]))
+        #expect(tracker.members(of: identity(10)).isEmpty)
+    }
+
+    /// A member refused for being on another Space leads its own group, which never takes the refused group's tabs.
+    @Test func aMemberOnAnotherSpaceNeverTakesItsOldGroupsTabs() {
+        let (tracker, resolution) = rebind(tabCount: 4, spaces: [10: [2], 30: []])
         #expect(resolution.groupFor == [10: identity(10)])
         #expect(tracker.members(of: identity(30)) == [30])
         #expect(tracker.members(of: identity(10)) == [10, 11, 12])
+    }
+
+    /// A group's own leader refused for being on another Space never founds a second group under the same identity.
+    @Test func aRefusedLeaderNeverFoundsASecondGroupUnderItsIdentity() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)], spaces: [10: [1]])
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2)], cgWindows: [cg(10), cg(40, onScreen: true)], tracked: [identity(10)],
+            spaces: [40: [1]]
+        )
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 3)], cgWindows: [cg(10, onScreen: true), cg(40), cg(50)],
+            tracked: [identity(10)], spaces: [10: [2]]
+        )
+        #expect(resolution.tabCount.count == 1)
+        #expect(resolution.groupFor[10] == nil)
+        #expect(tracker.members(of: identity(10)) == [40])
     }
 
     @Test func aMemberWithTheGroupsTabCountRebindsIt() {

@@ -168,6 +168,52 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events).isEmpty)
     }
 
+    /// Review D1 (iteration 4): A (10) gains tab 40; then Cmd-T (50) and a click back on tab 10 land in one refresh,
+    /// so the leader is listed with a new AXTabs count while the old shown tab sits offscreen.
+    @Test(arguments: modes)
+    func cmdTAndASwitchToTheLeaderInOneRefreshStayOneGroup(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        await fake.open(.standard(id: 10, pid: pid, frame: frame, space: 1))
+        await fake.showSpace(1)
+        await refresh(fake)
+        await fake.newTab(40, in: 10)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        #expect(await summary(fake) == [[10, 40, 2]])
+
+        await fake.newTab(50, in: 10)
+        await fake.selectTab(10)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        #expect(await summary(fake) == [[10, 10, 3]])
+        let events = await drain(fake.events)
+        #expect(created(events).map(\.window) == [ref(10)])
+        #expect(destroyed(events).isEmpty)
+    }
+
+    /// Review D2 (iteration 4): tabs 10 (leader), 40 and 50, 50 shown; Cmd-T (60) and a click on 40 in one refresh.
+    @Test(arguments: modes)
+    func cmdTAndASwitchToAnotherTabInOneRefreshStayOneGroup(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        await fake.open(.standard(id: 10, pid: pid, frame: frame, space: 1))
+        await fake.showSpace(1)
+        await refresh(fake)
+        await fake.newTab(40, in: 10)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        await fake.newTab(50, in: 10)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        #expect(await summary(fake) == [[10, 50, 3]])
+
+        await fake.newTab(60, in: 10)
+        await fake.selectTab(40)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        #expect(await summary(fake) == [[10, 40, 4]])
+        await fake.selectTab(50)
+        await refresh(fake, advancing: true)
+        #expect(await summary(fake) == [[10, 50, 4]])
+        let events = await drain(fake.events)
+        #expect(created(events).map(\.window) == [ref(10)])
+        #expect(destroyed(events).isEmpty)
+    }
+
     /// C3: Window > Merge All Windows. The merged window is reported gone only after a second refresh agrees.
     @Test(arguments: modes)
     func mergingTwoTrackedWindowsLeavesOneGroupAndReportsTheOtherGone(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
