@@ -139,6 +139,11 @@ covered_files:
 covered_digest: "v3:sha256:ba1b84fafb0c3ccea883469ca226e7008e7e80aea566b11abf2fdc9b4d76b33a"
 behavior_unverified: 0
 overrides_applied: 0
+overrides:
+  - must_have: "Without Space data (Spaces capability off or missing), two same-frame native tab groups of one app on two Spaces (scenario C5) are tracked as two separate windows"
+    reason: "Project-lead decision 2026-10-25: when the read-only SkyLight Spaces lookup is unavailable, Pane falls back to single-Space behaviour. Without per-window Space data no rule can tell the two groups' hidden tabs apart (REVIEW iteration 3 CR-01: 'No ordering rule can choose between 31 and 10'), so in that mode the two groups may be tracked as one window. With Space data the case is handled and tested (02-14). In fallback, Pane still never reports a live window destroyed and never tracks one window ID under two identities, and 02-14's tests assert both."
+    accepted_by: "project lead (Ken Scott), decision 2026-10-25"
+    accepted_at: "2026-10-25T19:07:21Z"
 gaps:
   - truth: "A natively tabbed window counts as one tracked window, and a same-frame window of the same app on another Space is never taken as its hidden tab (ROADMAP SC2; 02-10 truth 1; REVIEW CR-01)"
     status: failed
