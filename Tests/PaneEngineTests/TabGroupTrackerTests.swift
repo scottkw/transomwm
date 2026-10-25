@@ -244,4 +244,88 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(tracker.members(of: identity(30)) == (tabCount == 3 ? [30, 31, 11] : [30, 11]))
         #expect(resolution.tabCount == [identity(30): tabCount])
     }
+
+    /// Group G shows 30 on Space 1; its hidden tab 31 reports no Space while 10 (Space 2) shares the slot, so G knows
+    /// no other member. Then 30 closes (or AX reports it invalid) and a window is listed: does it take G's identity?
+    private func orphanHandoff(
+        previous: CGWindowEntry = cg(31), listed: UInt32 = 31, listedSpace: Set<UInt64> = [1], tracked: [WindowIdentity] = [],
+        shownGone: Bool = true
+    ) -> TabResolution {
+        var tracker = TabGroupTracker()
+        let first = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(30, 2)], cgWindows: [cg(10), cg(30, onScreen: true), previous],
+            spaces: [30: [1], 10: [2], previous.windowID: []]
+        )
+        #expect(tracker.members(of: identity(30)) == [30])
+        #expect(first.groupFor == [30: identity(30)])
+        return tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(listed, 1)],
+            cgWindows: [cg(10), cg(listed, onScreen: true)] + (shownGone ? [] : [cg(30)]),
+            tracked: tracked + [identity(30)], spaces: [listed: listedSpace, 10: [2]], invalid: shownGone ? [] : [30]
+        )
+    }
+
+    @Test(arguments: [true, false])
+    func aFormerTabOfAGroupWithNoMemberLeftTakesItsIdentity(shownGone: Bool) {
+        let resolution = orphanHandoff(shownGone: shownGone)
+        #expect(resolution.groupFor == [31: identity(30)])
+        #expect(resolution.tabCount[identity(30)] == 1)
+    }
+
+    @Test func aFormerTabExactlyOnePointOffStillTakesTheIdentity() {
+        let shifted = Rect(x: frame.x + 1, y: frame.y, width: frame.width, height: frame.height)
+        #expect(orphanHandoff(previous: cg(31, shifted)).groupFor == [31: identity(30)])
+    }
+
+    @Test(arguments: [
+        ("absent from the previous CG list", cg(32), UInt32(31), Set<UInt64>([1]), false),
+        ("onscreen in the previous CG list", cg(31, onScreen: true), 31, [1], false),
+        ("on another Space", cg(31), 31, [3], false),
+        ("already reported", cg(31), 31, [1], true),
+        ("outside the slot", cg(31, Rect(x: frame.x + 1.01, y: frame.y, width: frame.width, height: frame.height)), 31, [1], false),
+    ] as [(String, CGWindowEntry, UInt32, Set<UInt64>, Bool)])
+    func aWindowWithoutFormerTabEvidenceNeverTakesTheIdentity(
+        _ reason: String, previous: CGWindowEntry, listed: UInt32, listedSpace: Set<UInt64>, reported: Bool
+    ) {
+        let resolution = orphanHandoff(previous: previous, listed: listed, listedSpace: listedSpace, tracked: reported ? [identity(listed)] : [])
+        #expect(resolution.groupFor.isEmpty, "\(reason)")
+    }
+
+    /// G1 shows 30 and took 10 as its hidden tab (bound with AXTabs 2). 10 is then listed with a tab bar.
+    private func rebind(tabCount: Int, shownStillHidden: Bool = true, spaces: [UInt32: Set<UInt64>]? = nil) -> (TabGroupTracker, TabResolution) {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(30, 2)], cgWindows: [cg(10), cg(11), cg(12), cg(30, onScreen: true)],
+            spaces: spaces.map { _ in [30: [1]] }
+        )
+        #expect(tracker.members(of: identity(30)) == [10, 30])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, tabCount)],
+            cgWindows: [cg(10, onScreen: true), cg(11), cg(12)] + (shownStillHidden ? [cg(30)] : []), tracked: [identity(30)], spaces: spaces
+        )
+        return (tracker, resolution)
+    }
+
+    @Test func aMemberWhoseTabCountDiffersFromItsGroupsLeavesItWhileTheShownTabIsStillThere() {
+        let (tracker, resolution) = rebind(tabCount: 3)
+        #expect(resolution.groupFor == [10: identity(10)])
+        #expect(tracker.members(of: identity(30)) == [30])
+        #expect(tracker.members(of: identity(10)) == [10, 11, 12])
+    }
+
+    @Test func aMemberWithTheGroupsTabCountRebindsIt() {
+        let (_, resolution) = rebind(tabCount: 2)
+        #expect(resolution.groupFor == [10: identity(30)])
+    }
+
+    @Test func aMemberRebindsItsGroupOnceTheShownTabLeftTheCGList() {
+        let (_, resolution) = rebind(tabCount: 3, shownStillHidden: false)
+        #expect(resolution.groupFor == [10: identity(30)])
+    }
+
+    @Test func aMemberOnAnotherSpaceNeverRebindsTheGroup() {
+        let (tracker, resolution) = rebind(tabCount: 2, spaces: [10: [2], 30: []])
+        #expect(resolution.groupFor == [10: identity(10)])
+        #expect(tracker.members(of: identity(30)) == [30])
+    }
 }

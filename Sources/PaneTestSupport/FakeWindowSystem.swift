@@ -33,10 +33,15 @@ public struct FakeWindow: Sendable {
     public var listedInAX: Bool
     public var cgLayer: Int
     public var onScreen: Bool
+    /// The Space the window is on; nil for scenarios that do not model Spaces.
+    public var space: UInt64?
+    /// The native tab group the window is a tab of (`tabGroup` and `newTab` set it).
+    public var tabGroupID: UInt32?
 
     public init(
         id: UInt32, pid: Int32, title: String, frame: Rect, snapshot: WindowSnapshot, hiddenMinimum: Size? = nil,
-        axValid: Bool = true, inCGList: Bool = true, listedInAX: Bool = true, cgLayer: Int = 0, onScreen: Bool = true
+        axValid: Bool = true, inCGList: Bool = true, listedInAX: Bool = true, cgLayer: Int = 0, onScreen: Bool = true,
+        space: UInt64? = nil, tabGroupID: UInt32? = nil
     ) {
         self.id = id
         self.pid = pid
@@ -49,16 +54,19 @@ public struct FakeWindow: Sendable {
         self.listedInAX = listedInAX
         self.cgLayer = cgLayer
         self.onScreen = onScreen
+        self.space = space
+        self.tabGroupID = tabGroupID
     }
 
     /// An `AXStandardWindow` with all four title-bar buttons present and enabled.
-    public static func standard(id: UInt32, pid: Int32, frame: Rect, title: String = "") -> FakeWindow {
+    public static func standard(id: UInt32, pid: Int32, frame: Rect, title: String = "", space: UInt64? = nil) -> FakeWindow {
         FakeWindow(
             id: id, pid: pid, title: title, frame: frame,
             snapshot: WindowSnapshot(
                 role: "AXWindow", subrole: "AXStandardWindow", modal: false, main: false, minimized: false, fullScreen: false,
                 close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: frame
-            )
+            ),
+            space: space
         )
     }
 }
@@ -88,6 +96,14 @@ public actor FakeWindowSystem: WindowSystem {
     private var initialSweepDone = false
     /// The latest frame per window of a hung or degraded app, applied after its next successful refresh (D-16).
     private var heldFrames: [WindowIdentity: (ref: WindowRef, rect: Rect)] = [:]
+    /// Whether observations carry Space data, as when the Spaces capability is on.
+    private var spacesAvailable = false
+    /// Whether a hidden tab reports its Space; a real one may report none.
+    private var hiddenTabsReportSpace = false
+    /// The Space shown since the last `showSpace`; nil until a scenario switches Spaces.
+    private var currentSpace: UInt64?
+    /// The selected tab of each tab group.
+    private var selectedTabs: [UInt32: UInt32] = [:]
 
     public init(now: ContinuousClock.Instant = .now) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -108,27 +124,66 @@ public actor FakeWindowSystem: WindowSystem {
         windows[id] = window
     }
 
-    /// A native tab group (D-08): standard windows sharing `frame`. Only `visible` is listed in AX and onscreen;
-    /// the other tabs exist only in the CG list, offscreen.
-    public func tabGroup(ids: [UInt32], frame: Rect, pid: Int32, visible: UInt32) {
+    /// A native tab group (D-08): standard windows sharing `frame` and `space`. Only `visible` is listed in AX and
+    /// onscreen; the other tabs exist only in the CG list, offscreen.
+    public func tabGroup(ids: [UInt32], frame: Rect, pid: Int32, visible: UInt32, space: UInt64? = nil) {
         for id in ids {
-            var tab = FakeWindow.standard(id: id, pid: pid, frame: frame, title: "Tab \(id)")
-            tab.snapshot.tabGroup = TabGroupFact(tabCount: ids.count)
+            var tab = FakeWindow.standard(id: id, pid: pid, frame: frame, title: "Tab \(id)", space: space)
+            tab.tabGroupID = ids.first
             windows[id] = tab
         }
         selectTab(visible)
     }
 
-    /// Shows tab `id`, as AppKit does: it becomes the one listed, onscreen member and its `AXTabs` count is the
-    /// number of its group's tabs still in the CG list. The others go unlisted and offscreen.
+    /// Cmd-T in `window`: AppKit opens tab `id` in its frame and on its Space, and shows it.
+    public func newTab(_ id: UInt32, in window: UInt32) {
+        guard let host = windows[window] else { return }
+        let group = host.tabGroupID ?? window
+        windows[window]?.tabGroupID = group
+        var tab = FakeWindow.standard(id: id, pid: host.pid, frame: host.frame, title: "Tab \(id)", space: host.space)
+        tab.tabGroupID = group
+        windows[id] = tab
+        selectTab(id)
+    }
+
+    /// Shows tab `id`, as AppKit does: it becomes its group's one listed, onscreen member (while its Space is shown)
+    /// and its `AXTabs` count is the number of its group's tabs AX still knows. The others go unlisted and offscreen.
     public func selectTab(_ id: UInt32) {
-        guard let tab = windows[id] else { return }
-        let group = windows.values.filter { $0.pid == tab.pid && $0.frame == tab.frame && $0.snapshot.tabGroup != nil && $0.inCGList }
-        for member in group.map(\.id) {
-            windows[member]?.listedInAX = member == id
-            windows[member]?.onScreen = member == id
-            windows[member]?.snapshot.tabGroup = TabGroupFact(tabCount: group.count)
+        guard let group = windows[id]?.tabGroupID else { return }
+        selectedTabs[group] = id
+        let members = windows.values.filter { $0.tabGroupID == group && $0.inCGList }
+        let tabCount = members.filter(\.axValid).count
+        for member in members {
+            let shown = member.id == id && (currentSpace == nil || member.space == nil || member.space == currentSpace)
+            windows[member.id]?.listedInAX = shown
+            windows[member.id]?.onScreen = shown
+            windows[member.id]?.snapshot.tabGroup = TabGroupFact(tabCount: tabCount)
         }
+    }
+
+    /// A Space switch: AX lists, and WindowServer shows onscreen, exactly the open windows on `space` that are not
+    /// hidden tabs.
+    public func showSpace(_ space: UInt64) {
+        currentSpace = space
+        for (id, window) in windows {
+            let shown = window.space == space && !isHiddenTab(window) && window.axValid && window.inCGList
+            windows[id]?.listedInAX = shown
+            windows[id]?.onScreen = shown
+        }
+    }
+
+    /// Whether observations carry Space data (the Spaces capability on) or not (single-Space fallback).
+    public func setSpacesAvailable(_ available: Bool) {
+        spacesAvailable = available
+    }
+
+    /// Whether a hidden tab reports its group's Space, or none (as the live lookup may answer).
+    public func setHiddenTabsReportSpace(_ report: Bool) {
+        hiddenTabsReportSpace = report
+    }
+
+    private func isHiddenTab(_ window: FakeWindow) -> Bool {
+        window.tabGroupID.map { selectedTabs[$0] != window.id } ?? false
     }
 
     /// The user's exclusion list, as `AXWindowSystem.setExcludedBundleIDs` receives it.
@@ -247,20 +302,24 @@ public actor FakeWindowSystem: WindowSystem {
         let minimum = target.hiddenMinimum ?? Size(width: 0, height: 0)
         let actual = Rect(x: rect.x, y: rect.y, width: max(rect.width, minimum.width), height: max(rect.height, minimum.height))
         for (id, window) in windows where id == target.id
-            || (target.snapshot.tabGroup != nil && window.snapshot.tabGroup != nil && window.pid == target.pid && window.frame == target.frame)
+            || (target.tabGroupID != nil && window.tabGroupID == target.tabGroupID)
         {
             windows[id]?.frame = actual
         }
         yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: actual, failure: nil)))
     }
 
-    /// The CG list (empty while locked), displays, session state and clock of the simulation right now.
+    /// The CG list (empty while locked), displays, session state, clock and, while Spaces are available, each CG
+    /// window's Space (a hidden tab's is empty unless hidden tabs report it) of the simulation right now.
     private func context() -> ObservationContext {
         let cgWindows = locked ? [] : windows.values.filter(\.inCGList).sorted { $0.id < $1.id }.map {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
+        let windowSpaces: [UInt32: Set<UInt64>]? = spacesAvailable ? Dictionary(uniqueKeysWithValues: windows.values.filter { $0.inCGList && !locked }.compactMap { window in
+            window.space.map { (window.id, isHiddenTab(window) && !hiddenTabsReportSpace ? Set<UInt64>() : [$0]) }
+        }) : nil
         return ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !(locked && lockGate),
-                                  initialSweep: !initialSweepDone, now: clock)
+                                  initialSweep: !initialSweepDone, now: clock, windowSpaces: windowSpaces)
     }
 
     private func yield(_ events: [WindowEvent]) {

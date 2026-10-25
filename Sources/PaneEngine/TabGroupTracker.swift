@@ -65,7 +65,7 @@ public struct TabGroupTracker: Equatable, Sendable {
     /// `spaces` are the CG windows' Spaces; nil means no Space data (single-Space behaviour).
     public mutating func update(
         pid: Int32, bundleID: String, visible: [(id: UInt32, frame: Rect, tabCount: Int)], cgWindows: [CGWindowEntry],
-        tracked: [WindowIdentity] = [], spaces: [UInt32: Set<UInt64>]? = nil
+        tracked: [WindowIdentity] = [], spaces: [UInt32: Set<UInt64>]? = nil, invalid: Set<UInt32> = []
     ) -> TabResolution {
         let cg = cgWindows.filter { $0.pid == pid }
         let inCG = Set(cg.map(\.windowID))
