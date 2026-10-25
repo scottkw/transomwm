@@ -150,7 +150,7 @@ covered_files:
   - "scripts/run-debug.sh"
   - "xcode/Pane.entitlements"
   - "xcode/project.yml"
-covered_digest: "v3:sha256:8f7eba2849c47e8b376757b01378906f139e7f1683523515d9f9c1b2ff5c861f"
+covered_digest: "v3:sha256:2591440ce5bbe2d5c5d7d5cea8ac172767c9dbba28338ccfa20b47bddc5e97bf"
 behavior_unverified: 1
 overrides_applied: 1
 overrides:
