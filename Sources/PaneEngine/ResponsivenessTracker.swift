@@ -47,6 +47,16 @@ public struct ResponsivenessTracker: Equatable, Sendable {
         return lastAttempt[pid].map { instant >= $0 + Self.probeInterval } ?? true
     }
 
+    /// One turn of a degraded app's probe loop.
+    public enum ProbeStep: Equatable, Sendable { case stop, wait, probe }
+
+    /// Stop once the app is no longer degraded; otherwise probe when due, else wait. A result that lands
+    /// after the degrade resets the interval, so "not due yet" must never end the loop.
+    public func probeStep(pid: Int32, at instant: ContinuousClock.Instant) -> ProbeStep {
+        guard degraded.contains(pid) else { return .stop }
+        return needsProbe(pid: pid, at: instant) ? .probe : .wait
+    }
+
     public func shouldRefresh(pid: Int32) -> Bool { !degraded.contains(pid) }
 
     public mutating func forget(pid: Int32) {

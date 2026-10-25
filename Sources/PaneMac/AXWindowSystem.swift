@@ -270,9 +270,12 @@ import os
         probes[pid] = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: ResponsivenessTracker.probeInterval)
-                guard !Task.isCancelled, let self, let thread = self.threads[pid],
-                      self.responsiveness.needsProbe(pid: pid, at: .now)
-                else { return }
+                guard !Task.isCancelled, let self, let thread = self.threads[pid] else { return }
+                switch self.responsiveness.probeStep(pid: pid, at: .now) {
+                case .stop: return
+                case .wait: continue
+                case .probe: break
+                }
                 let (outcome, duration) = await thread.probe()
                 guard !Task.isCancelled, self.threads[pid] === thread else { return }
                 self.record(pid, outcome, duration)

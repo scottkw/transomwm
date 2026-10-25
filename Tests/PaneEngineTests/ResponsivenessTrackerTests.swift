@@ -56,6 +56,18 @@ private let fast: Duration = .milliseconds(10)
         #expect(tracker.needsProbe(pid: pid, at: t0 + .seconds(2)))
     }
 
+    @Test func aLateResultAfterTheDegradeMakesTheProbeLoopWaitNotStop() {
+        var tracker = ResponsivenessTracker()
+        _ = tracker.record(pid: pid, outcome: .cannotComplete, duration: fast, at: t0)
+        _ = tracker.record(pid: pid, outcome: .cannotComplete, duration: fast, at: t0)
+        // A job queued before the degrade finishes 1 s later and resets the probe interval.
+        _ = tracker.record(pid: pid, outcome: .cannotComplete, duration: fast, at: t0 + .seconds(1))
+        #expect(tracker.probeStep(pid: pid, at: t0 + .seconds(2)) == .wait)
+        #expect(tracker.probeStep(pid: pid, at: t0 + .seconds(3)) == .probe)
+        _ = tracker.record(pid: pid, outcome: .success, duration: fast, at: t0 + .seconds(3))
+        #expect(tracker.probeStep(pid: pid, at: t0 + .seconds(5)) == .stop)
+    }
+
     @Test func aHealthyAppNeedsNoProbe() {
         var tracker = ResponsivenessTracker()
         _ = tracker.record(pid: pid, outcome: .success, duration: fast, at: t0)
