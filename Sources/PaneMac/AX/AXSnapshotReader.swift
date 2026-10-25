@@ -54,7 +54,8 @@ public nonisolated enum AXSnapshotReader {
             let (snapshot, title) = read(element)
             let id = windowID(of: element, snapshot: snapshot, title: title, forceFallback: forceFallback, fallback: &fallback)
             if let id { byID[id.id] = CachedWindow(element: element, source: id.source) }
-            windows.append(WindowObservation(windowID: id?.id, idSource: id?.source ?? .axPrivate, read: snapshot, title: title))
+            windows.append(WindowObservation(
+                windowID: id?.id, idSource: id?.source ?? .axPrivate, read: snapshot, title: title, replacesWindowID: id?.replaces))
         }
         return (AppObservation(pid: pid, bundleID: bundleID, appHidden: hidden, windows: windows, duration: start.duration(to: .now)), byID)
     }
@@ -75,22 +76,30 @@ public nonisolated enum AXSnapshotReader {
     /// desktop). Each lookup that fails for a real window counts towards switching it off (D-15).
     private static func windowID(
         of element: AXUIElement, snapshot: Result<WindowSnapshot, AXFailure>, title: String, forceFallback: Bool, fallback: inout Fallback
-    ) -> (id: UInt32, source: WindowIDSource)? {
-        // An element keeps the ID it was first given for as long as the cache holds it: a fallback ID never turns
-        // into the lookup's real one, which would track the window a second time.
-        if let cached = fallback.cache.first(where: { CFEqual($0.value.element, element) }) { return (cached.key, cached.value.source) }
-        if !forceFallback, Capabilities.isAvailable(.axWindowID), let function = AXWindowID.function {
+    ) -> (id: UInt32, source: WindowIDSource, replaces: UInt32?)? {
+        let function = !forceFallback && Capabilities.isAvailable(.axWindowID) ? AXWindowID.function : nil
+        if let cached = fallback.cache.first(where: { CFEqual($0.value.element, element) }) {
+            // A fallback ID is checked again while the lookup works, and replaced (the tracker re-keys) when it differs.
+            var id: CGWindowID = 0
+            guard cached.value.source != .axPrivate, let function, function(element, &id) == .success else {
+                return (cached.key, cached.value.source, nil)
+            }
+            Capabilities.recordSuccess(.axWindowID)
+            fallback.bound.insert(id)
+            return (id, .axPrivate, id == cached.key ? nil : cached.key)
+        }
+        if let function {
             var id: CGWindowID = 0
             if function(element, &id) == .success {
                 Capabilities.recordSuccess(.axWindowID)
                 // shortcut: only IDs bound before a failed element are kept from its frame match; two passes if twins collide.
                 fallback.bound.insert(id)
-                return (id, .axPrivate)
+                return (id, .axPrivate, nil)
             }
             // -25201 on a non-window (Finder's desktop) is expected; only a readable AXWindow counts.
             if case .success(let read) = snapshot, read.role == kAXWindowRole { Capabilities.recordFailure(.axWindowID) }
         }
-        return fallback.identify(element, snapshot: snapshot, title: title)
+        return fallback.identify(element, snapshot: snapshot, title: title).map { ($0.id, $0.source, nil) }
     }
 
     /// One observation's frame-fallback state: the app thread's cache, one CG snapshot taken on first need, and the

@@ -16,7 +16,7 @@ import os
     let hints: AsyncStream<AXEventHint>
     private let hintContinuation: AsyncStream<AXEventHint>.Continuation
     private let appFilter: @MainActor (Int32, String) -> Bool
-    private let forceWindowIDFallback: Bool
+    private var forceWindowIDFallback: Bool
     private let logger = Logger(subsystem: "com.eightabyte.pane", category: "ax")
     private var tracker = WindowTracker()
     private var threads: [Int32: AXAppThread] = [:]
@@ -70,7 +70,8 @@ import os
 
     /// Test seam: identify windows by frame (true) or through `_AXUIElementGetWindow` again (false), for every app.
     func setForceWindowIDFallback(_ force: Bool) {
-        // RED stub (02-16 Task 1)
+        forceWindowIDFallback = force
+        for thread in threads.values { thread.forceWindowIDFallback = force }
     }
 
     /// Session-aware: a lookup switched off mid-session reads as off here, in the menu and in the footer.
@@ -354,6 +355,14 @@ import os
                     onLearnedMinimum?(info.window.bundleID, minimum)
                 }
             case .windowDestroyed(let ref): reportedMinimums[ref.identity] = nil
+            case .windowRekeyed(let from, let info):
+                // Every per-window record follows the new ID; the minimum it carries was reported or seeded already.
+                let pid = from.pid
+                if focusedIdentities[pid] == from.identity { focusedIdentities[pid] = info.window.identity }
+                if mainWindowIDs[pid] == from.windowID { mainWindowIDs[pid] = info.visibleMemberID ?? info.window.windowID }
+                if pendingFocus[pid] == from.windowID { pendingFocus[pid] = info.visibleMemberID ?? info.window.windowID }
+                reportedMinimums[from.identity] = nil
+                reportedMinimums[info.window.identity] = info.learnedMinimum
             default: break
             }
             continuation.yield(event)

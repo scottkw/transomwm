@@ -36,8 +36,12 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     /// Per-window notifications of cached windows not registered yet (no observer, or the window was not AX-ready);
     /// each `observe()` retries them.
     private var unregisteredWindows: [UInt32: [String]] = [:]
-    /// Test seam: identify windows by frame even when `_AXUIElementGetWindow` works.
-    private let forceWindowIDFallback: Bool
+    private let forceFallback: OSAllocatedUnfairLock<Bool>
+    /// Test seam: identify windows by frame even when `_AXUIElementGetWindow` works. Read by `observe()` on the thread.
+    var forceWindowIDFallback: Bool {
+        get { forceFallback.withLock { $0 } }
+        set { forceFallback.withLock { $0 = newValue } }
+    }
     /// Latest-wins frame slots, one per window ID (D-16, T-02-34): a newer `enqueueFrame` overwrites a waiting one,
     /// and at most one drain is scheduled at a time.
     private let frames = OSAllocatedUnfairLock(initialState: FrameQueue())
@@ -76,7 +80,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         self.pid = pid
         self.bundleID = bundleID
         self.hints = hints
-        self.forceWindowIDFallback = forceWindowIDFallback
+        forceFallback = OSAllocatedUnfairLock(initialState: forceWindowIDFallback)
         (frameResults, frameContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         let thread = Thread { [self] in
             runLoop = CFRunLoopGetCurrent()
@@ -176,7 +180,8 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             var observation = listed
             if var cache = elements {
                 for id in known where cache[id] == nil {
-                    guard let cached = windows[id] else { continue }
+                    // A re-keyed element is in the new map under its new ID; it is never cached twice.
+                    guard let cached = windows[id], !cache.values.contains(where: { CFEqual($0.element, cached.element) }) else { continue }
                     if isStopped { return nil }
                     cache[id] = cached
                     observation.windows.append(WindowObservation(

@@ -50,6 +50,13 @@ public struct WindowTracker: Sendable {
         closedIDs.purge(at: context.now)
         displays = context.displays
         var events: [WindowEvent] = []
+        // Corrected IDs first, so the rest of this refresh sees each window under its new ID.
+        for o in app.windows {
+            guard let old = o.replacesWindowID, let new = o.windowID, old != new else { continue }
+            let from = WindowIdentity(windowID: old, pid: app.pid, bundleID: app.bundleID)
+            windows[from]?.idSource = o.idSource
+            events += rekey(from: from, to: WindowIdentity(windowID: new, pid: app.pid, bundleID: app.bundleID))
+        }
         var seen: Set<WindowIdentity> = []
         var created: Set<WindowIdentity> = []
         let cgByID = Dictionary(context.cgWindows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
@@ -192,9 +199,28 @@ public struct WindowTracker: Sendable {
         return events
     }
 
-    /// The window known as `from` is the same window as `to` (a corrected ID, D-15).
+    /// The window known as `from` is the same window as `to` (a corrected ID, D-15): everything known about it moves
+    /// to `to`, and it is reported as one windowRekeyed, never as destroyed and created. A window not reported yet
+    /// keeps its settle start under the new ID, silently. An unknown `from` changes nothing.
     public mutating func rekey(from: WindowIdentity, to: WindowIdentity) -> [WindowEvent] {
-        []  // RED stub (02-16 Task 1)
+        guard from != to else { return [] }
+        guard var info = windows[from] else {
+            if let firstSeen = pending.removeValue(forKey: from) { pending[to] = min(pending[to] ?? firstSeen, firstSeen) }
+            return []
+        }
+        guard windows[to] == nil else { return [] }
+        windows[from] = nil
+        let old = info.window
+        info.window = WindowRef(identity: to, titleHint: old.titleHint, axIdentifier: old.axIdentifier, creationOrder: old.creationOrder)
+        if info.visibleMemberID == from.windowID { info.visibleMemberID = to.windowID }
+        lastReliable[to] = lastReliable.removeValue(forKey: from)
+        rechecks[to] = rechecks.removeValue(forKey: from)
+        foldPending[to] = foldPending.removeValue(forKey: from)
+        learner.rekey(from: from, to: to)
+        info.learnedMinimum = learner.minimum(for: to)
+        closedIDs.remove(to)
+        windows[to] = info
+        return [.windowRekeyed(from: old, to: info)]
     }
 
     /// NSWorkspace says `pid` quit. AX can no longer answer for it, so each window closes once it leaves the CG list.

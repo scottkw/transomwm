@@ -83,8 +83,13 @@ public struct MinimumSizeLearner: Equatable, Sendable {
     }
 
     /// The window's ID was corrected (WindowTracker.rekey): its minimum and candidate move to `to`.
+    /// When `to` already has a minimum (a duplicate merged), it keeps the larger value per axis.
     public mutating func rekey(from: WindowIdentity, to: WindowIdentity) {
-        // RED stub (02-16 Task 1)
+        if let moved = minimums.removeValue(forKey: from) {
+            let kept = minimums[to] ?? moved
+            minimums[to] = Size(width: max(kept.width, moved.width), height: max(kept.height, moved.height))
+        }
+        if let candidate = candidates.removeValue(forKey: from), candidates[to] == nil { candidates[to] = candidate }
     }
 
     public mutating func forget(_ window: WindowIdentity) {
