@@ -169,6 +169,16 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         #expect(learned(tracker) == nil)
     }
 
+    /// Probe4c "late applier (>1 s)", lead decision 2026-10-25: the app has not moved toward the request by the
+    /// confirming refresh, so its old, larger frame is not a minimum.
+    @Test func aWindowStillAtItsPreWriteSizeAfterASecondLearnsNothing() {
+        var tracker = tracker(at: r(800, 600))
+        write(&tracker, r(300, 600), readsBack: r(800, 600), at: t0)
+        refresh(&tracker, at: r(800, 600), time: t0 + confirmDelay)
+        #expect(learned(tracker) == nil)
+        #expect(!tracker.awaitsMinimumConfirmation(pid: pid))
+    }
+
     @Test func aWindowResizedByTheUserBeforeTheRefreshLearnsNothing() {
         var tracker = tracker(at: r(800, 600))
         write(&tracker, r(300, 600), readsBack: r(500, 600), at: t0)
