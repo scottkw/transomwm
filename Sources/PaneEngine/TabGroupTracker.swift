@@ -29,7 +29,8 @@ public struct TabResolution: Equatable, Sendable {
 /// another Space is never taken; a hidden tab may report no Space, so while a window known to be on another Space
 /// shares the frame slot no candidate of unknown Space is taken either (own members and the Cmd-T window excepted).
 /// A shown tab that was not in the previous refresh's CG list is brand new (Cmd-T, New Tab): it takes the tracked
-/// standalone window listed last refresh and leads a new group with it. A window listed in AXWindows without a tab
+/// standalone window listed last refresh and leads a new group with it, even while a CG list older than the AX read
+/// (a sweep's) still shows that window onscreen and lacks the tab. A window listed in AXWindows without a tab
 /// bar of its own is never a hidden tab, and leaves any group it was in unless it is the group's leader, its shown
 /// tab, or all that is left of it. A tracked standalone window not listed at the last refresh is never taken either.
 /// A listed member with a tab bar rebinds its group unless the two are on known different Spaces (a changed AXTabs
@@ -122,12 +123,17 @@ public struct TabGroupTracker: Equatable, Sendable {
         for v in visible.sorted(by: { rank($0).lexicographicallyPrecedes(rank($1)) }).reversed() {
             let shownSpace = space(v.id)
             let slot = cg.filter { $0.windowID != v.id && $0.layer == 0 && Self.matches($0.bounds, v.frame) }
-            let candidates = slot.filter {
-                !$0.onScreen && !invalid.contains($0.windowID) && canBeHiddenTab($0.windowID) && !Self.differ(space($0.windowID), shownSpace)
-            }.map(\.windowID)
             // Brand new (Cmd-T, New Tab): the tracked standalone window listed last refresh is the one it was opened from.
             let isNew = previousCG.map { !$0.contains { $0.windowID == v.id } } ?? false
-            let opener = isNew ? standalone.first { wasListed.contains($0.windowID) && candidates.contains($0.windowID) }?.windowID : nil
+            // A new tab missing from this CG list too: the list predates the AX read (a sweep's, taken before Cmd-T),
+            // so the window it was opened from can still be onscreen in it.
+            let staleCG = isNew && !inCG.contains(v.id)
+            func mayBeOpener(_ id: UInt32) -> Bool { wasListed.contains(id) && standalone.contains { $0.windowID == id } }
+            let candidates = slot.filter {
+                (!$0.onScreen || staleCG && mayBeOpener($0.windowID)) && !invalid.contains($0.windowID) && canBeHiddenTab($0.windowID)
+                    && !Self.differ(space($0.windowID), shownSpace)
+            }.map(\.windowID)
+            let opener = isNew ? standalone.first { mayBeOpener($0.windowID) && candidates.contains($0.windowID) }?.windowID : nil
             var index = list.firstIndex { $0.members.contains(v.id) }
             var refused: Int?
             if let member = index, list[member].shown != v.id, v.tabCount >= 2, !mayRebind(list[member], v) {

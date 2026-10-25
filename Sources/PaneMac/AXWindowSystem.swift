@@ -247,7 +247,8 @@ import os
         // The app may have quit meanwhile; its windows are decided by the terminated path now.
         guard let observation, threads[pid] === thread else { return }
         record(pid, Self.outcome(of: observation), observation.duration)
-        // Read after AX answered, so a window AX just reported invalid has had the most time to leave the CG list.
+        // Read after AX answered, so a window AX just reported invalid has had the most time to leave the CG list. A
+        // sweep's shared list predates every app's AX read instead; TabGroupTracker allows for a tab missing from it.
         guard let cgWindows = cgWindows ?? CGWindowList.snapshot() else {
             // No second source: no close decision and no tab update now; refresh again soon (WR-01).
             followUp.remove(pid)
