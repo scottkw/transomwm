@@ -153,6 +153,9 @@ public struct WindowTracker: Sendable {
         return decide(pid: pid, app: .terminated, context: context) { _ in .timedOut }
     }
 
+    /// RED stub (02-12).
+    public mutating func applyFrameResult(_ result: FrameWriteResult) -> [WindowEvent] { [] }
+
     /// Decides the windows of terminated apps again against a fresh CG list (WindowServer lags behind the quit).
     public mutating func recheckTerminated(context: ObservationContext) -> [WindowEvent] {
         var events: [WindowEvent] = []
