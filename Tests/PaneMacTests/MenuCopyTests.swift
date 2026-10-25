@@ -24,6 +24,11 @@ import Testing
         #expect(MenuCopy.capabilityItem(windowIDLookupAvailable: false) == "Window ID lookup: off, matching by frame")
     }
 
+    @Test func spacesItemNamesTheSpacesLookupState() {
+        #expect(MenuCopy.spacesItem(available: true) == "Spaces lookup: available")
+        #expect(MenuCopy.spacesItem(available: false) == "Spaces lookup: off, single Space")
+    }
+
     @Test func appNamesUpToTheLimitAreUnchanged() {
         let name = String(repeating: "a", count: MenuCopy.maxAppNameLength)
         #expect(MenuCopy.maxAppNameLength == 32)
