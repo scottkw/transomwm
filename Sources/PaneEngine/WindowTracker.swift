@@ -286,15 +286,15 @@ public struct WindowTracker: Sendable {
         bundleHints = hints
     }
 
-    /// A finished frame write (D-17): the read-back becomes the window's frame, and a refused size becomes a minimum
-    /// candidate that a refresh `MinimumSizeLearner.confirmDelay` later confirms. A failed write changes nothing; a
-    /// later refresh decides the window's state through CloseRule.
+    /// A finished frame write (D-17): the read-back becomes the window's frame, and a refused size the window moved
+    /// to from its tracked frame becomes a minimum candidate that a refresh `MinimumSizeLearner.confirmDelay` later
+    /// confirms. A failed write changes nothing; a later refresh decides the window's state through CloseRule.
     public mutating func applyFrameResult(_ result: FrameWriteResult, at now: ContinuousClock.Instant) -> [WindowEvent] {
         let identity = result.window.identity
         guard result.failure == nil, let actual = result.actual, actual.isValidGeometry, var info = windows[identity] else { return [] }
         let old = info
         // A fullscreen or minimized window does not take the requested size, so it teaches nothing.
-        if info.state == .present { learner.recordWrite(window: identity, requested: result.requested, actual: actual, at: now) }
+        if info.state == .present { learner.recordWrite(window: identity, requested: result.requested, actual: actual, before: info.frame.size, at: now) }
         info.frame = actual
         info.displayUUID = Coordinates.displayUUID(for: actual, among: displays)
         windows[identity] = info

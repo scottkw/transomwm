@@ -3,13 +3,15 @@ import PaneModel
 /// Learns each window's real minimum size from what its app did with a smaller request (D-13, in memory).
 ///
 /// Apps refuse an undersized `AXSize` silently: the write succeeds and the read-back is clamped. The rule, per axis:
-/// a read-back more than `refusalMargin` (32 pt) above the request is a refusal candidate. It is learned, as
-/// max(old, read-back), when a refresh at least `confirmDelay` (1 s) after that write, with no newer write to the
-/// window in between, still sees the window within `tolerance` (2 pt) of that size. Anything else drops it.
-/// The margin keeps grid snaps out: a terminal rounds a size up by less than one cell. The delay keeps late
-/// appliers out: an app that animates or applies the size from a busy main thread has caught up by then, while a
-/// clamped window has not moved. An axis read back smaller than requested teaches nothing. Learned values only
-/// grow; an unlearned axis reads 0.
+/// a read-back more than `refusalMargin` (32 pt) above the request, and more than `tolerance` (2 pt) below the
+/// window's size before the write, is a refusal candidate: the app moved toward the request and stopped. A later
+/// write read back at that same size keeps it. It is learned, as max(old, read-back), when a refresh at least
+/// `confirmDelay` (1 s) after the latest write still sees the window within `tolerance` of that size. Anything else
+/// drops it. The margin keeps grid snaps out: a terminal rounds a size up by less than one cell. The move keeps
+/// late appliers out: an app that has not applied the size yet, even a second later, still shows its old frame. The
+/// delay keeps out an app that animates toward the request. Known limit: a window first written while already at
+/// its minimum does not move, so it is learned only after a later write moves it. An axis read back smaller than
+/// requested teaches nothing. Learned values only grow; an unlearned axis reads 0.
 public struct MinimumSizeLearner: Equatable, Sendable {
     public static let tolerance: Double = 2
     public static let refusalMargin: Double = 32
@@ -27,15 +29,25 @@ public struct MinimumSizeLearner: Equatable, Sendable {
 
     public init() {}
 
-    /// A finished write replaces the window's candidate. Read-backs are untrusted numbers: a write with a non-finite
-    /// or out-of-range value (beyond `Geometry.maxCoordinate`) leaves no candidate.
-    public mutating func recordWrite(window: WindowIdentity, requested: Rect, actual: Rect, at: ContinuousClock.Instant) {
-        guard requested.isValidGeometry, actual.isValidGeometry else {
+    /// A finished write replaces the window's candidate; `before` is the window's size just before it. Read-backs are
+    /// untrusted numbers: a write with a non-finite or out-of-range value (beyond `Geometry.maxCoordinate`) leaves no
+    /// candidate.
+    public mutating func recordWrite(window: WindowIdentity, requested: Rect, actual: Rect, before: Size, at: ContinuousClock.Instant) {
+        guard requested.isValidGeometry, actual.isValidGeometry, Self.isValid(before) else {
             candidates[window] = nil
             return
         }
-        func refused(_ requested: Double, _ actual: Double) -> Double? { actual > requested + Self.refusalMargin ? actual : nil }
-        let candidate = Candidate(width: refused(requested.width, actual.width), height: refused(requested.height, actual.height), writtenAt: at)
+        func refused(_ requested: Double, _ actual: Double, _ before: Double, _ previous: Double?) -> Double? {
+            guard actual > requested + Self.refusalMargin else { return nil }
+            if actual < before - Self.tolerance { return actual }
+            // Not moved: only the same clamp seen again keeps the earlier write's candidate.
+            guard let previous, abs(actual - previous) <= Self.tolerance else { return nil }
+            return previous
+        }
+        let previous = candidates[window]
+        let candidate = Candidate(
+            width: refused(requested.width, actual.width, before.width, previous?.width),
+            height: refused(requested.height, actual.height, before.height, previous?.height), writtenAt: at)
         candidates[window] = candidate.width == nil && candidate.height == nil ? nil : candidate
     }
 

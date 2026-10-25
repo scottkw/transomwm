@@ -233,7 +233,9 @@ private func sweep(_ cgWindows: [CGWindowEntry]) -> ObservationContext {
         func at(_ frame: Rect, _ id: UInt32, _ source: WindowIDSource) -> WindowObservation {
             WindowObservation(windowID: id, idSource: source, read: .success(snapshot(frame: frame)), title: "Secret Plan.txt")
         }
-        _ = tracker.ingest(app(at(wide, synthetic, .synthetic), at(tall, real, .axPrivate)), context: ObservationContext(initialSweep: true, now: start))
+        // Both open larger, so each refused write moves its window (MinimumSizeLearner learns only from a move).
+        let opened = (Rect(x: 40, y: 80, width: 500, height: 120), Rect(x: 400, y: 80, width: 210, height: 600))
+        _ = tracker.ingest(app(at(opened.0, synthetic, .synthetic), at(opened.1, real, .axPrivate)), context: ObservationContext(initialSweep: true, now: start))
         let duplicate = try #require(tracker.info(for: identity(synthetic)))
         let kept = try #require(tracker.info(for: identity(real)))
         #expect(duplicate.window.creationOrder < kept.window.creationOrder)

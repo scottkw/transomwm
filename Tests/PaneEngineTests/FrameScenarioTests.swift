@@ -118,11 +118,17 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         #expect(events.filter { if case .windowChanged = $0 { true } else { false } } == [.windowChanged(info)])
     }
 
-    /// probe3c "at-min static": the window opens at its minimum, so the read-back equals the frame it had.
-    @Test func aWindowThatOpensAtItsMinimumLearnsIt() {
+    /// probe3c "at-min static": the window opens at its minimum, so the read-back equals the frame it had. That is
+    /// indistinguishable from a late applier (lead decision 2026-10-25), so it is learned only once a write moves it.
+    @Test func aWindowThatOpensAtItsMinimumLearnsItOnceAWriteMovesIt() {
         var tracker = tracker(at: r(500, 600))
         write(&tracker, r(300, 600), readsBack: r(500, 600), at: t0)
         refresh(&tracker, at: r(500, 600), time: t0 + confirmDelay)
+        #expect(learned(tracker) == nil, "known limit: the first refused write did not move it")
+        let time = t0 + .seconds(2)
+        write(&tracker, r(700, 600), readsBack: r(700, 600), at: time)
+        write(&tracker, r(300, 600), readsBack: r(500, 600), at: time)
+        refresh(&tracker, at: r(500, 600), time: time + confirmDelay)
         #expect(learned(tracker) == Size(width: 500, height: 0))
     }
 
