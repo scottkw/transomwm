@@ -51,9 +51,9 @@ nonisolated public enum MenuCopy {
     public static let noExclusions = "No apps excluded"
 
     /// Nudge copy (Debug submenu, all builds).
-    public static let nudgeItem = ""
-    public static let nudgeExcluded = ""
-    public static let nudgeNoWindow = ""
+    public static let nudgeItem = "Nudge Focused Window"
+    public static let nudgeExcluded = "Nudge Focused Window (app excluded)"
+    public static let nudgeNoWindow = "Nudge Focused Window (no window)"
 
     /// Freeze-test copy (Debug submenu, Surface 4). Pass names through `truncatedAppName` first.
     public static func freezeItem(appName: String) -> String { "Freeze \u{201C}\(appName)\u{201D} for 10 Seconds\u{2026}" }

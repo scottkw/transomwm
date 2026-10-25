@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import PaneEngine
+import PaneModel
 import os
 
 /// The menu-bar status item (D-01). The menu is rebuilt from the cached inventory each time it opens.
@@ -22,6 +23,8 @@ import os
     var onInventory: ((WindowInventory) -> Void)?
     /// The frontmost app when the menu opened; opening a status menu does not activate Pane.
     private var frontmost: NSRunningApplication?
+    /// Restore frames for Debug ▸ Nudge Focused Window (D-01).
+    private var nudgePlanner = NudgePlanner()
 
     /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item.
     init(
@@ -162,15 +165,41 @@ import os
 
     private func debugMenuItem() -> NSMenuItem {
         let submenu = NSMenu(title: "Debug")
+        submenu.addItem(nudgeMenuItem())
         #if DEBUG
             submenu.addItem(freezeMenuItem())
-            submenu.addItem(.separator())
         #endif
+        submenu.addItem(.separator())
         let available = system.capabilityReport[.axWindowID] == true
         submenu.addItem(Self.info(MenuCopy.capabilityItem(windowIDLookupAvailable: available)))
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
+    }
+
+    /// "Nudge Focused Window" for the frontmost app's focused tracked dockable window; disabled with an explanatory
+    /// title when the app is excluded or has no such window (UI-SPEC Debug submenu).
+    private func nudgeMenuItem() -> NSMenuItem {
+        guard let app = frontmost else { return Self.info(MenuCopy.nudgeNoWindow) }
+        let window = system.focusedWindow(of: app.processIdentifier)
+        if window?.isExcluded == true || app.bundleIdentifier.map(exclusions.contains) == true {
+            return Self.info(MenuCopy.nudgeExcluded)
+        }
+        guard let window, window.kind == .dockable else { return Self.info(MenuCopy.nudgeNoWindow) }
+        let item = NSMenuItem(title: MenuCopy.nudgeItem, action: #selector(nudge), keyEquivalent: "")
+        item.target = self
+        item.representedObject = window.window
+        return item
+    }
+
+    /// Nudges from the window's current frame, or restores the frame it had before the last nudge.
+    @objc private func nudge(_ sender: NSMenuItem) {
+        guard let ref = sender.representedObject as? PaneModel.WindowRef else { return }
+        Task { [weak self, system] in
+            guard let info = await system.windowInfo(ref), let self else { return }
+            let target = self.nudgePlanner.target(for: ref.identity, current: info.frame)
+            await system.perform([.setFrame(info.window, target)])
+        }
     }
 
     #if DEBUG

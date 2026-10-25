@@ -30,6 +30,10 @@ import os
     private var followingLaunches = false
     /// The window a focus hint named, emitted as `windowFocused` after its pid's refresh.
     private var pendingFocus: [Int32: UInt32] = [:]
+    /// Per pid: the window named by the latest `windowFocused`, and the visible window ID whose latest
+    /// observation was AXMain. `focusedWindow(of:)` reads them.
+    private var focusedIdentities: [Int32: WindowIdentity] = [:]
+    private var mainWindowIDs: [Int32: UInt32] = [:]
     /// Which apps are degraded (D-16). A degraded app gets no refreshes, only its probe loop.
     private var responsiveness = ResponsivenessTracker()
     /// At most one refresh job per pid runs; a request meanwhile becomes one follow-up (T-02-19).
@@ -183,6 +187,14 @@ import os
         tracker.info(for: window.identity)
     }
 
+    /// The app's focused tracked window: the one its latest `windowFocused` named, else the one whose visible
+    /// member was AXMain at its latest observation; nil when neither is tracked.
+    public func focusedWindow(of pid: Int32) -> WindowInfo? {
+        if let identity = focusedIdentities[pid], let info = tracker.info(for: identity) { return info }
+        guard let id = mainWindowIDs[pid] else { return nil }
+        return tracker.sortedWindows().first { $0.window.pid == pid && ($0.visibleMemberID ?? $0.window.windowID) == id }
+    }
+
     /// Refreshes every responsive app concurrently. A degraded app is never awaited here: its probe loop
     /// runs on its own (T-02-20).
     private func sweep(initial: Bool) async {
@@ -218,7 +230,7 @@ import os
         if let windowID = pendingFocus.removeValue(forKey: pid),
            let info = tracker.sortedWindows().first(where: { $0.window.pid == pid && ($0.visibleMemberID ?? $0.window.windowID) == windowID })
         {
-            continuation.yield(.windowFocused(info.window))
+            emit([.windowFocused(info.window)])
         }
         if followUp.remove(pid) != nil { scheduler?.schedule(pid: pid, after: .zero) }
     }
@@ -271,6 +283,11 @@ import os
     private func ingest(_ observation: AppObservation, cgWindows: [CGWindowEntry], initial: Bool) {
         if let failure = observation.listFailure {
             logger.info("pid \(observation.pid, privacy: .public) AXWindows failed: \(String(describing: failure), privacy: .public)")
+        } else {
+            mainWindowIDs[observation.pid] = observation.windows.first { o in
+                guard o.listedInAXWindows, case .success(let snapshot) = o.read else { return false }
+                return snapshot.main == true
+            }?.windowID
         }
         let shown = Dictionary(
             observation.windows.compactMap { o -> (UInt32, Rect)? in
@@ -304,7 +321,10 @@ import os
     }
 
     private func emit(_ events: [WindowEvent]) {
-        for event in events { continuation.yield(event) }
+        for event in events {
+            if case .windowFocused(let ref) = event { focusedIdentities[ref.pid] = ref.identity }
+            continuation.yield(event)
+        }
     }
 
     /// A quitting app's windows can stay in the CG list briefly: recheck every 250 ms for up to 5 s, then leave
@@ -349,6 +369,8 @@ import os
         thread.stop()
         scheduler?.cancel(pid: pid)
         pendingFocus[pid] = nil
+        focusedIdentities[pid] = nil
+        mainWindowIDs[pid] = nil
         probes.removeValue(forKey: pid)?.cancel()
         responsiveness.forget(pid: pid)
         inFlight.remove(pid)
