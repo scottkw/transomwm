@@ -36,6 +36,8 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     /// Per-window notifications of cached windows not registered yet (no observer, or the window was not AX-ready);
     /// each `observe()` retries them.
     private var unregisteredWindows: [UInt32: [String]] = [:]
+    /// Assigns the cached and new window elements their IDs; thread-confined, beside the cache it reads.
+    private var resolver: WindowIDResolver
     private let forceFallback: OSAllocatedUnfairLock<Bool>
     /// Test seam: identify windows by frame even when `_AXUIElementGetWindow` works. Read by `observe()` on the thread.
     var forceWindowIDFallback: Bool {
@@ -81,6 +83,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         self.bundleID = bundleID
         self.hints = hints
         forceFallback = OSAllocatedUnfairLock(initialState: forceWindowIDFallback)
+        resolver = WindowIDResolver(pid: pid)
         (frameResults, frameContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         let thread = Thread { [self] in
             runLoop = CFRunLoopGetCurrent()
@@ -174,7 +177,7 @@ nonisolated final class AXAppThread: @unchecked Sendable {
             let hidden = AXSnapshotReader.isHidden(app)
             guard !isStopped,
                   let (listed, elements) = AXSnapshotReader.observeApp(
-                      app, pid: pid, bundleID: bundleID, hidden: hidden, cache: windows, forceFallback: forceWindowIDFallback,
+                      app, pid: pid, bundleID: bundleID, hidden: hidden, cache: windows, resolver: &resolver, forceFallback: forceWindowIDFallback,
                       isCancelled: { self.isStopped })
             else { return nil }
             var observation = listed

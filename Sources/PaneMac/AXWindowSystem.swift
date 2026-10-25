@@ -320,9 +320,9 @@ import os
             initialSweep: initial, now: .now, windowSpaces: windowSpaces)
         emit(tracker.ingest(observation, context: context))
         emit(tracker.recheckTerminated(context: context))
-        // A new window is withheld until it settles, and a close AX reported waits for the CG list to agree:
-        // refresh again soon.
-        if tracker.hasPendingWindows(pid: observation.pid) || tracker.needsQuickRecheck(pid: observation.pid) {
+        // A new window is withheld until it settles, a close AX reported waits for the CG list to agree, and a window
+        // whose ID lookup failed for the first time waits for its own CG entry: refresh again soon.
+        if tracker.hasPendingWindows(pid: observation.pid) || tracker.needsQuickRecheck(pid: observation.pid) || observation.identityPending {
             scheduler?.schedule(pid: observation.pid, after: tracker.settleDelay)
         } else if tracker.awaitsMinimumConfirmation(pid: observation.pid) {
             // This refresh came too soon to confirm a refused write.

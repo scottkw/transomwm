@@ -50,7 +50,7 @@ public enum Capabilities {
     }
 
     /// The process-wide session. Forced off at launch, missing, or switched off for the session all mean unavailable.
-    static let session = CapabilitySession(loaded: { capability in
+    public static let session = CapabilitySession(loaded: { capability in
         switch capability {
         case .axWindowID: AXWindowID.function != nil
         case .spaces: SkyLightSpaces.isLoaded

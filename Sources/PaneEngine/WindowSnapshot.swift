@@ -137,14 +137,20 @@ public struct AppObservation: Equatable, Sendable {
     public var windows: [WindowObservation]
     public var listFailure: AXFailure?
     public var duration: Duration
+    /// A listed window could not be identified yet and must not be guessed this time: refresh again soon.
+    public var identityPending: Bool
 
-    public init(pid: Int32, bundleID: String, appHidden: Bool = false, windows: [WindowObservation], listFailure: AXFailure? = nil, duration: Duration = .zero) {
+    public init(
+        pid: Int32, bundleID: String, appHidden: Bool = false, windows: [WindowObservation], listFailure: AXFailure? = nil,
+        duration: Duration = .zero, identityPending: Bool = false
+    ) {
         self.pid = pid
         self.bundleID = bundleID
         self.appHidden = appHidden
         self.windows = windows
         self.listFailure = listFailure
         self.duration = duration
+        self.identityPending = identityPending
     }
 }
 

@@ -77,9 +77,10 @@ import Testing
         #expect(AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success)
         let element = try #require((value as? [AXUIElement])?.first)
         let synthetic = WindowIdentity.syntheticIDBase | 1
+        var resolver = WindowIDResolver(pid: fixture.pid)
         let read = try #require(AXSnapshotReader.observeApp(
             app, pid: fixture.pid, bundleID: "test.fallback", hidden: false,
-            cache: [synthetic: CachedWindow(element: element, source: .synthetic)]
+            cache: [synthetic: CachedWindow(element: element, source: .synthetic)], resolver: &resolver
         ))
         #expect(read.observation.windows.map(\.windowID) == [realID])
         #expect(read.observation.windows.map(\.idSource) == [.axPrivate])

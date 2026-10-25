@@ -23,17 +23,18 @@ public nonisolated enum AXSnapshotReader {
     /// One app's windows, read on the calling thread (for `pane-dump`; the live system reads on the app's thread).
     public static func observeApp(pid: Int32, bundleID: String) -> AppObservation {
         let app = AXUIElementCreateApplication(pid)
+        var resolver = WindowIDResolver(pid: pid)
         // Never cancelled, so never nil.
-        return observeApp(app, pid: pid, bundleID: bundleID, hidden: isHidden(app))!.observation
+        return observeApp(app, pid: pid, bundleID: bundleID, hidden: isHidden(app), resolver: &resolver)!.observation
     }
 
     /// Also returns the listed window elements by window ID (nil when `AXWindows` failed), for the app thread's cache.
-    /// `cache` is that cache: an element already in it keeps its ID, and a new one gets the private lookup's ID or,
-    /// without it (or with `forceFallback`), is matched by frame against one CG snapshot. `isCancelled` is checked between AX calls; once
-    /// it returns true the read stops and returns nil.
+    /// `cache` is that cache and `resolver` the app thread's `WindowIDResolver`, which assigns each element its ID
+    /// through `_AXUIElementGetWindow` or, without it (or with `forceFallback`), by frame against one CG snapshot.
+    /// `isCancelled` is checked between AX calls; once it returns true the read stops and returns nil.
     static func observeApp(
         _ app: AXUIElement, pid: Int32, bundleID: String, hidden: Bool, cache: [UInt32: CachedWindow] = [:],
-        forceFallback: Bool = false, isCancelled: () -> Bool = { false }
+        resolver: inout WindowIDResolver, forceFallback: Bool = false, isCancelled: () -> Bool = { false }
     ) -> (observation: AppObservation, elements: [UInt32: CachedWindow]?)? {
         let start = ContinuousClock.now
         var value: CFTypeRef?
@@ -46,18 +47,33 @@ public nonisolated enum AXSnapshotReader {
             return (AppObservation(pid: pid, bundleID: bundleID, appHidden: hidden, windows: [],
                                    listFailure: .attributeUnsupported, duration: start.duration(to: .now)), nil)
         }
-        var byID: [UInt32: CachedWindow] = [:]
-        var windows: [WindowObservation] = []
-        var fallback = Fallback(pid: pid, cache: cache)
+        var reads: [(snapshot: Result<WindowSnapshot, AXFailure>, title: String)] = []
         for element in elements {
             if isCancelled() { return nil }
-            let (snapshot, title) = read(element)
-            let id = windowID(of: element, snapshot: snapshot, title: title, forceFallback: forceFallback, fallback: &fallback)
-            if let id { byID[id.id] = CachedWindow(element: element, source: id.source) }
-            windows.append(WindowObservation(
-                windowID: id?.id, idSource: id?.source ?? .axPrivate, read: snapshot, title: title, replacesWindowID: id?.replaces))
+            reads.append(read(element))
         }
-        return (AppObservation(pid: pid, bundleID: bundleID, appHidden: hidden, windows: windows, duration: start.duration(to: .now)), byID)
+        let items = zip(elements, reads).map { element, read in
+            let window = if case .success(let snapshot) = read.snapshot, snapshot.role == kAXWindowRole { snapshot } else { WindowSnapshot?.none }
+            return WindowIDResolver.Item(element: element, isReadableWindow: window != nil, frame: window?.frame, title: read.title)
+        }
+        let resolution = resolver.resolve(
+            items, cache: cache, lookup: windowIDLookup(forced: forceFallback), session: Capabilities.session,
+            cgWindows: { CGWindowList.snapshot() }, cgNames: { CGWindowList.names(pid: pid) })
+        let windows = zip(reads, resolution.ids).map { read, id in
+            WindowObservation(windowID: id?.id, idSource: id?.source ?? .axPrivate, read: read.snapshot, title: read.title, replacesWindowID: id?.replaces)
+        }
+        return (AppObservation(pid: pid, bundleID: bundleID, appHidden: hidden, windows: windows, duration: start.duration(to: .now),
+                               identityPending: resolution.identityPending), resolution.byID)
+    }
+
+    /// `_AXUIElementGetWindow` as a lookup that returns the CGWindowID on success; nil when the fallback is forced,
+    /// the function is missing or the capability is off.
+    private static func windowIDLookup(forced: Bool) -> ((AXUIElement) -> UInt32?)? {
+        guard !forced, Capabilities.isAvailable(.axWindowID), let function = AXWindowID.function else { return nil }
+        return { element in
+            var id: CGWindowID = 0
+            return function(element, &id) == .success ? id : nil
+        }
     }
 
     static func snapshot(of window: AXUIElement) -> Result<WindowSnapshot, AXFailure> {
@@ -69,70 +85,6 @@ public nonisolated enum AXSnapshotReader {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXHiddenAttribute as CFString, &value) == .success else { return false }
         return value as? Bool == true
-    }
-
-    /// The cached ID of an element already seen; else `_AXUIElementGetWindow` while it is available; otherwise (or
-    /// forced, or when it fails for this element) the frame fallback. nil for an element with no window (Finder's
-    /// desktop). Each lookup that fails for a real window counts towards switching it off (D-15).
-    private static func windowID(
-        of element: AXUIElement, snapshot: Result<WindowSnapshot, AXFailure>, title: String, forceFallback: Bool, fallback: inout Fallback
-    ) -> (id: UInt32, source: WindowIDSource, replaces: UInt32?)? {
-        let function = !forceFallback && Capabilities.isAvailable(.axWindowID) ? AXWindowID.function : nil
-        if let cached = fallback.cache.first(where: { CFEqual($0.value.element, element) }) {
-            // A fallback ID is checked again while the lookup works, and replaced (the tracker re-keys) when it differs.
-            var id: CGWindowID = 0
-            guard cached.value.source != .axPrivate, let function, function(element, &id) == .success else {
-                return (cached.key, cached.value.source, nil)
-            }
-            Capabilities.recordSuccess(.axWindowID)
-            fallback.bound.insert(id)
-            return (id, .axPrivate, id == cached.key ? nil : cached.key)
-        }
-        if let function {
-            var id: CGWindowID = 0
-            if function(element, &id) == .success {
-                Capabilities.recordSuccess(.axWindowID)
-                // shortcut: only IDs bound before a failed element are kept from its frame match; two passes if twins collide.
-                fallback.bound.insert(id)
-                return (id, .axPrivate, nil)
-            }
-            // -25201 on a non-window (Finder's desktop) is expected; only a readable AXWindow counts.
-            if case .success(let read) = snapshot, read.role == kAXWindowRole { Capabilities.recordFailure(.axWindowID) }
-        }
-        return fallback.identify(element, snapshot: snapshot, title: title).map { ($0.id, $0.source, nil) }
-    }
-
-    /// One observation's frame-fallback state: the app thread's cache, one CG snapshot taken on first need, and the
-    /// IDs bound so far, so two identical windows never share one CG window.
-    private struct Fallback {
-        let pid: Int32
-        let cache: [UInt32: CachedWindow]
-        var bound: Set<UInt32>
-        var cgWindows: [CGWindowEntry]?
-
-        init(pid: Int32, cache: [UInt32: CachedWindow]) {
-            self.pid = pid
-            self.cache = cache
-            bound = Set(cache.keys)
-        }
-
-        mutating func identify(_ element: AXUIElement, snapshot: Result<WindowSnapshot, AXFailure>, title: String) -> (id: UInt32, source: WindowIDSource)? {
-            guard case .success(let read) = snapshot, read.role == kAXWindowRole, let frame = read.frame else { return nil }
-            // No CG list: leave the window unidentified this time rather than give it a synthetic ID.
-            guard let cg = cgWindows ?? CGWindowList.snapshot() else { return nil }
-            cgWindows = cg
-            var match = FallbackMatcher.match(pid: pid, frame: frame, title: title, cgWindows: cg, cgNames: [:], excluding: bound)
-            if match == .ambiguous {
-                // Names need Screen Recording; they decide this match only and are dropped with it (T-02-31).
-                match = FallbackMatcher.match(pid: pid, frame: frame, title: title, cgWindows: cg, cgNames: CGWindowList.names(pid: pid), excluding: bound)
-            }
-            let id: (id: UInt32, source: WindowIDSource) =
-                if case .cg(let windowID) = match { (windowID, .cgFrameMatch) } else {
-                    (SyntheticWindowIDs.next(avoiding: Set(cg.map(\.windowID))), .synthetic)
-                }
-            bound.insert(id.id)
-            return id
-        }
     }
 
     private static func read(_ window: AXUIElement) -> (snapshot: Result<WindowSnapshot, AXFailure>, title: String) {
