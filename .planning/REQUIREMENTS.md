@@ -46,6 +46,12 @@
 - [ ] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
 - [ ] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
 - [ ] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
+- [ ] **TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL
+- [ ] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" returns every window to the Desktop as a normal Mac layout
+- [ ] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
+- [ ] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
+- [ ] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
+- [ ] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
 
 ### Safety & Recovery
 
@@ -66,6 +72,11 @@
 - [ ] **ZOOM-06**: Clicking a window in a zoomed view zooms in to it and focuses it
 - [ ] **ZOOM-07**: After a zoom settles, real windows are arranged at their new sizes within 500 ms for 15 windows, without visible flashing of stale layouts
 - [ ] **ZOOM-08**: Zoom hotkeys are rebindable
+- [ ] **ZOOM-09**: User can move the view to the neighbouring area left, right, up or down by hotkey and URL
+- [ ] **ZOOM-10**: User can frame the focused window on its own and toggle back, by hotkey, URL or double-clicking its title bar
+- [ ] **ZOOM-11**: User can frame the Desktop on its own and toggle back, by hotkey, URL or double-clicking the Desktop
+- [ ] **ZOOM-12**: Esc cancels a ⌘⇧-drag rectangle zoom in progress
+- [ ] **ZOOM-13**: A tile too small for its window's minimum size shows as a collapsed block in the app's colour with its icon, and double-clicking it zooms in to it
 
 ### Gestures
 
@@ -90,6 +101,7 @@
 - [ ] **TABS-03**: A group's close, minimise and dock/float buttons act on the whole group
 - [ ] **TABS-04**: A tab can be dragged out to become its own window
 - [ ] **TABS-05**: Tab groups work for windows from different apps, docked or floating
+- [ ] **TABS-06**: Right-clicking a tab offers closing it and moving it out of the group
 
 ### Saved Views & Commands
 
@@ -106,6 +118,9 @@
 - [ ] **SHIP-03**: User can launch Pane at login
 - [ ] **SHIP-04**: Pane checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
 - [ ] **SHIP-05**: Releases are Developer ID signed, notarised, and installable with `brew install --cask`
+- [ ] **SHIP-06**: Menu bar shows back, forward and saved-view buttons with the current view highlighted, and Settings lets the user choose and reorder which controls appear, down to icon only
+- [ ] **SHIP-07**: The menu includes "Report a Problem", and the menu bar icon shows a dot when an update is available
+- [ ] **SHIP-08**: `pane://settings?pane=` opens a specific Settings pane
 
 ## v2 Requirements
 
@@ -171,6 +186,12 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-12 | Phase 3 | Pending |
 | TILE-13 | Phase 3 | Pending |
 | TILE-14 | Phase 3 | Pending |
+| TILE-15 | Phase 3 | Pending |
+| TILE-16 | Phase 3 | Pending |
+| TILE-17 | Phase 3 | Pending |
+| TILE-18 | Phase 3 | Pending |
+| TILE-19 | Phase 3 | Pending |
+| TILE-20 | Phase 3 | Pending |
 | SAFE-01 | Phase 3 | Pending |
 | SAFE-02 | Phase 3 | Pending |
 | SAFE-03 | Phase 3 | Pending |
@@ -185,6 +206,11 @@ Populated by the roadmapper on 2026-10-23.
 | ZOOM-06 | Phase 4 | Pending |
 | ZOOM-07 | Phase 4 | Pending |
 | ZOOM-08 | Phase 4 | Pending |
+| ZOOM-09 | Phase 4 | Pending |
+| ZOOM-10 | Phase 4 | Pending |
+| ZOOM-11 | Phase 4 | Pending |
+| ZOOM-12 | Phase 4 | Pending |
+| ZOOM-13 | Phase 4 | Pending |
 | GEST-01 | Phase 5 | Pending |
 | GEST-02 | Phase 5 | Pending |
 | GEST-03 | Phase 5 | Pending |
@@ -200,6 +226,7 @@ Populated by the roadmapper on 2026-10-23.
 | TABS-03 | Phase 7 | Pending |
 | TABS-04 | Phase 7 | Pending |
 | TABS-05 | Phase 7 | Pending |
+| TABS-06 | Phase 7 | Pending |
 | VIEW-01 | Phase 8 | Pending |
 | VIEW-02 | Phase 8 | Pending |
 | VIEW-03 | Phase 8 | Pending |
@@ -210,12 +237,15 @@ Populated by the roadmapper on 2026-10-23.
 | SHIP-03 | Phase 9 | Pending |
 | SHIP-04 | Phase 9 | Pending |
 | SHIP-05 | Phase 9 | Pending |
+| SHIP-06 | Phase 9 | Pending |
+| SHIP-07 | Phase 9 | Pending |
+| SHIP-08 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 72 total
-- Mapped to phases: 72
+- v1 requirements: 87 total
+- Mapped to phases: 87
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-23*
-*Last updated: 2026-10-25 — added TILE-11..14, OVER-06, VIEW-05 (features from other macOS window managers)*
+*Last updated: 2026-10-25 — added TILE-11..14, OVER-06, VIEW-05 (features from other macOS window managers); TILE-15..20, ZOOM-09..13, TABS-06, SHIP-06..08 (features from the TrellisWM website)*

@@ -108,7 +108,7 @@ Plans:
 **Goal**: As a Mac user, I want to drag windows into nested tiles that reflow as windows open and close, so that my windows never overlap.
 **Mode:** mvp
 **Depends on**: Phase 2
-**Requirements**: TILE-01, TILE-02, TILE-03, TILE-04, TILE-05, TILE-06, TILE-07, TILE-08, TILE-09, TILE-10, TILE-11, TILE-12, TILE-13, TILE-14, WIN-07, SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-06
+**Requirements**: TILE-01, TILE-02, TILE-03, TILE-04, TILE-05, TILE-06, TILE-07, TILE-08, TILE-09, TILE-10, TILE-11, TILE-12, TILE-13, TILE-14, TILE-15, TILE-16, TILE-17, TILE-18, TILE-19, TILE-20, WIN-07, SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-06
 **Success Criteria** (what must be TRUE):
   1. Dragging a window by its title bar to a screen edge or another window's edge shows a drop preview and docks it there on release, nesting as deep as the user likes; holding the bypass modifier moves it freely, new windows open floating on the Desktop tile, and the green button toggles a window between docked and floating
   2. Closing a docked window reflows its neighbours to fill the space, dragging the gap between two windows resizes both, the user can change the gap size, and a window that leaves native fullscreen returns to its reserved tile
@@ -116,24 +116,26 @@ Plans:
   4. Quitting Pane returns every window it moved to a sensible on-screen frame, a crash or force-quit is followed on next launch by stranded windows coming back on-screen, and Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict, offers to turn them off and can restore the originals; quitting and relaunching Pane while apps keep running brings each layout back with the same windows in their tiles
   5. All of the above works with zoom absent and Screen Recording denied, and testers install it as a Developer ID-signed, notarised build whose Accessibility grant survives updates
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
+  7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Standard patterns; drop-zone geometry starts from yabai's numbers (edge bands ~25%, centre ~50%) and is tuned in UAT
-**Scope notes**: First usable release. Pulled forward per research: crash restore, edge-tiling detection and a minimal signed + notarised pipeline (an enabler for SHIP-05, which completes in Phase 9 with the Homebrew cask; confirm notarisation works with dlopen of private frameworks). Drags are detected from frame deltas, not mouse-down hit-tests; keep the top-edge zone clear of Mission Control. Includes the event-tap wrapper with re-enable watchdog, persisted home frames, default exclusions and single-display correctness. The `pane://` scheme is registered here with `restore` only; Phase 8 generalises it. Basic layout restore (SAFE-06) re-attaches by unchanged window IDs while apps keep running; reboot/app-relaunch re-matching stays in Phase 8 (VIEW-04).
+**Scope notes**: First usable release. Pulled forward per research: crash restore, edge-tiling detection and a minimal signed + notarised pipeline (an enabler for SHIP-05, which completes in Phase 9 with the Homebrew cask; confirm notarisation works with dlopen of private frameworks). Drags are detected from frame deltas, not mouse-down hit-tests; keep the top-edge zone clear of Mission Control. Includes the event-tap wrapper with re-enable watchdog, persisted home frames, default exclusions and single-display correctness. The `pane://` scheme is registered here with `restore` only; Phase 8 generalises it. Basic layout restore (SAFE-06) re-attaches by unchanged window IDs while apps keep running; reboot/app-relaunch re-matching stays in Phase 8 (VIEW-04). Default hotkeys for all new commands are Pane's own choices (clean-room rule: no copying TrellisWM's settings values).
 
 ### Phase 4: Zoom Camera
 
 **Goal**: As a Mac user, I want to zoom out to see every window and zoom back in to any of them, so that I can find and focus any window fast.
 **Mode:** mvp
 **Depends on**: Phase 3
-**Requirements**: ZOOM-01, ZOOM-02, ZOOM-03, ZOOM-04, ZOOM-05, ZOOM-06, ZOOM-07, ZOOM-08
+**Requirements**: ZOOM-01, ZOOM-02, ZOOM-03, ZOOM-04, ZOOM-05, ZOOM-06, ZOOM-07, ZOOM-08, ZOOM-09, ZOOM-10, ZOOM-11, ZOOM-12, ZOOM-13
 **Success Criteria** (what must be TRUE):
   1. User can zoom out to see every window on the display at once, step in or out one level of the layout tree, and ⌘⇧-drag a rectangle to zoom to the windows it frames
   2. User can go back and forward through previous views, and clicking a window in a zoomed view zooms in to it and focuses it
   3. Zoomed views show live window snapshots when Screen Recording is granted and app colour plus icon when it isn't; denying Screen Recording never breaks zoom
   4. After a zoom settles, 15 real windows are at their new sizes within 500 ms with no visible flash of a stale layout, and windows parked out of view still come back on-screen on quit, after a crash and via "Restore all windows"
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
+  6. User can move the view to a neighbouring area, frame the focused window or the Desktop on its own and toggle back (including by double-click), cancel a rectangle zoom with Esc, and tiles too small for their window show as collapsed app-colour blocks that zoom in on double-click
 
 **Plans**: TBD
 **UI hint**: yes
@@ -179,13 +181,14 @@ Plans:
 **Goal**: As a Mac user, I want to group windows from any apps into one tabbed tile, so that related windows share space without overlapping.
 **Mode:** mvp
 **Depends on**: Phase 4
-**Requirements**: TABS-01, TABS-02, TABS-03, TABS-04, TABS-05
+**Requirements**: TABS-01, TABS-02, TABS-03, TABS-04, TABS-05, TABS-06
 **Success Criteria** (what must be TRUE):
   1. Dropping a window on the middle of another and pausing groups them under one tab strip that follows the group as it moves and resizes
   2. Clicking a tab switches the visible window, and the other tabs stay hidden (not minimised)
   3. The group's close, minimise and dock/float buttons act on the whole group
   4. Dragging a tab out of the strip makes it its own window again
   5. Tab groups work for windows from different apps, both docked and floating on the Desktop tile
+  6. Right-clicking a tab offers close and move-out
 
 **Plans**: TBD
 **UI hint**: yes
@@ -213,13 +216,14 @@ Plans:
 **Goal**: As a new user, I want to install Pane with Homebrew and be guided through setup, so that it starts at login and keeps itself updated.
 **Mode:** mvp
 **Depends on**: Phase 5, Phase 6, Phase 7, Phase 8
-**Requirements**: SHIP-01, SHIP-02, SHIP-03, SHIP-04, SHIP-05
+**Requirements**: SHIP-01, SHIP-02, SHIP-03, SHIP-04, SHIP-05, SHIP-06, SHIP-07, SHIP-08
 **Success Criteria** (what must be TRUE):
   1. The Settings window lets the user change gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
   2. On first run, onboarding walks the user through Accessibility, optional Screen Recording and the conflicting macOS features, without looping on permission prompts
   3. User can turn on launch at login, and Pane starts at the next login
   4. Settings (opened from the menu-bar icon) has an Updates section: an automatic-check toggle and a "Check for Updates" button; when GitHub has a newer release Pane notifies the user, and the downloaded DMG is opened only after its sha256 digest and Team ID verify
   5. `brew install --cask` installs a Developer ID-signed, notarised Pane that opens without Gatekeeper warnings
+  6. The menu bar shows back, forward and saved-view controls (current view highlighted) that the user can choose and reorder in Settings; the menu has "Report a Problem", the icon shows a dot when an update is waiting, and `pane://settings?pane=` opens a given Settings pane
 
 **Plans**: TBD
 **UI hint**: yes
