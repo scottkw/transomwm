@@ -42,6 +42,10 @@
 - [ ] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [ ] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
 - [ ] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
+- [ ] **TILE-11**: User can swap two docked windows' tiles, by hotkey or by dragging with a modifier
+- [ ] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
+- [ ] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
+- [ ] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
 
 ### Safety & Recovery
 
@@ -77,6 +81,7 @@
 - [ ] **OVER-03**: If Pane crashes while replacing Mission Control, the system shortcuts are restored on next launch
 - [ ] **OVER-04**: Each display (and each Space) keeps its own layout
 - [ ] **OVER-05**: Unplugging and re-plugging a display, or sleep/wake, restores that display's layout
+- [ ] **OVER-06**: Pane remembers layouts per display arrangement and applies the matching one automatically when the arrangement changes (e.g. docking and undocking a laptop)
 
 ### Tab Groups
 
@@ -92,6 +97,7 @@
 - [ ] **VIEW-02**: Saved views survive layout changes and app restarts
 - [ ] **VIEW-03**: Pane commands run from `pane://` URLs (for Raycast, Alfred, Shortcuts, scripts)
 - [ ] **VIEW-04**: Layouts persist across reboots and app relaunches (new window IDs), with windows re-matched to their tiles
+- [ ] **VIEW-05**: A bundled `pane` command-line tool runs the same commands as `pane://` URLs and reports errors with a non-zero exit code
 
 ### Ship
 
@@ -161,6 +167,10 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-08 | Phase 3 | Pending |
 | TILE-09 | Phase 3 | Pending |
 | TILE-10 | Phase 3 | Pending |
+| TILE-11 | Phase 3 | Pending |
+| TILE-12 | Phase 3 | Pending |
+| TILE-13 | Phase 3 | Pending |
+| TILE-14 | Phase 3 | Pending |
 | SAFE-01 | Phase 3 | Pending |
 | SAFE-02 | Phase 3 | Pending |
 | SAFE-03 | Phase 3 | Pending |
@@ -184,6 +194,7 @@ Populated by the roadmapper on 2026-10-23.
 | OVER-03 | Phase 6 | Pending |
 | OVER-04 | Phase 6 | Pending |
 | OVER-05 | Phase 6 | Pending |
+| OVER-06 | Phase 6 | Pending |
 | TABS-01 | Phase 7 | Pending |
 | TABS-02 | Phase 7 | Pending |
 | TABS-03 | Phase 7 | Pending |
@@ -193,6 +204,7 @@ Populated by the roadmapper on 2026-10-23.
 | VIEW-02 | Phase 8 | Pending |
 | VIEW-03 | Phase 8 | Pending |
 | VIEW-04 | Phase 8 | Pending |
+| VIEW-05 | Phase 8 | Pending |
 | SHIP-01 | Phase 9 | Pending |
 | SHIP-02 | Phase 9 | Pending |
 | SHIP-03 | Phase 9 | Pending |
@@ -200,10 +212,10 @@ Populated by the roadmapper on 2026-10-23.
 | SHIP-05 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 66 total
-- Mapped to phases: 66
+- v1 requirements: 72 total
+- Mapped to phases: 72
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-23*
-*Last updated: 2026-10-23 after roadmap creation (traceability populated)*
+*Last updated: 2026-10-25 — added TILE-11..14, OVER-06, VIEW-05 (features from other macOS window managers)*

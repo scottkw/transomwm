@@ -108,13 +108,14 @@ Plans:
 **Goal**: As a Mac user, I want to drag windows into nested tiles that reflow as windows open and close, so that my windows never overlap.
 **Mode:** mvp
 **Depends on**: Phase 2
-**Requirements**: TILE-01, TILE-02, TILE-03, TILE-04, TILE-05, TILE-06, TILE-07, TILE-08, TILE-09, TILE-10, WIN-07, SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-06
+**Requirements**: TILE-01, TILE-02, TILE-03, TILE-04, TILE-05, TILE-06, TILE-07, TILE-08, TILE-09, TILE-10, TILE-11, TILE-12, TILE-13, TILE-14, WIN-07, SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-06
 **Success Criteria** (what must be TRUE):
   1. Dragging a window by its title bar to a screen edge or another window's edge shows a drop preview and docks it there on release, nesting as deep as the user likes; holding the bypass modifier moves it freely, new windows open floating on the Desktop tile, and the green button toggles a window between docked and floating
   2. Closing a docked window reflows its neighbours to fill the space, dragging the gap between two windows resizes both, the user can change the gap size, and a window that leaves native fullscreen returns to its reserved tile
   3. From the menu bar and from hotkeys, routed through one command dispatcher, the user can dock, float, focus a neighbour, undo the last layout change, pause and resume arranging, and "Restore all windows" (also via `pane://restore`)
   4. Quitting Pane returns every window it moved to a sensible on-screen frame, a crash or force-quit is followed on next launch by stranded windows coming back on-screen, and Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict, offers to turn them off and can restore the originals; quitting and relaunching Pane while apps keep running brings each layout back with the same windows in their tiles
   5. All of the above works with zoom absent and Screen Recording denied, and testers install it as a Developer ID-signed, notarised build whose Accessibility grant survives updates
+  6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
 
 **Plans**: TBD
 **UI hint**: yes
@@ -160,12 +161,13 @@ Plans:
 **Goal**: As a multi-display user, I want to see every window on every display and Space in one overview, so that I can jump anywhere and keep each layout.
 **Mode:** mvp
 **Depends on**: Phase 4
-**Requirements**: OVER-01, OVER-02, OVER-03, OVER-04, OVER-05
+**Requirements**: OVER-01, OVER-02, OVER-03, OVER-04, OVER-05, OVER-06
 **Success Criteria** (what must be TRUE):
   1. Opening the overview shows every window on every display with the Spaces along the top, and clicking a window goes to it
   2. User can opt in to Mission Control's swipe and shortcut opening Pane's overview and opt out to get the system behaviour back; if Pane crashes while the takeover is on, the next launch restores the system shortcuts
   3. Each display and each Space keeps its own layout, and switching Spaces leaves the other layouts untouched
   4. Unplugging and re-plugging a display, or sleeping and waking the Mac, restores that display's layout, with "Displays have separate Spaces" both on and off
+  5. Pane remembers a layout set per display arrangement and switches to the matching one automatically when a laptop is docked or undocked
 
 **Plans**: TBD
 **UI hint**: yes
@@ -195,11 +197,12 @@ Plans:
 **Goal**: As a power user, I want to save views to hotkeys and run Pane from pane:// URLs, so that my layouts and automations survive restarts.
 **Mode:** mvp
 **Depends on**: Phase 4
-**Requirements**: VIEW-01, VIEW-02, VIEW-03, VIEW-04
+**Requirements**: VIEW-01, VIEW-02, VIEW-03, VIEW-04, VIEW-05
 **Success Criteria** (what must be TRUE):
   1. User can save the current view to slots 1-9 and return to it with a hotkey, and it still lands on the right windows after the layout changes and after Pane restarts
   2. Raycast, Alfred, Shortcuts or a shell `open pane://...` can run Pane commands, and unknown commands are rejected without side effects
   3. After quitting and relaunching Pane, or rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires rather than a permanent hole
+  4. A bundled `pane` command-line tool runs every `pane://` command and exits non-zero with a message on errors
 
 **Plans**: TBD
 **Research**: Standard patterns; cheap on top of the Phase 3 command dispatcher and Phase 4 `NodeID` camera targets
