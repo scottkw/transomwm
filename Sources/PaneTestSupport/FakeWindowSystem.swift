@@ -73,6 +73,8 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var locked = false
     /// Whether a lock also pauses the session (`sessionActive: false`), as `SessionGate` does live.
     private var lockGate = true
+    /// Whether AX answers during a lock with no windows and -25202 per known window, instead of timing out.
+    private var lockAXInvalid = false
     public private(set) var performed: [WindowCommand] = []
     /// Commands `ExclusionFilter` kept away from excluded apps.
     public private(set) var dropped: [WindowCommand] = []
@@ -145,11 +147,13 @@ public actor FakeWindowSystem: WindowSystem {
         self.displays = displays
     }
 
-    /// Lock blanking (D-14): every AX read fails with -25204 and the CG list is empty. With `gate: false` the
-    /// session stays active, as if no lock signal arrived.
-    public func setLocked(_ locked: Bool, gate: Bool = true) {
+    /// Lock blanking (D-14): the CG list is empty and every AX read fails with -25204, or with `axInvalid` AXWindows
+    /// is empty and every known window answers -25202, which only the gate keeps from closing. With `gate: false`
+    /// the session stays active, as if no lock signal arrived.
+    public func setLocked(_ locked: Bool, gate: Bool = true, axInvalid: Bool = false) {
         self.locked = locked
         lockGate = gate
+        lockAXInvalid = axInvalid
     }
 
     /// The window closed: AX says invalid and it left the CG list.
@@ -188,9 +192,17 @@ public actor FakeWindowSystem: WindowSystem {
             guard change == .recovered(pid) else { return }
         }
         let observation: AppObservation
-        if app.hung || locked {
+        if app.hung || (locked && !lockAXInvalid) {
             observation = AppObservation(pid: pid, bundleID: app.bundleID, appHidden: app.hidden, windows: [],
                                          listFailure: .cannotComplete, duration: app.hung ? Self.hungJobDuration : app.responseDelay)
+        } else if locked {
+            observation = AppObservation(
+                pid: pid, bundleID: app.bundleID, appHidden: app.hidden,
+                windows: tracker.knownWindowIDs(pid: pid).map {
+                    WindowObservation(windowID: $0, idSource: .axPrivate, read: .failure(.invalidElement), title: "", listedInAXWindows: false)
+                },
+                duration: app.responseDelay
+            )
         } else {
             let listed = windows.values.filter { $0.pid == pid && $0.listedInAX }.sorted { $0.id < $1.id }
             // Like AXAppThread: known windows that left AXWindows are probed through their cached element.
@@ -215,9 +227,9 @@ public actor FakeWindowSystem: WindowSystem {
             )
         }
         record(pid, observation.listFailure == nil ? .success : .cannotComplete, observation.duration)
-        // A hung app's observation never reaches the tracker, so its windows keep their last values (WIN-09).
-        guard !app.hung else { return }
+        // Like AXWindowSystem, a hung app's failed observation reaches the tracker: CloseRule must keep its windows (WIN-09).
         yield(tracker.ingest(observation, context: context()))
+        guard !app.hung else { return }
         for (identity, held) in heldFrames.filter({ $0.key.pid == pid }).sorted(by: { $0.key < $1.key }) {
             heldFrames[identity] = nil
             write(held.rect, to: held.ref)

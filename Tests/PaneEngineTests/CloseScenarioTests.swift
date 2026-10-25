@@ -53,8 +53,8 @@ private func tenWindows() async -> FakeWindowSystem {
 }
 
 /// Locks for 5 refresh rounds a second apart, unlocks, and refreshes until every app answers again.
-private func blank(_ fake: FakeWindowSystem, gate: Bool) async {
-    await fake.setLocked(true, gate: gate)
+private func blank(_ fake: FakeWindowSystem, gate: Bool, axInvalid: Bool = false) async {
+    await fake.setLocked(true, gate: gate, axInvalid: axInvalid)
     for _ in 0..<5 {
         await fake.advance(by: .seconds(1))
         await fake.refreshAll()
@@ -111,11 +111,19 @@ private func blank(_ fake: FakeWindowSystem, gate: Bool) async {
         #expect(await fake.inventory().windows.isEmpty)
     }
 
-    @Test func lockBlankingClosesNothing() async {
+    @Test(arguments: [false, true])
+    func lockBlankingClosesNothing(axInvalid: Bool) async {
         let fake = await tenWindows()
-        await blank(fake, gate: true)
+        await blank(fake, gate: true, axInvalid: axInvalid)
         #expect(destroyed(await drain(fake.events)).isEmpty)
         #expect(await fake.inventory().windows.count == 10)
+    }
+
+    @Test func withoutTheGateABlankingThatAnswersInvalidClosesEverything() async {
+        let fake = await tenWindows()
+        await blank(fake, gate: false, axInvalid: true)
+        // They come back as new windows after the unlock: the churn the gate prevents.
+        #expect(destroyed(await drain(fake.events)).count == 10, "the gate is what keeps these windows")
     }
 
     @Test func blankingWithoutTheGateAlsoClosesNothingBecauseEveryReadTimesOut() async {
