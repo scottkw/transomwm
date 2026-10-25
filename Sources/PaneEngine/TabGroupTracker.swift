@@ -36,9 +36,14 @@ public struct TabResolution: Equatable, Sendable {
 /// never across known different Spaces. A group whose shown tab and known members are all gone (out of the CG list or
 /// AX-invalid) passes its identity only to a former tab: a listed, unreported window that was offscreen in its slot
 /// at the last refresh. Nothing here destroys a window; CloseRule's two sources still decide that.
+/// Without Space data, the first full update after a Space switch (`spaceChanged`) makes no orphan handoff: a window
+/// the switch shows may be another Space's twin that sat offscreen in the slot. The window is decided at the next
+/// update, when that evidence is gone (it was onscreen in this update's CG list).
 /// shortcut: without Space data (capability off or missing) Pane runs single-Space behaviour, and two same-frame tab
 /// groups of one app on two Spaces can be tracked as one window; with Space data, an unknown-Space hidden tab can stay
-/// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected).
+/// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected). A Space-switch
+/// notification that reaches main only after the update that already saw the new Space protects nothing; upgrade with
+/// the Phase 6 window-to-Space map.
 ///
 /// A group's identity is the `WindowIdentity` of its oldest already-tracked member, else of its first-seen visible
 /// member (the leader), for the group's whole life, even after the leader tab itself closes. Phases 3-4 must
@@ -71,10 +76,14 @@ public struct TabGroupTracker: Equatable, Sendable {
     /// app's tracked window identities, oldest first: a standalone one that gains a tab (Cmd-T) leads the new group.
     /// `spaces` are the CG windows' Spaces; nil means no Space data (single-Space behaviour). `invalid` are the
     /// windows whose AX element reported -25202 this refresh: for a group they count as gone, never as destroyed.
+    /// `spaceChanged`: the active Space changed since this app's previous full update.
     public mutating func update(
         pid: Int32, bundleID: String, visible: [(id: UInt32, frame: Rect, tabCount: Int)], cgWindows: [CGWindowEntry],
-        tracked: [WindowIdentity] = [], spaces: [UInt32: Set<UInt64>]? = nil, invalid: Set<UInt32> = []
+        tracked: [WindowIdentity] = [], spaces: [UInt32: Set<UInt64>]? = nil, invalid: Set<UInt32> = [],
+        spaceChanged: Bool = false
     ) -> TabResolution {
+        // A Space switch without Space data: geometry alone cannot tell another Space's twin from a former tab.
+        let blindSwitch = spaceChanged && spaces == nil
         let cg = cgWindows.filter { $0.pid == pid }
         let inCG = Set(cg.map(\.windowID))
         let onScreen = Set(cg.filter(\.onScreen).map(\.windowID))
@@ -134,7 +143,7 @@ public struct TabGroupTracker: Equatable, Sendable {
             }
             // Orphan handoff: a group whose shown tab and every known member are gone passes to a listed window only
             // if it was an offscreen entry in the group's slot last refresh, so a former tab. A brand-new window never is.
-            if index == nil, !trackedIDs.contains(v.id),
+            if index == nil, !blindSwitch, !trackedIDs.contains(v.id),
                let previous = previousCG?.first(where: { $0.windowID == v.id && !$0.onScreen })
             {
                 index = list.firstIndex { group in

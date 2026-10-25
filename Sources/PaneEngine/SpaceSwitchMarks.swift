@@ -17,7 +17,9 @@ public struct SpaceSwitchMarks: Equatable, Sendable {
 
     /// Whether the update of `pid` whose reads began at `readGeneration` is flagged.
     public mutating func take(pid: Int32, readGeneration: UInt64) -> Bool {
-        false  // RED stub
+        guard let mark = marks[pid] else { return false }
+        if readGeneration >= mark { marks[pid] = nil }
+        return true
     }
 
     public mutating func forget(pid: Int32) {
