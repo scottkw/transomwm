@@ -122,6 +122,10 @@ import os
         )
     }
 
+    /// The user's exclusion list (D-12): those apps' windows stay tracked, marked `isExcluded`, and never touched.
+    public func setExcludedBundleIDs(_ bundleIDs: Set<String>) {
+    }
+
     /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
     /// `Geometry.maxCoordinate`, and windows Pane does not track, are dropped and logged (T-02-32).

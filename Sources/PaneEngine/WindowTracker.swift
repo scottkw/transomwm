@@ -154,6 +154,11 @@ public struct WindowTracker: Sendable {
         return decide(pid: pid, app: .terminated, context: context) { _ in .timedOut }
     }
 
+    /// Marks every tracked window of an excluded app (D-12); a windowChanged for each window whose flag flipped.
+    public mutating func setExcluded(_ bundleIDs: Set<String>) -> [WindowEvent] {
+        []
+    }
+
     /// A finished frame write (D-17): the read-back becomes the window's frame and teaches its minimum. A
     /// failed write changes nothing; a later refresh decides the window's state through CloseRule.
     public mutating func applyFrameResult(_ result: FrameWriteResult) -> [WindowEvent] {

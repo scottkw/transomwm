@@ -74,6 +74,8 @@ public actor FakeWindowSystem: WindowSystem {
     /// Whether a lock also pauses the session (`sessionActive: false`), as `SessionGate` does live.
     private var lockGate = true
     public private(set) var performed: [WindowCommand] = []
+    /// Commands `ExclusionFilter` kept away from excluded apps.
+    public private(set) var dropped: [WindowCommand] = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()
     /// Hung and slow apps go through the production responsiveness rule (D-14, D-16).
@@ -124,6 +126,10 @@ public actor FakeWindowSystem: WindowSystem {
             windows[member]?.onScreen = member == id
             windows[member]?.snapshot.tabGroup = TabGroupFact(tabCount: group.count)
         }
+    }
+
+    /// The user's exclusion list, as `AXWindowSystem.setExcludedBundleIDs` receives it.
+    public func setExcluded(_ bundleIDs: Set<String>) {
     }
 
     public func setHung(pid: Int32, _ hung: Bool) {
