@@ -36,9 +36,11 @@ public struct TabResolution: Equatable, Sendable {
 /// never across known different Spaces. A group whose shown tab and known members are all gone (out of the CG list or
 /// AX-invalid) passes its identity only to a former tab: a listed, unreported window that was offscreen in its slot
 /// at the last refresh. Nothing here destroys a window; CloseRule's two sources still decide that.
-/// Without Space data, the first full update after a Space switch (`spaceChanged`) makes no orphan handoff: a window
-/// the switch shows may be another Space's twin that sat offscreen in the slot. The window is decided at the next
-/// update, when that evidence is gone (it was onscreen in this update's CG list).
+/// Without Space data, the first full update after a Space switch (`spaceChanged`) makes no orphan handoff and no new
+/// fold (a tracked standalone window taken as a hidden tab, as in Merge All Windows): a window the switch shows may be
+/// another Space's twin that sat offscreen in the slot, and a window left on the other Space looks like a hidden tab.
+/// Each is decided at the next update, when that evidence is gone. A window folded earlier stays a member, and the
+/// Cmd-T opener and the room-rule join still apply: a Space switch cannot fake their evidence.
 /// shortcut: without Space data (capability off or missing) Pane runs single-Space behaviour, and two same-frame tab
 /// groups of one app on two Spaces can be tracked as one window; with Space data, an unknown-Space hidden tab can stay
 /// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected). A Space-switch
@@ -161,7 +163,11 @@ public struct TabGroupTracker: Equatable, Sendable {
                 if confirmed(id) { return 2 }
                 return standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } ? 4 : 3
             }
-            let eligible = candidates.filter { !ambiguous || own.contains($0) || $0 == opener || confirmed($0) }
+            // Blind switch: no tracked standalone window becomes a new hidden tab (the opener and earlier folds excepted).
+            let foldable = blindSwitch
+                ? candidates.filter { id in id == opener || !standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } }
+                : candidates
+            let eligible = foldable.filter { !ambiguous || own.contains($0) || $0 == opener || confirmed($0) }
             let hidden = eligible.sorted { (tier($0), $0) < (tier($1), $1) }.prefix(max(v.tabCount - 1, 0))
             let members = Set(hidden).union([v.id])
             if let index {

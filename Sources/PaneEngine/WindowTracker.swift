@@ -78,9 +78,16 @@ public struct WindowTracker: Sendable {
             // Merged into another window's tab group: gone as a separate window once two consecutive refreshes with
             // the same shown tab agree, so one wrong fold never removes a live window (D-09).
             var folds: [WindowIdentity: (shown: UInt32, refreshes: Int)] = [:]
+            // A Space switch without Space data decides no fold: the window may be live on the other Space.
+            let holdFolds = context.spaceChanged && context.windowSpaces == nil
             for identity in tabs.folded {
                 let shown = tabGroups.shownTab(containing: identity.windowID, pid: app.pid) ?? identity.windowID
                 let previous = foldPending[identity]
+                if holdFolds {
+                    // Same shown tab: the count is kept, not advanced. Otherwise it starts at 1 at the next update.
+                    if let previous, previous.shown == shown { folds[identity] = previous }
+                    continue
+                }
                 let refreshes = previous?.shown == shown ? (previous?.refreshes ?? 0) + 1 : 1
                 if refreshes >= 2, let info = remove(identity, at: context.now) {
                     events.append(.windowDestroyed(info.window))

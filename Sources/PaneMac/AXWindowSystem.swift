@@ -24,6 +24,9 @@ import os
     private var initialRefreshComplete = false
     private var displays: [DisplayInfo] = []
     private var screenObserver: (any NSObjectProtocol)?
+    /// `NSWorkspace.activeSpaceDidChangeNotification`: marks every app's next full update `spaceChanged` (02-17).
+    private var spaceObserver: (any NSObjectProtocol)?
+    private var spaceSwitches = SpaceSwitchMarks()
     private var registry: AppRegistry?
     private var scheduler: RefreshScheduler?
     /// False while the registry starts the apps already running, which are not "launched".
@@ -65,6 +68,7 @@ import os
         for probe in probes.values { probe.cancel() }
         resumeTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
         hintContinuation.finish()
     }
 
@@ -101,6 +105,14 @@ import os
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.displaysDidChange() }
+        }
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.spaceSwitches.spaceDidChange(pids: self.threads.keys)
+            }
         }
         let gate = SessionGate(
             workspaceCenter: NSWorkspace.shared.notificationCenter, distributedCenter: DistributedNotificationCenter.default(),
@@ -207,19 +219,21 @@ import os
     /// runs on its own (T-02-20).
     private func sweep(initial: Bool) async {
         // One CG list per refresh: the window layer fact for the classifier (and the close rule's second source).
-        // nil when it failed: each refresh then reads its own.
+        // nil when it failed: each refresh then reads its own. The reads begin here, so the Space-switch generation too.
+        let readGeneration = spaceSwitches.generation
         let cgWindows = CGWindowList.snapshot()
         let pids = threads.keys.filter { responsiveness.shouldRefresh(pid: $0) }
         await withTaskGroup(of: Void.self) { group in
             for pid in pids {
-                group.addTask { await self.refresh(pid: pid, initial: initial, cgWindows: cgWindows) }
+                group.addTask { await self.refresh(pid: pid, initial: initial, cgWindows: cgWindows, readGeneration: readGeneration) }
             }
         }
     }
 
     /// One app's refresh, from the sweep, a hint, a launch or a settle follow-up. Dropped while the app is
-    /// degraded; collapsed into one follow-up while a job for it is in flight.
-    private func refresh(pid: Int32, initial: Bool = false, cgWindows: [CGWindowEntry]? = nil) async {
+    /// degraded; collapsed into one follow-up while a job for it is in flight. `readGeneration`: the Space-switch
+    /// generation when the sweep's reads began; nil records it here, just before this refresh's own reads.
+    private func refresh(pid: Int32, initial: Bool = false, cgWindows: [CGWindowEntry]? = nil, readGeneration: UInt64? = nil) async {
         // Polls the CGSession lock flag too (A3: belt and braces); a paused session refreshes nothing.
         gate?.evaluate()
         guard !paused, let thread = threads[pid], responsiveness.shouldRefresh(pid: pid) else { return }
@@ -227,6 +241,7 @@ import os
             followUp.insert(pid)
             return
         }
+        let readGeneration = readGeneration ?? spaceSwitches.generation
         let observation = await thread.observe(known: tracker.knownWindowIDs(pid: pid))
         inFlight.remove(pid)
         // The app may have quit meanwhile; its windows are decided by the terminated path now.
@@ -239,7 +254,7 @@ import os
             scheduler?.schedule(pid: pid, after: tracker.settleDelay)
             return
         }
-        ingest(observation, cgWindows: cgWindows, initial: initial)
+        ingest(observation, cgWindows: cgWindows, initial: initial, readGeneration: readGeneration)
         // Through the shown tab: a focus hint on a non-leader tab names the group's visible member, not its identity.
         if let windowID = pendingFocus.removeValue(forKey: pid),
            let info = tracker.sortedWindows().first(where: { $0.window.pid == pid && ($0.visibleMemberID ?? $0.window.windowID) == windowID })
@@ -297,7 +312,7 @@ import os
         }
     }
 
-    private func ingest(_ observation: AppObservation, cgWindows: [CGWindowEntry], initial: Bool) {
+    private func ingest(_ observation: AppObservation, cgWindows: [CGWindowEntry], initial: Bool, readGeneration: UInt64) {
         if let failure = observation.listFailure {
             logger.info("pid \(observation.pid, privacy: .public) AXWindows failed: \(String(describing: failure), privacy: .public)")
         } else {
@@ -315,9 +330,11 @@ import os
         // WindowServer IPC, not AX: fine on main. Nil while the Spaces capability is off (single-Space behaviour).
         let windowSpaces = observation.listFailure == nil
             ? SkyLightSpaces.spaces(of: cgWindows.filter { $0.pid == observation.pid && $0.layer == 0 }.map(\.windowID)) : nil
+        // Only a full answer consumes a mark; a notification during the reads keeps it for the next update.
+        let spaceChanged = observation.listFailure == nil && spaceSwitches.take(pid: observation.pid, readGeneration: readGeneration)
         let context = ObservationContext(
             cgWindows: withSyntheticPresence(cgWindows, shown: shown), displays: displays, sessionActive: !paused,
-            initialSweep: initial, now: .now, windowSpaces: windowSpaces)
+            initialSweep: initial, now: .now, windowSpaces: windowSpaces, spaceChanged: spaceChanged)
         emit(tracker.ingest(observation, context: context))
         emit(tracker.recheckTerminated(context: context))
         // A new window is withheld until it settles, a close AX reported waits for the CG list to agree, and a window
@@ -418,6 +435,7 @@ import os
         mainWindowIDs[pid] = nil
         probes.removeValue(forKey: pid)?.cancel()
         responsiveness.forget(pid: pid)
+        spaceSwitches.forget(pid: pid)
         inFlight.remove(pid)
         followUp.remove(pid)
         guard terminated else {
