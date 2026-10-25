@@ -193,8 +193,17 @@ public struct TabGroupTracker: Equatable, Sendable {
 
     /// A window's ID was corrected (`WindowTracker.rekey`): `from` becomes `to` in `pid`'s groups and history, and a
     /// group led by `from` is led by `newLeader` when it is given.
+    /// `lastCG` keeps the real CG entries: a frame-matched `from` there is the other window's own entry.
     public mutating func rekey(pid: Int32, from: UInt32, to: UInt32, newLeader: WindowIdentity?) {
-        // RED stub (02-16 Task 3)
+        if var list = groups[pid] {
+            for i in list.indices {
+                if list[i].members.remove(from) != nil { list[i].members.insert(to) }
+                if list[i].shown == from { list[i].shown = to }
+                if let newLeader, list[i].leader.windowID == from { list[i].leader = newLeader }
+            }
+            groups[pid] = list
+        }
+        if lastListed[pid]?.remove(from) != nil { lastListed[pid]?.insert(to) }
     }
 
     public mutating func forget(pid: Int32) {

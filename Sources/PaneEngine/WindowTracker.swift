@@ -5,7 +5,8 @@ import PaneModel
 /// Shared by `AXWindowSystem` and `FakeWindowSystem`, so scenario tests run the production decisions.
 /// Every known window's state and removal is decided by `CloseRule` (two sources, D-09); a window with no
 /// answer counts as timed out and is left untouched. Windows are keyed by ID, never merged by frame, except that the
-/// tabs of a native tab group are one window under its leader's identity (`TabGroupTracker`, D-08).
+/// tabs of a native tab group are one window under its leader's identity (`TabGroupTracker`, D-08). A window's ID
+/// only ever changes through `rekey(from:to:)`, reported as `windowRekeyed`.
 public struct WindowTracker: Sendable {
     /// How long a window first seen outside the initial sweep settles before it is reported and classified.
     public let settleDelay: Duration
@@ -200,22 +201,40 @@ public struct WindowTracker: Sendable {
     }
 
     /// The window known as `from` is the same window as `to` (a corrected ID, D-15): everything known about it moves
-    /// to `to`, and it is reported as one windowRekeyed, never as destroyed and created. A window not reported yet
-    /// keeps its settle start under the new ID, silently. An unknown `from` changes nothing.
+    /// to `to`, and it is reported as one windowRekeyed, never as destroyed and created. A window tracked under both IDs
+    /// merges into the `to` entry with the older creation order and the larger minimum per axis. A tab of a group that
+    /// is not the group's identity is renamed in the group; the group window showing it reports one windowChanged. A
+    /// window not reported yet keeps its settle start under the new ID, silently. An unknown `from` changes nothing.
     public mutating func rekey(from: WindowIdentity, to: WindowIdentity) -> [WindowEvent] {
-        guard from != to else { return [] }
-        guard var info = windows[from] else {
-            if let firstSeen = pending.removeValue(forKey: from) { pending[to] = min(pending[to] ?? firstSeen, firstSeen) }
-            return []
+        guard from != to, from.pid == to.pid else { return [] }
+        guard let moving = windows.removeValue(forKey: from) else {
+            if let firstSeen = pending.removeValue(forKey: from) {
+                pending[to] = min(pending[to] ?? firstSeen, firstSeen)
+                return []
+            }
+            guard tabGroups.isKnownMember(from.windowID, pid: from.pid) else { return [] }
+            tabGroups.rekey(pid: from.pid, from: from.windowID, to: to.windowID, newLeader: nil)
+            guard let shown = windows.first(where: { $0.key.pid == from.pid && $0.value.visibleMemberID == from.windowID })?.key,
+                  var info = windows[shown]
+            else { return [] }
+            info.visibleMemberID = to.windowID
+            windows[shown] = info
+            return [.windowChanged(info)]
         }
-        guard windows[to] == nil else { return [] }
-        windows[from] = nil
-        let old = info.window
-        info.window = WindowRef(identity: to, titleHint: old.titleHint, axIdentifier: old.axIdentifier, creationOrder: old.creationOrder)
+        tabGroups.rekey(pid: from.pid, from: from.windowID, to: to.windowID, newLeader: to)
+        let old = moving.window
+        let merging = windows[to] != nil
+        var info = windows[to] ?? moving
+        info.window = WindowRef(
+            identity: to, titleHint: info.window.titleHint, axIdentifier: info.window.axIdentifier,
+            creationOrder: min(old.creationOrder, info.window.creationOrder))
         if info.visibleMemberID == from.windowID { info.visibleMemberID = to.windowID }
-        lastReliable[to] = lastReliable.removeValue(forKey: from)
-        rechecks[to] = rechecks.removeValue(forKey: from)
-        foldPending[to] = foldPending.removeValue(forKey: from)
+        if !merging {
+            lastReliable[to] = lastReliable[from]
+            rechecks[to] = rechecks[from]
+            foldPending[to] = foldPending[from]
+        }
+        (lastReliable[from], rechecks[from], foldPending[from], pending[from]) = (nil, nil, nil, nil)
         learner.rekey(from: from, to: to)
         info.learnedMinimum = learner.minimum(for: to)
         closedIDs.remove(to)
