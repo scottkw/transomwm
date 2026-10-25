@@ -129,3 +129,26 @@ IN-13 (chained re-key, Probe4d) and IN-14 (a blind switch with a partial Space m
 _Fixed: 2026-10-25T21:07:06Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+## Round: slow-resize hardening
+
+**Done at:** 2026-10-25T21:59:09Z, in the main checkout (`/Users/ken/dev/panewm`, branch `gsd/phase-01-layout-model`), for the same root-pin reason as above.
+**Source:** 02-VERIFICATION.md warning 1 (late applier) and the lead's decision of 2026-10-25.
+**Commits:** `1a5f2b1` (test, RED), `7c97838` (fix, GREEN).
+
+**Rule:** an axis becomes a refusal candidate only when its read-back is more than 32 pt above the request and more than 2 pt below the window's tracked size before the write. In other words, the app moved toward the request. `WindowTracker.applyFrameResult` passes `info.frame.size` into the new `before:` argument of `MinimumSizeLearner.recordWrite`. A later write that reads back the same clamp (within 2 pt) without moving keeps the candidate and restarts the 1 s delay, so a layout that keeps asking for the same tile still learns. The doc comment in `MinimumSizeLearner.swift` now states the rule and the limit.
+
+**Tests:**
+- New: `aWindowStillAtItsPreWriteSizeAfterASecondLearnsNothing` (the Probe4c row: request 300, read-back stays 800). It failed before the fix, learning 800.
+- New learner tests: `aReadBackThatDidNotMoveTeachesNothing` and `theSameClampReadBackAgainKeepsTheCandidateFromTheLatestWrite`.
+- Changed: the learner tests pass `before:`. `aWindowTrackedUnderBothIDsMergesIntoOne` opens its windows larger than their read-backs.
+- Changed: `aWindowThatOpensAtItsMinimumLearnsIt` is now `aWindowThatOpensAtItsMinimumLearnsItOnceAWriteMovesIt`, which expects nothing from the first write and then 500 after a write that moves the window.
+
+**Known limit:** a window that opens already larger than its tile, where Pane's first write is a shrink the app refuses entirely, now learns nothing from that write. It learns later, once a write moves it. The "at-min static" scenario is exactly this case: one write that reads back the pre-write size cannot be told apart from a late applier. So it no longer learns 500 from one write, contrary to the brief's list of behaviours to keep. This needs a lead decision.
+
+**Verification (main checkout, at `7c97838`):**
+- `swift build`: complete.
+- `swift test --skip PaneMacIntegrationTests`: 473 pass (142 + 97 + 234).
+- `scripts/check-no-appkit.sh`: OK (25 files).
+- Probe4c, rebuilt against this tree: snap nil; one shrink then static 500; opens at its minimum nil (known limit); lag-2 drag nil; lag-2 back and forth nil; early refresh waits, then 500 at 1.05 s; late applier nil.
+- Live `caffeinate -d -i swift test --filter FrameWriteIntegrationTests`: 4 pass, 1 skipped (needs two displays). `aRefusedSizeIsReadBackAndLearned` still learns 250×150, because the fixture shrinks from its 320-wide opening frame. Before the run, lockstate said `locked: nil`. Afterwards `pgrep -fl PaneFixtureApp` found nothing.
