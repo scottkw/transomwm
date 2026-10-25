@@ -8,9 +8,13 @@ import os
 public nonisolated enum CGWindowList {
     private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "ax")
 
-    /// Every CG window (`optionAll`: on- and offscreen), bounds already in global top-left points.
-    public static func snapshot() -> [CGWindowEntry] {
-        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return [] }
+    /// Every CG window (`optionAll`: on- and offscreen), bounds already in global top-left points. nil (logged) when
+    /// the list could not be read: that is not "no windows", so callers must decide nothing from it.
+    public static func snapshot() -> [CGWindowEntry]? {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else {
+            logger.error("CG window list unavailable; skipping decisions that need it")
+            return nil
+        }
         var skipped = 0
         let entries = list.compactMap { info -> CGWindowEntry? in
             guard let number = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,

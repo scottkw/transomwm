@@ -72,7 +72,8 @@ guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: b
 }
 let observation = AXSnapshotReader.observeApp(pid: app.processIdentifier, bundleID: bundleID)
 if let failure = observation.listFailure { fail("AXWindows failed: \(failure)", 69) }
-let cgWindows = Dictionary(CGWindowList.snapshot().map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+guard let cgList = CGWindowList.snapshot() else { fail("the CG window list could not be read", 69) }
+let cgWindows = Dictionary(cgList.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
 
 /// The snapshot with its CG fact merged by window ID, exactly as WindowTracker sees it.
 func snapshot(_ window: WindowObservation) -> WindowSnapshot? {

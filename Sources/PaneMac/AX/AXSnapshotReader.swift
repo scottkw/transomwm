@@ -106,7 +106,8 @@ public nonisolated enum AXSnapshotReader {
             // An element keeps the ID it was first given for as long as the cache holds it.
             if let cached = cache.first(where: { CFEqual($0.value.element, element) }) { return (cached.key, cached.value.source) }
             guard case .success(let read) = snapshot, read.role == kAXWindowRole, let frame = read.frame else { return nil }
-            let cg = cgWindows ?? CGWindowList.snapshot()
+            // No CG list: leave the window unidentified this time rather than give it a synthetic ID.
+            guard let cg = cgWindows ?? CGWindowList.snapshot() else { return nil }
             cgWindows = cg
             var match = FallbackMatcher.match(pid: pid, frame: frame, title: title, cgWindows: cg, cgNames: [:], excluding: bound)
             if match == .ambiguous {

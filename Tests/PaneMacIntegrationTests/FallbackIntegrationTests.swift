@@ -23,7 +23,7 @@ import Testing
             #expect(info?.idSource == .cgFrameMatch, "window \(standard.index) was not matched to its CG window")
         }
         let tabIDs = Set(fixture.windows.filter { $0.kind == "tabs:2" }.map(\.id))
-        let onscreenTab = try #require(CGWindowList.snapshot().first { tabIDs.contains($0.windowID) && $0.onScreen }?.windowID)
+        let onscreenTab = try #require(CGWindowList.snapshot()?.first { tabIDs.contains($0.windowID) && $0.onScreen }?.windowID)
         let group = try #require(windows.first { $0.tabCount == 2 }, "the tab group was not tracked as one window")
         #expect(group.idSource == .cgFrameMatch)
         #expect(group.visibleMemberID == onscreenTab)
@@ -42,7 +42,7 @@ import Testing
         _ = try await fixture.send("title 1 Twin")
         let fixtureIDs = Set(fixture.windows.map(\.id))
         let stacked = await waitUntil(timeout: .seconds(2)) {
-            Set(CGWindowList.snapshot().filter { fixtureIDs.contains($0.windowID) }.map(\.bounds)).count == 1
+            Set((CGWindowList.snapshot() ?? []).filter { fixtureIDs.contains($0.windowID) }.map(\.bounds)).count == 1
         }
         #expect(stacked, "the two fixture windows never reached identical CG bounds")
 

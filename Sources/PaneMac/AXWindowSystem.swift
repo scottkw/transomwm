@@ -199,6 +199,7 @@ import os
     /// runs on its own (T-02-20).
     private func sweep(initial: Bool) async {
         // One CG list per refresh: the window layer fact for the classifier (and the close rule's second source).
+        // nil when it failed: each refresh then reads its own.
         let cgWindows = CGWindowList.snapshot()
         let pids = threads.keys.filter { responsiveness.shouldRefresh(pid: $0) }
         await withTaskGroup(of: Void.self) { group in
@@ -222,9 +223,14 @@ import os
         inFlight.remove(pid)
         // The app may have quit meanwhile; its windows are decided by the terminated path now.
         guard let observation, threads[pid] === thread else { return }
-        // Read after AX answered, so a window AX just reported invalid has had the most time to leave the CG list.
-        let cgWindows = cgWindows ?? CGWindowList.snapshot()
         record(pid, Self.outcome(of: observation), observation.duration)
+        // Read after AX answered, so a window AX just reported invalid has had the most time to leave the CG list.
+        guard let cgWindows = cgWindows ?? CGWindowList.snapshot() else {
+            // No second source: no close decision and no tab update now; refresh again soon (WR-01).
+            followUp.remove(pid)
+            scheduler?.schedule(pid: pid, after: tracker.settleDelay)
+            return
+        }
         ingest(observation, cgWindows: cgWindows, initial: initial)
         // Through the shown tab: a focus hint on a non-leader tab names the group's visible member, not its identity.
         if let windowID = pendingFocus.removeValue(forKey: pid),
@@ -337,8 +343,9 @@ import os
             for _ in 0..<20 {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard let self, !self.tracker.knownWindowIDs(pid: pid).isEmpty else { return }
+                guard let cgWindows = CGWindowList.snapshot() else { continue }
                 let context = ObservationContext(
-                    cgWindows: self.withSyntheticPresence(CGWindowList.snapshot()), displays: self.displays, sessionActive: !self.paused, now: .now)
+                    cgWindows: self.withSyntheticPresence(cgWindows), displays: self.displays, sessionActive: !self.paused, now: .now)
                 self.emit(self.tracker.recheckTerminated(context: context))
             }
         }
@@ -380,7 +387,10 @@ import os
         followUp.remove(pid)
         guard terminated else { return }
         continuation.yield(.appTerminated(pid: pid))
-        let context = ObservationContext(cgWindows: withSyntheticPresence(CGWindowList.snapshot()), displays: displays, sessionActive: !paused, now: .now)
+        let cgWindows = CGWindowList.snapshot()
+        // Without the CG list nothing closes yet (an inactive context decides nothing); the rechecks below decide.
+        let context = ObservationContext(
+            cgWindows: withSyntheticPresence(cgWindows ?? []), displays: displays, sessionActive: !paused && cgWindows != nil, now: .now)
         emit(tracker.appTerminated(pid: pid, context: context))
         if !tracker.knownWindowIDs(pid: pid).isEmpty { recheckTerminatedSoon(pid) }
     }
