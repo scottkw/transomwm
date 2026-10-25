@@ -64,7 +64,7 @@ public struct WindowTracker: Sendable {
         }
         // Probes of windows that left AXWindows only feed the close decision below.
         for observation in app.windows where observation.listedInAXWindows {
-            // Fallback IDs (nil windowID) arrive in Plan 11.
+            // No ID: a non-window, or one the frame fallback could not identify this time.
             guard case .success(var snapshot) = observation.read, let windowID = observation.windowID else { continue }
             if let cg = cgByID[windowID] {
                 snapshot.cg = CGWindowFact(layer: cg.layer, onScreen: cg.onScreen, alpha: cg.alpha)

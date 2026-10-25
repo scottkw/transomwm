@@ -70,8 +70,9 @@ public nonisolated enum AXSnapshotReader {
         return value as? Bool == true
     }
 
-    /// `_AXUIElementGetWindow` while it is available; otherwise (or forced) the frame fallback. nil for an element with
-    /// no window (Finder's desktop). Each lookup that fails for a real window counts towards switching it off (D-15).
+    /// `_AXUIElementGetWindow` while it is available; otherwise (or forced, or when it fails for this element) the frame
+    /// fallback. nil for an element with no window (Finder's desktop). Each lookup that fails for a real window counts
+    /// towards switching it off (D-15).
     private static func windowID(
         of element: AXUIElement, snapshot: Result<WindowSnapshot, AXFailure>, title: String, forceFallback: Bool, fallback: inout Fallback
     ) -> (id: UInt32, source: WindowIDSource)? {
@@ -79,11 +80,12 @@ public nonisolated enum AXSnapshotReader {
             var id: CGWindowID = 0
             if function(element, &id) == .success {
                 Capabilities.recordSuccess(.axWindowID)
+                // shortcut: only IDs bound before a failed element are kept from its frame match; two passes if twins collide.
+                fallback.bound.insert(id)
                 return (id, .axPrivate)
             }
             // -25201 on a non-window (Finder's desktop) is expected; only a readable AXWindow counts.
             if case .success(let read) = snapshot, read.role == kAXWindowRole { Capabilities.recordFailure(.axWindowID) }
-            if Capabilities.isAvailable(.axWindowID) { return nil }
         }
         return fallback.identify(element, snapshot: snapshot, title: title)
     }
