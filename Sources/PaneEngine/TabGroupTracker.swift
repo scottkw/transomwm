@@ -57,7 +57,7 @@ public struct TabGroupTracker: Equatable, Sendable {
     /// app's tracked window identities, oldest first: a standalone one that gains a tab (Cmd-T) leads the new group.
     public mutating func update(
         pid: Int32, bundleID: String, visible: [(id: UInt32, frame: Rect, tabCount: Int)], cgWindows: [CGWindowEntry],
-        tracked: [WindowIdentity] = []
+        tracked: [WindowIdentity] = [], spaces: [UInt32: Set<UInt64>]? = nil
     ) -> TabResolution {
         let cg = cgWindows.filter { $0.pid == pid }
         let inCG = Set(cg.map(\.windowID))

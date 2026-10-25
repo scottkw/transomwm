@@ -3,6 +3,9 @@ import os
 /// One private API Pane can run without. The raw value is the name used by `--disable-private=`.
 public enum Capability: String, CaseIterable, Sendable {
     case axWindowID = "AXWindowID"
+    case spaces = "Spaces"
+
+    public var fallback: String { "" }
 }
 
 /// Registry of private-API capabilities (D-15, SAFE-05). Each capability is either loaded or off;
@@ -44,6 +47,7 @@ public enum Capabilities {
     static let session = CapabilitySession(loaded: { capability in
         switch capability {
         case .axWindowID: AXWindowID.function != nil
+        case .spaces: SkyLightSpaces.isLoaded
         }
     })
 

@@ -8,6 +8,8 @@ import Testing
         (["PaneApp", "--disable-private=AXWindowID,Bogus"], [.axWindowID], ["Bogus"]),
         (["PaneApp", "--disable-private=Bogus"], [], ["Bogus"]),
         (["PaneApp", "--disable-private"], [], []),
+        (["PaneApp", "--disable-private=Spaces"], [.spaces], []),
+        (["PaneApp", "--disable-private=AXWindowID,Spaces"], [.axWindowID, .spaces], []),
     ] as [([String], Set<Capability>, [String])])
     func disablePrivateTakesOnlyKnownNames(arguments: [String], disabled: Set<Capability>, unknown: [String]) {
         let parsed = Capabilities.parseDisabled(arguments)
@@ -16,7 +18,13 @@ import Testing
     }
 
     @Test func everyCapabilityIsReported() {
+        #expect(Capability.allCases.map(\.rawValue) == ["AXWindowID", "Spaces"])
         #expect(Set(Capabilities.report().keys) == Set(Capability.allCases))
+    }
+
+    @Test func eachCapabilityNamesItsOwnFallback() {
+        #expect(Capability.axWindowID.fallback == "matching by frame")
+        #expect(Capability.spaces.fallback == "single Space")
     }
 }
 

@@ -167,9 +167,16 @@ public struct ObservationContext: Sendable {
     public var sessionActive: Bool
     public var initialSweep: Bool
     public var now: ContinuousClock.Instant
+    /// Each CG window's Spaces (SkyLight); nil means no Space data (the Spaces capability is off or missing).
+    /// A window with no Space reported maps to an empty set.
+    public var windowSpaces: [UInt32: Set<UInt64>]?
 
-    public init(cgWindows: [CGWindowEntry] = [], displays: [DisplayInfo] = [], sessionActive: Bool = true, initialSweep: Bool = false, now: ContinuousClock.Instant) {
+    public init(
+        cgWindows: [CGWindowEntry] = [], displays: [DisplayInfo] = [], sessionActive: Bool = true, initialSweep: Bool = false,
+        now: ContinuousClock.Instant, windowSpaces: [UInt32: Set<UInt64>]? = nil
+    ) {
         self.cgWindows = cgWindows
+        self.windowSpaces = windowSpaces
         self.displays = displays
         self.sessionActive = sessionActive
         self.initialSweep = initialSweep

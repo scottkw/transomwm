@@ -167,4 +167,81 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(resolution.memberIDs == [10, 11])
         #expect(resolution.folded.isEmpty)
     }
+
+    /// C2 with Space data: Cmd-T in A (10, Space 1) while an untracked same-frame twin Z sits on Space 2. The new tab
+    /// takes A, which really became its hidden tab; ID order does not matter.
+    @Test(arguments: [UInt32(5), 50])
+    func cmdTTakesTheWindowThatBecameItsTabNotATwinOnAnotherSpace(twin: UInt32) {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true), cg(twin)],
+            tracked: [identity(10)], spaces: [10: [1], twin: [2]]
+        )
+        // A hidden tab may report no Space.
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2)], cgWindows: [cg(10), cg(twin), cg(40, onScreen: true)],
+            tracked: [identity(10)], spaces: [40: [1], 10: [], twin: [2]]
+        )
+        #expect(resolution.groupFor == [40: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+        #expect(!resolution.memberIDs.contains(twin))
+        #expect(resolution.folded.isEmpty)
+    }
+
+    /// The Cmd-T rule, with and without Space data: a shown tab that was not in the previous CG list takes the tracked
+    /// standalone window listed last refresh, and leads a new group instead of joining a same-slot group with room.
+    @Test(arguments: [false, true])
+    func aBrandNewTabLeadsANewGroupWithTheStandaloneItCameFrom(spacesAvailable: Bool) {
+        var tracker = TabGroupTracker()
+        func spaces(_ map: [UInt32: Set<UInt64>]) -> [UInt32: Set<UInt64>]? { spacesAvailable ? map : nil }
+        // Group T (30) on Space 2 with one unseen tab, so it has room; then A (10) is listed alone on Space 1.
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(30, 2)], cgWindows: [cg(30, onScreen: true)], spaces: spaces([30: [2]]))
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true), cg(30)],
+            tracked: [identity(30), identity(10)], spaces: spaces([10: [1], 30: [2]])
+        )
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2)], cgWindows: [cg(5), cg(10), cg(30), cg(40, onScreen: true)],
+            tracked: [identity(30), identity(10)], spaces: spaces([40: [1], 10: [], 30: [2], 5: []])
+        )
+        #expect(resolution.groupFor == [40: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+        #expect(tracker.members(of: identity(30)) == [30])
+        #expect(resolution.folded.isEmpty)
+    }
+
+    /// S4 unchanged: a shown tab already in the previous CG list keeps today's ranking (untracked before standalone).
+    @Test func aShownTabSeenBeforeKeepsTheUsualRanking() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true), cg(30), cg(31)], tracked: [identity(10)]
+        )
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(30, 2)], cgWindows: [cg(10), cg(30, onScreen: true), cg(31)], tracked: [identity(10)]
+        )
+        #expect(resolution.groupFor == [30: identity(30)])
+        #expect(tracker.members(of: identity(30)) == [30, 31])
+        #expect(resolution.folded.isEmpty)
+    }
+
+    /// The ambiguity rule: hidden tabs may report no Space, so while a window known to be on another Space shares the
+    /// frame slot, no candidate of unknown Space is taken, however many free slots the group has.
+    @Test(arguments: [2, 3])
+    func noUnknownSpaceCandidateIsTakenWhileAKnownOtherSpaceWindowSharesTheSlot(tabCount: Int) {
+        var tracker = TabGroupTracker()
+        var resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(30, tabCount)], cgWindows: [cg(10), cg(11), cg(30, onScreen: true), cg(31)],
+            spaces: [30: [1], 31: [], 10: [2]]
+        )
+        #expect(resolution.groupFor == [30: identity(30)])
+        #expect(tracker.members(of: identity(30)) == [30])
+        #expect(resolution.tabCount == [identity(30): tabCount])
+        // 10 left the CG list: nothing rules the unknown ones out any more, so the normal tiers take them.
+        resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(30, tabCount)], cgWindows: [cg(11), cg(30, onScreen: true), cg(31)],
+            spaces: [30: [1], 31: []]
+        )
+        #expect(tracker.members(of: identity(30)) == (tabCount == 3 ? [30, 31, 11] : [30, 11]))
+        #expect(resolution.tabCount == [identity(30): tabCount])
+    }
 }

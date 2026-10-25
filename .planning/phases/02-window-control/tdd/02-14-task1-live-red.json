@@ -1,0 +1,10 @@
+{
+ "command": "NO_COLOR=1 caffeinate -d -i swift test --filter SpacesIntegrationTests",
+ "exitCode": 1,
+ "output": "Building for debugging...\n[Computing dependencies]\n[1\u2009/\u200936] PaneFixtureApp-product\nBuild complete! (0.55 sec)\n\u25c7 Test run started.\n\u21b3 Testing Library Version: 2084\n\u21b3 Target Platform: arm64e-apple-macos14.0\n\u25c7 Suite SpacesIntegrationTests started.\n\u25c7 Test aShownTabAndAStandardWindowShareOneSpaceAndTheHiddenTabNeverReportsAnother() started.\n\u2718 Test aShownTabAndAStandardWindowShareOneSpaceAndTheHiddenTabNeverReportsAnother() recorded an issue at SpacesIntegrationTests.swift:24:26: Expectation failed: SkyLightSpaces.spaces(of: [shown.id, hidden.id, standard.id])\n\u21b3 Spaces lookup unavailable\n\u21b3 SkyLightSpaces.spaces(of: [shown.id, hidden.id, standard.id]) \u2192 nil\n\u21b3   [shown.id, hidden.id, standard.id] \u2192 [19564, 19565, 19566]\n\u2718 Test aShownTabAndAStandardWindowShareOneSpaceAndTheHiddenTabNeverReportsAnother() failed after 1.054 seconds with 1 issue.\n\u2718 Suite SpacesIntegrationTests failed after 1.054 seconds with 1 issue.\n\u21b3 /// D-15 live: the read-only SkyLight lookup puts the fixture's shown tab and its standard window on one Space. A\n\u21b3 /// hidden native tab reports either no Space or the group's, never another one.\n\u2718 Test run with 1 test in 1 suite failed after 1.055 seconds with 1 issue.\nNote: Some test targets reported failures:\n  - PaneMacIntegrationTests (Swift Testing)\n",
+ "targetTest": "aShownTabAndAStandardWindowShareOneSpaceAndTheHiddenTabNeverReportsAnother()",
+ "targetFile": "Tests/PaneMacIntegrationTests/SpacesIntegrationTests.swift",
+ "expected": "SkyLightSpaces.spaces(of:) returns a set per window; shown tab and standard window share one non-empty Space set",
+ "actual": "stub SkyLightSpaces.spaces returns nil, so the #require fails",
+ "semanticAssessment": "Live fixture launched (trusted), the target ran and failed on the planned #require of the lookup result against the nil stub. No fixture or load fault; no PaneFixtureApp left running."
+}
