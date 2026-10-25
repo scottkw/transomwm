@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: verifying
-stopped_at: Completed 02-13-PLAN.md
-last_updated: "2026-10-25T17:07:18.925Z"
+stopped_at: Completed 02-14-PLAN.md
+last_updated: "2026-10-25T19:36:49.649Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: b13626de3022b03c9239205804d2f1e2b45de46e
+state_head: be47ef88e7565e801aa69557389a3940095890ae
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 22
+  completed_plans: 20
   percent: 11
 ---
 
@@ -75,6 +75,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P11 | 10 min | 2 tasks | 14 files |
 | Phase 2 P12 | 10 min | 2 tasks | 12 files |
 | Phase 2 P13 | 11 min | 3 tasks | 16 files |
+| Phase 2 P14 | 23 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,10 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-13: Per-bundle minimum hints persist in ~/Library/Application Support/Pane/min-size-hints.json; a bad file is rejected whole, logged and moved aside as .corrupt
 - [Phase 2]: 02-13: Bundle hints seed only newly reported windows and learning only raises them; hints are keyed by exact bundle ID, unbundled keys never stored
 - [Phase 2]: 02-13: Nudge Focused Window is in every build; focusedWindow(of:) uses the latest windowFocused, else the AXMain visible window
+- [Phase 2]: 02-14: Spaces data comes from a read-only SkyLight lookup (SkyLightSpaces, capability Spaces); nil in ObservationContext.windowSpaces means single-Space behaviour
+- [Phase 2]: 02-14: Live macOS 27 reports an empty Space set for a hidden native tab, so an unknown-Space candidate is never taken while a known other-Space window shares the frame slot
+- [Phase 2]: 02-14: A folded window is destroyed only after two consecutive refreshes with the same shown tab; a group whose tabs are all gone hands its identity only to a former tab (offscreen in its slot last refresh)
+- [Phase 2]: 02-14: Without Space data two same-frame tab groups on two Spaces may be one tracked window (accepted override); no live window is destroyed and no ID is tracked twice
 
 ### Pending Todos
 
@@ -174,6 +179,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-25T17:07:18.872Z
-Stopped at: Completed 02-13-PLAN.md
+Last session: 2026-10-25T19:36:49.551Z
+Stopped at: Completed 02-14-PLAN.md
 Resume file: None
