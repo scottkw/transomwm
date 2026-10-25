@@ -22,7 +22,7 @@
 
 - [x] **WIN-01**: User is guided through granting Accessibility permission, and a stale grant is detected and explained
 - [x] **WIN-02**: Pane tracks every standard window of every running app, including windows opened or closed later
-- [ ] **WIN-03**: A hung or slow app never freezes Pane or delays arranging other apps' windows
+- [x] **WIN-03**: A hung or slow app never freezes Pane or delays arranging other apps' windows
 - [ ] **WIN-04**: Pane moves and resizes windows and learns an app's real minimum size when it refuses a size
 - [x] **WIN-05**: Dialogs, sheets, popovers and picture-in-picture windows are never docked (classifier tested against recorded AX dumps)
 - [x] **WIN-06**: Native tabs (Finder, Terminal, Safari, etc.) count as one window
@@ -144,7 +144,7 @@ Populated by the roadmapper on 2026-10-23.
 | MODEL-10 | Phase 1 | Complete |
 | WIN-01 | Phase 2 | Complete |
 | WIN-02 | Phase 2 | Complete |
-| WIN-03 | Phase 2 | Pending |
+| WIN-03 | Phase 2 | Complete |
 | WIN-04 | Phase 2 | Pending |
 | WIN-05 | Phase 2 | Complete |
 | WIN-06 | Phase 2 | Complete |
