@@ -68,7 +68,7 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: 16/16 plans executed
+**Plans**: 16/17 plans executed
 
 Plans:
 **Wave 1**
@@ -104,6 +104,7 @@ Plans:
 - [x] 02-14-PLAN.md — Read-only SkyLight Spaces capability; Space-aware tab groups, single-Space fallback rule and fold guard (WIN-06, WIN-09, SAFE-05)
 - [x] 02-15-PLAN.md — Minimum-size learner: one clear refusal confirmed by time, no snaps, in-session hints (WIN-04)
 - [x] 02-16-PLAN.md — Window identity: per-element failure counting, fallback IDs re-checked and re-keyed with no destroy/create (SAFE-05, WIN-02)
+- [ ] 02-17-PLAN.md — Space-switch race without Space data: after `NSWorkspace.activeSpaceDidChangeNotification`, refuse the orphan handoff and new hidden-tab folds for one update; with Space data, no change (WIN-06, WIN-09)
 
 **Research**: Moderate. Patterns are documented (AeroSpace), but the window classifier corpus, native-tab heuristics and two-source close-confirmation rules need careful design
 **Scope notes**: Pulled forward per research: coordinate conversion at one tested boundary plus display-UUID matching (from Phase 6) and native-tab detection (from Phase 7). Also: per-app AX threads with ~1 s messaging timeouts, coalesced size-position-size writes with read-back, the `PanePrivate` dlsym pattern and capability registry, `FakeWindowSystem`, fullscreen state detection (tile return is verified in Phase 3 under WIN-07), stable dev signing identity and a separate debug bundle ID so TCC grants survive rebuilds.
