@@ -27,6 +27,8 @@ public struct WindowTracker: Sendable {
     private var excluded: Set<String> = []
     /// Per-bundle minimums from earlier sessions (D-13).
     private var bundleHints: [String: Size] = [:]
+    /// The displays of the latest observation, so a frame write can place its window too.
+    private var displays: [DisplayInfo] = []
     /// Quick follow-ups per window before it is left to the sweep: WindowServer drops a closed window a few
     /// hundred ms after AX reports it invalid, so the decision must be retried soon, but not forever.
     public static let maxQuickRechecks = 8
@@ -43,6 +45,7 @@ public struct WindowTracker: Sendable {
 
     public mutating func ingest(_ app: AppObservation, context: ObservationContext) -> [WindowEvent] {
         closedIDs.purge(at: context.now)
+        displays = context.displays
         var events: [WindowEvent] = []
         var seen: Set<WindowIdentity> = []
         var created: Set<WindowIdentity> = []
@@ -209,11 +212,12 @@ public struct WindowTracker: Sendable {
         if info.state == .present { _ = learner.learn(window: identity, requested: result.requested, actual: actual) }
         info.frame = actual
         info.learnedMinimum = learner.minimum(for: identity)
+        info.displayUUID = Coordinates.displayUUID(for: actual, among: displays)
         windows[identity] = info
         var events: [WindowEvent] = [.frameApplied(info.window, requested: result.requested, actual: actual)]
         if old.frame.origin != actual.origin { events.append(.windowMoved(info.window, actual)) }
         if old.frame.size != actual.size { events.append(.windowResized(info.window, actual)) }
-        if old.learnedMinimum != info.learnedMinimum { events.append(.windowChanged(info)) }
+        if old.learnedMinimum != info.learnedMinimum || old.displayUUID != info.displayUUID { events.append(.windowChanged(info)) }
         return events
     }
 
