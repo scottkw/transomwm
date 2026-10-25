@@ -57,3 +57,18 @@ public enum Capabilities {
         }
     }
 }
+
+/// Call-time degradation state for the capabilities (stub).
+public final class CapabilitySession: Sendable {
+    private let loaded: @Sendable (Capability) -> Bool
+
+    public init(loaded: @escaping @Sendable (Capability) -> Bool) {
+        self.loaded = loaded
+    }
+
+    public func isAvailable(_ capability: Capability) -> Bool { loaded(capability) }
+
+    @discardableResult public func recordFailure(_ capability: Capability) -> Bool { false }
+
+    public func recordSuccess(_ capability: Capability) {}
+}
