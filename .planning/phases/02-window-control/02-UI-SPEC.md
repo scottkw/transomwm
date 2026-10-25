@@ -155,6 +155,7 @@ Item 4 when the frontmost app is Pane itself, has no bundle ID, or is not `.regu
 | "Resume “Safari” Now" | Debug only | Replaces the Freeze item while an app is frozen; sends `SIGCONT` immediately |
 | — separator — | | |
 | "Window ID lookup: available" / "Window ID lookup: off, matching by frame" | all | Disabled info item from the capability registry (SAFE-05 visibility) |
+| "Spaces lookup: available" / "Spaces lookup: off, single Space" | all | Disabled info item right after the Window ID line, from the capability registry (SAFE-05 visibility, 02-14) |
 
 ---
 
@@ -304,6 +305,7 @@ Voice: plain, second person, sentence case for body text, title case for menu it
 | Exclusion toggle | "Don't Arrange “{App}”" / disabled fallback "Don't Arrange Frontmost App" |
 | Exclusion submenu | "Never Arrange"; empty → "No apps excluded" |
 | Capability item | "Window ID lookup: available" / "Window ID lookup: off, matching by frame" |
+| Spaces capability item | "Spaces lookup: available" / "Spaces lookup: off, single Space" |
 | T1 heading / body | "Pane can't see windows yet" / "Give Pane Accessibility access to list and arrange windows." |
 | Loading | "Looking for windows…" |
 | Footer | "{n} windows · {m} apps · {k} never dock · {e} excluded · {d} not responding" (singular forms: "1 window", "1 app"; zero segments after apps omitted) |

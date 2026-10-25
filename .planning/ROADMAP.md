@@ -179,7 +179,7 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Needs phase research. Verify SkyLight signatures, Space-UUID stability across reboots and macOS updates, and symbolic-hotkey state after deliberate crash tests
-**Scope notes**: Read-only SkyLight `SpacesProvider` with a single-Space fallback; skip dirty desks while their Space is hidden; orphan/dormant desks on unplug re-attached by display UUID; debounced display reconfiguration; Mission Control takeover is opt-in with a restore watchdog.
+**Scope notes**: Read-only SkyLight `SpacesProvider` with a single-Space fallback; skip dirty desks while their Space is hidden; orphan/dormant desks on unplug re-attached by display UUID; debounced display reconfiguration; Mission Control takeover is opt-in with a restore watchdog. The read-only SkyLight Spaces lookup (`SkyLightSpaces`, capability `Spaces`, single-Space fallback) landed in Phase 2 (02-14), so Phase 6 builds its `SpacesProvider` on it rather than re-adding it.
 
 ### Phase 7: Tab Groups
 

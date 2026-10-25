@@ -19,7 +19,9 @@ nonisolated public enum MenuCopy {
         windowIDLookupAvailable ? "Window ID lookup: available" : "Window ID lookup: off, matching by frame"
     }
 
-    public static func spacesItem(available: Bool) -> String { "" }
+    public static func spacesItem(available: Bool) -> String {
+        available ? "Spaces lookup: available" : "Spaces lookup: off, single Space"
+    }
 
     /// Names over 32 graphemes become their first 32 plus "…", so menu width stays bounded.
     public static func truncatedAppName(_ name: String) -> String {
