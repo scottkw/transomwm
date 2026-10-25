@@ -56,8 +56,18 @@ import Testing
         #expect(h.resumes == 1)
     }
 
-    @Test func theLoginWindowInFrontPauses() {
+    /// While unlocked, macOS briefly activates loginwindow when apps quit together; the lock flag is not set then.
+    @Test func aQuitsMomentaryLoginWindowDoesNotPause() {
         let h = GateHarness()
+        h.frontmost = "com.apple.loginwindow"
+        h.gate.evaluate()
+        #expect(!h.gate.isPaused)
+        #expect(h.pauses == 0)
+    }
+
+    @Test func theLoginWindowInFrontPausesWhenTheSessionCannotBeRead() {
+        let h = GateHarness()
+        h.dictionary = nil
         h.frontmost = "com.apple.loginwindow"
         h.gate.evaluate()
         #expect(h.gate.isPaused)

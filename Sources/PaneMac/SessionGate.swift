@@ -5,8 +5,9 @@ import AppKit
 ///
 /// Belt and braces (RESEARCH A3, confirmed on macOS 27 while locked): `com.apple.screenIsLocked` /
 /// `screenIsUnlocked`, system sleep and wake, display sleep and wake, fast user switching, `loginwindow`
-/// frontmost, and the `CGSSessionScreenIsLocked` session flag polled by `evaluate()`. A spoofed lock
-/// notification can only pause (nothing closes); the matching unlock or wake clears it (T-02-25).
+/// frontmost (when the session flag cannot be read), and the `CGSSessionScreenIsLocked` session flag polled by
+/// `evaluate()`. A spoofed lock notification can only pause (nothing closes); the matching unlock or wake clears
+/// it (T-02-25).
 @MainActor public final class SessionGate {
     private enum Signal { case screenLocked, systemAsleep, displaysAsleep, sessionInactive, loginWindowFrontmost, sessionLockFlag }
 
@@ -44,9 +45,12 @@ import AppKit
     public var isPaused: Bool { !on.isEmpty }
 
     /// Polls the two signals that have no notification: `loginwindow` frontmost and the session lock flag.
+    /// While unlocked, macOS briefly activates `loginwindow` when apps quit together (seen on macOS 27), so it
+    /// counts only when the session dictionary cannot be read; otherwise the lock flag decides.
     public func evaluate() {
-        set(.loginWindowFrontmost, frontmostBundleID() == "com.apple.loginwindow")
-        set(.sessionLockFlag, sessionDictionary()?["CGSSessionScreenIsLocked"] as? Bool == true)
+        let session = sessionDictionary()
+        set(.loginWindowFrontmost, session == nil && frontmostBundleID() == "com.apple.loginwindow")
+        set(.sessionLockFlag, session?["CGSSessionScreenIsLocked"] as? Bool == true)
     }
 
     private func observe(_ center: NotificationCenter, _ name: Notification.Name, _ handle: @escaping @MainActor (SessionGate) -> Void) {
