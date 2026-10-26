@@ -1,13 +1,16 @@
 import AppKit
 import Combine
+import KeyboardShortcuts
 import PaneEngine
 import PaneModel
 import os
 
-/// The menu-bar status item (D-01). The menu is rebuilt from the cached inventory each time it opens.
-/// Later plans add their sections as `add…Items(to:)` methods here.
+/// The menu-bar status item (D-01). The menu is rebuilt from the cached inventory each time it opens, grouped into
+/// Arrange, Safety and Exclusions (UI-SPEC Surface 1, D-28). Command items come from `CommandMenu`, built once.
 @MainActor final class StatusItemController: NSObject, NSMenuDelegate {
     private let system: AXWindowSystem
+    private let arrange: ArrangeController
+    private let commands: CommandMenu
     private let permission: PermissionController
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
@@ -25,13 +28,17 @@ import os
     private var frontmost: NSRunningApplication?
     /// Restore frames for Debug ▸ Nudge Focused Window (D-01).
     private var nudgePlanner = NudgePlanner()
+    /// Installed apps' display names by bundle ID, so a menu rebuild does not ask Launch Services per row (02-UI-REVIEW).
+    private var displayNames: [String: String] = [:]
 
-    /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item.
+    /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
-        system: AXWindowSystem, permission: PermissionController, exclusions: ExclusionStore, freezeTest: FreezeTest,
-        showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
+        exclusions: ExclusionStore, freezeTest: FreezeTest, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
+        self.arrange = arrange
+        commands = CommandMenu(dispatch: dispatch)
         self.permission = permission
         self.exclusions = exclusions
         self.freezeTest = freezeTest
@@ -55,17 +62,43 @@ import os
         frontmost = NSWorkspace.shared.frontmostApplication
         addStatusItems(to: menu)
         menu.addItem(.separator())
-        let tracked = NSMenuItem(title: "Show Tracked Windows", action: #selector(openTrackedWindows), keyEquivalent: "")
-        tracked.target = self
-        menu.addItem(tracked)
+        addArrangeItems(to: menu)
         menu.addItem(.separator())
+        menu.addItem(.sectionHeader(title: MenuCopy.safetySection))
+        menu.addItem(.separator())
+        menu.addItem(.sectionHeader(title: MenuCopy.exclusionsSection))
         addExclusionItems(to: menu)
-        menu.addItem(.separator())
-        menu.addItem(debugMenuItem())
+        if NSEvent.modifierFlags.contains(.option) {
+            menu.addItem(.separator())
+            menu.addItem(debugMenuItem())
+        }
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit Pane", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
+    }
+
+    /// A chord pressed while the menu is open runs its menu item once, instead of being buffered and fired again by the
+    /// hotkey when the menu closes (KeyboardShortcuts' `setShortcut` note, RESEARCH Pattern 9).
+    func menuWillOpen(_ menu: NSMenu) {
+        KeyboardShortcuts.disable(Hotkeys.entries.map(\.name))
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        KeyboardShortcuts.enable(Hotkeys.entries.map(\.name))
+    }
+
+    /// Items 6–18: the Arrange section, enabled by the one availability rule.
+    private func addArrangeItems(to menu: NSMenu) {
+        let context = arrange.commandContext()
+        commands.update { arrange.arranger.availability($0, context: context) }
+        commands.item(for: .toggleDesktop).title = MenuCopy.desktopToggle(hidden: arrange.arranger.isDesktopHidden(focused: context.focused))
+        menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
+        for command in [Command.dock, .float, .undo] { menu.addItem(commands.item(for: command)) }
+        menu.addItem(commands.focusMenu)
+        menu.addItem(commands.splitMenu)
+        menu.addItem(.separator())
+        menu.addItem(commands.item(for: .toggleDesktop))
     }
 
     /// Template glyph per UI-SPEC Surface 1: the warning triangle until access is ready.
@@ -90,8 +123,7 @@ import os
             menu.addItem(item)
             return
         }
-        let apps = Set(latest.windows.map(\.window.pid)).count
-        menu.addItem(Self.info(MenuCopy.header(windows: latest.windows.count, apps: apps)))
+        menu.addItem(Self.info(MenuCopy.header(latest)))
         if let degraded = MenuCopy.degradedLine(count: latest.degradedPIDs.count) {
             menu.addItem(Self.info(degraded))
         }
@@ -114,7 +146,7 @@ import os
         menu.addItem(toggle)
 
         let submenu = NSMenu(title: "Never Arrange")
-        let names = Dictionary(uniqueKeysWithValues: exclusions.bundleIDs.compactMap { id in Self.displayName(of: id).map { (id, $0) } })
+        let names = Dictionary(uniqueKeysWithValues: exclusions.bundleIDs.compactMap { id in displayName(of: id).map { (id, $0) } })
         for entry in exclusions.sortedEntries(displayNames: names) {
             let item = NSMenuItem(title: entry.title, action: #selector(removeExclusion), keyEquivalent: "")
             item.target = self
@@ -142,11 +174,13 @@ import os
         exclusions.remove(id)
     }
 
-    /// The installed app's display name, or nil when no app has this bundle ID.
-    private static func displayName(of bundleID: String) -> String? {
+    /// The installed app's display name, or nil when no app has this bundle ID (not cached, so a later install shows).
+    private func displayName(of bundleID: String) -> String? {
+        if let name = displayNames[bundleID] { return name }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
         let name = FileManager.default.displayName(atPath: url.path)
-        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+        displayNames[bundleID] = name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+        return displayNames[bundleID]
     }
 
     @objc private func openTrackedWindows() {
@@ -159,6 +193,9 @@ import os
 
     private func debugMenuItem() -> NSMenuItem {
         let submenu = NSMenu(title: "Debug")
+        let tracked = NSMenuItem(title: "Show Tracked Windows", action: #selector(openTrackedWindows), keyEquivalent: "")
+        tracked.target = self
+        submenu.addItem(tracked)
         submenu.addItem(nudgeMenuItem())
         #if DEBUG
             submenu.addItem(freezeMenuItem())

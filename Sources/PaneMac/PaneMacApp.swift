@@ -47,15 +47,19 @@ public enum PaneMacApp {
             permission: permissionController, exclusions: exclusions,
             windowIDLookupAvailable: { system.capabilityReport[.axWindowID] == true }
         ) { setupController.show() }
-        let controller = StatusItemController(
-            system: system, permission: permissionController, exclusions: exclusions, freezeTest: freezeTest,
-            showTrackedWindows: { trackedController.show() }, showSetup: { setupController.show() }
-        )
-        controller.onInventory = { trackedController.feed.inventory = $0 }
         // The only reader of system.events: it re-reads the inventory after each event and feeds the menu.
         // The layout survives a quit and relaunch (SAFE-06); the store loads when tracking starts.
         let layoutStore = LayoutStore(directory: MinimumHintsStore.defaultDirectory)
         let arrangeController = ArrangeController(system: system, store: layoutStore)
+        arrangeController.isReady = { permissionController.state.phase == .ready }
+        // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).
+        let dispatch: @MainActor (Command) -> Void = { command in Task { await arrangeController.dispatch(command) } }
+        let controller = StatusItemController(
+            system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController,
+            exclusions: exclusions, freezeTest: freezeTest, showTrackedWindows: { trackedController.show() },
+            showSetup: { setupController.show() }
+        )
+        controller.onInventory = { trackedController.feed.inventory = $0 }
         arrangeController.onInventory = { controller.update($0) }
         trackedWindows = trackedController
         statusItem = controller
@@ -63,8 +67,7 @@ public enum PaneMacApp {
         permission = permissionController
         setupWindow = setupController
         permissionController.onTrackingStarted = { await arrangeController.start() }
-        // ⌃⌥⌘D/F/Z; a command the Arranger refuses beeps (UI-SPEC: no hotkey fails silently).
-        Hotkeys.register { command in Task { await arrangeController.dispatch(command) } }
+        Hotkeys.register(dispatch)
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
         // Quit Pane during a freeze resumes the app now rather than at the next launch. A normal quit is recorded

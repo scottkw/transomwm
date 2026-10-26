@@ -69,10 +69,24 @@ import os
         }
     }
 
-    /// Runs `command` on the frontmost app's focused tracked window.
-    public func dispatch(_ command: Command) async {
+    /// Whether Pane has working Accessibility access; PaneMacApp wires it to the permission state.
+    public var isReady: () -> Bool = { true }
+
+    /// The frontmost app's focused tracked window and the access state: what availability depends on.
+    public func commandContext() -> CommandContext {
         let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        await dispatch(command, focused: pid.flatMap { system.focusedWindow(of: $0) }?.window)
+        return CommandContext(focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady())
+    }
+
+    /// Every route (hotkey, menu item) calls this. A command the availability rule refuses beeps (UI-SPEC: no
+    /// hotkey fails silently).
+    public func dispatch(_ command: Command) async {
+        let context = commandContext()
+        guard arranger.availability(command, context: context) else {
+            NSSound.beep()
+            return
+        }
+        await dispatch(command, focused: context.focused)
     }
 
     public func dispatch(_ command: Command, focused: PaneModel.WindowRef?) async {

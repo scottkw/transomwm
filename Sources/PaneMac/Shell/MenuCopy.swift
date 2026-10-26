@@ -1,4 +1,5 @@
 import PaneEngine
+import PaneModel
 
 /// Status-menu copy from the UI-SPEC Copywriting Contract. Pure strings, no AppKit types.
 nonisolated public enum MenuCopy {
@@ -9,6 +10,37 @@ nonisolated public enum MenuCopy {
         if windows == 0 { return "No windows to track" }
         return "Tracking \(count(windows, "window")) in \(count(apps, "app"))"
     }
+
+    /// Item 1 while ready (02-UI-REVIEW fix 1): no count before the first sweep, and closed windows never count.
+    public static func header(_ inventory: WindowInventory) -> String {
+        guard inventory.initialRefreshComplete else { return lookingForWindows }
+        let open = inventory.windows.filter { $0.state != .closed }
+        return header(windows: open.count, apps: Set(open.map(\.window.pid)).count)
+    }
+
+    public static let lookingForWindows = "Looking for windows\u{2026}"
+
+    /// Section headers (UI-SPEC Surface 1, D-28).
+    public static let arrangeSection = "Arrange"
+    public static let safetySection = "Safety"
+    public static let exclusionsSection = "Exclusions"
+
+    /// A command item's title. Toggles have their own functions (`desktopToggle`).
+    public static func commandTitle(_ command: Command) -> String {
+        switch command {
+        case .dock: "Dock Window"
+        case .float: "Float Window"
+        case .undo: "Undo Layout Change"
+        case .toggleDesktop: desktopToggle(hidden: false)
+        case .focus(.left): "Left"
+        case .focus(.right): "Right"
+        case .focus(.top): "Up"
+        case .focus(.bottom): "Down"
+        case .finderSplit: "Split with New Finder Window"
+        }
+    }
+
+    public static func desktopToggle(hidden: Bool) -> String { hidden ? "Show Desktop Tile" : "Hide Desktop Tile" }
 
     /// nil at 0, else "1 app not responding" / "N apps not responding".
     public static func degradedLine(count apps: Int) -> String? {

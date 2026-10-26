@@ -201,21 +201,29 @@ public struct Arranger: Sendable {
         world.desks.first { $0.value.contains(window) }?.key
     }
 
-    /// Whether `command` can act now: the same rule greys menu items and makes a refused hotkey beep.
+    /// `availability` with access granted: the Arranger only runs once tracking has started.
     public func isAvailable(_ command: Command, focused: WindowRef?) -> Bool {
+        availability(command, context: CommandContext(focused: focused, ready: true))
+    }
+
+    /// Whether `command` can act now (UI-SPEC Surface 1 disabled-state rules): the one rule that greys menu items and
+    /// makes a refused hotkey beep. Window-scoped commands need a focused, trackable, dockable window of an app that
+    /// is not excluded; nothing in the Arrange section acts without Accessibility access.
+    public func availability(_ command: Command, context: CommandContext) -> Bool {
+        guard context.ready else { return false }
+        let focused = context.focused
+        let trackable = focused.flatMap { windows[$0.identity] }.map { $0.kind == .dockable && !$0.isExcluded } ?? false
         switch command {
         case .dock:
-            guard let focused, let info = windows[focused.identity], info.kind == .dockable, !info.isExcluded,
-                info.state == .present
-            else { return false }
+            guard trackable, let focused, windows[focused.identity]?.state == .present else { return false }
             return world.desks.values.contains { $0.desktop.contains(focused) && $0.state(of: focused) == .present }
         case .float:
-            guard let focused else { return false }
+            guard trackable, let focused else { return false }
             return world.desks.values.contains { $0.tree.state(of: focused) != nil }
         case .undo:
             return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
         case .focus:
-            return focused.flatMap(deskKey(of:)) != nil
+            return trackable && focused.flatMap(deskKey(of:)) != nil
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
         case .toggleDesktop:
@@ -223,6 +231,11 @@ public struct Arranger: Sendable {
             guard let key = targetKey(focused), let desk = world[key] else { return false }
             return desk.tree.isDesktopHidden == true || desk.tree.windows.contains { desk.tree.state(of: $0) == .present }
         }
+    }
+
+    /// Whether the Desktop tile of the desk a command on `focused` targets is hidden: the toggle item's title.
+    public func isDesktopHidden(focused: WindowRef?) -> Bool {
+        targetKey(focused).flatMap { world[$0]?.tree.isDesktopHidden } == true
     }
 
     /// The focused window's desk or, with none focused (or one on no desk), the main display's visible desk.
