@@ -197,6 +197,24 @@ public actor FakeWindowSystem: WindowSystem {
         }
     }
 
+    /// A Space switch on display `uuid` only (separate Spaces per display): its `currentSpaceID` becomes `space`, and
+    /// AX lists exactly the open windows on any display's current Space. Notifies like `showSpace`, for that display.
+    /// shortcut: tab groups still follow `showSpace`'s single current Space; extend `selectTab` if a test mixes the two.
+    public func showSpace(_ space: UInt64, onDisplay uuid: String, notifies: Bool = true) {
+        guard let index = displays.firstIndex(where: { $0.uuid == uuid }) else { return }
+        displays[index].currentSpaceID = space
+        if notifies {
+            spaceSwitches.spaceDidChange(pids: apps.keys)
+            continuation.yield(.spaceChanged(displayUUID: uuid, spaceID: space))
+        }
+        let shownSpaces = Set(displays.compactMap(\.currentSpaceID))
+        for (id, window) in windows {
+            let shown = window.space.map(shownSpaces.contains) == true && !isHiddenTab(window) && window.axValid && window.inCGList
+            windows[id]?.listedInAX = shown
+            windows[id]?.onScreen = shown
+        }
+    }
+
     /// Whether observations carry Space data (the Spaces capability on) or not (single-Space fallback).
     public func setSpacesAvailable(_ available: Bool) {
         spacesAvailable = available
