@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-10-PLAN.md
-last_updated: "2026-10-26T04:26:39.416Z"
+stopped_at: Completed 03-11-PLAN.md
+last_updated: "2026-10-26T05:00:46.808Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 5fc27c761964cf418b2fb6d08df5b078ac324801
+state_head: dbccbc8b2e5bec2d0c507dab80484294816aa020
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 33
+  completed_plans: 34
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 11 of 17
+Plan: 12 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -89,6 +89,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 3 P08 | 17min | 2 tasks | 16 files |
 | Phase 03 P09 | 9min | 2 tasks | 17 files |
 | Phase 03 P10 | 13 min | 3 tasks | 17 files |
+| Phase 3 P11 | 26 min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -204,6 +205,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-10: Arranger.availability(_:context:) is the one rule for greying and beeping; paused disables Arrange items, only Resume acts; Stage Manager alone cannot be resumed
 - [Phase 03]: 03-10: While any PauseReason is set the Arranger records facts but sends no window command; Resume re-sends only tiles whose windows moved
 - [Phase 03]: 03-10: Excluded windows are filtered from the plan in the Arranger (no frame, park or minimum); a docked window that becomes excluded floats at its frame via World.reflow
+- [Phase 3]: 03-11: one drop decision per held 150 ms hover, applied exactly on mouse-up; with none, the miss rules; the pressed window is never written, corrected or rehomed before mouse-up
+- [Phase 3]: 03-11: the window-under-pointer field is 0 at the session tap, so the press window comes from the topmost on-screen tracked window (CGWindowList.onScreenFrontToBack)
+- [Phase 3]: 03-11: the app starts the event tap after tracking starts and stops it when access leaves .ready; a 2 s watchdog re-enables it or invalidates it when a trial tap is refused
 
 ### Pending Todos
 
@@ -231,8 +235,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T04:26:39.287Z
-Stopped at: Completed 03-10-PLAN.md
+Last session: 2026-10-26T05:00:46.667Z
+Stopped at: Completed 03-11-PLAN.md
 Resume file: None
 
 ## Deferred Verification

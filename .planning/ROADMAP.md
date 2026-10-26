@@ -124,7 +124,7 @@ Plans:
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
   7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
-**Plans:** 10/17 plans executed
+**Plans:** 11/17 plans executed
 
 Plans:
 **Wave 1**
@@ -156,7 +156,7 @@ Plans:
 - [x] 03-10-PLAN.md — Menu regrouped (Arrange/Safety/Exclusions, Debug with ⌥) through one dispatcher, items built once; Pause/Resume; Gaps; Don't Arrange ⌃⌥⌘E
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 03-11-PLAN.md — Drag to dock: active event tap with watchdog, drag sessions, 150 ms WYSIWYG preview, ⇧ bypass, ⌘ swap, blocked drops
+- [x] 03-11-PLAN.md — Drag to dock: active event tap with watchdog, drag sessions, 150 ms WYSIWYG preview, ⇧ bypass, ⌘ swap, blocked drops
 
 **Wave 11** *(blocked on Wave 10 completion)*
 - [ ] 03-12-PLAN.md — Keyboard layout commands: move/snap halves, swap previous, grow/shrink, balance/rotate/flip, thirds/quarters/maximise/centre, Arrange All, Float All
@@ -296,7 +296,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 17/17 | In Progress | - |
-| 3. Tiling MVP | 10/17 | In Progress | - |
+| 3. Tiling MVP | 11/17 | In Progress | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |

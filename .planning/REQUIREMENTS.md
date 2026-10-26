@@ -32,8 +32,8 @@
 
 ### Tiling
 
-- [ ] **TILE-01**: Dragging a window by its title bar to a screen edge or another window's edge shows a drop preview and docks it there on release
-- [ ] **TILE-02**: Holding a bypass modifier while dragging moves the window freely without docking
+- [x] **TILE-01**: Dragging a window by its title bar to a screen edge or another window's edge shows a drop preview and docks it there on release
+- [x] **TILE-02**: Holding a bypass modifier while dragging moves the window freely without docking
 - [x] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
 - [x] **TILE-04**: User can set the gap between windows
 - [ ] **TILE-05**: Dragging the gap between two windows resizes both
@@ -172,8 +172,8 @@ Populated by the roadmapper on 2026-10-23.
 | WIN-07 | Phase 3 | Pending |
 | WIN-08 | Phase 2 | Complete |
 | WIN-09 | Phase 2 | Complete |
-| TILE-01 | Phase 3 | Pending |
-| TILE-02 | Phase 3 | Pending |
+| TILE-01 | Phase 3 | Complete |
+| TILE-02 | Phase 3 | Complete |
 | TILE-03 | Phase 3 | Complete |
 | TILE-04 | Phase 3 | Complete |
 | TILE-05 | Phase 3 | Pending |
