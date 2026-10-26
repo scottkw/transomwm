@@ -15,6 +15,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case beep
     case announce(String)
     case fault(String)
+    /// Worth one info-level log line (the shell logs it with the arrange category).
+    case info(String)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.

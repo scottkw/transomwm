@@ -64,6 +64,8 @@ import os
                     userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
             case .fault(let message):
                 logger.error("\(message, privacy: .public)")
+            case .info(let message):
+                logger.info("\(message, privacy: .public)")
             }
         }
     }

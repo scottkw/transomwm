@@ -9,9 +9,9 @@ private let a = DisplayInfo(uuid: "A", frame: Rect(x: 0, y: 0, width: 1000, heig
 private let b = DisplayInfo(uuid: "B", frame: Rect(x: 1000, y: 0, width: 1920, height: 1080),
                             visibleFrame: Rect(x: 1000, y: 0, width: 1920, height: 1080), currentSpaceID: nil)
 
-private func app(frame: Rect) -> AppObservation {
+private func app(frame: Rect, fullScreen: Bool = false) -> AppObservation {
     let snapshot = WindowSnapshot(
-        role: "AXWindow", subrole: "AXStandardWindow", modal: false, minimized: false, fullScreen: false,
+        role: "AXWindow", subrole: "AXStandardWindow", modal: false, minimized: false, fullScreen: fullScreen,
         close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled, frame: frame
     )
     return AppObservation(pid: pid, bundleID: "com.example.app", windows: [
@@ -19,8 +19,8 @@ private func app(frame: Rect) -> AppObservation {
     ])
 }
 
-private func context(initial: Bool = false) -> ObservationContext {
-    ObservationContext(displays: [a, b], initialSweep: initial, now: .now)
+private func context(initial: Bool = false, spaces: [UInt32: Set<UInt64>]? = nil) -> ObservationContext {
+    ObservationContext(displays: [a, b], initialSweep: initial, now: .now, windowSpaces: spaces)
 }
 
 @Suite struct TrackerDisplayTests {
@@ -54,6 +54,39 @@ private func context(initial: Bool = false) -> ObservationContext {
         let info = try #require(tracker.info(for: ref.identity))
         #expect(info.displayUUID == "B")
         #expect(events.contains(.windowChanged(info)))
+    }
+}
+
+/// D-25: each window carries the Spaces the lookup reports for its visible member.
+@Suite struct TrackerSpacesTests {
+    private let frame = Rect(x: 100, y: 100, width: 600, height: 400)
+
+    @Test func aWindowsSpacesComeFromTheLookupAndAChangeIsReported() throws {
+        var tracker = WindowTracker()
+        _ = tracker.ingest(app(frame: frame), context: context(initial: true, spaces: [7: [2]]))
+        #expect(try #require(tracker.sortedWindows().first).spaces == [2])
+        let events = tracker.ingest(app(frame: frame), context: context(spaces: [7: [3]]))
+        let info = try #require(tracker.sortedWindows().first)
+        #expect(info.spaces == [3])
+        #expect(events == [.windowChanged(info)])
+    }
+
+    @Test func withoutSpaceDataSpacesStayNilAndNothingIsReported() throws {
+        var tracker = WindowTracker()
+        _ = tracker.ingest(app(frame: frame), context: context(initial: true))
+        #expect(try #require(tracker.sortedWindows().first).spaces == nil)
+        #expect(tracker.ingest(app(frame: frame), context: context()).isEmpty)
+    }
+
+    /// A window going fullscreen moves to its own Space: its state is reported first, so no consumer sees a present
+    /// window on a foreign Space (WIN-07).
+    @Test func goingFullscreenReportsTheStateBeforeTheNewSpace() throws {
+        var tracker = WindowTracker()
+        _ = tracker.ingest(app(frame: frame), context: context(initial: true, spaces: [7: [1]]))
+        let events = tracker.ingest(app(frame: frame, fullScreen: true), context: context(spaces: [7: [9]]))
+        let info = try #require(tracker.sortedWindows().first)
+        #expect(info.state == .fullscreen && info.spaces == [9])
+        #expect(events == [.windowStateChanged(info.window, .fullscreen), .windowChanged(info)])
     }
 }
 

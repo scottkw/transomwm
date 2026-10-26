@@ -115,3 +115,130 @@ extension Harness {
         #expect(await harness.inbox.take().isEmpty, "a switch without the notification yielded events")
     }
 }
+
+private let spacesOff = ArrangerEffect.info("Spaces lookup off: one layout per display")
+
+private func info(_ id: UInt32, frame: Rect, display: String = "D", spaces: Set<UInt64>?) -> WindowInfo {
+    WindowInfo(window: ref(id), frame: frame, state: .present, displayUUID: display, spaces: spaces)
+}
+
+private func inventory(_ displays: [DisplayInfo], _ windows: [WindowInfo]) -> ArrangerInput {
+    .inventory(WindowInventory(displays: displays, windows: windows))
+}
+
+/// D-25, WIN-07, TILE-03, A7: windows go to their own Space's desk, fullscreen Spaces get none, re-homes and re-plans.
+extension ArrangerSpacesTests {
+    @Test func windowsAtLaunchGoToTheirOwnSpacesDeskAndOnlyTheShownOneIsPlanned() {
+        var arranger = Arranger()
+        // Window 2 sits where window 1's tile lands: on window 1's desk it would be moved out of the tile.
+        let under = Rect(x: 100, y: 300, width: 200, height: 150)
+        _ = arranger.handle(inventory([display(space: 1)], [
+            info(1, frame: frameA, spaces: [1]), info(2, frame: under, spaces: [2]), info(3, frame: frameB, spaces: nil),
+        ]), now: .now)
+        #expect(arranger.deskKey(of: a) == desk(1))
+        #expect(arranger.deskKey(of: b) == desk(2))
+        #expect(arranger.deskKey(of: c) == desk(1), "a window with no Space data goes to the shown Space")
+        let frames = setFrames(arranger.handle(.command(.dock, focused: a), now: .now))
+        #expect(frames[a] != nil)
+        #expect(frames[b] == nil, "a window on a Space not shown was planned")
+    }
+
+    @Test func aFullscreenSpaceGetsNoDeskAndTheWindowReturnsToItsTile() async throws {
+        var harness = await Harness.onSpaceOne()
+        let tileA = try #require(await harness.frame(a)), tileB = try #require(await harness.frame(b))
+        await harness.fake.update(1) {
+            $0.space = 9
+            $0.snapshot.fullScreen = true
+        }
+        let enter = await harness.switchTo(9)
+        #expect(harness.arranger.world[desk(9)] == nil, "a fullscreen Space got a desk")
+        #expect(harness.arranger.deskKey(of: a) == desk(1))
+        #expect(harness.arranger.world[desk(1)]?.state(of: a) == .fullscreen)
+        #expect(setFrames(enter.effects).isEmpty, "planned while the fullscreen Space is shown: \(setFrames(enter.effects))")
+
+        await harness.fake.update(1) {
+            $0.space = 1
+            $0.snapshot.fullScreen = false
+        }
+        _ = await harness.switchTo(1)
+        #expect(harness.arranger.world[desk(1)]?.state(of: a) == .present)
+        #expect(await harness.frame(a) == tileA)
+        #expect(await harness.frame(b) == tileB)
+    }
+
+    @Test func aFloatingWindowOnAnotherSpaceMovesToThatSpacesDeskWithNoUndoStep() throws {
+        var arranger = Arranger()
+        _ = arranger.handle(inventory([display(space: 1)], [info(1, frame: frameA, spaces: [1])]), now: .now)
+        let history = arranger.history
+        _ = arranger.handle(.event(.windowChanged(info(1, frame: frameA, spaces: [2]))), now: .now)
+        #expect(arranger.deskKey(of: a) == desk(2))
+        #expect(arranger.world[desk(2)]?.desktop.frame(of: a) == frameA)
+        #expect(arranger.history == history)
+    }
+
+    @Test func aDockedWindowOnAnotherSpaceFloatsThereAndItsNeighbourReflows() throws {
+        var arranger = Arranger()
+        _ = arranger.handle(inventory([display(space: 1)], [info(1, frame: frameA, spaces: [1]), info(2, frame: frameB, spaces: [1])]), now: .now)
+        _ = arranger.handle(.command(.dock, focused: a), now: .now)
+        _ = arranger.handle(.command(.dock, focused: b), now: .now)
+        let history = arranger.history
+        let moved = Rect(x: 700, y: 100, width: 400, height: 300)
+        let frames = setFrames(arranger.handle(.event(.windowChanged(info(2, frame: moved, spaces: [2]))), now: .now))
+        #expect(arranger.deskKey(of: b) == desk(2))
+        #expect(arranger.world[desk(2)]?.desktop.frame(of: b) == moved)
+        #expect(arranger.world[desk(1)]?.tree.state(of: b) == nil)
+        #expect(frames[a] != nil, "the neighbour did not reflow")
+        #expect(frames[b] == nil)
+        #expect(arranger.history == history)
+    }
+
+    @Test func anEmptySpaceSetNeverMovesAWindow() {
+        var arranger = Arranger()
+        _ = arranger.handle(inventory([display(space: 1)], [info(1, frame: frameA, spaces: [1])]), now: .now)
+        _ = arranger.handle(.event(.windowChanged(info(1, frame: frameA, spaces: []))), now: .now)
+        #expect(arranger.deskKey(of: a) == desk(1))
+    }
+
+    @Test func aWindowMovedToAnotherDisplayFloatsOnItsShownDesk() throws {
+        var arranger = Arranger()
+        let e = DisplayInfo(uuid: "E", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080),
+                            visibleFrame: Rect(x: 1440, y: 25, width: 1920, height: 1055), currentSpaceID: 5)
+        _ = arranger.handle(inventory([display(space: 1), e], [info(1, frame: frameA, spaces: [1]), info(2, frame: frameB, spaces: [1])]), now: .now)
+        _ = arranger.handle(.command(.dock, focused: a), now: .now)
+        _ = arranger.handle(.command(.dock, focused: b), now: .now)
+        let onE = Rect(x: 1600, y: 100, width: 400, height: 300)
+        let frames = setFrames(arranger.handle(.event(.windowChanged(info(1, frame: onE, display: "E", spaces: [5]))), now: .now))
+        #expect(arranger.deskKey(of: a) == DeskKey(displayUUID: "E", spaceID: 5))
+        #expect(arranger.world[DeskKey(displayUUID: "E", spaceID: 5)]?.desktop.frame(of: a) == onE)
+        #expect(frames[b] != nil, "the old display's desk was not re-planned")
+        #expect(frames[a] == nil)
+    }
+
+    @Test func withSpacesOffEachDisplayHasOneDeskAndThatIsLoggedOnce() {
+        var arranger = Arranger()
+        let first = arranger.handle(inventory([display(space: nil)], [info(1, frame: frameA, spaces: nil)]), now: .now)
+        #expect(arranger.deskKey(of: a) == desk(nil))
+        #expect(first.filter { $0 == spacesOff }.count == 1)
+        let again = arranger.handle(inventory([display(space: nil)], [info(1, frame: frameA, spaces: nil)]), now: .now)
+        #expect(!again.contains(spacesOff))
+        #expect(!arranger.handle(.command(.dock, focused: a), now: .now).contains(spacesOff))
+    }
+
+    @Test func aDisplayChangeReplansTheShownDeskAndAGoneDisplayGetsNothing() throws {
+        var arranger = Arranger()
+        let e = DisplayInfo(uuid: "E", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080),
+                            visibleFrame: Rect(x: 1440, y: 25, width: 1920, height: 1055), currentSpaceID: 5)
+        let onE = Rect(x: 1600, y: 100, width: 400, height: 300)
+        let windows = [info(1, frame: frameA, spaces: [1]), info(3, frame: onE, display: "E", spaces: [5])]
+        _ = arranger.handle(inventory([display(space: 1), e], windows), now: .now)
+        _ = arranger.handle(.command(.dock, focused: a), now: .now)
+        _ = arranger.handle(.command(.dock, focused: c), now: .now)
+        var smaller = display(space: 1)
+        smaller.visibleFrame = Rect(x: 0, y: 25, width: 1000, height: 600)
+        let frames = setFrames(arranger.handle(inventory([smaller], windows), now: .now))
+        let tile = try #require(frames[a], "the shown desk was not re-planned")
+        #expect(inside(tile, smaller.visibleFrame))
+        #expect(frames[c] == nil, "a window on a display that went away got a frame")
+    }
+}
+
