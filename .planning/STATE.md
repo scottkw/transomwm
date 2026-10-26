@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-10-26T01:59:01.066Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-10-26T02:05:33.445Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 0a7ffa09f86a4b3b17c31b0ce68231e7a6b78549
+state_head: 952db3e8e4adaa06666335db27551119b21251f2
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 25
+  completed_plans: 26
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 3 of 17
+Plan: 4 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -81,6 +81,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P17 | 8 min | 2 tasks | 9 files |
 | Phase 3 P01 | 9 min | 2 tasks | 17 files |
 | Phase 03 P02 | 6min | 3 tasks | 7 files |
+| Phase 03 P03 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -171,6 +172,8 @@ Recent decisions affecting current work:
 - [Phase 3]: resolve: a desktopMinimum too big for the area makes every docked window unfit and gives the Desktop the whole area (no throw)
 - [Phase 03]: 03-02: rotate on a nested split flips every axis from the root, so Rotate is its own inverse (D-32)
 - [Phase 03]: 03-02: resizeBoundary delegates to resizeBetween(i, i+1) and now validates in every build
+- [Phase 03]: 03-03: A rekey onto an ID a desk already holds closes the old ID; a rekey to the same ID is a no-op
+- [Phase 03]: 03-03: World.edit = World.reflow + history push; OS facts and automatic floats use reflow/recordFloatingFrame, never edit
 
 ### Pending Todos
 
@@ -198,8 +201,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T01:59:00.744Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-10-26T02:05:33.127Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
 
 ## Deferred Verification
