@@ -326,7 +326,8 @@ extension ArrangerLifecycleTests {
         // The close is still recorded (and saved); no window is written.
         #expect(await harness.send(.event(.windowDestroyed(w1))) == [.save(.debounced)])
         let resumed = await harness.send(.event(.sessionPaused(false)))
-        #expect(resumed.count == 1)
+        // One write, plus the gap handles the closed window took with it (03-13).
+        #expect(resumed.filter { if case .gapHandles = $0 { false } else { true } }.count == 1)
         #expect(try #require(setFrames(resumed)[w2]).width > b.width)
     }
 

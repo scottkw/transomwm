@@ -45,6 +45,8 @@ import os
     private let dragPoller = DragFramePoller()
     /// The drop preview panels, one per display; made when tracking starts.
     private var previews: PreviewPresenter?
+    /// The gap handles (TILE-05). A panel is made only when a handle first shows.
+    private let gapPanels = GapHandlePanels()
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
@@ -56,6 +58,12 @@ import os
         self.store = store
         self.exclusions = exclusions
         arranger = Arranger(gap: gap)
+        gapPanels.onDrag = { [weak self] handle, delta, ended in
+            Task { [weak self] in
+                guard let self else { return }
+                await self.run(self.arranger.handle(.gapDrag(handle, delta: delta, ended: ended), now: .now))
+            }
+        }
     }
 
     /// A new gap from the Gaps submenu: applied at once, or on Resume while paused (D-27).
@@ -109,6 +117,7 @@ import os
     @discardableResult
     public func startTap() -> Bool {
         if previews == nil { previews = PreviewPresenter() }  // the panels exist before the first drag, never per drag
+
         startWatchdog()
         guard tap.start() else {
             if !loggedTapRefusal { logger.error("event tap refused; drags are not detected") }
@@ -337,8 +346,8 @@ import os
                 previews?.show(state, on: displayUUID)
             case .flashBlocked(let rect, let displayUUID):
                 previews?.flashBlocked(rect, on: displayUUID)
-            case .gapHandles:
-                break
+            case .gapHandles(let handles, let displayUUID):
+                gapPanels.show(handles, on: displayUUID)
             }
         }
     }

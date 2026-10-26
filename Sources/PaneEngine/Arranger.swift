@@ -121,6 +121,8 @@ public struct Arranger: Sendable {
     public var isDragging: Bool { drag?.kind == .move }
     /// Desk plans a drag hit-tests against, computed once per drag (and again after the World changes).
     private var dragPlans: [DragPlanKey: FramePlan] = [:]
+    /// The gap handles last sent per display, so only a change is sent again.
+    private var shownHandles: [String: [GapHandle]] = [:]
 
     private enum DragPlanKey: Hashable {
         case desk(DeskKey)
@@ -216,7 +218,7 @@ public struct Arranger: Sendable {
         case .setPaused(let reason, let on):
             let wasPaused = !pauseReasons.isEmpty
             if on { pauseReasons.insert(reason) } else { pauseReasons.remove(reason) }
-            return wasPaused && pauseReasons.isEmpty ? resume() : []
+            return on ? hideHandles() : wasPaused && pauseReasons.isEmpty ? resume() : []
         case .gap(let value):
             gap = value
             return replan()
@@ -233,8 +235,8 @@ public struct Arranger: Sendable {
                 deskKey(of: info.window) != nil
             else { return [] }
             return process(.command(isFloating(info.window) ? .dock : .float, focused: info.window), now: now)
-        case .gapDrag:
-            return []
+        case .gapDrag(let handle, let delta, let ended):
+            return gapDrag(handle, delta: delta, ended: ended)
         }
     }
 
@@ -367,6 +369,7 @@ public struct Arranger: Sendable {
 
     private mutating func handle(_ event: WindowEvent, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         var subject: WindowIdentity?
+        var hidden: [ArrangerEffect] = []
         do throws(LayoutError) {
             switch event {
             case .windowCreated(let info), .windowChanged(let info):
@@ -399,6 +402,11 @@ public struct Arranger: Sendable {
             case .spaceChanged(let uuid, let spaceID):
                 // Only the shown Space's desk is planned; the one left keeps its layout untouched (D-25).
                 if let i = displays.firstIndex(where: { $0.uuid == uuid }) { displays[i].currentSpaceID = spaceID }
+                // The old Space's handles go first; the re-plan below shows the new Space's (UI-SPEC Surface 3).
+                if shownHandles[uuid]?.isEmpty == false {
+                    shownHandles[uuid] = []
+                    hidden = [.gapHandles([], displayUUID: uuid)]
+                }
             case .windowFocused(let window):
                 focusOrder.removeAll { $0 == window.identity }
                 focusOrder.insert(window.identity, at: 0)
@@ -416,7 +424,7 @@ public struct Arranger: Sendable {
         } catch {
             return [.fault("ignored an event: \(error)")]
         }
-        guard case .windowCreated(let info) = event else { return replan() }
+        guard case .windowCreated(let info) = event else { return hidden + replan() }
         do throws(LayoutError) {
             return try takeFinderWindow(info, now: now) + replan()
         } catch {
@@ -718,7 +726,7 @@ public struct Arranger: Sendable {
     private mutating func togglePause() -> [ArrangerEffect] {
         guard !pauseReasons.isEmpty else {
             pauseReasons.insert(.user)
-            return []
+            return hideHandles()
         }
         pauseReasons.subtract([.user, .crashLoop])
         return pauseReasons.isEmpty ? resume() : []
@@ -807,10 +815,11 @@ public struct Arranger: Sendable {
     private mutating func follow(now: ContinuousClock.Instant) -> [ArrangerEffect] {
         if drag?.kind == .resize { return followResize() }
         guard var session = drag, session.kind == .move else { return [] }
+        let hidden = hideHandles()  // no gap handles while a window is dragged
         guard windows[session.window.identity]?.isExcluded == false, deskKey(of: session.window) != nil else { return endDrag() }
         let hover = hover(for: session)
-        guard session.update(hover: hover, at: now) else { return settleDrag(now: now) }
-        var effects: [ArrangerEffect] = []
+        guard session.update(hover: hover, at: now) else { return hidden + settleDrag(now: now) }
+        var effects = hidden
         if session.shown != nil {
             effects.append(.preview(nil, displayUUID: session.shownOn))
             session.shown = nil
@@ -1163,6 +1172,7 @@ public struct Arranger: Sendable {
         var faults: [ArrangerEffect] = []
         var planned: Set<WindowIdentity> = []
         var lost: [WindowRef] = []
+        var handles: [String: [GapHandle]] = [:]
         let mins = minimums
         for display in displays {
             let key = Self.key(display)
@@ -1177,6 +1187,7 @@ public struct Arranger: Sendable {
                 continue
             }
             guard let desk = world[key] else { continue }
+            if drag?.kind != .move { handles[display.uuid] = GapHandles.handles(tree: desk.tree, resolution: plan.resolution, gap: gap) }
             // Pane never moves an excluded app's window: no clamp, no park (D-29).
             var desired = plan.frames.filter { windows[$0.key.identity]?.isExcluded != true }
             let desktopHidden = desk.tree.isDesktopHidden == true
@@ -1217,7 +1228,43 @@ public struct Arranger: Sendable {
         parkRequested = parkRequested.filter { parkedNow.contains($0) || hidden.contains($0) }
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
-            + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))])
+            + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles)
+    }
+
+    /// Sends each display's handles that changed; a display with none planned (or gone) gets an empty list.
+    private mutating func show(_ handles: [String: [GapHandle]]) -> [ArrangerEffect] {
+        let uuids = Set(handles.keys).union(shownHandles.keys).sorted()
+        return uuids.compactMap { uuid in
+            let next = handles[uuid] ?? []
+            guard next != shownHandles[uuid] ?? [] else { return nil }
+            shownHandles[uuid] = next.isEmpty ? nil : next
+            return .gapHandles(next, displayUUID: uuid)
+        }
+    }
+
+    /// Hides every shown gap handle: paused, a window drag, a Space change (UI-SPEC Surface 3).
+    private mutating func hideHandles() -> [ArrangerEffect] {
+        show([:])
+    }
+
+    /// A gap-handle drag (TILE-05, D-07): until mouse-up both sides follow on a transient copy of the World; mouse-up
+    /// commits one `World.edit`. The handle's split names its desk (split IDs are unique in the World). Nothing moves
+    /// while paused or while a window is being dragged or resized.
+    private mutating func gapDrag(_ handle: GapHandle, delta: Double, ended: Bool) -> [ArrangerEffect] {
+        guard pauseReasons.isEmpty, !sessionPaused, drag?.kind == nil, delta.isFinite,
+            let key = displays.map(Self.key).first(where: { key in
+                if case .split? = world[key]?.tree.node(handle.split) { true } else { false }
+            })
+        else { return [] }
+        let move = BoundaryMove(split: handle.split, first: handle.first, second: handle.second, points: delta)
+        do throws(LayoutError) {
+            guard let change = try boundaryChange(key, [move]) else { return replan() }
+            guard ended else { return try replan(with: change, on: key) }
+            try world.edit(key, history: &history, change)
+            return replan()
+        } catch {
+            return [.fault("could not drag the gap of \(handle.split): \(error)")] + replan()
+        }
     }
 
     /// Plans `key`'s desk after floating every docked window it has no room for (D-26). A floated window's minimum
