@@ -163,7 +163,14 @@ public struct Arranger: Sendable {
     private mutating func process(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch input {
         case .inventory(var inventory):
-            displays = inventory.displays
+            // A Space lookup that answers 0 or switches off mid-session keeps each display's last shown Space, so the
+            // desks keyed by it are not stranded and no Space-less phantom desk appears (WR-01).
+            let previous = displays
+            displays = inventory.displays.map { display in
+                var display = display
+                if display.currentSpaceID == nil { display.currentSpaceID = previous.first { $0.uuid == display.uuid }?.currentSpaceID }
+                return display
+            }
             sessionPaused = inventory.sessionPaused
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
             guard let restore = pendingRestore else { return place(inventory) }
@@ -463,7 +470,7 @@ public struct Arranger: Sendable {
                 sessionPaused = paused
             case .spaceChanged(let uuid, let spaceID):
                 // Only the shown Space's desk is planned; the one left keeps its layout untouched (D-25).
-                if let i = displays.firstIndex(where: { $0.uuid == uuid }) { displays[i].currentSpaceID = spaceID }
+                if let i = displays.firstIndex(where: { $0.uuid == uuid }), let spaceID { displays[i].currentSpaceID = spaceID }  // WR-01
                 // The old Space's handles go first; the re-plan below shows the new Space's (UI-SPEC Surface 3).
                 if shownHandles[uuid]?.isEmpty == false {
                     shownHandles[uuid] = []

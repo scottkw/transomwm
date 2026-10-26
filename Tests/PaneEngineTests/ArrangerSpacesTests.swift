@@ -224,6 +224,24 @@ extension ArrangerSpacesTests {
         #expect(!arranger.handle(.command(.dock, focused: a), now: .now).contains(spacesOff))
     }
 
+    /// WR-01: a Space lookup that answers 0 or switches off mid-session keeps the display's last shown Space, so its
+    /// desk is still planned, commands on it act, and a new window joins it instead of a phantom Space-less desk.
+    @Test func aSpaceLookupLostMidSessionKeepsTheLastShownSpacesDesk() throws {
+        var arranger = Arranger()
+        _ = arranger.handle(inventory([display(space: 1)], [info(1, frame: frameA, spaces: [1]), info(2, frame: frameB, spaces: [1])]), now: .now)
+        _ = arranger.handle(.command(.dock, focused: a), now: .now)
+
+        _ = arranger.handle(inventory([display(space: nil)], [info(1, frame: frameA, spaces: nil), info(2, frame: frameB, spaces: nil)]), now: .now)
+        _ = arranger.handle(.event(.spaceChanged(displayUUID: "D", spaceID: nil)), now: .now)
+        _ = arranger.handle(.event(.windowCreated(info(3, frame: Rect(x: 900, y: 500, width: 200, height: 150), spaces: nil))), now: .now)
+
+        #expect(arranger.displays.first?.currentSpaceID == 1)
+        #expect(arranger.deskKey(of: c) == desk(1), "the new window went to a phantom desk")
+        #expect(arranger.world[desk(nil)] == nil)
+        let docked = setFrames(arranger.handle(.command(.dock, focused: b), now: .now))
+        #expect(docked[b] != nil, "the stranded desk could not be docked into")
+    }
+
     @Test func aDisplayChangeReplansTheShownDeskAndAGoneDisplayGetsNothing() throws {
         var arranger = Arranger()
         let e = DisplayInfo(uuid: "E", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080),
