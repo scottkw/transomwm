@@ -305,3 +305,78 @@ extension ArrangerResizeTests {
         #expect(try plan(arranger, mins: mins).frames == before.frames)
     }
 }
+
+/// G-03-3 H2: until mouse-up every replan plans the live gap move, so a mid-drag event never writes the pre-drag desk.
+extension ArrangerResizeTests {
+    /// A live +50 drag of the a|b gap of `row`: the pre-drag plan, the live frames and the handle.
+    private func liveDrag(_ arranger: inout Arranger) throws -> (before: FramePlan, live: [WindowRef: Rect], handle: GapHandle) {
+        let before = try plan(arranger)
+        let h = try handle(arranger, 0, 1)
+        let live = setFrames(arranger.handle(.gapDrag(h, delta: 50, ended: false), now: .now))
+        #expect(live[a] != nil && live[b] != nil, "the drag moved nothing: \(live)")
+        return (before, live, h)
+    }
+
+    /// No pre-drag tile and no pre-drag handle is sent; whatever is written is the live frame.
+    private func expectLive(_ effects: [ArrangerEffect], _ drag: (before: FramePlan, live: [WindowRef: Rect], handle: GapHandle)) {
+        let frames = setFrames(effects)
+        for window in [a, b] {
+            #expect(frames[window] != drag.before.frames[window], "\(window) went back to its pre-drag tile: \(effects)")
+            if let frame = frames[window] { #expect(frame == drag.live[window], "\(window) left its live tile: \(frame)") }
+        }
+        for handles in gapHandles(effects) {
+            let moved = handles.first { $0.split == drag.handle.split && $0.first == 0 }
+            #expect(moved.map { near($0.rect.minX, drag.handle.rect.minX + 50) } ?? true, "the handle went back: \(handles)")
+        }
+    }
+
+    @Test func aWindowChangeMidDragKeepsTheLiveLayout() throws {
+        var arranger = try arranger(row)
+        let drag = try liveDrag(&arranger)
+        let info = WindowInfo(window: b, frame: try #require(drag.live[b]), state: .present, displayUUID: "main")
+        expectLive(arranger.handle(.event(.windowChanged(info)), now: .now), drag)
+
+        _ = arranger.handle(.gapDrag(drag.handle, delta: 50, ended: true), now: .now)
+        #expect(arranger.history.depth(for: key) == 1)
+        let committed = try plan(arranger)
+        #expect(committed.frames[a] == drag.live[a] && committed.frames[b] == drag.live[b], "mouse-up committed something else")
+    }
+
+    @Test func anOffPlanFrameAndACorrectionTickMidDragKeepTheLiveLayout() throws {
+        var arranger = try arranger(row)
+        let drag = try liveDrag(&arranger)
+        let ta = try #require(drag.before.frames[a])
+        let start = ContinuousClock.now
+        let stale = Rect(x: ta.x, y: ta.y, width: ta.width + 30, height: ta.height)
+        expectLive(arranger.handle(.event(.windowResized(a, stale)), now: start), drag)
+        let staler = Rect(x: ta.x, y: ta.y, width: ta.width + 20, height: ta.height)
+        expectLive(arranger.handle(.event(.windowResized(a, staler)), now: start + .milliseconds(100)), drag)
+        expectLive(arranger.handle(.tick, now: start + .seconds(2)), drag)
+
+        _ = arranger.handle(.gapDrag(drag.handle, delta: 50, ended: true), now: start + .seconds(2))
+        #expect(arranger.history.depth(for: key) == 1)
+        #expect(try plan(arranger).frames[a] == drag.live[a])
+    }
+
+    @Test func anEndedEventWhilePausedClearsTheLiveMove() throws {
+        var arranger = try arranger(row)
+        let drag = try liveDrag(&arranger)
+        _ = arranger.handle(.setPaused(.user, true), now: .now)
+        #expect(setFrames(arranger.handle(.gapDrag(drag.handle, delta: 50, ended: true), now: .now)).isEmpty)
+        #expect(arranger.history.depth(for: key) == 0)
+        let resumed = setFrames(arranger.handle(.setPaused(.user, false), now: .now))
+        #expect(try plan(arranger) == drag.before)
+        #expect(resumed[a] == drag.before.frames[a] && resumed[b] == drag.before.frames[b], "the stale live move was applied: \(resumed)")
+    }
+
+    @Test func aLiveMoveWhoseSplitIsGoneIsDropped() throws {
+        var arranger = try arranger(corner)
+        let h = try handle(arranger, 0, 1, parentOf: a)
+        #expect(!setFrames(arranger.handle(.gapDrag(h, delta: 50, ended: false), now: .now)).isEmpty)
+        let closed = arranger.handle(.event(.windowDestroyed(a)), now: .now)
+        #expect(!closed.contains { if case .fault = $0 { true } else { false } }, "\(closed)")
+        #expect(setFrames(closed)[b] == (try plan(arranger).frames[b]))
+        let later = arranger.handle(.tick, now: .now + .seconds(2))
+        #expect(!later.contains { if case .fault = $0 { true } else { false } }, "\(later)")
+    }
+}
