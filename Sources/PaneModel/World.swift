@@ -124,8 +124,25 @@ public struct World: Codable, Equatable, Sendable {
 
     public subscript(key: DeskKey) -> Desk? { desks[key] }
 
+    /// A copy with every docked, tabbed and floating window's `titleHint` emptied, for layout.json: titles are personal
+    /// data and Phase 3 re-attaches by identity only (T-03-17). Equal to `self`, since WindowRef equality is identity-only.
     public func withoutTitleHints() -> World {
-        self  // RED stub
+        func untitled(_ window: WindowRef) -> WindowRef {
+            WindowRef(identity: window.identity, axIdentifier: window.axIdentifier, creationOrder: window.creationOrder)
+        }
+        var copy = self
+        for (key, var desk) in desks {
+            for (id, node) in desk.tree.nodes {
+                switch node {
+                case .panel(let window): desk.tree.nodes[id] = .panel(untitled(window))
+                case .tabs(let windows, let selected): desk.tree.nodes[id] = .tabs(windows: windows.map(untitled), selected: selected)
+                case .split, .desktop: break
+                }
+            }
+            desk.desktop.mapWindows(untitled)
+            copy.desks[key] = desk
+        }
+        return copy
     }
 
     public mutating func addDesk(_ key: DeskKey) throws(LayoutError) {

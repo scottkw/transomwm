@@ -51,6 +51,11 @@ public struct DesktopLayer: Codable, Equatable, Sendable {
         windows[index] = FloatingWindow(window: to, frame: windows[index].frame, state: windows[index].state)
     }
 
+    /// Replaces each window's ref with `change(ref)`, which must keep its identity (World.withoutTitleHints).
+    mutating func mapWindows(_ change: (WindowRef) -> WindowRef) {
+        windows = windows.map { FloatingWindow(window: change($0.window), frame: $0.frame, state: $0.state) }
+    }
+
     public func frame(of window: WindowRef) -> Rect? {
         index(of: window).map { windows[$0].frame }
     }
