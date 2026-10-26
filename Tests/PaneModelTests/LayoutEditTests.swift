@@ -129,4 +129,50 @@ private func worldABDesktop() throws -> World {
         #expect(t == original)
         #expect(throws: LayoutError.notASplit(n(2))) { try t.rotate(split: n(2)) }
     }
+
+    // MARK: resizeChild and resizeBetween (TILE-13, TILE-05)
+
+    private func three(_ w: [Double]) throws -> LayoutTree {
+        try tree(root: 1, [1: .split(axis: .horizontal, children: [n(2), n(3), n(4)], weights: w), 2: .panel(a), 3: .panel(b), 4: .panel(c)])
+    }
+
+    @Test func resizeChildTakesFromSiblingsInProportion() throws {
+        var t = try three([0.5, 0.25, 0.25])
+        try t.resizeChild(in: n(1), index: 0, by: 0.1)
+        expectWeights(weights(t, 1), [0.6, 0.2, 0.2])
+        t = try three([0.5, 0.25, 0.25])
+        try t.resizeChild(in: n(1), index: 0, by: -0.1)
+        expectWeights(weights(t, 1), [0.4, 0.3, 0.3])
+    }
+
+    @Test func resizeChildClampsSiblingsAndThrowsAtTheLimit() throws {
+        var t = try three([0.5, 0.48, 0.02])
+        try t.resizeChild(in: n(1), index: 0, by: 0.3)
+        expectWeights(weights(t, 1), [0.8, 0.19, 0.01])
+        try t.validate()
+
+        let full = try three([0.98, 0.01, 0.01])
+        t = full
+        #expect(throws: LayoutError.atSizeLimit(n(1))) { try t.resizeChild(in: n(1), index: 0, by: 0.1) }
+        #expect(t == full)
+        let tiny = try three([0.01, 0.5, 0.49])
+        t = tiny
+        #expect(throws: LayoutError.atSizeLimit(n(1))) { try t.resizeChild(in: n(1), index: 0, by: -0.1) }
+        #expect(t == tiny)
+        #expect(throws: LayoutError.invalidBoundary(split: n(1), index: 3)) { try t.resizeChild(in: n(1), index: 3, by: 0.1) }
+        #expect(throws: LayoutError.notASplit(n(2))) { try t.resizeChild(in: n(2), index: 0, by: 0.1) }
+    }
+
+    @Test func resizeBetweenLeavesOtherChildrenAlone() throws {
+        var t = try three([0.4, 0.2, 0.4])
+        try t.resizeBetween(in: n(1), 0, 2, by: 0.1)
+        expectWeights(weights(t, 1), [0.5, 0.2, 0.3])
+        #expect(weights(t, 1)[1] == 0.2)
+        try t.resizeBetween(in: n(1), 0, 2, by: 1)
+        expectWeights(weights(t, 1), [0.79, 0.2, 0.01])
+        try t.resizeBetween(in: n(1), 0, 2, by: -1)
+        expectWeights(weights(t, 1), [0.01, 0.2, 0.79])
+        #expect(throws: LayoutError.invalidBoundary(split: n(1), index: 0)) { try t.resizeBetween(in: n(1), 0, 3, by: 0.1) }
+        #expect(throws: LayoutError.invalidBoundary(split: n(1), index: 1)) { try t.resizeBetween(in: n(1), 1, 1, by: 0.1) }
+    }
 }
