@@ -1,16 +1,21 @@
 import AppKit
+import PaneEngine
 
 /// Pane's application delegate: the quit restore (SAFE-01, D-15, RESEARCH Pattern 11).
 @MainActor public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let restore: () -> Void
     private let writeCleanExit: () -> Void
     private let reply: (Bool) -> Void
+    private let open: (Command) -> Void
+    private let urlScheme: String?
     private var sigterm: (any DispatchSourceSignal)?
 
     init(
-        restore: @escaping () -> Void, writeCleanExit: @escaping () -> Void,
-        reply: @escaping (Bool) -> Void = { NSApp.reply(toApplicationShouldTerminate: $0) }
+        restore: @escaping () -> Void, writeCleanExit: @escaping () -> Void, open: @escaping (Command) -> Void,
+        urlScheme: String?, reply: @escaping (Bool) -> Void = { NSApp.reply(toApplicationShouldTerminate: $0) }
     ) {
+        self.open = open
+        self.urlScheme = urlScheme
         self.restore = restore
         self.writeCleanExit = writeCleanExit
         self.reply = reply
@@ -37,4 +42,6 @@ import AppKit
         source.resume()
         sigterm = source
     }
+
+    public func application(_ application: NSApplication, open urls: [URL]) {}  // RED stub
 }

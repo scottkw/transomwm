@@ -289,6 +289,12 @@ import os
         return CommandContext(focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady())
     }
 
+    public var beep: () -> Void = { NSSound.beep() }
+
+    public func dispatch(_ command: Command, from source: CommandSource) async {
+        await dispatch(command)  // RED stub
+    }
+
     /// Every route (hotkey, menu item) calls this. A command the availability rule refuses beeps (UI-SPEC: no
     /// hotkey fails silently).
     public func dispatch(_ command: Command) async {
@@ -300,7 +306,7 @@ import os
         }
         let context = commandContext()
         guard arranger.availability(command, context: context) else {
-            NSSound.beep()
+            beep()
             return
         }
         await dispatch(command, focused: context.focused)
@@ -459,6 +465,8 @@ import os
         NSRunningApplication(processIdentifier: window.pid)?.localizedName ?? window.bundleID
     }
 }
+
+public enum CommandSource { case hotkey, menu, url }
 
 /// One pending wake-up: `set` replaces any earlier one, so only the latest instant fires.
 @MainActor final class WakeTimer {
