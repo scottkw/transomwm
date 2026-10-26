@@ -60,6 +60,8 @@ public struct WindowTracker: Sendable {
         }
         var seen: Set<WindowIdentity> = []
         var created: Set<WindowIdentity> = []
+        // Reported after CloseRule, so a window going fullscreen carries its new state with its new Space (WIN-07).
+        var changed: [WindowIdentity] = []
         let cgByID = Dictionary(context.cgWindows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
         // A failed AXWindows says nothing about which tab is showing, so groups are only re-resolved on a full answer.
         var tabs = TabResolution()
@@ -152,6 +154,7 @@ public struct WindowTracker: Sendable {
             info.tabCount = tabs.tabCount[identity] ?? 1
             info.displayUUID = Coordinates.displayUUID(for: frame, among: context.displays)
             info.isExcluded = excluded.contains(identity.bundleID.lowercased())
+            info.spaces = context.windowSpaces?[windowID]
             if old == nil, let hint = bundleHints[identity.bundleID] {
                 learner.seed(identity, minimum: hint)
                 info.learnedMinimum = learner.minimum(for: identity)
@@ -179,9 +182,9 @@ public struct WindowTracker: Sendable {
             if old.frame.origin != frame.origin { events.append(.windowMoved(ref, frame)) }
             if old.frame.size != frame.size { events.append(.windowResized(ref, frame)) }
             if old.window.titleHint != ref.titleHint || old.kind != kind || old.tabCount != info.tabCount
-                || old.displayUUID != info.displayUUID || old.learnedMinimum != info.learnedMinimum
+                || old.displayUUID != info.displayUUID || old.learnedMinimum != info.learnedMinimum || old.spaces != info.spaces
             {
-                events.append(.windowChanged(info))
+                changed.append(identity)
             }
         }
         learner.dropDue(pid: app.pid, at: context.now)
@@ -198,6 +201,7 @@ public struct WindowTracker: Sendable {
             case .failure: return .otherFailure
             }
         }
+        events += changed.compactMap { windows[$0].map { .windowChanged($0) } }
         // A pending window that left the list was never reported, so it is dropped silently.
         if app.listFailure == nil {
             for identity in pending.keys where identity.pid == app.pid && !seen.contains(identity) {

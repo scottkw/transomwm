@@ -33,7 +33,10 @@ import os
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
-                self.onInventory?(await system.inventory())
+                let inventory = await system.inventory()
+                // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03).
+                if case .displaysChanged = event { await self.run(self.arranger.handle(.inventory(inventory), now: .now)) }
+                self.onInventory?(inventory)
             }
         }
     }

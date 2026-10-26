@@ -36,6 +36,8 @@ public struct Arranger: Sendable {
     private var lastRequested: [WindowIdentity: Rect] = [:]
     /// Locked or asleep: nothing is written until the session resumes, then every visible desk is re-planned.
     private var sessionPaused = false
+    /// The Spaces-off fallback (A7) is reported once per session.
+    private var reportedSpacesOff = false
 
     public init(gap: Double = 8) {
         self.gap = gap
@@ -48,8 +50,16 @@ public struct Arranger: Sendable {
             sessionPaused = inventory.sessionPaused
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
             var faults: [ArrangerEffect] = []
+            if !reportedSpacesOff, !displays.isEmpty, displays.allSatisfy({ $0.currentSpaceID == nil }) {
+                reportedSpacesOff = true
+                faults.append(.info("Spaces lookup off: one layout per display"))
+            }
+            // A display change arrives as a new inventory: windows whose display or Space changed are re-homed first.
             for info in inventory.windows {
-                do throws(LayoutError) { try admit(info) } catch { faults.append(.fault("could not add \(info.window): \(error)")) }
+                do throws(LayoutError) {
+                    try rehome(info)
+                    try admit(info)
+                } catch { faults.append(.fault("could not add \(info.window): \(error)")) }
             }
             return faults + replan()
         case .event(let event):
@@ -134,6 +144,7 @@ public struct Arranger: Sendable {
                 break
             }
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
+            if case .windowChanged(let info) = event { try rehome(info) }
             // A window that just became dockable, present or known floats on its display's Desktop (D-24).
             if let subject, let info = windows[subject] { try admit(info) }
         } catch {
@@ -147,15 +158,43 @@ public struct Arranger: Sendable {
         lastRequested[window.identity] = nil
     }
 
-    /// Puts a dockable, present, non-excluded window that no desk holds on its display's Desktop layer, at its own
-    /// frame. Never docks it (TILE-07). Creates the desk the first time such a window is seen there.
+    /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
+    /// frame. Never docks it (TILE-07). Creates the desk the first time such a window is seen there, so a fullscreen
+    /// Space, which holds no present window, never gets one (WIN-07).
     private mutating func admit(_ info: WindowInfo) throws(LayoutError) {
         guard info.kind == .dockable, !info.isExcluded, info.state == .present, deskKey(of: info.window) == nil,
-            let display = displays.first(where: { $0.uuid == info.displayUUID })
+            let key = home(of: info)
         else { return }
-        let key = Self.key(display)
         if world[key] == nil { try world.addDesk(key) }
         try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
+    }
+
+    /// The desk a window belongs on (D-25): its display's, on the shown Space unless its known Spaces exclude that
+    /// one, then on the lowest of them. Nil for a window on no known display.
+    private func home(of info: WindowInfo) -> DeskKey? {
+        guard let display = displays.first(where: { $0.uuid == info.displayUUID }) else { return nil }
+        guard let shown = display.currentSpaceID, let spaces = info.spaces, !spaces.contains(shown), let lowest = spaces.min()
+        else { return Self.key(display) }
+        return DeskKey(displayUUID: display.uuid, spaceID: lowest)
+    }
+
+    /// A present window whose display changed, or whose known, non-empty Spaces no longer include its desk's, floats
+    /// on its home desk at its current frame, so no layout plans a window that is not there (D-25). An OS fact: it
+    /// goes through `World.reflow`, with no undo step. An empty set (a hidden tab, 02-14) never moves a window.
+    private mutating func rehome(_ info: WindowInfo) throws(LayoutError) {
+        guard info.state == .present, let from = deskKey(of: info.window), world[from]?.state(of: info.window) == .present,
+            let to = home(of: info), to != from
+        else { return }
+        let spaces = info.spaces ?? []
+        let leftSpace = from.spaceID.map { !spaces.isEmpty && !spaces.contains($0) } ?? false
+        guard to.displayUUID != from.displayUUID || leftSpace else { return }
+        var candidate = world
+        try candidate.reflow(from) { desk, _ throws(LayoutError) in
+            if desk.desktop.contains(info.window) { try desk.desktop.remove(info.window) } else { try desk.tree.remove(info.window) }
+        }
+        if candidate[to] == nil { try candidate.addDesk(to) }
+        try candidate.reflow(to) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
+        world = candidate
     }
 
     // MARK: Commands
