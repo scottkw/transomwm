@@ -54,6 +54,12 @@ public enum Recovery {
         mode == .normal ? nil : launchedAt + crashLoopWindow
     }
 
+    public static func terminationPlan(
+        windows: [WindowInfo], homeFrames: [WindowIdentity: Rect], displays: [DisplayInfo], docked: Set<WindowIdentity>
+    ) -> [WindowRef: Rect] {
+        [:]  // RED stub
+    }
+
     public static func launchMode(previous: SessionRecord?) -> LaunchMode {
         guard let previous, !previous.cleanExit else { return .normal }
         return previous.recoveryLaunch && !previous.survivedMinute ? .crashLoop : .recovery

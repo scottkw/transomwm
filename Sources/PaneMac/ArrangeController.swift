@@ -392,6 +392,11 @@ import os
         NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser)
     }
 
+    @discardableResult
+    public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
+        0  // RED stub
+    }
+
     /// Writes layout.json one last time with `cleanExit: true` when Pane quits normally. Nothing is written if
     /// tracking never started, so a quit before the first sweep cannot replace a saved layout with an empty one.
     public func writeCleanExit() {

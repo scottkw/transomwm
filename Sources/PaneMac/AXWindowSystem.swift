@@ -213,6 +213,10 @@ import os
         }
     }
 
+    public func restoreForTermination(_ frames: [PaneModel.WindowRef: Rect], deadline: DispatchTime) -> Int {
+        0  // RED stub
+    }
+
     /// AXMain and AXRaise on the app's thread, then activation on main. macOS 14+ activation is cooperative, so
     /// when the app is still not frontmost about 200 ms later its AXFrontmost is set instead (Pattern 15).
     private func focus(_ windowID: UInt32, of ref: PaneModel.WindowRef, on thread: AXAppThread) async {

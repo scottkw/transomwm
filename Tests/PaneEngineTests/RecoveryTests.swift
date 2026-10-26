@@ -86,4 +86,60 @@ private let side = DisplayInfo(
         #expect(Recovery.survivedMinuteDue(launchedAt: launched, mode: .crashLoop) == launched + .seconds(60))
         #expect(Recovery.survivedMinuteDue(launchedAt: launched, mode: .normal) == nil)
     }
+
+    // MARK: Quit restore (SAFE-01, D-15)
+
+    private static func window(_ id: UInt32) -> WindowRef {
+        WindowRef(identity: WindowIdentity(windowID: id, pid: 900, bundleID: "com.example.x"))
+    }
+
+    private static func info(_ window: WindowRef, _ frame: Rect, display: String = "main", excluded: Bool = false) -> WindowInfo {
+        WindowInfo(window: window, frame: frame, state: .present, displayUUID: display, kind: .dockable, isExcluded: excluded)
+    }
+
+    @Test func aParkedFloatingWindowGoesToItsHomeFrameClampedOnScreen() {
+        let parked = Self.window(1)
+        let home = Rect(x: 1300, y: 700, width: 400, height: 300)
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(parked, main.parkedFrame(size: Size(width: 400, height: 300)))], homeFrames: [parked.identity: home],
+            displays: [main], docked: [])
+        #expect(plan == [parked: Rect(x: 1040, y: 600, width: 400, height: 300)])
+    }
+
+    /// The park corner of the main display can be mostly visible on a display to its right: the home frame still wins,
+    /// on the display it is on.
+    @Test func aParkedWindowGoesHomeEvenWhenItsParkCornerShowsOnANeighbouringDisplay() {
+        let parked = Self.window(1)
+        let home = Rect(x: 100, y: 100, width: 400, height: 300)
+        let corner = main.parkedFrame(size: Size(width: 400, height: 300))
+        #expect(!Recovery.isStranded(corner, displays: [main, side]))
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(parked, corner, display: "side")], homeFrames: [parked.identity: home], displays: [main, side], docked: [])
+        #expect(plan == [parked: home])
+    }
+
+    @Test func anOffScreenFloatingWindowWithNoHomeIsCentredOnItsDisplay() {
+        let lost = Self.window(2)
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(lost, Rect(x: 10000, y: 50, width: 400, height: 300))], homeFrames: [:], displays: [main], docked: [])
+        #expect(plan == [lost: Rect(x: 520, y: 312.5, width: 400, height: 300)])
+    }
+
+    @Test func aDockedOnScreenWindowAndAnOnScreenFloatingOneAreLeftAlone() {
+        let docked = Self.window(3), floating = Self.window(4)
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(docked, Rect(x: 0, y: 25, width: 720, height: 875)), Self.info(floating, Rect(x: 800, y: 100, width: 300, height: 200))],
+            homeFrames: [:], displays: [main], docked: [docked.identity])
+        #expect(plan.isEmpty)
+    }
+
+    @Test func anExcludedOrNeverDockWindowIsNeverMoved() {
+        let excluded = Self.window(5), panel = Self.window(6)
+        var never = Self.info(panel, Rect(x: 10000, y: 50, width: 400, height: 300))
+        never.kind = .neverDock(.subrole)
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(excluded, Rect(x: 10000, y: 50, width: 400, height: 300), excluded: true), never],
+            homeFrames: [excluded.identity: Rect(x: 100, y: 100, width: 400, height: 300)], displays: [main], docked: [])
+        #expect(plan.isEmpty)
+    }
 }

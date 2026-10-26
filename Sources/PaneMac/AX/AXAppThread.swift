@@ -318,6 +318,10 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         }
     }
 
+    func writeForTermination(windowID: UInt32, rect: Rect, deadline: DispatchTime) -> Bool {
+        false  // RED stub
+    }
+
     /// The job token: true once `stop()` was called.
     private var isStopped: Bool { stopped.withLock { $0 } }
 
