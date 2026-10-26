@@ -41,6 +41,9 @@ public enum ArrangerEffect: Equatable, Sendable {
 /// OS facts change the World through `LifecycleSync` and `World.reflow`, user commands through `World.edit`.
 public struct Arranger: Sendable {
     public static let noRoom = "Not enough room to dock here"
+    public static let finderBundleID = "com.apple.finder"
+    /// How long ⌃⌥⌘N waits for Finder's new window (D-14).
+    public static let finderWait: Duration = .seconds(2)
 
     public private(set) var world = World()
     public private(set) var history = UndoHistory()
@@ -70,6 +73,17 @@ public struct Arranger: Sendable {
     private var parkRequested: Set<WindowIdentity> = []
     /// Window identities, the most recently focused first: focus ties go to the earliest (D-11).
     public private(set) var focusOrder: [WindowIdentity] = []
+    /// The split ⌃⌥⌘N asked for, waiting for Finder's new window; a newer one replaces it.
+    private var finderExpectation: FinderExpectation?
+
+    private struct FinderExpectation: Sendable {
+        let key: DeskKey
+        let target: NodeID
+        let edge: Edge
+        /// Finder windows already tracked at the press: a change to one of them is never the new window.
+        let known: Set<WindowIdentity>
+        let deadline: ContinuousClock.Instant
+    }
 
     public init(gap: Double = 8) {
         self.gap = gap
@@ -109,7 +123,8 @@ public struct Arranger: Sendable {
                 case (.undo, _): return try undo(focused)
                 case (.toggleDesktop, _): return try toggleDesktop(focused)
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
-                case (.dock, nil), (.float, nil), (.focus, nil), (.finderSplit, _): return [.beep]
+                case (.finderSplit, _): return try finderSplit(focused, now: now)
+                case (.dock, nil), (.float, nil), (.focus, nil): return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -202,7 +217,7 @@ public struct Arranger: Sendable {
         case .focus:
             return focused.flatMap(deskKey(of:)) != nil
         case .finderSplit:
-            return false
+            return targetKey(focused).flatMap(display(for:)) != nil
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }
@@ -264,7 +279,12 @@ public struct Arranger: Sendable {
         } catch {
             return [.fault("ignored an event: \(error)")]
         }
-        return replan()
+        guard case .windowCreated(let info) = event else { return replan() }
+        do throws(LayoutError) {
+            return try takeFinderWindow(info, now: now) + replan()
+        } catch {
+            return [.fault("could not dock the new Finder window: \(error)")] + replan()
+        }
     }
 
     private mutating func forget(_ window: WindowRef) {
@@ -311,6 +331,7 @@ public struct Arranger: Sendable {
 
     /// Corrects the docked windows whose second has passed and that are still off their tile.
     private mutating func tick(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        if let expected = finderExpectation, now >= expected.deadline { finderExpectation = nil }
         let due = pendingCorrections.filter { id in lastCorrection[id].map { now >= $0 + Self.correctionInterval } ?? true }
         pendingCorrections.subtract(due)
         let off = due.filter { id in
@@ -331,8 +352,9 @@ public struct Arranger: Sendable {
     }
 
     /// The earliest instant a waiting correction is due.
+    /// The earliest instant a waiting correction or the Finder deadline is due: the shell keeps one wake only.
     private var nextWake: ContinuousClock.Instant? {
-        pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } }.min()
+        (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } } + [finderExpectation?.deadline].compactMap { $0 }).min()
     }
 
     /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
@@ -476,6 +498,52 @@ public struct Arranger: Sendable {
         case .split?, nil: target = nil
         }
         return target.map { [.perform([.focus($0)])] } ?? [.beep]
+    }
+
+    /// Waits for a new Finder window to split the current tile along its longer side: width >= height splits to the
+    /// right, otherwise below (D-14, TILE-17). The current tile is the focused docked window's; with a floating focused
+    /// window, or none, it is the Desktop tile of that desk (or of the main display's visible desk).
+    private mutating func finderSplit(_ focused: WindowRef?, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = targetKey(focused), let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let target = focused.flatMap { world[key]?.tree.leaf(containing: $0) } ?? .desktop
+        let rect: Rect?
+        if let desk = world[key] {
+            rect = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution.nodeRects[target]
+        } else {
+            rect = area  // no desk there yet: it is all Desktop
+        }
+        guard let rect else { return [.beep] }  // a hidden Desktop has no tile to split
+        finderExpectation = FinderExpectation(
+            key: key, target: target, edge: rect.width >= rect.height ? .right : .bottom,
+            known: Set(windows.keys.filter { $0.bundleID == Self.finderBundleID }), deadline: now + Self.finderWait)
+        return [.openFinderWindow] + (nextWake.map { [.wake(at: $0)] } ?? [])
+    }
+
+    /// Docks the first Finder window created before the deadline that was not tracked at the press, in the split the
+    /// press asked for. A dock that would leave any window without room is refused; the window keeps floating (D-26).
+    private mutating func takeFinderWindow(_ info: WindowInfo, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
+        guard let expected = finderExpectation, info.window.bundleID == Self.finderBundleID, !expected.known.contains(info.window.identity),
+            now < expected.deadline, let from = deskKey(of: info.window), world[from]?.desktop.contains(info.window) == true,
+            let area = display(for: expected.key)?.visibleFrame
+        else { return [] }
+        finderExpectation = nil
+        let drop = DropTarget.tile(expected.target, .edge(expected.edge))
+        var candidate = world, candidateHistory = history
+        // Finder may open the window on another display: it leaves that Desktop first (an OS fact, no undo step).
+        if from != expected.key {
+            try candidate.reflow(from) { desk, _ throws(LayoutError) in try desk.desktop.remove(info.window) }
+            if candidate[expected.key] == nil { try candidate.addDesk(expected.key) }
+        }
+        try candidate.edit(expected.key, history: &candidateHistory) { desk, ids throws(LayoutError) in
+            if desk.desktop.contains(info.window) { try desk.desktop.remove(info.window) }
+            try desk.tree.applyDrop(drop, window: info.window, ids: &ids)
+        }
+        guard let docked = candidate[expected.key], try Planner.plan(desk: docked, area: area, gap: gap, mins: minimums).unfit.isEmpty else {
+            return [.beep, .announce(Self.noRoom)]
+        }
+        world = candidate
+        history = candidateHistory
+        return []
     }
 
     /// The change that shows a desk's Desktop tile, with each floating window that has a home frame back at it.

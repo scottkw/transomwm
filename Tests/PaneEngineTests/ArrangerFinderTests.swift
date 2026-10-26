@@ -75,7 +75,8 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(scene.isDocked(n), "the new Finder window did not dock")
         let left = try scene.tile(of: a), right = try scene.tile(of: n)
         #expect(right.minX > left.maxX - 1 && near(right.minY, left.minY) && near(right.height, left.height), "\(left) | \(right)")
-        #expect(near(left.minX, before.minX) && near(right.maxX, before.maxX), "the split left a's old tile: \(left) | \(right) in \(before)")
+        // A right-edge drop into a horizontal split joins it (D-20), so a and n share the row with the Desktop.
+        #expect(near(left.minX, before.minX) && right.maxX < scene.area.maxX - 100, "\(left) | \(right) in \(scene.area)")
     }
 
     @Test func aTallTileSplitsBelow() throws {

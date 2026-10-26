@@ -102,13 +102,24 @@ import os
             case .save(.now):
                 write()
             case .openFinderWindow:
-                break
+                // Its own task: an AX press waits on Finder, which must never hold up the effects behind it.
+                Task { await openFinderWindow() }
             case .wake(let instant):
                 wake.set(instant) { [weak self] in
                     guard let self else { return }
                     await self.run(self.arranger.handle(.tick, now: .now))
                 }
             }
+        }
+    }
+
+    /// Presses Finder's ⌘N menu item on Finder's AX thread (RESEARCH Pattern 14): no Apple Events, no Automation prompt.
+    private func openFinderWindow() async {
+        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: Arranger.finderBundleID).first?.processIdentifier,
+            await system.pressNewWindowItem(pid: pid)
+        else {
+            logger.info("could not press Finder's New Finder Window item")
+            return
         }
     }
 

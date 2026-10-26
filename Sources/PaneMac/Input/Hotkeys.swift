@@ -12,6 +12,7 @@ extension KeyboardShortcuts.Name {
     static let focusRight = Self("focusRight", initial: .init(.rightArrow, modifiers: [.control, .option, .command]))
     static let focusUp = Self("focusUp", initial: .init(.upArrow, modifiers: [.control, .option, .command]))
     static let focusDown = Self("focusDown", initial: .init(.downArrow, modifiers: [.control, .option, .command]))
+    static let finderSplit = Self("finderSplit", initial: .init(.n, modifiers: [.control, .option, .command]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -25,6 +26,7 @@ enum Hotkeys {
         (.focusRight, .focus(.right)),
         (.focusUp, .focus(.top)),
         (.focusDown, .focus(.bottom)),
+        (.finderSplit, .finderSplit),
     ]
 
     /// Installs a key-down handler per entry. Call once.

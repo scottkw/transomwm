@@ -16,6 +16,7 @@ import AppKit
 //   fullscreen <i> | exit-fullscreen <i> (ok once the transition finished, 5 s limit)
 //   select-tab <i> | title <i> <text> | hide-app | unhide-app | list | quit
 //   frontmost: prints `frontmost index=<i>` while this app is active with window i key, else `frontmost none`
+// Menu: File ▸ New Window (⌘N) opens a `standard` window and prints its window line, for the AX menu-press test.
 // Closing stdin quits the fixture, so a crashed test never leaves it running.
 
 /// Global top-left -> AppKit bottom-left, computed here independently of PaneEngine (an oracle).
@@ -115,6 +116,15 @@ final class Fixture: NSObject, NSApplicationDelegate {
             return indices
         default:
             throw FixtureFailure(message: "unknown window spec \(spec)")
+        }
+    }
+
+    /// File ▸ New Window (⌘N).
+    @objc func newWindow(_ sender: Any?) {
+        guard let opened = try? open("standard") else { return }
+        Task {
+            try? await Task.sleep(for: settle)
+            for index in opened { emitWindow(index) }
         }
     }
 
@@ -242,6 +252,17 @@ let app = NSApplication.shared
 app.setActivationPolicy(.regular)
 let fixture = Fixture(specs: specs)
 app.delegate = fixture
+
+let fileMenu = NSMenu(title: "File")
+let newWindowItem = NSMenuItem(title: "New Window", action: #selector(Fixture.newWindow(_:)), keyEquivalent: "n")
+newWindowItem.target = fixture
+fileMenu.addItem(newWindowItem)
+let mainMenu = NSMenu()
+mainMenu.addItem(NSMenuItem())  // the application menu
+let fileItem = NSMenuItem()
+fileItem.submenu = fileMenu
+mainMenu.addItem(fileItem)
+app.mainMenu = mainMenu
 
 // Commands run one at a time on MainActor; the reader waits for each to finish.
 let stdinReader = Thread {

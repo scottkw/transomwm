@@ -237,7 +237,8 @@ import os
 
     /// Presses the app's ⌘N menu item on its thread (RESEARCH Pattern 14). False when the app is not tracked.
     public func pressNewWindowItem(pid: Int32) async -> Bool {
-        false
+        guard let thread = threads[pid] else { return false }
+        return await thread.perform { MenuPress.pressCommandN(in: $0) } ?? false
     }
 
     public func windowInfo(_ window: PaneModel.WindowRef) async -> WindowInfo? {
