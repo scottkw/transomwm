@@ -281,18 +281,24 @@ extension ArrangerCommandTests {
         #expect(shape(undone.tree) == "D" && Set(undone.desktop.windows.map(\.window)) == [a, b, c])
     }
 
+    /// V[a, Desktop], a at least 500 wide and 600 tall. b (at least 1000 wide) fits on the Desktop but not beside a,
+    /// the largest tile; c, with no minimum, docks there.
     @Test func aWindowThatDoesNotFitStaysFloatingAndIsCounted() throws {
         var arranger = try arranger(
-            frames: [a: Rect(x: 100, y: 100, width: 300, height: 200), b: Rect(x: 500, y: 100, width: 300, height: 200)],
-            minimums: [b: Size(width: 1430, height: 100)])
+            frames: [a: somewhere, b: Rect(x: 100, y: 650, width: 1000, height: 150), c: Rect(x: 1200, y: 700, width: 200, height: 150)],
+            minimums: [a: Size(width: 500, height: 600), b: Size(width: 1000, height: 100)]
+        ) { desk, ids throws(LayoutError) in
+            try desk.tree.insert(a, at: .top, of: .desktop, ids: &ids)
+        }
         let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
         let desk = try #require(arranger.world[key])
-        #expect(desk.tree.windows == [a] && desk.desktop.contains(b))
+        #expect(shape(desk.tree) == "V[H[a,c],D]" && desk.desktop.contains(b), "\(shape(desk.tree)) \(effects)")
         #expect(notices(effects) == [.arrangeLeftovers(count: 1)])
+        #expect(depth(arranger) == 1)
     }
 
     @Test func whenNothingFitsArrangeAllBeepsAndFlashesTheFirstWindowsBlockedFrame() throws {
-        var arranger = try arranger(frames: [b: Rect(x: 500, y: 100, width: 300, height: 200)], minimums: [b: Size(width: 1430, height: 100)])
+        var arranger = try arranger(frames: [b: Rect(x: 500, y: 100, width: 300, height: 200)], minimums: [b: Size(width: 100, height: 900)])
         let world = arranger.world, history = arranger.history
         let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
         #expect(effects.first == .beep)

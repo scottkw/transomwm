@@ -34,6 +34,8 @@ extension KeyboardShortcuts.Name {
     static let snapBottomRight = Self("snapBottomRight", initial: .init(.k, modifiers: [.control, .option, .command]))
     static let snapMaximize = Self("snapMaximize", initial: .init(.return, modifiers: [.control, .option, .command]))
     static let snapCenter = Self("snapCenter", initial: .init(.c, modifiers: [.control, .option, .command]))
+    static let arrangeAll = Self("arrangeAll", initial: .init(.d, modifiers: [.control, .option, .command, .shift]))
+    static let floatAll = Self("floatAll", initial: .init(.f, modifiers: [.control, .option, .command, .shift]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -69,6 +71,8 @@ enum Hotkeys {
         (.snapBottomRight, .snap(.bottomRight)),
         (.snapMaximize, .snap(.maximize)),
         (.snapCenter, .snap(.center)),
+        (.arrangeAll, .arrangeAll),
+        (.floatAll, .floatAll),
     ]
 
     /// Installs a key-down handler per entry. Call once.

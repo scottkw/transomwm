@@ -64,6 +64,82 @@ extension Arranger {
         return try commit(key, flashing: window) { desk, _ throws(LayoutError) in try edit(&desk.tree, split) }
     }
 
+    /// Docks every eligible floating window of the target desk in screen order (top to bottom, then left to right),
+    /// each on the longer side of the largest tile, as one undo step (TILE-16, D-13). A window whose dry run leaves
+    /// any window without room stays floating, and N5 counts them; when none docks: beep, and the first one's
+    /// blocked frame flashes.
+    mutating func arrangeAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let order = desk.desktop.windows.filter { floating in
+            floating.state == .present
+                && windows[floating.window.identity].map { $0.kind == .dockable && !$0.isExcluded && $0.state == .present } == true
+        }
+        .sorted { ($0.frame.minY, $0.frame.minX, $0.window.identity) < ($1.frame.minY, $1.frame.minX, $1.window.identity) }
+        .map(\.window)
+        guard !order.isEmpty else { return [.beep] }
+        let gap = gap, mins = minimums
+        var skipped = 0
+        var blocked: Rect?
+        var candidate = world, candidateHistory = history
+        try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
+            for window in order {
+                var trial = desk, trialIDs = ids
+                try trial.desktop.remove(window)
+                let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
+                guard let (target, rect) = Self.largestTile(resolution, in: trial.tree) else {
+                    skipped += 1
+                    continue
+                }
+                do {
+                    try trial.tree.insert(window, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
+                } catch {
+                    skipped += 1  // a full split
+                    continue
+                }
+                if try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).unfit.isEmpty {
+                    desk = trial
+                    ids = trialIDs
+                } else {
+                    skipped += 1
+                    if blocked == nil { blocked = try Planner.plan(desk: trial, area: area, gap: gap, mins: [:]).frames[window] }
+                }
+            }
+        }
+        guard skipped < order.count else { return [.beep] + (blocked.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? []) }
+        world = candidate
+        history = candidateHistory
+        return replan() + (skipped == 0 ? [] : [.notice(.arrangeLeftovers(count: skipped))])
+    }
+
+    /// Floats every docked window of the target desk at its tile rect, clamped into the Desktop that leaves, as one
+    /// undo step that also shows a hidden Desktop (TILE-16). N4 says how many. Nothing docked: beep.
+    mutating func floatAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame, !desk.tree.windows.isEmpty
+        else { return [.beep] }
+        let plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
+        let docked = desk.tree.windows.map { window in
+            (window, desk.tree.state(of: window) ?? .present, plan.frames[window] ?? windows[window.identity]?.frame ?? area)
+        }
+        let gap = gap, mins = minimums, show = showingDesktop()
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
+            for (window, _, _) in docked { try desk.tree.remove(window) }
+            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
+            for (window, state, tile) in docked {
+                try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
+                if state != .present { try desk.desktop.setState(state, for: window) }
+            }
+        }
+        return replan() + [.notice(.floatedAll(count: docked.count))]
+    }
+
+    /// The largest placed leaf (the Desktop tile included); ties go to the smaller NodeID.
+    private static func largestTile(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
+        let leaves = resolution.nodeRects.filter { if case .split? = tree.node($0.key) { false } else { true } }
+        return leaves.max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
+            .map { ($0.key, $0.value) }
+    }
+
     /// The docked panel focused most recently before `window` on its desk, when `window` is a present docked panel.
     func previousDocked(before window: WindowRef) -> WindowRef? {
         guard let key = deskKey(of: window), let tree = world[key]?.tree, Self.isPresentPanel(window, in: tree) else { return nil }

@@ -175,6 +175,8 @@ public struct Arranger: Sendable {
                 case (.rotateSplit, let window?): return try editSplit(of: window) { tree, split throws(LayoutError) in try tree.rotate(split: split) }
                 case (.flipSplit, let window?): return try editSplit(of: window) { tree, split throws(LayoutError) in try tree.flip(split: split) }
                 case (.snap(let target), let window?): return try snap(window, to: target)
+                case (.arrangeAll, _): return try arrangeAll(focused)
+                case (.floatAll, _): return try floatAll(focused)
                 case (.togglePause, _): return togglePause()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
                 case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
@@ -307,6 +309,8 @@ public struct Arranger: Sendable {
             return trackable && focused.flatMap(previousDocked(before:)) != nil
         case .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit:
             return trackable && focused.flatMap(parentSplit(of:)) != nil
+        case .arrangeAll, .floatAll:
+            return targetKey(focused) != nil  // enabled with no focused window (UI-SPEC disabled-state rules)
         case .snap:
             guard trackable, let focused, let key = deskKey(of: focused), let desk = world[key] else { return false }
             return desk.desktop.contains(focused) && desk.state(of: focused) == .present && desk.tree.isDesktopHidden != true
@@ -705,7 +709,7 @@ public struct Arranger: Sendable {
     }
 
     /// The change that shows a desk's Desktop tile, with each floating window that has a home frame back at it.
-    private func showingDesktop() -> (inout Desk, inout IDSource) throws(LayoutError) -> Void {
+    func showingDesktop() -> (inout Desk, inout IDSource) throws(LayoutError) -> Void {
         let homes = homeFrames
         return { desk, _ throws(LayoutError) in
             try desk.tree.setDesktopHidden(false)

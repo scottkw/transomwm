@@ -8,11 +8,15 @@ public enum Notice: Equatable, Sendable {
     case lostRoom([WindowRef])
     /// N9: ⌃⌥⌘N pressed Finder's New Finder Window item, but no new Finder window came within 2 s (D-14).
     case finderNoWindow
+    /// N4: Float All Windows floated this many windows.
+    case floatedAll(count: Int)
+    /// N5: Arrange All Windows left this many windows floating, for lack of room.
+    case arrangeLeftovers(count: Int)
 
     /// Crash notices (N2/N3, plan 13) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
-        case .lostRoom, .finderNoWindow: false
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers: false
         }
     }
 }

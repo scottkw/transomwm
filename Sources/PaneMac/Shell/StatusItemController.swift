@@ -111,6 +111,8 @@ import os
         menu.addItem(commands.splitMenu)
         menu.addItem(commands.snapMenu)
         menu.addItem(.separator())
+        menu.addItem(commands.item(for: .arrangeAll))
+        menu.addItem(commands.item(for: .floatAll))
         menu.addItem(commands.item(for: .toggleDesktop))
         menu.addItem(gapsMenuItem())
     }

@@ -14,6 +14,7 @@ import PaneModel
         .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
         .swapPrevious, .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .snap(.leftThird), .snap(.centerThird),
         .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
+        .arrangeAll, .floatAll,
     ]
 
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")

@@ -14,13 +14,19 @@ nonisolated public enum NoticeCopy {
             }
         case .finderNoWindow:
             "Finder didn't open a new window."
+        case .floatedAll(let count):
+            "Floated \(count == 1 ? "1 window" : "\(count) windows"). Undo with \u{2303}\u{2325}\u{2318}Z."
+        case .arrangeLeftovers(let count):
+            count == 1
+                ? "1 window didn't fit, so it stays floating on the Desktop."
+                : "\(count) windows didn't fit, so they stay floating on the Desktop."
         }
     }
 
     /// The SF Symbol shown before the text.
     public static func glyph(for notice: Notice) -> String {
         switch notice {
-        case .lostRoom: "macwindow"
+        case .lostRoom, .floatedAll, .arrangeLeftovers: "macwindow"
         case .finderNoWindow: "info.circle"
         }
     }

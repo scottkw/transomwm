@@ -40,6 +40,8 @@ nonisolated public enum MenuCopy {
         case .rotateSplit: "Rotate Layout"
         case .flipSplit: "Flip Split"
         case .snap(let target): snapTitle(target)
+        case .arrangeAll: "Arrange All Windows"
+        case .floatAll: "Float All Windows"
         case .finderSplit: "Split with New Finder Window"
         case .togglePause: pauseToggle(paused: false)
         case .toggleExcludeFrontmost: dontArrangeFallback

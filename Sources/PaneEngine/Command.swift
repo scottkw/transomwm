@@ -27,6 +27,8 @@ public enum Command: Hashable, Sendable {
     case balanceSplit, rotateSplit, flipSplit
     /// Snap a floating window to a target inside the Desktop tile (TILE-14).
     case snap(SnapTarget)
+    /// Dock every eligible floating window, or float every docked one, on the target desk: one undo step (TILE-16).
+    case arrangeAll, floatAll
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and
