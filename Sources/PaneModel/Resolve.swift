@@ -15,6 +15,9 @@ public struct Resolution: Equatable, Sendable {
         self.windowRects = windowRects
         self.unfit = unfit
     }
+
+    /// The Desktop tile's rect; nil when the tree has none or it is hidden.
+    public var desktopRect: Rect? { nodeRects[.desktop] }
 }
 
 /// Lays the tree out in `area` with one `gap` between tiles and around the outer edge (D-12).
@@ -28,7 +31,9 @@ public struct Resolution: Equatable, Sendable {
 ///   WindowIdentity. Victims are then re-admitted in removal order wherever they fit (D-11).
 /// - The area is snapped inward to whole points and the gap rounded, so every rect is whole points;
 ///   along a split each child but the last gets floor(share) and the last the remainder (D-13).
-public func resolve(_ tree: LayoutTree, in area: Rect, mins: [WindowRef: Size], gap: Double) throws(LayoutError) -> Resolution {
+public func resolve(
+    _ tree: LayoutTree, in area: Rect, mins: [WindowRef: Size], gap: Double, desktopMinimum: Size = Size(width: 1, height: 1)
+) throws(LayoutError) -> Resolution {
     guard area.isValidGeometry else { throw .invalidGeometry("area") }
     guard gap.isFinite, gap >= 0, gap <= Geometry.maxCoordinate else { throw .invalidGap }
     let isValid = { (s: Size) in [s.width, s.height].allSatisfy { $0.isFinite && $0 >= 0 && $0 <= Geometry.maxCoordinate } }
@@ -54,7 +59,7 @@ public func resolve(_ tree: LayoutTree, in area: Rect, mins: [WindowRef: Size], 
         switch node {
         case let .panel(window): windows = [window]
         case let .tabs(tabs, _): windows = tabs
-        case .split: continue
+        case .split, .desktop: continue
         }
         for window in windows where tree.state(of: window) == .present {
             let min = mins[window] ?? Size(width: 1, height: 1)
@@ -116,6 +121,8 @@ private struct Solver {
             let sizes = windows.filter(active.contains).compactMap { minimum[$0] }
             guard !sizes.isEmpty else { return nil }
             return Size(width: sizes.map(\.width).max()!, height: sizes.map(\.height).max()!)
+        case .desktop:
+            return nil
         case let .split(axis, children, _):
             var sizes: [Size] = []
             for child in children { if let size = try aggregate(child) { sizes.append(size) } }
@@ -135,6 +142,8 @@ private struct Solver {
             result.windowRects[window] = rect
         case let .tabs(windows, _):
             for window in windows where active.contains(window) { result.windowRects[window] = rect }
+        case .desktop:
+            break
         case let .split(axis, children, weights):
             var parts: [(id: NodeID, weight: Double, min: Double)] = []
             let horizontal = axis == .horizontal

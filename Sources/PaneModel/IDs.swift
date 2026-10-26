@@ -38,6 +38,12 @@ public struct NodeID: Hashable, Comparable, Codable, Sendable, CodingKeyRepresen
     public var description: String { "n\(raw)" }
 }
 
+extension NodeID {
+    /// The Desktop tile's reserved ID (D-24). `IDSource` starts at 1 and `World` requires that, so this
+    /// ID is never minted and a desk can hold at most one Desktop tile by construction.
+    public static let desktop = NodeID(raw: 0)
+}
+
 public struct IDSource: Codable, Equatable, Sendable {
     public private(set) var next: UInt64
 

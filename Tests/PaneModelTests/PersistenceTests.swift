@@ -18,10 +18,16 @@ private func splitJSON(_ children: [Int], _ weights: [Double], axis: String = "h
     #"{"split":{"axis":"\#(axis)","children":\#(children),"weights":\#(weights)}}"#
 }
 
+/// The visible Desktop tile, which every desk holds under NodeID 0 (D-24).
+private let desktopTileJSON = #"{"desktop":{"hidden":false}}"#
+
 /// `nodes` maps NodeID to node JSON; `windows` are the window IDs that get a `present` state.
+/// The Desktop tile is added as node 0 unless `desktopTile` is false; the caller places it in the tree.
 private func deskJSON(
-    key: String = "D1", root: Int?, nodes: [Int: String], windows: [Int], floating: [String] = []
+    key: String = "D1", root: Int?, nodes: [Int: String], windows: [Int], floating: [String] = [], desktopTile: Bool = true
 ) -> String {
+    var nodes = nodes
+    if desktopTile { nodes[0] = desktopTileJSON }
     let nodeList = nodes.sorted { $0.key < $1.key }.map { #""\#($0.key)":\#($0.value)"# }.joined(separator: ",")
     let states = windows.sorted().map { #"{"state":"present","window":\#(identityJSON($0))}"# }.joined(separator: ",")
     let rootPart = root.map { #","root":\#($0)"# } ?? ""
@@ -36,21 +42,21 @@ private func floatingJSON(_ id: Int, x: String = "0", width: String = "100") -> 
     #"{"frame":{"height":100,"width":\#(width),"x":\#(x),"y":0},"state":"present","window":\#(windowJSON(id))}"#
 }
 
-/// H[1: w1, 2: w2] under split 3: the valid baseline every structural corpus item is one change away from.
-private let validPair = deskJSON(root: 3, nodes: [1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [0.5, 0.5])], windows: [1, 2])
+/// H[1: w1, 2: w2, 0: Desktop] under split 3: the valid baseline every structural corpus item is one change away from.
+private let validPair = deskJSON(
+    root: 3, nodes: [1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2, 0], [0.25, 0.25, 0.5])], windows: [1, 2])
 
-/// `splits` nested splits with alternating axes, each holding a panel and the next split.
+/// `splits` nested splits with alternating axes, each holding a panel and the next split; the deepest
+/// split holds the Desktop tile instead.
 private func chainDesk(splits: Int) -> String {
     var nodes: [Int: String] = [:]
     var windows: [Int] = []
     for i in 1...splits {
-        let second = i == splits ? 2000 : i + 1
+        let second = i == splits ? 0 : i + 1
         nodes[1000 + i] = panelJSON(1000 + i)
         windows.append(1000 + i)
         nodes[i] = splitJSON([1000 + i, second], [0.5, 0.5], axis: i % 2 == 1 ? "horizontal" : "vertical")
     }
-    nodes[2000] = panelJSON(2000)
-    windows.append(2000)
     return deskJSON(root: 1, nodes: nodes, windows: windows)
 }
 
@@ -74,42 +80,49 @@ private let corruptCorpus: [CorruptCase] = [
     CorruptCase(name: "JSON array", data: Data("[]".utf8), invalidLayout: false),
     CorruptCase(name: "null", data: Data("null".utf8), invalidLayout: false),
     CorruptCase(name: "cycle", data: worldJSON([deskJSON(root: 1, nodes: [
-        1: splitJSON([2, 3], [0.5, 0.5]), 2: splitJSON([1, 4], [0.5, 0.5], axis: "vertical"), 3: panelJSON(3), 4: panelJSON(4),
+        1: splitJSON([2, 3, 0], [0.25, 0.25, 0.5]), 2: splitJSON([1, 4], [0.5, 0.5], axis: "vertical"), 3: panelJSON(3), 4: panelJSON(4),
     ], windows: [3, 4])]), invalidLayout: true),
     CorruptCase(name: "dangling child", data: worldJSON([deskJSON(root: 3, nodes: [
-        1: panelJSON(1), 3: splitJSON([1, 2], [0.5, 0.5]),
+        1: panelJSON(1), 3: splitJSON([1, 2, 0], [0.25, 0.25, 0.5]),
     ], windows: [1])]), invalidLayout: true),
-    CorruptCase(name: "single-child split", data: worldJSON([deskJSON(root: 3, nodes: [
-        1: panelJSON(1), 3: splitJSON([1], [1.0]),
+    CorruptCase(name: "single-child split", data: worldJSON([deskJSON(root: 4, nodes: [
+        1: panelJSON(1), 3: splitJSON([1], [1.0]), 4: splitJSON([3, 0], [0.5, 0.5], axis: "vertical"),
     ], windows: [1])]), invalidLayout: true),
     CorruptCase(name: "weights sum to 0.9", data: worldJSON([deskJSON(root: 3, nodes: [
-        1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [0.4, 0.5]),
+        1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2, 0], [0.4, 0.3, 0.2]),
     ], windows: [1, 2])]), invalidLayout: true),
     CorruptCase(name: "negative weight", data: worldJSON([deskJSON(root: 3, nodes: [
-        1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [-0.5, 1.5]),
+        1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2, 0], [-0.5, 1.0, 0.5]),
     ], windows: [1, 2])]), invalidLayout: true),
-    CorruptCase(name: "tabs selected out of range", data: worldJSON([deskJSON(root: 1, nodes: [
-        1: #"{"tabs":{"selected":5,"windows":[\#(windowJSON(1)),\#(windowJSON(2))]}}"#,
+    CorruptCase(name: "tabs selected out of range", data: worldJSON([deskJSON(root: 2, nodes: [
+        1: #"{"tabs":{"selected":5,"windows":[\#(windowJSON(1)),\#(windowJSON(2))]}}"#, 2: splitJSON([1, 0], [0.5, 0.5]),
     ], windows: [1, 2])]), invalidLayout: true),
     CorruptCase(name: "duplicate window across desks", data: worldJSON([
-        deskJSON(key: "D1", root: 1, nodes: [1: panelJSON(1)], windows: [1]),
-        deskJSON(key: "D2", root: 2, nodes: [2: panelJSON(1)], windows: [1]),
+        deskJSON(key: "D1", root: 3, nodes: [1: panelJSON(1), 3: splitJSON([1, 0], [0.5, 0.5])], windows: [1]),
+        deskJSON(key: "D2", root: 3, nodes: [2: panelJSON(1), 3: splitJSON([2, 0], [0.5, 0.5])], windows: [1]),
     ]), invalidLayout: true),
     CorruptCase(name: "NodeID >= ids.next", data: worldJSON([validPair], next: 3), invalidLayout: true),
     CorruptCase(name: "ids.next = UInt64.max", data: worldJSON([], next: .max), invalidLayout: true),
     CorruptCase(name: "ids.next within maxNodes of exhaustion", data: worldJSON([validPair], next: .max - 100), invalidLayout: true),
     CorruptCase(name: "ids.next one past the load headroom bound", data: worldJSON([validPair], next: .max / 2 + 1), invalidLayout: true),
     CorruptCase(name: "floating frame width -1", data: worldJSON([
-        deskJSON(root: nil, nodes: [:], windows: [], floating: [floatingJSON(7, width: "-1")]),
+        deskJSON(root: 0, nodes: [:], windows: [], floating: [floatingJSON(7, width: "-1")]),
     ]), invalidLayout: true),
     CorruptCase(name: "coordinate 1e300", data: worldJSON([
-        deskJSON(root: nil, nodes: [:], windows: [], floating: [floatingJSON(7, x: "1e300")]),
+        deskJSON(root: 0, nodes: [:], windows: [], floating: [floatingJSON(7, x: "1e300")]),
     ]), invalidLayout: true),
     CorruptCase(name: "unknown Node case", data: worldJSON([deskJSON(root: 1, nodes: [
         1: #"{"stack":{"_0":\#(windowJSON(1))}}"#,
     ], windows: [1])]), invalidLayout: false),
     CorruptCase(name: "100-deep split chain", data: worldJSON([chainDesk(splits: 100)]), invalidLayout: true),
     CorruptCase(name: "5000 nodes", data: worldJSON([manyNodesDesk(5000)], next: 10_000), invalidLayout: true),
+    CorruptCase(name: "desk without the Desktop tile", data: worldJSON([deskJSON(root: 3, nodes: [
+        1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [0.5, 0.5]),
+    ], windows: [1, 2], desktopTile: false)]), invalidLayout: true),
+    CorruptCase(name: "Desktop tile under NodeID 7", data: worldJSON([deskJSON(root: 3, nodes: [
+        1: panelJSON(1), 7: desktopTileJSON, 3: splitJSON([1, 7], [0.5, 0.5]),
+    ], windows: [1], desktopTile: false)]), invalidLayout: true),
+    CorruptCase(name: "ids.next = 0 could mint the Desktop ID", data: worldJSON([], next: 0), invalidLayout: true),
 ]
 
 // MARK: Rich world for the exact round-trip
@@ -123,16 +136,17 @@ private func hinted(_ id: UInt32, title: String, ax: String?, order: UInt64) -> 
 }
 
 private func richWorld() throws -> World {
-    // D1: nested splits from inserts only. H[D, A, V[B, C]].
+    // D1: nested splits from inserts only. H[D, A, V[B, C], Desktop].
     var ids = IDSource()
-    var nested = LayoutTree()
+    var nested = LayoutTree.withDesktop()
     let a = makeWindow(1), b = makeWindow(2), c = makeWindow(3), d = makeWindow(4)
-    try nested.insertRoot(a, ids: &ids)
+    try nested.insert(a, at: .left, of: .desktop, ids: &ids)
     try nested.insert(b, at: .right, of: #require(nested.leaf(containing: a)), ids: &ids)
     try nested.insert(c, at: .bottom, of: #require(nested.leaf(containing: b)), ids: &ids)
     try nested.insert(d, at: .left, of: #require(nested.leaf(containing: a)), ids: &ids)
 
-    // D1 Space 7: tabs plus kept-slot states, through the validating init. H[E, tabs(F, G)] at 1/3, 2/3.
+    // D1 Space 7: tabs plus kept-slot states, through the validating init. H[E, tabs(F, G), Desktop] at
+    // 1/3, 1/2, 1/6.
     let e = hinted(10, title: "Notes.txt", ax: "AXWindow-1", order: 3)
     let f = hinted(11, title: "", ax: nil, order: 4)
     let g = hinted(12, title: "Ünïcode ✓ \"quoted\"", ax: "", order: 5)
@@ -141,11 +155,14 @@ private func richWorld() throws -> World {
         nodes: [
             NodeID(raw: 100): .panel(e),
             NodeID(raw: 101): .tabs(windows: [f, g], selected: 1),
-            NodeID(raw: 102): .split(axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101)], weights: [1.0 / 3.0, 2.0 / 3.0]),
+            NodeID(raw: 102): .split(
+                axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101), .desktop], weights: [1.0 / 3.0, 0.5, 1.0 / 6.0]),
+            .desktop: .desktop(hidden: false),
         ],
         states: [e.identity: .absent, f.identity: .fullscreen, g.identity: .present])
 
-    // D2: a 0.1 / 0.9 vertical split plus two floating windows, one at a negative origin.
+    // D2: a 0.1 / 0.8 / 0.1 vertical split with a hidden Desktop tile, plus two floating windows, one at a
+    // negative origin.
     let h = hinted(20, title: "a", ax: "AXWin-20", order: 9_007_199_254_740_993)
     let i = makeWindow(21)
     let thin = try LayoutTree(
@@ -153,7 +170,8 @@ private func richWorld() throws -> World {
         nodes: [
             NodeID(raw: 200): .panel(h),
             NodeID(raw: 201): .panel(i),
-            NodeID(raw: 202): .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201)], weights: [0.1, 0.9]),
+            NodeID(raw: 202): .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201), .desktop], weights: [0.1, 0.8, 0.1]),
+            .desktop: .desktop(hidden: true),
         ],
         states: [h.identity: .present, i.identity: .present])
     var desktop = DesktopLayer()
@@ -197,9 +215,10 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         #expect(floating.window.titleHint == "Float")
         #expect(floating.frame == Rect(x: -1440, y: -0.5, width: 800.25, height: 600))
         let tabs = try #require(decoded[k1s7]?.tree.node(NodeID(raw: 102)))
-        #expect(tabs == .split(axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101)], weights: [1.0 / 3.0, 2.0 / 3.0]))
+        #expect(tabs == .split(axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101), .desktop], weights: [1.0 / 3.0, 0.5, 1.0 / 6.0]))
         let thin = try #require(decoded[k2]?.tree.node(NodeID(raw: 202)))
-        #expect(thin == .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201)], weights: [0.1, 0.9]))
+        #expect(thin == .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201), .desktop], weights: [0.1, 0.8, 0.1]))
+        #expect(decoded[k2]?.tree.isDesktopHidden == true)
         #expect(decoded[k1s7]?.tree.state(of: makeWindow(10)) == nil)  // different pid/bundle: not the same window
         let e = hinted(10, title: "", ax: nil, order: 0)
         #expect(decoded[k1s7]?.tree.state(of: e) == .absent)
@@ -216,7 +235,7 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         try world.addDesk(perDisplay)
         try world.addDesk(perSpace)
         var history = UndoHistory()
-        try world.edit(perSpace, history: &history) { desk, ids throws(LayoutError) in try desk.tree.insertRoot(makeWindow(1), ids: &ids) }
+        try world.edit(perSpace, history: &history) { desk, ids throws(LayoutError) in try desk.tree.insert(makeWindow(1), at: .left, of: .desktop, ids: &ids) }
         #expect(world.desks.count == 2)
 
         let decoded = try World.decode(from: world.encoded())

@@ -5,6 +5,9 @@ public enum Node: Codable, Equatable, Sendable {
     case split(axis: Axis, children: [NodeID], weights: [Double])
     case panel(WindowRef)
     case tabs(windows: [WindowRef], selected: Int)
+    /// The Desktop tile (D-24): floating windows live inside its rect. Hidden means it gets no rect,
+    /// its space goes to the docked tiles and its floating windows are parked. Only `NodeID.desktop` holds it.
+    case desktop(hidden: Bool)
 }
 
 /// Messages name NodeIDs and window identities only, never window titles.
@@ -105,6 +108,8 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                     throw .invariantViolated("tab group \(id) selects \(selected) of \(windows.count) tabs")
                 }
                 for window in windows { try see(window) }
+            case .desktop:
+                break
             }
         }
         guard visited.count == nodes.count else {
@@ -137,7 +142,7 @@ public struct LayoutTree: Codable, Equatable, Sendable {
             case let .split(_, children, _)?: stack.append(contentsOf: children.reversed())
             case let .panel(window)?: result.append(window)
             case let .tabs(windows, _)?: result.append(contentsOf: windows)
-            case nil: break
+            case .desktop?, nil: break
             }
         }
         return result
@@ -148,12 +153,26 @@ public struct LayoutTree: Codable, Equatable, Sendable {
             switch node {
             case let .panel(window): window == w
             case let .tabs(windows, _): windows.contains(w)
-            case .split: false
+            case .split, .desktop: false
             }
         }?.key
     }
 
     public func state(of w: WindowRef) -> WindowState? { states[w.identity] }
+
+    /// A layout holding only the visible Desktop tile: what every new desk starts as (D-24).
+    public static func withDesktop() -> LayoutTree {
+        var tree = LayoutTree()
+        tree.root = .desktop
+        tree.nodes[.desktop] = .desktop(hidden: false)
+        return tree
+    }
+
+    /// Whether the Desktop tile is hidden; nil when the tree has no Desktop tile.
+    public var isDesktopHidden: Bool? {
+        guard case let .desktop(hidden)? = nodes[.desktop] else { return nil }
+        return hidden
+    }
 
     func assertValid() {
         #if DEBUG

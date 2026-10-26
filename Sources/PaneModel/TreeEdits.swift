@@ -106,7 +106,7 @@ extension LayoutTree {
         switch node {
         case let .panel(existing): next.nodes[target] = .tabs(windows: [existing, window], selected: 1)
         case let .tabs(windows, _): next.nodes[target] = .tabs(windows: windows + [window], selected: windows.count)
-        case .split: throw .notALeaf(target)
+        case .split, .desktop: throw .notALeaf(target)
         }
         next.states[window.identity] = .present
         self = next
