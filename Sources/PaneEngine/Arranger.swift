@@ -101,7 +101,7 @@ public struct Arranger: Sendable {
                 case (.dock, let window?): return try dock(window)
                 case (.float, let window?): return try float(window)
                 case (.undo, _): return try undo(focused)
-                case (.dock, nil), (.float, nil): return [.beep]
+                case (.dock, nil), (.float, nil), (.toggleDesktop, _): return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -191,6 +191,8 @@ public struct Arranger: Sendable {
             return world.desks.values.contains { $0.tree.state(of: focused) != nil }
         case .undo:
             return undoKey(focused).map { history.depth(for: $0) > 0 } ?? false
+        case .toggleDesktop:
+            return false
         }
     }
 

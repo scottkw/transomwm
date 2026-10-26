@@ -86,6 +86,8 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var performed: [WindowCommand] = []
     /// Commands `ExclusionFilter` kept away from excluded apps.
     public private(set) var dropped: [WindowCommand] = []
+    /// Windows a `park` moved to their display's corner; a later `setFrame` takes a window out.
+    public private(set) var parked: Set<WindowIdentity> = []
     private var excluded: Set<String> = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()

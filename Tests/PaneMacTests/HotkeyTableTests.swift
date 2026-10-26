@@ -9,12 +9,14 @@ import Testing
     private let base: NSEvent.ModifierFlags = [.control, .option, .command]
 
     @Test func entriesMapStableNamesToCommands() {
-        #expect(Hotkeys.entries.map(\.name.rawValue) == ["dock", "float", "undo"])
-        #expect(Hotkeys.entries.map(\.command) == [.dock, .float, .undo])
+        #expect(Hotkeys.entries.map(\.name.rawValue) == ["dock", "float", "undo", "toggleDesktop"])
+        #expect(Hotkeys.entries.map(\.command) == [.dock, .float, .undo, .toggleDesktop])
     }
 
     @Test func defaultsAreControlOptionCommandPlusALetter() {
-        let expected: [KeyboardShortcuts.Shortcut] = [.init(.d, modifiers: base), .init(.f, modifiers: base), .init(.z, modifiers: base)]
+        let expected: [KeyboardShortcuts.Shortcut] = [
+            .init(.d, modifiers: base), .init(.f, modifiers: base), .init(.z, modifiers: base), .init(.h, modifiers: base),
+        ]
         #expect(Hotkeys.entries.map(\.name.defaultShortcut) == expected)
     }
 
