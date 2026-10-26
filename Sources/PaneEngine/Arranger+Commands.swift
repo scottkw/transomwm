@@ -25,6 +25,14 @@ extension Arranger {
         }
     }
 
+    /// Restore All Windows (SAFE-03): every stranded window back on screen and every hidden Desktop tile holding windows
+    /// shown, one undo step per desk shown. Runs while paused; N6 counts the windows moved.
+    mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
+        let moves = rescueStranded(desks: world)
+        try showParkedDesktops(keeping: moves, undoable: true)
+        return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + [.notice(.restored(count: moves.count))]
+    }
+
     /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step.
     mutating func snap(_ window: WindowRef, to target: SnapTarget) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let frame = desk.desktop.frame(of: window),

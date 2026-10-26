@@ -29,6 +29,7 @@ public enum Command: Hashable, Sendable {
     case snap(SnapTarget)
     /// Dock every eligible floating window, or float every docked one, on the target desk: one undo step (TILE-16).
     case arrangeAll, floatAll
+    /// Bring every window Pane may move back on screen (SAFE-03); acts while paused.
     case restoreAll
 }
 

@@ -76,6 +76,7 @@ import os
         let pause = commands.item(for: .togglePause)
         pause.title = MenuCopy.pauseToggle(paused: !arrange.arranger.pauseReasons.isEmpty)
         menu.addItem(pause)
+        menu.addItem(commands.item(for: .restoreAll))  // enabled while paused (Arranger.availability)
         menu.addItem(.separator())
         menu.addItem(.sectionHeader(title: MenuCopy.exclusionsSection))
         addExclusionItems(to: menu)

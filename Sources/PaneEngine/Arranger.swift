@@ -217,7 +217,7 @@ public struct Arranger: Sendable {
                 case (.arrangeAll, _): return try arrangeAll(focused)
                 case (.floatAll, _): return try floatAll(focused)
                 case (.togglePause, _): return togglePause()
-                case (.restoreAll, _): return []
+                case (.restoreAll, _): return try restoreAll()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
                 case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
                     (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
@@ -373,6 +373,7 @@ public struct Arranger: Sendable {
         guard context.ready else { return false }
         // Paused, only Resume acts; Stage Manager's pause ends through its conflict item, not Resume.
         if command == .togglePause { return pauseReasons != [.stageManager] }
+        if command == .restoreAll { return true }  // the way back, so it works while paused (UI-SPEC Surface 1 row 21)
         guard pauseReasons.isEmpty else { return false }
         let focused = context.focused
         let trackable = focused.flatMap { windows[$0.identity] }.map { $0.kind == .dockable && !$0.isExcluded } ?? false
@@ -402,10 +403,8 @@ public struct Arranger: Sendable {
             return desk.desktop.contains(focused) && desk.state(of: focused) == .present && desk.tree.isDesktopHidden != true
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
-        case .togglePause, .toggleExcludeFrontmost:
+        case .togglePause, .toggleExcludeFrontmost, .restoreAll:
             return true  // answered above
-        case .restoreAll:
-            return false
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }
