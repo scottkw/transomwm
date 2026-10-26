@@ -238,6 +238,17 @@ extension LayoutTree {
         try commit(split, .split(axis: axis, children: children, weights: result))
     }
 
+    /// Replaces `split`'s weights with `weights` normalised to sum 1 (G-03-3). One value per child, each finite and
+    /// greater than 0.
+    public mutating func setWeights(in split: NodeID, _ weights: [Double]) throws(LayoutError) {
+        let (axis, children, _) = try splitParts(split)
+        guard weights.count == children.count, weights.allSatisfy({ $0.isFinite && $0 > 0 }) else {
+            throw .invalidGeometry("weights must be one finite value above 0 per child")
+        }
+        let sum = weights.reduce(0, +)
+        try commit(split, .split(axis: axis, children: children, weights: weights.map { $0 / sum }))
+    }
+
     /// Grows (positive `delta`) or shrinks child `index` by a fraction of the split's length (TILE-13). The
     /// change comes from or goes to its siblings in proportion to their weights, each kept at `minWeight`
     /// or above. Throws `atSizeLimit` when the clamps leave nothing to move.

@@ -1199,13 +1199,24 @@ public struct Arranger: Sendable {
             resolution.nodeRects[id].map { axis == .horizontal ? $0.width : $0.height } ?? 0
         }
         func apply(_ moves: [BoundaryMove], to desk: inout Desk) throws(LayoutError) {
+            var rebased: Set<NodeID> = []
             for move in moves {
-                guard case .split(let axis, let children, let weights)? = desk.tree.node(move.split), let rect = before.nodeRects[move.split]
+                guard case .split(let axis, let children, var weights)? = desk.tree.node(move.split), let rect = before.nodeRects[move.split]
                 else { throw .nodeNotFound(move.split) }
                 let taking = children.indices.filter { before.nodeRects[children[$0]] != nil }
                 let length = (axis == .horizontal ? rect.width : rect.height) - gap.rounded() * Double(taking.count - 1)
                 guard length > 0 else { continue }
                 let weight = taking.reduce(0) { $0 + weights[$1] }
+                // Weights re-based to the laid-out sizes, so a side pinned at its minimum no longer soaks up the move
+                // (G-03-3 H1). Once per split: a second re-base would erase the first move. A minimised child keeps its weight.
+                // Only where a share is off by more than a point: re-based whole-point sizes can floor a point short.
+                let sizes = taking.map { size(children[$0], axis, before) }
+                let laidOut = sizes.reduce(0, +)
+                let offScreen = zip(taking, sizes).contains { abs(weights[$0] / weight * laidOut - $1) > 1 }
+                if rebased.insert(move.split).inserted, offScreen, laidOut > 0, sizes.allSatisfy({ $0 > 0 }) {
+                    for (i, index) in taking.enumerated() { weights[index] = sizes[i] / laidOut * weight }
+                    try desk.tree.setWeights(in: move.split, weights)
+                }
                 try desk.tree.resizeBetween(in: move.split, move.first, move.second, by: move.points * weight / length)
             }
         }
