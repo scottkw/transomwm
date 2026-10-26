@@ -44,6 +44,13 @@ public struct Arranger: Sendable {
     private var sessionPaused = false
     /// The Spaces-off fallback (A7) is reported once per session.
     private var reportedSpacesOff = false
+    /// Each window's last read-back (`frameApplied`): a move or resize within 2 pt of it is Pane's own write coming
+    /// back, never a move to answer (the echo rule).
+    private var lastApplied: [WindowIdentity: Rect] = [:]
+    /// When each docked window was last put back in its tile, and the ones waiting for that second to pass (T-03-13).
+    private var lastCorrection: [WindowIdentity: ContinuousClock.Instant] = [:]
+    private var pendingCorrections: Set<WindowIdentity> = []
+    private static let correctionInterval: Duration = .seconds(1)
 
     public init(gap: Double = 8) {
         self.gap = gap
@@ -69,7 +76,7 @@ public struct Arranger: Sendable {
             }
             return faults + replan()
         case .event(let event):
-            return handle(event)
+            return handle(event, now: now)
         case .command(let command, let focused):
             guard isAvailable(command, focused: focused) else { return [.beep] }
             do throws(LayoutError) {
@@ -90,7 +97,7 @@ public struct Arranger: Sendable {
             }
             return replan()
         case .tick:
-            return []
+            return tick(now: now)
         }
     }
 
@@ -122,7 +129,7 @@ public struct Arranger: Sendable {
 
     // MARK: Events
 
-    private mutating func handle(_ event: WindowEvent) -> [ArrangerEffect] {
+    private mutating func handle(_ event: WindowEvent, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         var subject: WindowIdentity?
         do throws(LayoutError) {
             switch event {
@@ -133,11 +140,16 @@ public struct Arranger: Sendable {
                 windows[from.identity] = nil
                 windows[to.window.identity] = to
                 lastRequested[to.window.identity] = lastRequested.removeValue(forKey: from.identity)
+                lastApplied[to.window.identity] = lastApplied.removeValue(forKey: from.identity)
+                lastCorrection[to.window.identity] = lastCorrection.removeValue(forKey: from.identity)
+                if pendingCorrections.remove(from.identity) != nil { pendingCorrections.insert(to.window.identity) }
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
                 windows[window.identity]?.frame = frame
-                // A floating window's frame is a fact (TILE-07): recorded with no undo step.
-                if world.desks.values.contains(where: { $0.desktop.contains(window) }) { try world.recordFloatingFrame(frame, for: window) }
+                return try moved(window, to: frame, now: now)
+            case .frameApplied(let window, _, let actual):
+                lastApplied[window.identity] = actual
+                return []
             case .windowStateChanged(let window, let state):
                 if state == .closed { forget(window) } else { windows[window.identity]?.state = state }
                 subject = window.identity
@@ -148,7 +160,7 @@ public struct Arranger: Sendable {
             case .spaceChanged(let uuid, let spaceID):
                 // Only the shown Space's desk is planned; the one left keeps its layout untouched (D-25).
                 if let i = displays.firstIndex(where: { $0.uuid == uuid }) { displays[i].currentSpaceID = spaceID }
-            case .windowFocused, .frameApplied, .appResponsiveness, .appLaunched, .appTerminated, .displaysChanged:
+            case .windowFocused, .appResponsiveness, .appLaunched, .appTerminated, .displaysChanged:
                 break
             }
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
@@ -164,6 +176,64 @@ public struct Arranger: Sendable {
     private mutating func forget(_ window: WindowRef) {
         windows[window.identity] = nil
         lastRequested[window.identity] = nil
+        lastApplied[window.identity] = nil
+        lastCorrection[window.identity] = nil
+        pendingCorrections.remove(window.identity)
+    }
+
+    // MARK: Moves
+
+    /// A window moved or resized. Within 2 pt of Pane's last read-back it is Pane's own write coming back: a floating
+    /// window's frame is still recorded as a fact, and nothing is answered. Otherwise a floating window's frame is
+    /// recorded (TILE-07, no undo step), clamped into the Desktop only if it now overlaps a docked tile, and a docked
+    /// window goes back to its tile, at most once per second (T-03-13). There is no pointer state yet, so every move
+    /// counts as finished; plan 10 adds drag sessions so a user dragging a docked window is never fought.
+    private mutating func moved(_ window: WindowRef, to frame: Rect, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let desk = world[key] else { return [] }
+        let floating = desk.desktop.contains(window)
+        if floating { try world.recordFloatingFrame(frame, for: window) }
+        if let applied = lastApplied[window.identity], Self.near(applied, frame, within: 2) { return [] }
+        if floating {
+            if let area = display(for: key)?.visibleFrame, let desk = world[key],
+                let clamped = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames[window]
+            {
+                try world.recordFloatingFrame(clamped, for: window)
+            }
+            return replan()
+        }
+        guard desk.tree.state(of: window) == .present else { return [] }
+        if let tile = lastRequested[window.identity], Self.near(tile, frame, within: 2) { return [] }
+        if let last = lastCorrection[window.identity], now < last + Self.correctionInterval {
+            pendingCorrections.insert(window.identity)
+            return nextWake.map { [.wake(at: $0)] } ?? []
+        }
+        return correct([window.identity], now: now)
+    }
+
+    /// Corrects the docked windows whose second has passed and that are still off their tile.
+    private mutating func tick(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        let due = pendingCorrections.filter { id in lastCorrection[id].map { now >= $0 + Self.correctionInterval } ?? true }
+        pendingCorrections.subtract(due)
+        let off = due.filter { id in
+            guard let info = windows[id], let tile = lastRequested[id] else { return false }
+            return world.desks.values.contains { $0.tree.state(of: info.window) == .present } && !Self.near(info.frame, tile, within: 2)
+        }
+        let effects = off.isEmpty ? [] : correct(off, now: now)
+        return effects + (nextWake.map { [.wake(at: $0)] } ?? [])
+    }
+
+    /// Forgets the tile last sent, so the re-plan writes it again.
+    private mutating func correct(_ ids: Set<WindowIdentity>, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        for id in ids {
+            lastCorrection[id] = now
+            lastRequested[id] = nil
+        }
+        return replan()
+    }
+
+    /// The earliest instant a waiting correction is due.
+    private var nextWake: ContinuousClock.Instant? {
+        pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } }.min()
     }
 
     /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
@@ -353,7 +423,8 @@ public struct Arranger: Sendable {
         DeskKey(displayUUID: display.uuid, spaceID: display.currentSpaceID)
     }
 
-    private static func near(_ a: Rect, _ b: Rect) -> Bool {
-        abs(a.x - b.x) <= 0.5 && abs(a.y - b.y) <= 0.5 && abs(a.width - b.width) <= 0.5 && abs(a.height - b.height) <= 0.5
+    private static func near(_ a: Rect, _ b: Rect, within tolerance: Double = 0.5) -> Bool {
+        abs(a.x - b.x) <= tolerance && abs(a.y - b.y) <= tolerance && abs(a.width - b.width) <= tolerance
+            && abs(a.height - b.height) <= tolerance
     }
 }

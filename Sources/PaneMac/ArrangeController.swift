@@ -16,6 +16,8 @@ import os
     private var notices = NoticeQueue<Notice>()
     private lazy var toast = ToastPresenter()
     private let noticeExpiry = WakeTimer()
+    /// The Arranger's one pending wake-up; a newer `.wake` replaces it.
+    private let wake = WakeTimer()
 
     public init(system: AXWindowSystem) {
         self.system = system
@@ -72,8 +74,11 @@ import os
                 logger.info("\(message, privacy: .public)")
             case .notice(let notice):
                 present(notices.post(notice, at: .now))
-            case .wake:
-                break
+            case .wake(let instant):
+                wake.set(instant) { [weak self] in
+                    guard let self else { return }
+                    await self.run(self.arranger.handle(.tick, now: .now))
+                }
             }
         }
     }
