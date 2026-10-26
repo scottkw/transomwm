@@ -98,7 +98,8 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
     func twoDockedWindowsTileWithoutOverlapAndReflowOnClose() async throws {
         let fixture = try await FixtureProcess.launch(["standard", "standard"])
         defer { fixture.terminate() }
-        let (_, _, a, _) = try await dockedPair(fixture)
+        let (arrange, _, a, _) = try await dockedPair(fixture)
+        defer { withExtendedLifetime(arrange) {} }  // its events loop ends with it
         _ = try await fixture.send("close 1")
         let after = await waitFor(fixture, 0, timeout: .seconds(3), grew(a))
         #expect(after != nil, "window 0 stayed \(a) after its neighbour closed")
@@ -108,7 +109,8 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
     func aMinimisedDockedWindowLendsItsTileAndComesBack() async throws {
         let fixture = try await FixtureProcess.launch(["standard", "standard"])
         defer { fixture.terminate() }
-        let (_, _, a, b) = try await dockedPair(fixture)
+        let (arrange, _, a, b) = try await dockedPair(fixture)
+        defer { withExtendedLifetime(arrange) {} }  // its events loop ends with it
         _ = try await fixture.send("minimize 0")
         #expect(await waitFor(fixture, 1, timeout: .seconds(3), grew(b)) != nil, "window 1 did not grow while window 0 was minimised")
         _ = try await fixture.send("deminimize 0")
@@ -124,7 +126,8 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
     func aFullscreenDockedWindowKeepsItsTileAndComesBack() async throws {
         let fixture = try await FixtureProcess.launch(["standard", "standard"])
         defer { fixture.terminate() }
-        let (_, _, a, b) = try await dockedPair(fixture)
+        let (arrange, _, a, b) = try await dockedPair(fixture)
+        defer { withExtendedLifetime(arrange) {} }  // its events loop ends with it
         do {
             _ = try await fixture.send("fullscreen 0", timeout: .seconds(6))
             #expect(await waitFor(fixture, 1, timeout: .seconds(5), grew(b)) != nil, "window 1 did not grow while window 0 was fullscreen")

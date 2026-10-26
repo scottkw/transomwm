@@ -13,6 +13,7 @@ import AppKit
 //   ok <command> | error <message>                               ends every command's reply
 // stdin commands (one per line; any window lines a command prints come before its ok):
 //   open <spec> | close <i> | move <i> <x> <y> | resize <i> <w> <h> | minimize <i> | deminimize <i>
+//   fullscreen <i> | exit-fullscreen <i> (ok once the transition finished, 5 s limit)
 //   select-tab <i> | title <i> <text> | hide-app | unhide-app | list | quit
 // Closing stdin quits the fixture, so a crashed test never leaves it running.
 
@@ -26,6 +27,10 @@ func appKitRect(x: Double, y: Double, width: Double, height: Double) -> NSRect {
 func emit(_ line: String) {
     print(line)
     fflush(stdout)
+}
+
+final class Flag {
+    var value = false
 }
 
 struct FixtureFailure: Error {
@@ -149,6 +154,22 @@ final class Fixture: NSObject, NSApplicationDelegate {
         return values
     }
 
+    /// Enters or leaves native fullscreen, only when the window is not already there, and returns once AppKit
+    /// reports the transition finished.
+    func setFullScreen(_ target: NSWindow, _ on: Bool) async throws(FixtureFailure) {
+        guard target.styleMask.contains(.fullScreen) != on else { return }
+        let done = Flag()
+        let name = on ? NSWindow.didEnterFullScreenNotification : NSWindow.didExitFullScreenNotification
+        let token = NotificationCenter.default.addObserver(forName: name, object: target, queue: .main) { _ in
+            MainActor.assumeIsolated { done.value = true }
+        }
+        defer { NotificationCenter.default.removeObserver(token) }
+        target.toggleFullScreen(nil)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !done.value, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+        guard done.value else { throw FixtureFailure(message: "fullscreen transition did not finish within 5 s") }
+    }
+
     /// Runs one stdin command and answers it.
     func handle(_ command: String) async {
         let parts = command.split(separator: " ").map(String.init)
@@ -179,6 +200,8 @@ final class Fixture: NSObject, NSApplicationDelegate {
                 try window(parts.dropFirst().first).miniaturize(nil)
             case "deminimize":
                 try window(parts.dropFirst().first).deminiaturize(nil)
+            case "fullscreen", "exit-fullscreen":
+                try await setFullScreen(try window(parts.dropFirst().first), parts[0] == "fullscreen")
             case "select-tab":
                 let target = try window(parts.dropFirst().first)
                 guard let group = target.tabGroup else { throw FixtureFailure(message: "window is not in a tab group") }
