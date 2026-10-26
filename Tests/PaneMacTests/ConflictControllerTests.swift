@@ -63,4 +63,80 @@ import Testing
         #expect(paused == [false])
         #expect(prefs.writes.isEmpty, "a poll never writes")
     }
+
+    @Test func anOriginalIsRecordedOnceAndNeverOverwritten() async {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = ["EnableTilingByEdgeDrag": .bool(true)]  // top tiling absent
+        let controller = ConflictController(store: prefs, defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        controller.poll()
+        await controller.turnOff(.edgeTiling)
+        #expect(controller.originals == ["EnableTilingByEdgeDrag": .bool(true), "EnableTopTilingByEdgeDrag": .absent])
+        prefs.values["EnableTilingByEdgeDrag"] = .bool(true)  // the user turns it back on in System Settings
+        await controller.turnOff(.edgeTiling)
+        #expect(controller.originals == ["EnableTilingByEdgeDrag": .bool(true), "EnableTopTilingByEdgeDrag": .absent])
+        #expect(!prefs.writes.contains("EnableTilingOptionAccelerator"))
+    }
+
+    @Test func aWriteThatDoesNotTakeOpensDesktopAndDockAndShowsN7() async {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.stuck = ["EnableTopTilingByEdgeDrag"]
+        let controller = ConflictController(store: prefs, defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        var opened: [URL] = []
+        var posted: [Notice] = []
+        controller.openSettings = { opened.append($0) }
+        controller.post = { posted.append($0) }
+        controller.poll()
+        await controller.turnOff(.edgeTiling)
+        #expect(opened == [URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!])
+        #expect(posted == [.turnOffFailed(.edgeTiling)])
+        #expect(controller.active.contains(.edgeTiling))
+
+        opened = []
+        posted = []
+        await controller.turnOff(.clickWallpaper)
+        #expect(opened.isEmpty && posted.isEmpty, "a write that takes opens nothing")
+    }
+
+    /// D-21: the only way originals come back, and the only time Pane writes a true.
+    @Test func restoreWritesEveryOriginalBackDeletingAbsentKeysAndShowsN8() async {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = ["GloballyEnabled": .bool(true), "EnableStandardClickToShowDesktop": .bool(true)]
+        let controller = ConflictController(store: prefs, defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        var posted: [Notice] = []
+        controller.post = { posted.append($0) }
+        controller.poll()
+        #expect(!controller.canRestore)
+        controller.restore()
+        #expect(prefs.writes.isEmpty && posted.isEmpty, "nothing recorded, nothing restored")
+
+        await controller.turnOff(.stageManager)
+        await controller.turnOff(.edgeTiling)
+        #expect(controller.canRestore)
+        controller.restore()
+        #expect(prefs.values["GloballyEnabled"] == .bool(true))
+        #expect(prefs.values["EnableTilingByEdgeDrag"] == .absent && prefs.values["EnableTopTilingByEdgeDrag"] == .absent)
+        #expect(prefs.values["EnableStandardClickToShowDesktop"] == .bool(true), "never turned off, never touched")
+        #expect(posted == [.settingsRestored])
+        #expect(!controller.canRestore)
+        #expect(controller.originals.isEmpty)
+        #expect(ConflictController(store: prefs, defaults: defaults, osMajor: 15).originals.isEmpty, "cleared on disk too")
+        #expect(controller.active.contains(.stageManager))
+    }
+
+    /// T-03-45: a crafted plist cannot make Restore write any other key.
+    @Test func recordedOriginalsOutsideTheAllowListAreDropped() throws {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let crafted: [String: PrefValue] = ["GloballyEnabled": .bool(true), "AppleShowAllFiles": .bool(true), "EnableTilingByEdgeDrag": .other]
+        defaults.set(try JSONEncoder().encode(crafted), forKey: ConflictController.originalsKey)
+        #expect(ConflictController(store: MemoryPreferences(), defaults: defaults, osMajor: 15).originals == ["GloballyEnabled": .bool(true)])
+        defaults.set(Data("not json".utf8), forKey: ConflictController.originalsKey)
+        #expect(ConflictController(store: MemoryPreferences(), defaults: defaults, osMajor: 15).originals.isEmpty)
+    }
 }

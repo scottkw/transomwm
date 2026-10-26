@@ -18,12 +18,16 @@ public enum Notice: Equatable, Sendable {
     /// N3: a second unclean exit within about a minute, so this launch started paused (D-18).
     case crashLoop
     case restored(count: Int)
+    /// N7: a Turn Off did not take on read-back; Pane opened Desktop & Dock (D-20).
+    case turnOffFailed(Conflict)
+    /// N8: Restore macOS Window Settings wrote every recorded original back (D-21).
+    case settingsRestored
 
     /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
         case .crashRecovered, .crashLoop: true
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored: false
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored, .turnOffFailed, .settingsRestored: false
         }
     }
 }

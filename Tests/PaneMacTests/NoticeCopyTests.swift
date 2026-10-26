@@ -71,4 +71,19 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(NoticeCopy.glyph(for: .restored(count: 2)) == "checkmark.circle")
         #expect(!Notice.restored(count: 1).isCrashNotice)
     }
+
+    @Test func turnOffFailedIsN7WithTheOrangeWarningGlyph() {
+        #expect(NoticeCopy.text(for: .turnOffFailed(.edgeTiling), appName: { _ in "" })
+            == "Couldn't turn off macOS edge tiling. Turn it off here in Desktop & Dock.")
+        #expect(NoticeCopy.text(for: .turnOffFailed(.stageManager), appName: { _ in "" })
+            == "Couldn't turn off Stage Manager. Turn it off here in Desktop & Dock.")
+        #expect(NoticeCopy.glyph(for: .turnOffFailed(.clickWallpaper)) == "exclamationmark.triangle.fill")
+        #expect(NoticeCopy.isWarning(.turnOffFailed(.clickWallpaper)))
+        #expect(!NoticeCopy.isWarning(.settingsRestored))
+    }
+
+    @Test func settingsRestoredIsN8() {
+        #expect(NoticeCopy.text(for: .settingsRestored, appName: { _ in "" }) == "macOS window settings restored.")
+        #expect(NoticeCopy.glyph(for: .settingsRestored) == "checkmark.circle")
+    }
 }

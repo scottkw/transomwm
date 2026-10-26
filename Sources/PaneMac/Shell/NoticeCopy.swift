@@ -24,6 +24,7 @@ nonisolated public enum NoticeCopy {
             count == 0 ? "All windows were already on screen." : "Moved \(count == 1 ? "1 window" : "\(count) windows") back on screen."
         case .crashLoop:
             "Pane quit unexpectedly twice in a minute, so arranging is paused. Your windows are on screen. Choose Resume Arranging from the Pane menu when you're ready."
+        case .turnOffFailed, .settingsRestored: ""
         case .crashRecovered(let unplaced):
             "Pane quit unexpectedly. Your windows are back on screen and your layout is restored."
                 + (unplaced == 0 ? ""
@@ -39,6 +40,9 @@ nonisolated public enum NoticeCopy {
         case .finderNoWindow: "info.circle"
         case .crashRecovered, .crashLoop: "lifepreserver"
         case .restored: "checkmark.circle"
+        case .turnOffFailed, .settingsRestored: ""
         }
     }
+
+    public static func isWarning(_ notice: Notice) -> Bool { false }
 }

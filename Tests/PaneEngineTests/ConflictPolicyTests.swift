@@ -26,4 +26,46 @@ import Testing
     @Test func turnOffWritesFalseToTheFeaturesKeysOnly() {
         #expect(ConflictPolicy.turnOffWrites(for: .stageManager) == ["GloballyEnabled": false])
     }
+
+    @Test func edgeTilingNeverExistsOnMacOS14() {
+        for value in [PrefValue.absent, .bool(true), .bool(false), .other] {
+            let values = ["EnableTilingByEdgeDrag": value, "EnableTopTilingByEdgeDrag": value]
+            #expect(!ConflictPolicy.active(values: values, osMajor: 14).contains(.edgeTiling))
+        }
+    }
+
+    @Test func edgeTilingOnMacOS15IsOnUnlessBothKeysAreFalse() {
+        #expect(ConflictPolicy.active(values: [:], osMajor: 15).contains(.edgeTiling), "absent is on")
+        #expect(ConflictPolicy.active(values: ["EnableTilingByEdgeDrag": .bool(false)], osMajor: 15).contains(.edgeTiling),
+            "top tiling is still on")
+        let off: [String: PrefValue] = ["EnableTilingByEdgeDrag": .bool(false), "EnableTopTilingByEdgeDrag": .bool(false)]
+        #expect(!ConflictPolicy.active(values: off, osMajor: 15).contains(.edgeTiling))
+        #expect(!ConflictPolicy.active(values: off, osMajor: 27).contains(.edgeTiling))
+    }
+
+    @Test func clickWallpaperIsOnWhenAbsentOrTrue() {
+        #expect(ConflictPolicy.active(values: [:], osMajor: 14).contains(.clickWallpaper))
+        #expect(ConflictPolicy.active(values: ["EnableStandardClickToShowDesktop": .bool(true)], osMajor: 14).contains(.clickWallpaper))
+        #expect(!ConflictPolicy.active(values: ["EnableStandardClickToShowDesktop": .bool(false)], osMajor: 14).contains(.clickWallpaper))
+    }
+
+    /// D-05: hold-⌥-to-tile is the user's, never in a write plan.
+    @Test func turningOffEdgeTilingWritesBothEdgeKeysAndNeverTheOptionAccelerator() {
+        #expect(ConflictPolicy.turnOffWrites(for: .edgeTiling) == ["EnableTilingByEdgeDrag": false, "EnableTopTilingByEdgeDrag": false])
+        #expect(ConflictPolicy.turnOffWrites(for: .clickWallpaper) == ["EnableStandardClickToShowDesktop": false])
+        for conflict in Conflict.allCases {
+            #expect(ConflictPolicy.turnOffWrites(for: conflict)["EnableTilingOptionAccelerator"] == nil)
+        }
+        #expect(!ConflictPolicy.allKeys.contains("EnableTilingOptionAccelerator"))
+    }
+
+    @Test func restoreWritesTheBooleanBackAndDeletesAKeyThatWasAbsent() {
+        let writes = ConflictPolicy.restoreWrites(originals: ["GloballyEnabled": .bool(true), "EnableTilingByEdgeDrag": .absent])
+        let expected: [String: Bool?] = ["GloballyEnabled": true, "EnableTilingByEdgeDrag": nil]
+        #expect(writes == expected)
+    }
+
+    @Test func restoreNeverWritesAKeyOutsideTheAllowList() {
+        #expect(ConflictPolicy.restoreWrites(originals: ["SomethingElse": .bool(true), "GloballyEnabled": .other]).isEmpty)
+    }
 }

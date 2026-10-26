@@ -42,6 +42,8 @@ public enum ConflictPolicy {
         allKeys.filter { values[$0] == .other }
     }
 
+    public static func restoreWrites(originals: [String: PrefValue]) -> [String: Bool?] { [:] }
+
     /// Turn Off: false to each of the feature's keys.
     public static func turnOffWrites(for conflict: Conflict) -> [String: Bool] {
         Dictionary(uniqueKeysWithValues: keys(for: conflict).map { ($0, false) })

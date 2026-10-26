@@ -10,6 +10,10 @@ import os
 
     /// `.setPaused(.stageManager, on)`, sent when Stage Manager's state first becomes known and on every change.
     var setStageManagerPaused: (Bool) -> Void = { _ in }
+    var post: (Notice) -> Void = { _ in }
+    var openSettings: (URL) -> Void = { _ in }
+    var canRestore: Bool { false }
+    func restore() {}
     private(set) var active: Set<Conflict> = []
     /// Each written key's value before Pane first wrote it; `.absent` means Restore deletes the key.
     private(set) var originals: [String: PrefValue]
