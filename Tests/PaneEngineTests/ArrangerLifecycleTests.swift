@@ -236,6 +236,22 @@ extension ArrangerLifecycleTests {
         #expect(harness.arranger.history.depth(for: key) == 0)
     }
 
+    /// CR-01: a window admitted after the undone edit (no undo step) is still floating on the desk after the undo.
+    @Test func undoKeepsAWindowAdmittedSinceTheUndoneEdit() throws {
+        var arranger = Arranger()
+        let inventory = WindowInventory(displays: [display], windows: [info(1, frame: frame1)], initialRefreshComplete: true)
+        _ = arranger.handle(.inventory(inventory), now: .now)
+        _ = arranger.handle(.command(.dock, focused: w1), now: .now)
+        _ = arranger.handle(.event(.windowCreated(info(2, frame: frame2))), now: .now)
+        #expect(arranger.world[key]?.desktop.contains(w2) == true)
+
+        _ = arranger.handle(.command(.undo, focused: w1), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        #expect(desk.desktop.frame(of: w1) == frame1)
+        #expect(desk.desktop.frame(of: w2) == frame2, "the window admitted after the dock was dropped from every desk")
+    }
+
     @Test func undoWithNoFocusUsesTheMainDisplaysDesk() async {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))

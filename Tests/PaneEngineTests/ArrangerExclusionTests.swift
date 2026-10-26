@@ -45,6 +45,20 @@ private func started() -> Arranger {
         #expect(grown != tileB, "the neighbour did not reflow")
     }
 
+    /// CR-01: an undo to a snapshot from before the exclusion must not dock the excluded window again.
+    @Test func undoNeverDocksAWindowExcludedSinceTheSnapshot() throws {
+        var arranger = started()
+        let tileA = try #require(setFrames(arranger.handle(.command(.dock, focused: a), now: .now))[a])
+        _ = arranger.handle(.command(.dock, focused: b), now: .now)
+        _ = arranger.handle(.event(.windowChanged(info(a, frame: tileA, excluded: true))), now: .now)
+
+        _ = arranger.handle(.command(.undo, focused: b), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        #expect(desk.tree.state(of: a) == nil, "the undo docked the excluded window again")
+        #expect(desk.desktop.contains(a))
+    }
+
     @Test func anExcludedFloatingWindowIsNeverClampedOrParkedAndStaysFloatingWhenIncludedAgain() throws {
         var arranger = started()
         // a covers the left of the screen, where b's tile will go.

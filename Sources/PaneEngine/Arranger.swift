@@ -686,7 +686,15 @@ public struct Arranger: Sendable {
         guard let key = targetKey(focused), let revived = try LifecycleSync.undo(key, world: &world, history: &history) else {
             return [.beep]
         }
-        return revived.windows.isEmpty ? replan() : [.requery(revived)]
+        // The snapshot predates OS facts with no undo step (a window admitted, rehomed or excluded since): apply them again.
+        var faults: [ArrangerEffect] = []
+        for info in windows.values.sorted(by: { $0.window.identity < $1.window.identity }) {
+            do throws(LayoutError) {
+                try release(info)
+                try admit(info)
+            } catch { faults.append(.fault("could not re-add \(info.window) after an undo: \(error)")) }
+        }
+        return faults + (revived.windows.isEmpty ? replan() : [.requery(revived)])
     }
 
     /// Hides the target desk's Desktop tile, so the docked tiles take its space and its floating windows are parked
