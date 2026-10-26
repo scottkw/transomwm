@@ -68,4 +68,22 @@ import Testing
     @Test func restoreNeverWritesAKeyOutsideTheAllowList() {
         #expect(ConflictPolicy.restoreWrites(originals: ["SomethingElse": .bool(true), "GloballyEnabled": .other]).isEmpty)
     }
+
+    /// D-19: one alert per on-episode.
+    @Test func anAlertIsDueOnlyWhenAFeatureTurnsOn() {
+        #expect(ConflictPolicy.alertsDue(active: [.stageManager], previous: [], notNow: [], restoredByPane: []) == [.stageManager],
+            "first launch with it on")
+        #expect(ConflictPolicy.alertsDue(active: [.stageManager], previous: [.stageManager], notNow: [], restoredByPane: []).isEmpty,
+            "already on at the last poll")
+        #expect(ConflictPolicy.alertsDue(active: [.stageManager], previous: [], notNow: [.stageManager], restoredByPane: []).isEmpty,
+            "Not Now")
+        #expect(ConflictPolicy.alertsDue(active: [.stageManager], previous: [], notNow: [], restoredByPane: [.stageManager]).isEmpty,
+            "Pane turned it back on")
+        #expect(ConflictPolicy.alertsDue(active: [], previous: [.stageManager], notNow: [], restoredByPane: []).isEmpty)
+    }
+
+    @Test func dueAlertsComeInTheFixedOrder() {
+        #expect(ConflictPolicy.alertsDue(active: [.clickWallpaper, .stageManager, .edgeTiling], previous: [], notNow: [], restoredByPane: [])
+            == [.stageManager, .edgeTiling, .clickWallpaper])
+    }
 }

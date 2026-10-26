@@ -56,6 +56,10 @@ public enum ConflictPolicy {
         return writes
     }
 
+    public static func alertsDue(active: Set<Conflict>, previous: Set<Conflict>, notNow: Set<Conflict>, restoredByPane: Set<Conflict>)
+        -> [Conflict]
+    { [] }
+
     /// Turn Off: false to each of the feature's keys.
     public static func turnOffWrites(for conflict: Conflict) -> [String: Bool] {
         Dictionary(uniqueKeysWithValues: keys(for: conflict).map { ($0, false) })

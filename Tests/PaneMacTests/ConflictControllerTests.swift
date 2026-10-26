@@ -139,4 +139,101 @@ import Testing
         defaults.set(Data("not json".utf8), forKey: ConflictController.originalsKey)
         #expect(ConflictController(store: MemoryPreferences(), defaults: defaults, osMajor: 15).originals.isEmpty)
     }
+
+    /// A controller whose alerts are recorded instead of shown.
+    private static func alerting(_ prefs: MemoryPreferences, _ defaults: UserDefaults, presented: @escaping (Conflict) -> Void)
+        -> ConflictController
+    {
+        let controller = ConflictController(store: prefs, defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        controller.presentAlert = presented
+        return controller
+    }
+
+    private static let everythingOff: [String: PrefValue] = [
+        "EnableTilingByEdgeDrag": .bool(false), "EnableTopTilingByEdgeDrag": .bool(false), "EnableStandardClickToShowDesktop": .bool(false),
+    ]
+
+    @Test func twoFeaturesOnAtOnceAlertOneAtATimeInOrder() async {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = Self.everythingOff.merging(["GloballyEnabled": .bool(true), "EnableStandardClickToShowDesktop": .bool(true)]) { $1 }
+        var presented: [Conflict] = []
+        let controller = Self.alerting(prefs, defaults) { presented.append($0) }
+        controller.poll()
+        #expect(presented == [.stageManager])
+        controller.poll()
+        #expect(presented == [.stageManager], "one alert per episode, one at a time")
+        await controller.answer(.stageManager, turnOff: false)
+        #expect(presented == [.stageManager, .clickWallpaper])
+        await controller.answer(.clickWallpaper, turnOff: true)
+        #expect(prefs.values["EnableStandardClickToShowDesktop"] == .bool(false), "Turn Off is the menu line's path")
+        #expect(controller.shownAlert == nil)
+    }
+
+    @Test func notNowIsRememberedAcrossRelaunchesWhileTheFeatureStaysOn() async {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = Self.everythingOff.merging(["GloballyEnabled": .bool(true)]) { $1 }
+        var presented: [Conflict] = []
+        let first = Self.alerting(prefs, defaults) { presented.append($0) }
+        first.poll()
+        await first.answer(.stageManager, turnOff: false)
+        #expect(defaults.stringArray(forKey: ConflictController.notNowKey) == ["stageManager"])
+
+        let relaunched = Self.alerting(prefs, defaults) { presented.append($0) }
+        relaunched.poll()
+        #expect(presented == [.stageManager], "no second alert after a relaunch")
+
+        prefs.values["GloballyEnabled"] = .bool(false)
+        relaunched.poll()
+        #expect(defaults.stringArray(forKey: ConflictController.notNowKey) == [], "off ends the episode")
+        prefs.values["GloballyEnabled"] = .bool(true)
+        relaunched.poll()
+        #expect(presented == [.stageManager, .stageManager], "the next episode alerts again")
+    }
+
+    @Test func aDueAlertWaitsForTheDragToEnd() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = Self.everythingOff.merging(["GloballyEnabled": .bool(true)]) { $1 }
+        var presented: [Conflict] = []
+        var dragging = true
+        let controller = Self.alerting(prefs, defaults) { presented.append($0) }
+        controller.isDragging = { dragging }
+        controller.poll()
+        #expect(presented.isEmpty)
+        dragging = false
+        controller.showNextAlert()
+        #expect(presented == [.stageManager])
+    }
+
+    @Test func aFeaturePaneTurnedBackOnRaisesNoAlert() async {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = Self.everythingOff.merging(["GloballyEnabled": .bool(true)]) { $1 }
+        var presented: [Conflict] = []
+        let controller = Self.alerting(prefs, defaults) { presented.append($0) }
+        controller.poll()
+        await controller.answer(.stageManager, turnOff: true)
+        #expect(!controller.active.contains(.stageManager))
+        controller.restore()
+        #expect(controller.active.contains(.stageManager))
+        #expect(presented == [.stageManager], "Restore turned it back on, so no alert")
+    }
+
+    @Test func anAlertWhoseFeatureTurnsOffIsWithdrawn() async {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = Self.everythingOff.merging(["GloballyEnabled": .bool(true)]) { $1 }
+        let controller = Self.alerting(prefs, defaults) { _ in }
+        controller.poll()
+        #expect(controller.shownAlert == .stageManager)
+        await controller.turnOff(.stageManager)  // from the menu line while the alert is up
+        #expect(controller.shownAlert == nil)
+    }
 }

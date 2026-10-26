@@ -13,6 +13,12 @@ import os
     /// Toasts N7 and N8.
     var post: (Notice) -> Void = { _ in }
     var openSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
+    static let notNowKey = "conflictNotNow"
+    var presentAlert: ((Conflict) -> Void)?
+    var isDragging: () -> Bool = { false }
+    private(set) var shownAlert: Conflict?
+    func answer(_ conflict: Conflict, turnOff: Bool) async {}
+    func showNextAlert() {}
     static let desktopAndDock = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!
     private(set) var active: Set<Conflict> = []
     /// Each written key's value before Pane first wrote it; `.absent` means Restore deletes the key.
