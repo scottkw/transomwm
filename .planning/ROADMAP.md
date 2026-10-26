@@ -174,7 +174,7 @@ Plans:
 - [ ] 03-16-PLAN.md — macOS conflicts: Stage Manager pause, edge tiling, click wallpaper; Turn Off with read-back, alerts, Restore macOS Window Settings
 
 **Wave 16** *(blocked on Wave 15 completion)*
-- [ ] 03-17-PLAN.md — `scripts/release.sh`: secure timestamp, notarise, staple, DMG; 0.3.0 pre-release (blocking checkpoint for the notarised run)
+- [ ] 03-17-PLAN.md — `scripts/release.sh`: secure timestamp, notarise, staple, DMG; local notarised 0.3.0 DMG, public release held for the Transom rename (blocking checkpoint for the notarised run)
 
 **UI hint**: yes
 **Research**: Standard patterns; drop-zone geometry starts from yabai's numbers (edge bands ~25%, centre ~50%) and is tuned in UAT
