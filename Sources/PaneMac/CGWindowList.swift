@@ -15,11 +15,17 @@ public nonisolated enum CGWindowList {
     /// The on-screen windows only, front to back (the order `optionAll` does not promise): for "topmost under a point".
     public static func onScreenFrontToBack() -> [CGWindowEntry]? { read([.optionOnScreenOnly, .excludeDesktopElements]) }
 
-    /// The topmost visible window of another process under `point`: the tap's fallback when an event carries no window
-    /// (0 at the session tap, 03-11), so a green button under another window is never taken.
+    /// The topmost visible layer-0 window of another process under `point`: the tap's fallback when an event carries no
+    /// window (0 at the session tap, 03-11), so a green button under another window is never taken.
     static func topmostWindow(at point: Point) -> UInt32? {
-        let own = getpid()
-        return onScreenFrontToBack()?.first { $0.pid != own && $0.alpha > 0 && $0.bounds.contains(point) }?.windowID
+        onScreenFrontToBack().flatMap { topmost(at: point, in: $0, excludingPID: getpid()) }
+    }
+
+    /// The first entry of the front-to-back `list` at layer 0, of a pid other than `own`, visible and containing `point`.
+    /// Layer 0 skips the Dock's full-screen layer-20 window (macOS 15, G-03-4) and other overlay layers, as pressWindow
+    /// does. Accepted trade-off (T-03-52): another app's non-zero-layer panel over a green button no longer blocks it.
+    static func topmost(at point: Point, in list: [CGWindowEntry], excludingPID own: Int32) -> UInt32? {
+        list.first { $0.layer == 0 && $0.pid != own && $0.alpha > 0 && $0.bounds.contains(point) }?.windowID
     }
 
     private static func read(_ options: CGWindowListOption) -> [CGWindowEntry]? {
