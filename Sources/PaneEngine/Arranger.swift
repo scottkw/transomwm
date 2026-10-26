@@ -30,6 +30,15 @@ public enum PauseReason: Int, Comparable, Hashable, Sendable {
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
+/// One split boundary an edge resize or a gap drag moves (D-07): `points` along the split's axis, positive growing
+/// child `first` at the expense of child `second`.
+struct BoundaryMove: Equatable, Sendable {
+    var split: NodeID
+    var first: Int
+    var second: Int
+    var points: Double
+}
+
 /// How soon the shell writes layout.json: about 0.5 s after the latest request, or at once (before a park, plan 08).
 public enum SaveUrgency: Equatable, Sendable {
     case debounced, now
@@ -790,6 +799,7 @@ public struct Arranger: Sendable {
     /// A move session's pointer or frame changed: a new hover withdraws the preview and restarts the dwell; a held one
     /// shows its preview once the dwell has passed.
     private mutating func follow(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        if drag?.kind == .resize { return followResize() }
         guard var session = drag, session.kind == .move else { return [] }
         guard windows[session.window.identity]?.isExcluded == false, deskKey(of: session.window) != nil else { return endDrag() }
         let hover = hover(for: session)
@@ -947,6 +957,13 @@ public struct Arranger: Sendable {
         }
         let action = kind == .move ? session.decision?.action ?? .miss : .miss
         do throws(LayoutError) {
+            if kind == .resize, let key = deskKey(of: window), world[key]?.tree.state(of: window) != nil,
+                let change = try boundaryChange(key, edgeMoves(session))
+            {
+                try world.edit(key, history: &history, change)
+                lastRequested[window.identity] = nil  // settles exactly into the new tile
+                return effects + replan()
+            }
             switch action {
             case .dock(let key, let target): effects += try commitDock(window, on: key, at: target)
             case .swap(let other): effects += try commitSwap(window, with: other)
@@ -1013,6 +1030,87 @@ public struct Arranger: Sendable {
         }
         try rehome(info)
         return replan()
+    }
+
+    /// A docked window's edge-resize session (D-07): its neighbours follow on a transient copy of the World, the
+    /// dragged window is never written, and nothing is committed before mouse-up. A floating one waits for mouse-up,
+    /// where its frame is recorded as a fact.
+    private mutating func followResize() -> [ArrangerEffect] {
+        guard let session = drag, let key = deskKey(of: session.window), world[key]?.tree.state(of: session.window) != nil else { return [] }
+        do throws(LayoutError) {
+            guard let change = try boundaryChange(key, edgeMoves(session)) else { return [] }
+            return try replan(with: change, on: key)
+        } catch {
+            return [.fault("could not follow the resize of \(session.window): \(error)")]
+        }
+    }
+
+    /// Plans the shown desks as if `change` were applied to `key`'s desk, without changing the World: the live half of
+    /// a resize. Writes still coalesce (latest wins), and mouse-up commits the change as one `World.edit`.
+    private mutating func replan(with change: (inout Desk, inout IDSource) throws(LayoutError) -> Void, on key: DeskKey) throws(LayoutError) -> [ArrangerEffect] {
+        let committed = world
+        defer { world = committed }
+        try world.reflow(key, change)  // weights never make a window unfit, so replan floats nothing here
+        return replan()
+    }
+
+    /// The inner edges of the pressed docked window that its frame has moved off its tile, each as the split boundary
+    /// it drags (`Neighbours.boundary`). An outer edge has none, so a window dragged only by those snaps back.
+    private mutating func edgeMoves(_ session: DragSession) -> [BoundaryMove] {
+        let window = session.window
+        guard let key = deskKey(of: window), let desk = world[key], let leaf = desk.tree.leaf(containing: window),
+            let plan = dragPlan(.desk(key)), let tile = plan.frames[window], let frame = windows[window.identity]?.frame
+        else { return [] }
+        let shifts: [(Edge, Double)] = [
+            (.left, frame.minX - tile.minX), (.right, frame.maxX - tile.maxX), (.top, frame.minY - tile.minY), (.bottom, frame.maxY - tile.maxY),
+        ]
+        return shifts.compactMap { edge, shift in
+            guard abs(shift) > 1, let boundary = Neighbours.boundary(for: leaf, edge: edge, in: desk.tree),
+                case .split(_, let children, _)? = desk.tree.node(boundary.split)
+            else { return nil }
+            // The nearest sibling that takes part: a minimised one in between keeps its weight (Pitfall 9).
+            let taking = { (i: Int) in plan.resolution.nodeRects[children[i]] != nil }
+            let first = edge.isLeading ? (0...boundary.index).reversed().first(where: taking) : boundary.index
+            let second = edge.isLeading ? boundary.index + 1 : (boundary.index + 1..<children.count).first(where: taking)
+            guard let first, let second else { return nil }
+            return BoundaryMove(split: boundary.split, first: first, second: second, points: shift)
+        }
+    }
+
+    /// The change that moves each boundary of `key`'s desk by its points (positive grows `first`), or nil when nothing
+    /// would move. Points become weight through the split's laid-out length, and are cut to what the shrinking side can
+    /// give before its minimum, so the stored weights say what the screen shows (no dead zone on the way back).
+    func boundaryChange(_ key: DeskKey, _ moves: [BoundaryMove]) throws(LayoutError) -> ((inout Desk, inout IDSource) throws(LayoutError) -> Void)? {
+        guard !moves.isEmpty, let desk = world[key], let area = display(for: key)?.visibleFrame else { return nil }
+        let gap = gap, mins = minimums
+        let before = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution
+        func size(_ id: NodeID, _ axis: Axis, _ resolution: Resolution) -> Double {
+            resolution.nodeRects[id].map { axis == .horizontal ? $0.width : $0.height } ?? 0
+        }
+        func apply(_ moves: [BoundaryMove], to desk: inout Desk) throws(LayoutError) {
+            for move in moves {
+                guard case .split(let axis, let children, let weights)? = desk.tree.node(move.split), let rect = before.nodeRects[move.split]
+                else { throw .nodeNotFound(move.split) }
+                let taking = children.indices.filter { before.nodeRects[children[$0]] != nil }
+                let length = (axis == .horizontal ? rect.width : rect.height) - gap.rounded() * Double(taking.count - 1)
+                guard length > 0 else { continue }
+                let weight = taking.reduce(0) { $0 + weights[$1] }
+                try desk.tree.resizeBetween(in: move.split, move.first, move.second, by: move.points * weight / length)
+            }
+        }
+        var raw = desk
+        try apply(moves, to: &raw)
+        let after = try Planner.plan(desk: raw, area: area, gap: gap, mins: mins).resolution
+        let cut = try moves.map { move throws(LayoutError) -> BoundaryMove in
+            guard case .split(let axis, let children, _)? = desk.tree.node(move.split) else { throw .nodeNotFound(move.split) }
+            let loser = children[move.points > 0 ? move.second : move.first]
+            let room = max(0, size(loser, axis, before) - size(loser, axis, after))
+            var cut = move
+            cut.points = move.points > 0 ? min(move.points, room) : -min(-move.points, room)
+            return cut
+        }
+        guard cut.contains(where: { abs($0.points) >= 0.5 }) else { return nil }
+        return { desk, _ throws(LayoutError) in try apply(cut, to: &desk) }
     }
 
     private mutating func dragPlan(_ key: DragPlanKey) -> FramePlan? {

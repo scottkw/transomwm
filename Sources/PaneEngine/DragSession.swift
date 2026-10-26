@@ -90,7 +90,7 @@ public struct DragSession: Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
         /// The origin moved with the size unchanged: a title-bar drag.
         case move
-        /// The size changed: an edge resize (plan 13).
+        /// The size changed: an edge resize, which moves a docked window's split boundaries (D-07).
         case resize
     }
 
