@@ -63,4 +63,12 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(NoticeCopy.glyph(for: .crashLoop) == "lifepreserver")
         #expect(Notice.crashLoop.isCrashNotice)
     }
+
+    @Test func restoredIsN6WithSingularPluralAndNone() {
+        #expect(NoticeCopy.text(for: .restored(count: 1), appName: { _ in "" }) == "Moved 1 window back on screen.")
+        #expect(NoticeCopy.text(for: .restored(count: 2), appName: { _ in "" }) == "Moved 2 windows back on screen.")
+        #expect(NoticeCopy.text(for: .restored(count: 0), appName: { _ in "" }) == "All windows were already on screen.")
+        #expect(NoticeCopy.glyph(for: .restored(count: 2)) == "checkmark.circle")
+        #expect(!Notice.restored(count: 1).isCrashNotice)
+    }
 }

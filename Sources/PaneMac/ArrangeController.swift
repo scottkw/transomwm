@@ -436,7 +436,7 @@ import os
     private func displayUUID(of notice: Notice) -> String? {
         switch notice {
         case .lostRoom(let windows): windows.first.flatMap { arranger.windows[$0.identity]?.displayUUID }
-        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop: nil
+        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored: nil
         }
     }
 

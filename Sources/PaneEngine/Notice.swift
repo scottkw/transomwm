@@ -17,12 +17,13 @@ public enum Notice: Equatable, Sendable {
     case crashRecovered(unplaced: Int)
     /// N3: a second unclean exit within about a minute, so this launch started paused (D-18).
     case crashLoop
+    case restored(count: Int)
 
     /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
         case .crashRecovered, .crashLoop: true
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers: false
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored: false
         }
     }
 }

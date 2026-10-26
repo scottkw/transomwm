@@ -36,6 +36,7 @@ extension KeyboardShortcuts.Name {
     static let snapCenter = Self("snapCenter", initial: .init(.c, modifiers: [.control, .option, .command]))
     static let arrangeAll = Self("arrangeAll", initial: .init(.d, modifiers: [.control, .option, .command, .shift]))
     static let floatAll = Self("floatAll", initial: .init(.f, modifiers: [.control, .option, .command, .shift]))
+    static let restoreAll = Self("restoreAll")
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.

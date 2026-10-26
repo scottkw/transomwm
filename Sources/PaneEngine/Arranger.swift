@@ -217,6 +217,7 @@ public struct Arranger: Sendable {
                 case (.arrangeAll, _): return try arrangeAll(focused)
                 case (.floatAll, _): return try floatAll(focused)
                 case (.togglePause, _): return togglePause()
+                case (.restoreAll, _): return []
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
                 case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
                     (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
@@ -403,6 +404,8 @@ public struct Arranger: Sendable {
             return targetKey(focused).flatMap(display(for:)) != nil
         case .togglePause, .toggleExcludeFrontmost:
             return true  // answered above
+        case .restoreAll:
+            return false
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }

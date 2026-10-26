@@ -29,6 +29,7 @@ public enum Command: Hashable, Sendable {
     case snap(SnapTarget)
     /// Dock every eligible floating window, or float every docked one, on the target desk: one undo step (TILE-16).
     case arrangeAll, floatAll
+    case restoreAll
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and

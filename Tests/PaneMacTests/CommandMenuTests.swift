@@ -42,6 +42,15 @@ import Testing
         #expect(sent == [command])
     }
 
+    @Test func restoreAllShowsControlOptionCommandZeroAndDispatchesItsCommand() throws {
+        var sent: [Command] = []
+        let menu = CommandMenu { sent.append($0) }
+        let item = menu.item(for: .restoreAll)
+        #expect(item.title == "Restore All Windows" && item.keyEquivalent == "0" && item.keyEquivalentModifierMask == base)
+        _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item)
+        #expect(sent == [.restoreAll])
+    }
+
     @Test func dockShowsControlOptionCommandD() {
         let item = CommandMenu { _ in }.item(for: .dock)
         #expect(item.keyEquivalent == "d")

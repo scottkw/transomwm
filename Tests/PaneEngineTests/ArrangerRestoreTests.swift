@@ -255,3 +255,89 @@ extension ArrangerRestoreTests {
         #expect(setFrames(resumed)[a] == tileA, "Resume did not re-apply the layout: \(resumed)")
     }
 }
+
+/// SAFE-03: Restore All Windows brings every window Pane may move back on screen, on demand, even while paused.
+extension ArrangerRestoreTests {
+    private static let home = Rect(x: 1000, y: 600, width: 150, height: 120)
+
+    /// [a | b | Desktop] with c floating at `home`, the Desktop hidden so c is parked.
+    private func parkedC() async throws -> Harness {
+        var harness = await twoDocked(frames: [
+            1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Self.home,
+        ])
+        await harness.send(.command(.toggleDesktop, focused: a))
+        try #require(harness.arranger.world[key]?.tree.isDesktopHidden == true)
+        let parked = try #require(await harness.frame(c))
+        try #require(!inside(parked, visibleFrame), "c was not parked: \(parked)")
+        return harness
+    }
+
+    /// Pushes b far off screen while paused, so nothing puts it back.
+    private func strandB(_ harness: inout Harness) async throws {
+        let tileB = try #require(await harness.frame(b))
+        await harness.fake.userMove(2, to: Rect(x: 10000, y: 100, width: tileB.width, height: tileB.height))
+        _ = await harness.refresh()
+        try #require(harness.arranger.windows[b.identity]?.frame.x == 10000)
+    }
+
+    @Test func restoreAllShowsTheHiddenDesktopAndMovesAnOffScreenWindowEvenWhilePaused() async throws {
+        var harness = try await parkedC()
+        await harness.send(.command(.togglePause, focused: nil))
+        try await strandB(&harness)
+        let depth = harness.arranger.history.depth(for: key)
+
+        let effects = await harness.send(.command(.restoreAll, focused: nil))
+        let frames = setFrames(effects)
+        #expect(frames[c] == Self.home, "the parked window did not go back to its home frame")
+        #expect(frames[b].map { inside($0, visibleFrame) } == true, "b is not back on screen: \(String(describing: frames[b]))")
+        #expect(notices(effects) == [.restored(count: 2)])
+        #expect(harness.arranger.world[key]?.tree.isDesktopHidden != true)
+        #expect(harness.arranger.world[key]?.desktop.frame(of: c) == Self.home)
+        #expect(harness.arranger.history.depth(for: key) == depth + 1, "showing the Desktop is the undoable part")
+        #expect(harness.arranger.pauseReasons == [.user], "Restore All does not resume arranging")
+        #expect(await harness.frame(c) == Self.home)
+    }
+
+    @Test func restoreAllWithNoHiddenDesktopAddsNoUndoStep() async throws {
+        var harness = await twoDocked()
+        await harness.send(.command(.togglePause, focused: nil))
+        try await strandB(&harness)
+        let depth = harness.arranger.history.depth(for: key)
+        let effects = await harness.send(.command(.restoreAll, focused: nil))
+        #expect(setFrames(effects).keys.sorted { $0.identity < $1.identity } == [b])
+        #expect(notices(effects) == [.restored(count: 1)])
+        #expect(harness.arranger.history.depth(for: key) == depth)
+    }
+
+    @Test func restoreAllWhileArrangingPutsTheShownDesktopsWindowsHome() async throws {
+        var harness = try await parkedC()
+        let depth = harness.arranger.history.depth(for: key)
+        let effects = await harness.send(.command(.restoreAll, focused: nil))
+        #expect(performs(effects).first?.first == .setFrame(c, Self.home), "the rescue goes before the layout")
+        #expect(notices(effects) == [.restored(count: 1)])
+        #expect(harness.arranger.history.depth(for: key) == depth + 1)
+        #expect(await harness.frame(c) == Self.home)
+    }
+
+    @Test func restoreAllWithNothingStrandedOnlySaysSo() async throws {
+        var harness = await twoDocked()
+        let world = harness.arranger.world
+        let effects = await harness.send(.command(.restoreAll, focused: nil))
+        #expect(performs(effects).isEmpty)
+        #expect(notices(effects) == [.restored(count: 0)])
+        #expect(harness.arranger.world == world)
+    }
+
+    @Test func restoreAllIsAvailableWhilePausedForAnyReasonButNotWithoutAccess() async throws {
+        var harness = await Harness.started()
+        let ready = CommandContext(focused: nil, ready: true)
+        #expect(harness.arranger.availability(.restoreAll, context: ready))
+        await harness.send(.command(.togglePause, focused: nil))
+        #expect(harness.arranger.availability(.restoreAll, context: ready))
+        await harness.send(.setPaused(.stageManager, true))
+        await harness.send(.setPaused(.crashLoop, true))
+        #expect(harness.arranger.availability(.restoreAll, context: ready))
+        #expect(!harness.arranger.availability(.restoreAll, context: CommandContext(focused: a, ready: false)))
+    }
+}
+

@@ -15,14 +15,14 @@ import Testing
             "togglePause", "toggleExcludeFrontmost", "moveLeft", "moveRight", "moveUp", "moveDown",
             "swapPrevious", "growTile", "shrinkTile", "balanceSplit", "rotateSplit", "flipSplit", "snapLeftThird", "snapCenterThird",
             "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight", "snapMaximize", "snapCenter",
-            "arrangeAll", "floatAll",
+            "arrangeAll", "floatAll", "restoreAll",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
             .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
             .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
             .swapPrevious, .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .snap(.leftThird), .snap(.centerThird),
             .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
-            .arrangeAll, .floatAll,
+            .arrangeAll, .floatAll, .restoreAll,
         ])
     }
 
@@ -37,7 +37,7 @@ import Testing
             .init(.r, modifiers: base), .init(.x, modifiers: base), .init(.one, modifiers: base), .init(.two, modifiers: base),
             .init(.three, modifiers: base), .init(.u, modifiers: base), .init(.i, modifiers: base), .init(.j, modifiers: base),
             .init(.k, modifiers: base), .init(.return, modifiers: base), .init(.c, modifiers: base),
-            .init(.d, modifiers: shifted), .init(.f, modifiers: shifted),
+            .init(.d, modifiers: shifted), .init(.f, modifiers: shifted), .init(.zero, modifiers: base),
         ]
         #expect(Hotkeys.entries.map(\.name.defaultShortcut) == expected)
     }
@@ -50,6 +50,24 @@ import Testing
     @Test func toggleExcludeFrontmostIsControlOptionCommandE() {
         #expect(KeyboardShortcuts.Name.toggleExcludeFrontmost.rawValue == "toggleExcludeFrontmost")
         #expect(KeyboardShortcuts.Name.toggleExcludeFrontmost.defaultShortcut == .init(.e, modifiers: base))
+    }
+
+    @Test func restoreAllIsControlOptionCommandZero() {
+        #expect(KeyboardShortcuts.Name.restoreAll.rawValue == "restoreAll")
+        #expect(KeyboardShortcuts.Name.restoreAll.defaultShortcut == .init(.zero, modifiers: base))
+    }
+
+    /// Every Phase 3 name, verbatim from 03-UI-SPEC.md Surface 6, so a rename fails here (Pitfall 13).
+    @Test func theTableHasExactlyThe33UISpecNames() {
+        let spec: Set<String> = [
+            "focusLeft", "focusRight", "focusUp", "focusDown", "moveLeft", "moveRight", "moveUp", "moveDown", "dock", "float",
+            "swapPrevious", "undo", "growTile", "shrinkTile", "balanceSplit", "rotateSplit", "flipSplit", "finderSplit",
+            "snapLeftThird", "snapCenterThird", "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight",
+            "snapMaximize", "snapCenter", "arrangeAll", "floatAll", "toggleDesktop", "togglePause", "restoreAll", "toggleExcludeFrontmost",
+        ]
+        #expect(spec.count == 33)
+        #expect(Hotkeys.entries.count == 33)
+        #expect(Set(Hotkeys.entries.map(\.name.rawValue)) == spec)
     }
 
     @Test func namesAreUnique() {
