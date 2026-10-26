@@ -43,6 +43,12 @@ struct BoundaryMove: Equatable, Sendable {
     var points: Double
 }
 
+extension BoundaryMove {
+    init(_ handle: GapHandle, _ points: Double) {
+        self.init(split: handle.split, first: handle.first, second: handle.second, points: points)
+    }
+}
+
 /// How soon the shell writes layout.json: about 0.5 s after the latest request, or at once (before a park, plan 08).
 public enum SaveUrgency: Equatable, Sendable {
     case debounced, now
@@ -129,6 +135,8 @@ public struct Arranger: Sendable {
     private var dragPlans: [DragPlanKey: FramePlan] = [:]
     /// The gap handles last sent per display, so only a change is sent again.
     private var shownHandles: [String: [GapHandle]] = [:]
+    /// The gap being dragged and its points since the press, applied by every replan until mouse-up (G-03-3 H2).
+    private var liveGap: (handle: GapHandle, delta: Double)?
 
     private enum DragPlanKey: Hashable {
         case desk(DeskKey)
@@ -1162,7 +1170,7 @@ public struct Arranger: Sendable {
         let committed = world
         defer { world = committed }
         try world.reflow(key, change)  // weights never make a window unfit, so replan floats nothing here
-        return replan()
+        return planShown()
     }
 
     /// The inner edges of the pressed docked window that its frame has moved off its tile, each as the split boundary
@@ -1268,10 +1276,27 @@ public struct Arranger: Sendable {
 
     // MARK: Planning
 
+    /// Plans the shown desks, with the live gap move applied until mouse-up so no mid-drag event writes the pre-drag
+    /// desk (G-03-3 H2). A live move whose split is gone, or that fails, is dropped.
+    mutating func replan() -> [ArrangerEffect] {
+        guard let live = liveGap else { return planShown() }
+        guard let key = shownDesk(holding: live.handle.split) else {
+            liveGap = nil
+            return planShown()
+        }
+        do throws(LayoutError) {
+            guard let change = try boundaryChange(key, [BoundaryMove(live.handle, live.delta)]) else { return planShown() }
+            return try replan(with: change, on: key)
+        } catch {
+            liveGap = nil
+            return [.fault("could not drag the gap of \(live.handle.split): \(error)")] + planShown()
+        }
+    }
+
     /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked
     /// windows left without room float first, and are named in one notice (D-26). A hidden Desktop's floating windows
     /// are parked once each, first in the perform, and only after an immediate save holding their home frames (D-16).
-    mutating func replan() -> [ArrangerEffect] {
+    private mutating func planShown() -> [ArrangerEffect] {
         guard !sessionPaused, pauseReasons.isEmpty else { return [] }
         var parks: [WindowCommand] = []
         var parkedNow: Set<WindowIdentity> = []
@@ -1352,23 +1377,29 @@ public struct Arranger: Sendable {
         show([:])
     }
 
-    /// A gap-handle drag (TILE-05, D-07): until mouse-up both sides follow on a transient copy of the World; mouse-up
-    /// commits one `World.edit`. The handle's split names its desk (split IDs are unique in the World). Nothing moves
-    /// while paused or while a window is being dragged or resized.
+    /// A gap-handle drag (TILE-05, D-07): until mouse-up both sides follow on a transient copy of the World (`liveGap`,
+    /// applied by every replan); mouse-up commits one `World.edit`. Nothing moves while paused or while a window is
+    /// being dragged or resized.
     private mutating func gapDrag(_ handle: GapHandle, delta: Double, ended: Bool) -> [ArrangerEffect] {
-        guard pauseReasons.isEmpty, !sessionPaused, drag?.kind == nil, delta.isFinite,
-            let key = displays.map(Self.key).first(where: { key in
-                if case .split? = world[key]?.tree.node(handle.split) { true } else { false }
-            })
+        if ended { liveGap = nil }  // first, so a mouse-up always ends the live move (T-03-56)
+        guard pauseReasons.isEmpty, !sessionPaused, drag?.kind == nil, delta.isFinite, let key = shownDesk(holding: handle.split)
         else { return [] }
-        let move = BoundaryMove(split: handle.split, first: handle.first, second: handle.second, points: delta)
+        guard ended else {
+            liveGap = (handle, delta)
+            return replan()
+        }
         do throws(LayoutError) {
-            guard let change = try boundaryChange(key, [move]) else { return replan() }
-            guard ended else { return try replan(with: change, on: key) }
-            try world.edit(key, history: &history, change)
+            if let change = try boundaryChange(key, [BoundaryMove(handle, delta)]) { try world.edit(key, history: &history, change) }
             return replan()
         } catch {
             return [.fault("could not drag the gap of \(handle.split): \(error)")] + replan()
+        }
+    }
+
+    /// The shown desk holding `split` (split IDs are unique in the World).
+    private func shownDesk(holding split: NodeID) -> DeskKey? {
+        displays.map(Self.key).first { key in
+            if case .split? = world[key]?.tree.node(split) { true } else { false }
         }
     }
 
