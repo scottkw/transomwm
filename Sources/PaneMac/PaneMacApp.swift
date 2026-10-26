@@ -15,6 +15,8 @@ public enum PaneMacApp {
     /// Takes the event tap down the moment access leaves `.ready`, and brings it back with access (Pitfall 4).
     private static var accessSubscription: AnyCancellable?
     private static var trackedWindows: TrackedWindowsWindowController?
+    /// NSApplication holds its delegate weakly.
+    private static var delegate: AppDelegate?
     private static let freezeTest = FreezeTest()
     private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "hints")
 
@@ -80,15 +82,17 @@ public enum PaneMacApp {
         Hotkeys.register(dispatch)
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
-        // Quit Pane during a freeze resumes the app now rather than at the next launch. A normal quit is recorded
-        // as cleanExit in layout.json (plan 15 moves this after the quit restore).
+        // A quit first returns parked and off-screen windows, then records cleanExit in layout.json (SAFE-01).
+        let appDelegate = AppDelegate(
+            restore: { arrangeController.restoreForTermination() }, writeCleanExit: { arrangeController.writeCleanExit() })
+        appDelegate.handleSIGTERM()
+        delegate = appDelegate
+        app.delegate = appDelegate
+        // Quit Pane during a freeze resumes the app now rather than at the next launch.
         _ = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { _ in
-            MainActor.assumeIsolated {
-                freezeTest.resumeNow()
-                arrangeController.writeCleanExit()
-            }
+            MainActor.assumeIsolated { freezeTest.resumeNow() }
         }
         app.run()
         exit(0)

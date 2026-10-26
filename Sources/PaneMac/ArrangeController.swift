@@ -392,9 +392,19 @@ import os
         NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser)
     }
 
+    /// Before Pane exits (SAFE-01, D-15): every parked or off-screen window Pane may move goes back on screen, within
+    /// `limit` in total; docked windows stay where they are. Synchronous, so it never waits on MainActor work
+    /// (Pitfall 14). Returns how many writes finished.
     @discardableResult
     public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
-        0  // RED stub
+        let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) })
+        let plan = Recovery.terminationPlan(
+            windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked)
+        guard !plan.isEmpty else { return 0 }
+        let (seconds, attoseconds) = limit.components
+        let restored = system.restoreForTermination(plan, deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)
+        logger.info("quit restore: \(restored, privacy: .public) of \(plan.count, privacy: .public) windows")
+        return restored
     }
 
     /// Writes layout.json one last time with `cleanExit: true` when Pane quits normally. Nothing is written if

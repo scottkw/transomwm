@@ -318,8 +318,26 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         }
     }
 
+    /// The quit restore's write (Pattern 11): writes `rect` on this thread, outside the latest-wins queue, and blocks the
+    /// caller until it finishes or `deadline` passes. True only for a finished write with a read-back; a hung app is
+    /// abandoned at the deadline (its write may still land later).
     func writeForTermination(windowID: UInt32, rect: Rect, deadline: DispatchTime) -> Bool {
-        false  // RED stub
+        let done = DispatchSemaphore(value: 0)
+        let written = OSAllocatedUnfairLock(initialState: false)
+        let enqueued = stopped.withLock { isStopped -> Bool in
+            guard !isStopped, let runLoop else { return false }
+            CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { [self] in
+                defer { done.signal() }
+                guard let app, let element = windows[windowID]?.element else { return }
+                let (actual, failure) = FrameWriter.write(
+                    rect, window: element, app: app,
+                    reenableEnhancedUI: Self.reenableEnhancedUIOverrides[bundleID] ?? true, isCancelled: { self.isStopped })
+                written.withLock { $0 = actual != nil && failure == nil }
+            }
+            CFRunLoopWakeUp(runLoop)
+            return true
+        }
+        return enqueued && done.wait(timeout: deadline) == .success && written.withLock { $0 }
     }
 
     /// The job token: true once `stop()` was called.
