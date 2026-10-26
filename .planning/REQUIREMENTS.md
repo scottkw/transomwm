@@ -46,18 +46,18 @@
 - [x] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
 - [x] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
 - [x] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
-- [ ] **TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL
+- [x] **TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL
 - [x] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" returns every window to the Desktop as a normal Mac layout
-- [ ] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
+- [x] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
 - [x] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
 - [x] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
 - [x] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
 
 ### Safety & Recovery
 
-- [ ] **SAFE-01**: On quit, every window Pane moved returns to a sensible on-screen frame
+- [x] **SAFE-01**: On quit, every window Pane moved returns to a sensible on-screen frame
 - [x] **SAFE-02**: After a crash or force-quit, the next launch restores stranded windows on-screen
-- [ ] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
+- [x] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
 - [ ] **SAFE-04**: Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
 - [x] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
 - [x] **SAFE-06**: Quitting and relaunching Pane while apps keep running restores each display's layout with the same windows in their tiles
@@ -186,15 +186,15 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-12 | Phase 3 | Complete |
 | TILE-13 | Phase 3 | Complete |
 | TILE-14 | Phase 3 | Complete |
-| TILE-15 | Phase 3 | Pending |
+| TILE-15 | Phase 3 | Complete |
 | TILE-16 | Phase 3 | Complete |
-| TILE-17 | Phase 3 | Pending |
+| TILE-17 | Phase 3 | Complete |
 | TILE-18 | Phase 3 | Complete |
 | TILE-19 | Phase 3 | Complete |
 | TILE-20 | Phase 3 | Complete |
-| SAFE-01 | Phase 3 | Pending |
+| SAFE-01 | Phase 3 | Complete |
 | SAFE-02 | Phase 3 | Complete |
-| SAFE-03 | Phase 3 | Pending |
+| SAFE-03 | Phase 3 | Complete |
 | SAFE-04 | Phase 3 | Pending |
 | SAFE-05 | Phase 2 | Complete |
 | SAFE-06 | Phase 3 | Complete |

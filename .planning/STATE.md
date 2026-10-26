@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-14-PLAN.md
-last_updated: "2026-10-26T06:06:47.272Z"
+stopped_at: Completed 03-15-PLAN.md
+last_updated: "2026-10-26T06:20:53.266Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: cead94248deffab9f97f1ae84483138428a5d196
+state_head: 8d6f2022b7e71b7c8593eab29290cf12a315f3e0
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 37
+  completed_plans: 38
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 15 of 17
+Plan: 16 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -93,6 +93,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 03 P12 | 13min | 3 tasks | 16 files |
 | Phase 3 P13 | 17 min | 3 tasks | 21 files |
 | Phase 3 P14 | 13 min | 3 tasks | 22 files |
+| Phase 03 P15 | 10 min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,9 @@ Recent decisions affecting current work:
 - [Phase 3]: Recovery and crash-loop launches show hidden Desktop tiles holding parked windows (no undo step), so the first plan does not park rescued windows again
 - [Phase 3]: A rescued window goes to its saved desk's display, else its nearest; survivedMinute written 60 s into a recovery launch and cancelled by a clean quit
 - [Phase 3]: Restore All shows hidden Desktops holding windows as one undo step per desk and acts while paused; SAFE-03 waits for pane://restore (plan 15)
+- [Phase 03]: Quit restore: a non-docked window with a home frame counts as parked even when not stranded (park corner can show on a neighbouring display); it goes home on the display holding its home frame's centre
+- [Phase 03]: A URL-sourced command that cannot act is silent on both refusal paths: availability and the Arranger's own beep effects
+- [Phase 03]: pane-debug:// in Debug and pane:// in Release via PANE_URL_SCHEME merged from xcode/Pane-Info.plist; outside the bundle every URL is rejected
 
 ### Pending Todos
 
@@ -248,8 +252,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T06:06:47.131Z
-Stopped at: Completed 03-14-PLAN.md
+Last session: 2026-10-26T06:20:53.126Z
+Stopped at: Completed 03-15-PLAN.md
 Resume file: None
 
 ## Deferred Verification
