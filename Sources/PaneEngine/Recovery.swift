@@ -2,7 +2,9 @@ import PaneModel
 
 /// How this launch treats the layout the last session left (D-17, D-18).
 public enum LaunchMode: Equatable, Sendable {
-    case normal, recovery, crashLoop
+    case normal, recovery
+    /// A second unclean exit within about a minute of a recovery launch: start paused (D-18).
+    case crashLoop
 }
 
 /// The crash-recovery rules (SAFE-02, SAFE-03, D-17, D-18, RESEARCH Pattern 10, thresholds A6). Pure, in CloseRule's
