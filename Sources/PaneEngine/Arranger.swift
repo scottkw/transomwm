@@ -168,9 +168,18 @@ public struct Arranger: Sendable {
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
                 case (.finderSplit, _): return try finderSplit(focused, now: now)
                 case (.moveOrSnap(let edge), let window?): return try moveOrSnap(window, toward: edge)
+                case (.swapPrevious, let window?): return try swapPrevious(window)
+                case (.growTile, let window?): return try resize(window, by: Self.resizeStep)
+                case (.shrinkTile, let window?): return try resize(window, by: -Self.resizeStep)
+                case (.balanceSplit, let window?): return try editSplit(of: window) { tree, split throws(LayoutError) in try tree.balance(split: split) }
+                case (.rotateSplit, let window?): return try editSplit(of: window) { tree, split throws(LayoutError) in try tree.rotate(split: split) }
+                case (.flipSplit, let window?): return try editSplit(of: window) { tree, split throws(LayoutError) in try tree.flip(split: split) }
+                case (.snap(let target), let window?): return try snap(window, to: target)
                 case (.togglePause, _): return togglePause()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
-                case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil): return [.beep]
+                case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
+                    (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
+                    return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -294,6 +303,13 @@ public struct Arranger: Sendable {
             // Docked or floating alike; the menu shows the pair's matching item (`isFloating`).
             guard trackable, let focused, let key = deskKey(of: focused) else { return false }
             return world[key]?.state(of: focused) == .present
+        case .swapPrevious:
+            return trackable && focused.flatMap(previousDocked(before:)) != nil
+        case .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit:
+            return trackable && focused.flatMap(parentSplit(of:)) != nil
+        case .snap:
+            guard trackable, let focused, let key = deskKey(of: focused), let desk = world[key] else { return false }
+            return desk.desktop.contains(focused) && desk.state(of: focused) == .present && desk.tree.isDesktopHidden != true
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
         case .togglePause, .toggleExcludeFrontmost:

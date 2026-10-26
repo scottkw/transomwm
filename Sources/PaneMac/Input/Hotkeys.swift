@@ -19,6 +19,21 @@ extension KeyboardShortcuts.Name {
     static let moveRight = Self("moveRight", initial: .init(.rightArrow, modifiers: [.control, .option, .command, .shift]))
     static let moveUp = Self("moveUp", initial: .init(.upArrow, modifiers: [.control, .option, .command, .shift]))
     static let moveDown = Self("moveDown", initial: .init(.downArrow, modifiers: [.control, .option, .command, .shift]))
+    static let swapPrevious = Self("swapPrevious", initial: .init(.s, modifiers: [.control, .option, .command]))
+    static let growTile = Self("growTile", initial: .init(.equal, modifiers: [.control, .option, .command]))
+    static let shrinkTile = Self("shrinkTile", initial: .init(.minus, modifiers: [.control, .option, .command]))
+    static let balanceSplit = Self("balanceSplit", initial: .init(.b, modifiers: [.control, .option, .command]))
+    static let rotateSplit = Self("rotateSplit", initial: .init(.r, modifiers: [.control, .option, .command]))
+    static let flipSplit = Self("flipSplit", initial: .init(.x, modifiers: [.control, .option, .command]))
+    static let snapLeftThird = Self("snapLeftThird", initial: .init(.one, modifiers: [.control, .option, .command]))
+    static let snapCenterThird = Self("snapCenterThird", initial: .init(.two, modifiers: [.control, .option, .command]))
+    static let snapRightThird = Self("snapRightThird", initial: .init(.three, modifiers: [.control, .option, .command]))
+    static let snapTopLeft = Self("snapTopLeft", initial: .init(.u, modifiers: [.control, .option, .command]))
+    static let snapTopRight = Self("snapTopRight", initial: .init(.i, modifiers: [.control, .option, .command]))
+    static let snapBottomLeft = Self("snapBottomLeft", initial: .init(.j, modifiers: [.control, .option, .command]))
+    static let snapBottomRight = Self("snapBottomRight", initial: .init(.k, modifiers: [.control, .option, .command]))
+    static let snapMaximize = Self("snapMaximize", initial: .init(.return, modifiers: [.control, .option, .command]))
+    static let snapCenter = Self("snapCenter", initial: .init(.c, modifiers: [.control, .option, .command]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -39,6 +54,21 @@ enum Hotkeys {
         (.moveRight, .moveOrSnap(.right)),
         (.moveUp, .moveOrSnap(.top)),
         (.moveDown, .moveOrSnap(.bottom)),
+        (.swapPrevious, .swapPrevious),
+        (.growTile, .growTile),
+        (.shrinkTile, .shrinkTile),
+        (.balanceSplit, .balanceSplit),
+        (.rotateSplit, .rotateSplit),
+        (.flipSplit, .flipSplit),
+        (.snapLeftThird, .snap(.leftThird)),
+        (.snapCenterThird, .snap(.centerThird)),
+        (.snapRightThird, .snap(.rightThird)),
+        (.snapTopLeft, .snap(.topLeft)),
+        (.snapTopRight, .snap(.topRight)),
+        (.snapBottomLeft, .snap(.bottomLeft)),
+        (.snapBottomRight, .snap(.bottomRight)),
+        (.snapMaximize, .snap(.maximize)),
+        (.snapCenter, .snap(.center)),
     ]
 
     /// Installs a key-down handler per entry. Call once.

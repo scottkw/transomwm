@@ -33,6 +33,13 @@ nonisolated public enum MenuCopy {
         case .undo: "Undo Layout Change"
         case .toggleDesktop: desktopToggle(hidden: false)
         case .focus(let edge), .moveOrSnap(let edge): direction(edge)
+        case .swapPrevious: "Swap with Previous Window"
+        case .growTile: "Grow Tile"
+        case .shrinkTile: "Shrink Tile"
+        case .balanceSplit: "Balance Split"
+        case .rotateSplit: "Rotate Layout"
+        case .flipSplit: "Flip Split"
+        case .snap(let target): snapTitle(target)
         case .finderSplit: "Split with New Finder Window"
         case .togglePause: pauseToggle(paused: false)
         case .toggleExcludeFrontmost: dontArrangeFallback

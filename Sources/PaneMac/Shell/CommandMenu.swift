@@ -12,6 +12,8 @@ import PaneModel
     static let commands: [Command] = [
         .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
         .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
+        .swapPrevious, .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .snap(.leftThird), .snap(.centerThird),
+        .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
     ]
 
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
@@ -45,10 +47,13 @@ import PaneModel
             halfItems[edge] = item
         }
         focusMenu.submenu = submenu("Focus", [.focus(.left), .focus(.right), .focus(.top), .focus(.bottom)])
-        splitMenu.submenu = submenu("Split", [.finderSplit])
+        splitMenu.submenu = submenu("Split", [.growTile, .shrinkTile, nil, .balanceSplit, .rotateSplit, .flipSplit, nil, .finderSplit])
         moveMenu.submenu = submenu(MenuCopy.moveMenu, Self.edges.map { .moveOrSnap($0) })
-        let snap = NSMenu(title: MenuCopy.snapMenu)
-        for edge in Self.edges { snap.addItem(halfItem(edge)) }
+        let snap = submenu(MenuCopy.snapMenu, [
+            nil, .snap(.leftThird), .snap(.centerThird), .snap(.rightThird), nil, .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft),
+            .snap(.bottomRight), nil, .snap(.maximize), .snap(.center),
+        ])
+        for (index, edge) in Self.edges.enumerated() { snap.insertItem(halfItem(edge), at: index) }
         snapMenu.submenu = snap
     }
 
@@ -82,9 +87,10 @@ import PaneModel
         dispatch(Self.commands[sender.tag])
     }
 
-    private func submenu(_ title: String, _ commands: [Command]) -> NSMenu {
+    /// nil adds a separator.
+    private func submenu(_ title: String, _ commands: [Command?]) -> NSMenu {
         let menu = NSMenu(title: title)
-        for command in commands { menu.addItem(item(for: command)) }
+        for command in commands { menu.addItem(command.map(item(for:)) ?? .separator()) }
         return menu
     }
 }

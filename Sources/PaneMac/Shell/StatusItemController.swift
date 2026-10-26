@@ -105,7 +105,7 @@ import os
         commands.update(focusedFloats: arrange.arranger.isFloating(context.focused)) { arrange.arranger.availability($0, context: context) }
         commands.item(for: .toggleDesktop).title = MenuCopy.desktopToggle(hidden: arrange.arranger.isDesktopHidden(focused: context.focused))
         menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
-        for command in [Command.dock, .float, .undo] { menu.addItem(commands.item(for: command)) }
+        for command in [Command.dock, .float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
         menu.addItem(commands.focusMenu)
         menu.addItem(commands.moveMenu)
         menu.addItem(commands.splitMenu)

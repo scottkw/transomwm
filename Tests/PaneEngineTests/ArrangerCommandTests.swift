@@ -163,7 +163,8 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
 /// The weights of the split holding `window`'s leaf.
 private func parentWeights(_ arranger: Arranger, _ window: WindowRef) throws -> [Double] {
     let tree = try #require(arranger.world[key]).tree
-    let parent = try #require(tree.parent(of: try #require(tree.leaf(containing: window))))
+    let leaf = try #require(tree.leaf(containing: window))
+    let parent = try #require(tree.parent(of: leaf))
     guard case .split(_, _, let weights)? = tree.node(parent) else { throw LayoutError.notASplit(parent) }
     return weights
 }

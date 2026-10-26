@@ -18,6 +18,15 @@ public enum Command: Hashable, Sendable {
     /// Move a docked window into the tile across that edge, or snap a floating one to that half of the Desktop tile
     /// (D-09, D-11, TILE-13, TILE-14).
     case moveOrSnap(Edge)
+    /// Swap the focused docked window with the docked window focused before it on the same desk (TILE-11).
+    case swapPrevious
+    /// Grow or shrink the focused tile by a tenth of its split's length (TILE-13).
+    case growTile, shrinkTile
+    /// Balance or flip the focused tile's parent split; rotate the whole layout from the desk's root split (TILE-12,
+    /// D-32). Rotate's hotkey name stays `rotateSplit` (Pitfall 13).
+    case balanceSplit, rotateSplit, flipSplit
+    /// Snap a floating window to a target inside the Desktop tile (TILE-14).
+    case snap(SnapTarget)
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and
