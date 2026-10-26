@@ -36,7 +36,7 @@ expected: Green button toggles dock/float; Option-click green zooms natively; a 
 result: issue
 reported: "1. Green button still maximizes. 2. Green button still maximizes. 3. Option-green button docks, not maximizes.  Seems you might have them backwards if that is what you intended. 4. Yep. 5. Yep."
 severity: major
-note: minimise and fullscreen return passed. Lead from the Safari debug session: in the VM the tap event's window-under-pointer field was 0 for every press; GreenButton.shouldSwallow looks up rects[windowID], so with 0 it never swallows and macOS handles the plain click. Why Option-click docks is unknown.
+note: minimise and fullscreen return passed. Diagnosed (G-03-4): plain click is a real bug; Option-click docking is D-33 working as specified. User decision 2026-10-26: keep D-33 (Option-zoom is undone when it would overlap a tile), so the expectation for Option-click is "zooms, then returns to its tile / the Desktop tile". Original lead: in the VM the tap event's window-under-pointer field was 0 for every press; GreenButton.shouldSwallow looks up rects[windowID], so with 0 it never swallows and macOS handles the plain click. Why Option-click docks is unknown.
 
 ### 5. Keyboard pass
 expected: Ctrl-Opt-Cmd arrows, Shift-arrows, S, =, -, B, R, X on docked windows and 1/2/3, U/I/J/K, Return, C, Shift-arrows on a floating window do what the UI-SPEC table says
@@ -55,7 +55,7 @@ expected: pane://toggle-desktop, pane://split-finder and pane://restore each run
 result: issue
 reported: "Claude-driven: pane://toggle-desktop hides and shows the Desktop tile; pane://restore brings parked windows back and re-shows the Desktop; pane://restore?x=1 is rejected (url log: rejected a URL). pane://split-finder opened a new Finder window (580) but did not dock it, and it never entered layout.json (menu still counted it)."
 severity: major
-note: split-finder worked from the menu earlier (test 6) when Finder had no other window; this run had Finder 546 already open, so it looks like the G-03-5 window-identity problem. Hide Desktop also left floating Finder 546 on screen while parking TextEdit 567/578: same suspect
+note: split-finder worked from the menu earlier (test 6) when Finder had no other window; this run had Finder 546 already open, so it looks like the G-03-5 window-identity problem. Hide Desktop also left floating Finder 546 on screen while parking TextEdit 567/578: same suspect. Diagnosed: not G-03-5 and not a bug: com.apple.finder was on the Never Arrange list (excludedBundleIDs) in the VM, so D-29 behaviour excluded it. With the exclusion cleared, Finder was admitted and Hide Desktop parked 546/580/731. Re-run test 7 with no exclusions after the gap fixes
 
 ### 8. Quit restore
 expected: Hide the Desktop (floating windows park), quit Pane from the menu: every parked window comes back on screen (SAFE-01)
@@ -132,8 +132,17 @@ blocked: 3
   reason: "User reported: Pass, but the gap drag is a little janky.  It sometimes goes back to the way it was.  Sometimes one of the windows won't let you drag in a particulat direction."
   severity: minor
   test: 3
-  artifacts: []
-  missing: []
+  root_cause: "Two independent bugs. (H1) Arranger.boundaryChange converts the drag delta to weight against the laid-out length, then caps it at the loser's on-screen loss; when the growing side is pinned at a minimum above its weight share (common for the Desktop tile, whose minimum is the largest learned minimum of its floating windows), the weight shift is absorbed and nothing moves (2 children) or the wrong boundary moves (3+), still recording an undo step. (H2) The live gap move only exists inside one replan(with:on:) call (defer restores the committed World), so any other replan() mid-drag (window event such as Terminal's title change, off-plan frame correction, correction tick) re-writes the pre-drag tiles until the next drag event or mouse-up."
+  artifacts:
+    - path: "Sources/PaneEngine/Arranger.swift"
+      issue: "boundaryChange (~1194) ignores pinned-child offset; gapDrag (~1347)/replan(with:on:) (~1161) keep no live drag state; handle(_:) (~515) and moved/correct (~569) replan the committed World mid-drag"
+    - path: "Sources/PaneEngine/Planner.swift"
+      issue: "Desktop minimum = max learned min of floating windows makes H1 common"
+  missing:
+    - "Re-base split weights to resolved child sizes (or apply delta in points) before capping"
+    - "Hold the pending gap move in Arranger state until mouse-up and apply it in every replan()"
+    - "Tests: pinned growing side; mid-drag windowChanged / off-plan windowResized must not write pre-drag tiles"
+  debug_session: ".planning/debug/g-03-3-gap-drag.md"
 
 - gap_id: G-03-5
   truth: "Keyboard and menu commands act on the app's focused window, so a second window of an app with a docked window can be docked (CR-01)"
@@ -141,8 +150,18 @@ blocked: 3
   reason: "Claude-driven UAT: with TextEdit A docked, focused TextEdit windows B and C can't be docked by Ctrl-Opt-Cmd-D; the menu treats docked A as frontmost"
   severity: major
   test: 6
-  artifacts: []
-  missing: []
+  root_cause: "The focus hint for a newly created window is lost: AXAppThread's observer gives windowID nil for an element not yet cached, and AXWindowSystem.refresh() consumes pendingFocus even when the window is still in WindowTracker's 250 ms settle set; settling emits only windowCreated. focusedWindow(of:) then prefers the stale focusedIdentities[pid] (docked A) over the correct AXMain, so every hotkey, pane:// URL and menu validation acts on A. The _NS:34 axIdentifier lead is refuted (identity is windowID/pid/bundleID)."
+  artifacts:
+    - path: "Sources/PaneMac/AXWindowSystem.swift"
+      issue: "focusedWindow(of:) (~278) prefers stale focusedIdentities; refresh() (~326) drops pendingFocus for not-yet-tracked windows; handle(_:) (~473) ignores focus hints without windowID"
+    - path: "Sources/PaneMac/AX/AXAppThread.swift"
+      issue: "observer callback (~119) yields windowID nil for uncached elements"
+    - path: "Sources/PaneEngine/WindowTracker.swift"
+      issue: "settle pending set (~118) and windowCreated carry no focus fact"
+  missing:
+    - "Keep an unresolved focus hint until the window is tracked (or refresh focus from AXMain when a created window is main), keeping focusedIdentities' tab-switch/panel behaviour"
+    - "Test: second window of the same app created after a windowFocused becomes the command target"
+  debug_session: ".planning/debug/g-03-5-focused-window-identity.md"
 
 - gap_id: G-03-6
   truth: "A docked window that can't fit its tile floats to the Desktop instead of overlapping a neighbour (core value: windows never overlap)"
@@ -150,14 +169,41 @@ blocked: 3
   reason: "Claude-driven UAT on Space 2: Reminders' fixed-size Welcome window (768x692) was docked beside Notes; it stays 768 wide at (12,25), overlapping Notes at x 370, and sits 12pt into the top gap"
   severity: major
   test: 15
-  artifacts: []
-  missing: []
+  root_cause: "Fit is decided only from learned minimums, and MinimumSizeLearner.recordWrite counts a refusal only if the read-back moved toward the request (late-applier guard from 7c97838). Reminders' window opens at its minimum, so no write moves it, nothing is learned, and no path compares a docked window's read-back with its tile. Overflows under the 32 pt refusalMargin are also never learned. y=25 is AppKit pinning a window taller than the visible frame, not a failed write."
+  artifacts:
+    - path: "Sources/PaneEngine/MinimumSizeLearner.swift"
+      issue: "moved-toward-request check (~43) rejects refusals from windows already at their minimum; 32 pt margin hides small overflows"
+    - path: "Sources/PaneEngine/WindowTracker.swift"
+      issue: "applyFrameResult (~304) only feeds the learner"
+    - path: "Sources/PaneEngine/Arranger.swift"
+      issue: "fit checks (Dock ~812, planFloatingLostRoom ~1368) rely solely on learned minimums"
+    - path: "Sources/PaneEngine/Planner.swift"
+      issue: "Desktop minimum = max learned min of floating windows; a too-big floater would then make every docked window on the desk unfit"
+  missing:
+    - "Treat a docked window whose read-back still exceeds its tile after confirmDelay as unfit (or learn that size), keeping the late-applier protection"
+    - "Decide docked-tile overflow under 32 pt"
+    - "Cap the Desktop minimum at the area / ignore floaters that can never fit, so floating one window doesn't float the whole desk"
+    - "Tests: window that opens at its minimum; minimum height within 32 pt of the tile"
+  debug_session: ".planning/debug/g-03-6-fixed-size-window-overlap.md"
 
 - gap_id: G-03-4
-  truth: "A plain green-button click toggles dock/float; Option-click zooms natively (TILE-06, TILE-19)"
+  truth: "A plain green-button click toggles dock/float; Option-click zooms natively and D-33 returns the window to its tile (TILE-06, TILE-19)"
   status: failed
   reason: "User reported: 1. Green button still maximizes. 2. Green button still maximizes. 3. Option-green button docks, not maximizes.  Seems you might have them backwards if that is what you intended."
   severity: major
   test: 4
-  artifacts: []
-  missing: []
+  root_cause: "The session tap's window-under-pointer field is 0 for every press (injected and HID), so InputTap falls back to CGWindowList.topmostWindow(at:), which has no layer filter and returns the Dock's full-screen layer-20 window (#7) on macOS 15. GreenButton.shouldSwallow finds no rect for it, the click passes through and macOS goes fullscreen. ArrangeController.pressWindow already filters layer 0, which is why drags work. Option-click 'docking' is D-33 as specified; user chose to keep it (2026-10-26)."
+  artifacts:
+    - path: "Sources/PaneMac/CGWindowList.swift"
+      issue: "topmostWindow(at:) (~18) has no layer-0 filter"
+    - path: "Sources/PaneMac/Input/InputTap.swift"
+      issue: "press (~131) resolves to the Dock overlay window and is never swallowed"
+  missing:
+    - "topmostWindow(at:) picks the topmost layer-0 window, as pressWindow does, ideally as a pure function over [CGWindowEntry] with a unit test (Dock layer-20 full-screen entry first)"
+    - "Re-test with real hand clicks"
+  debug_session: ".planning/debug/g-03-4-green-button.md"
+
+## Observed, not yet a gap
+
+- Space 2's docked Notes/Reminders were missing from layout.json after a Pane relaunch at 20:42 UTC (seen by the G-03-6 debugger). May be test 17's multi-desk relaunch; needs a clean repro.
+- After a Dock restart, Pane stopped correcting one window's frame changes (seen by the G-03-4 debugger, possibly caused by the restart).
