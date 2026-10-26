@@ -235,6 +235,11 @@ import os
         if tracker.awaitsMinimumConfirmation(pid: thread.pid) { scheduler?.schedule(pid: thread.pid, after: MinimumSizeLearner.confirmDelay) }
     }
 
+    /// Presses the app's ⌘N menu item on its thread (RESEARCH Pattern 14). False when the app is not tracked.
+    public func pressNewWindowItem(pid: Int32) async -> Bool {
+        false
+    }
+
     public func windowInfo(_ window: PaneModel.WindowRef) async -> WindowInfo? {
         tracker.info(for: window.identity)
     }

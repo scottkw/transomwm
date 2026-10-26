@@ -32,6 +32,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case wake(at: ContinuousClock.Instant)
     /// The World changed: write layout.json.
     case save(SaveUrgency)
+    /// Open a new Finder window by pressing Finder's own ⌘N menu item (RESEARCH Pattern 14).
+    case openFinderWindow
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -107,7 +109,7 @@ public struct Arranger: Sendable {
                 case (.undo, _): return try undo(focused)
                 case (.toggleDesktop, _): return try toggleDesktop(focused)
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
-                case (.dock, nil), (.float, nil), (.focus, nil): return [.beep]
+                case (.dock, nil), (.float, nil), (.focus, nil), (.finderSplit, _): return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -199,6 +201,8 @@ public struct Arranger: Sendable {
             return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
         case .focus:
             return focused.flatMap(deskKey(of:)) != nil
+        case .finderSplit:
+            return false
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }

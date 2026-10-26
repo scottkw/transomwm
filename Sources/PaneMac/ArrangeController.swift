@@ -101,6 +101,8 @@ import os
                 saveTimer.set(.now + .milliseconds(500)) { [weak self] in self?.write() }
             case .save(.now):
                 write()
+            case .openFinderWindow:
+                break
             case .wake(let instant):
                 wake.set(instant) { [weak self] in
                     guard let self else { return }
