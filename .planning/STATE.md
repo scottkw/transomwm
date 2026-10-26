@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-10-26T02:49:14.483Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-10-26T03:17:08.907Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 101b60c9aba467d76093f1fb32b4aeb264d751d9
+state_head: 8b09dd8bcc340d72a08064dd25cd4281a072d27c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 28
+  completed_plans: 29
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 6 of 17
+Plan: 7 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -84,6 +84,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 03 P03 | 5min | 2 tasks | 7 files |
 | Phase 03 P04 | 27min | 3 tasks | 16 files |
 | Phase 3 P05 | 8 min | 2 tasks | 12 files |
+| Phase 3 P06 | 20 min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -183,6 +184,10 @@ Recent decisions affecting current work:
 - [Phase 3]: WindowTracker emits windowChanged after CloseRule state events, so a fullscreen window never looks present on a foreign Space
 - [Phase 3]: A display change reaches the Arranger as a new inventory (ArrangeController feeds .inventory after .displaysChanged)
 - [Phase 3]: Re-home: a present window whose display or known non-empty Spaces leave its desk floats on its home desk via World.reflow, no undo step
+- [Phase 3]: Lost-room floating repeats until every docked window fits (a floated minimum sizes the Desktop tile); one lostRoom notice per re-plan
+- [Phase 3]: Echo rule: a move or resize within 2 pt of the last frameApplied is never answered; a floating window's echo frame is still recorded
+- [Phase 3]: Docked windows moved by their app return to their tile at most once per second via ArrangerEffect.wake and ArrangerInput.tick
+- [Phase 3]: NoticeQueue is generic over QueueableNotice (isCrashNotice, merged(with:)), used as NoticeQueue<Notice>
 
 ### Pending Todos
 
@@ -210,8 +215,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T02:49:14.263Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-10-26T03:17:08.676Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None
 
 ## Deferred Verification
