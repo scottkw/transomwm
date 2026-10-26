@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-10-26T02:35:27.069Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-10-26T02:49:14.483Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 38e6781e28734449784525244113f4fd4c334b5c
+state_head: 101b60c9aba467d76093f1fb32b4aeb264d751d9
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 27
+  completed_plans: 28
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 5 of 17
+Plan: 6 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -83,6 +83,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 03 P02 | 6min | 3 tasks | 7 files |
 | Phase 03 P03 | 5min | 2 tasks | 7 files |
 | Phase 03 P04 | 27min | 3 tasks | 16 files |
+| Phase 3 P05 | 8 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-04: lastRequested is pruned to planned windows, so a window returning from minimise or fullscreen gets its tile rect rewritten
 - [Phase 03]: 03-04: Undo with no focused window acts on the main display's visible desk
 - [Phase 03]: 03-04: Live fullscreen test is opt-in (PANE_LIVE_FULLSCREEN=1) because native fullscreen switches Spaces
+- [Phase 3]: WindowTracker emits windowChanged after CloseRule state events, so a fullscreen window never looks present on a foreign Space
+- [Phase 3]: A display change reaches the Arranger as a new inventory (ArrangeController feeds .inventory after .displaysChanged)
+- [Phase 3]: Re-home: a present window whose display or known non-empty Spaces leave its desk floats on its home desk via World.reflow, no undo step
 
 ### Pending Todos
 
@@ -206,8 +210,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T02:35:26.858Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-10-26T02:49:14.263Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
 
 ## Deferred Verification
