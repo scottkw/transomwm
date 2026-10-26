@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-12-PLAN.md
-last_updated: "2026-10-26T05:20:07.369Z"
+stopped_at: Completed 03-13-PLAN.md
+last_updated: "2026-10-26T05:46:50.556Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 7574955c6d55cdeefee897c9cb30904c1216e39a
+state_head: e2275676790a40c94d067fc0428d62403ca84120
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 35
+  completed_plans: 36
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 13 of 17
+Plan: 14 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -91,6 +91,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 03 P10 | 13 min | 3 tasks | 17 files |
 | Phase 3 P11 | 26 min | 3 tasks | 21 files |
 | Phase 03 P12 | 13min | 3 tasks | 16 files |
+| Phase 3 P13 | 17 min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -212,6 +213,10 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-12: Move to neighbour docks on the neighbour's near edge, but past a sibling in the same split (the near edge there is its own slot), taking its place
 - [Phase 03]: 03-12: Every keyboard tree command (move, swap, grow/shrink, balance, rotate, flip) dry-runs and refuses with beep + blocked flash when a window would lose its room
 - [Phase 03]: 03-12: Arrange All / Float All act on the focused window's desk or the main display's, stay enabled with nothing focused; a newer N4/N5 replaces the visible one
+- [Phase 3]: Green-button press with no window in the event: one CG on-screen list read in the tap callback finds the topmost window, so a covered button is never taken (03-13)
+- [Phase 3]: A press with no pointer travel whose frame changed (option-zoom, title-bar double-click) is answered at mouse-up as the app's own change (D-33)
+- [Phase 3]: Edge resize and gap drag share BoundaryMove/boundaryChange: points to weight through the split length, cut to what the shrinking side can give before its minimum, so weights match the screen
+- [Phase 3]: Gap handles are sent per display only when they change; hidden while paused, during a window drag and on a Space change
 
 ### Pending Todos
 
@@ -239,8 +244,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T05:20:07.234Z
-Stopped at: Completed 03-12-PLAN.md
+Last session: 2026-10-26T05:46:50.414Z
+Stopped at: Completed 03-13-PLAN.md
 Resume file: None
 
 ## Deferred Verification

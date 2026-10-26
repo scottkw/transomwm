@@ -36,8 +36,8 @@
 - [x] **TILE-02**: Holding a bypass modifier while dragging moves the window freely without docking
 - [x] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
 - [x] **TILE-04**: User can set the gap between windows
-- [ ] **TILE-05**: Dragging the gap between two windows resizes both
-- [ ] **TILE-06**: The green button toggles a window between docked and floating on the Desktop
+- [x] **TILE-05**: Dragging the gap between two windows resizes both
+- [x] **TILE-06**: The green button toggles a window between docked and floating on the Desktop
 - [x] **TILE-07**: New windows open floating on the Desktop tile, never auto-split into the layout
 - [x] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [x] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
@@ -50,7 +50,7 @@
 - [x] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" returns every window to the Desktop as a normal Mac layout
 - [ ] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
 - [x] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
-- [ ] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
+- [x] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
 - [x] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
 
 ### Safety & Recovery
@@ -176,8 +176,8 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-02 | Phase 3 | Complete |
 | TILE-03 | Phase 3 | Complete |
 | TILE-04 | Phase 3 | Complete |
-| TILE-05 | Phase 3 | Pending |
-| TILE-06 | Phase 3 | Pending |
+| TILE-05 | Phase 3 | Complete |
+| TILE-06 | Phase 3 | Complete |
 | TILE-07 | Phase 3 | Complete |
 | TILE-08 | Phase 3 | Complete |
 | TILE-09 | Phase 3 | Complete |
@@ -190,7 +190,7 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-16 | Phase 3 | Complete |
 | TILE-17 | Phase 3 | Pending |
 | TILE-18 | Phase 3 | Complete |
-| TILE-19 | Phase 3 | Pending |
+| TILE-19 | Phase 3 | Complete |
 | TILE-20 | Phase 3 | Complete |
 | SAFE-01 | Phase 3 | Pending |
 | SAFE-02 | Phase 3 | Pending |
