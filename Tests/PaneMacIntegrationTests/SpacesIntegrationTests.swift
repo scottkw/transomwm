@@ -30,4 +30,17 @@ import Testing
         print("SpacesIntegrationTests: the hidden tab reported \(branch)")
         #expect(hiddenSpaces.isEmpty || hiddenSpaces == shownSpaces, "the hidden tab reported \(hiddenSpaces), not \(branch)")
     }
+
+    /// D-25: the main display's current Space is the one Space a visible fixture window is on, and `Displays`
+    /// reports it as `currentSpaceID`. Reads only; no Space switch.
+    @Test(.timeLimit(.minutes(1)))
+    func theMainDisplaysCurrentSpaceIsTheSpaceOfAVisibleWindow() async throws {
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let window = try #require(fixture.windows.first)
+        let main = try #require(Displays.current().first)
+        let current = try #require(SkyLightSpaces.currentSpace(displayUUID: main.uuid), "no current Space for the main display")
+        #expect(SkyLightSpaces.spaces(of: [window.id])?[window.id] == [current])
+        #expect(main.currentSpaceID == current)
+    }
 }

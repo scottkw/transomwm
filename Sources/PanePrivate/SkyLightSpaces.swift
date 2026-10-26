@@ -47,6 +47,11 @@ public enum SkyLightSpaces {
         return result
     }
 
+    /// The Space shown on a display right now. Stub (RED).
+    public static func currentSpace(displayUUID: String, session: CapabilitySession = Capabilities.session) -> UInt64? {
+        nil
+    }
+
     /// Only CFNumber elements count; 0 and anything past `maxSpacesPerWindow` are dropped (T-02-38).
     static func spaceIDs(in array: CFArray) -> Set<UInt64> {
         var spaces: Set<UInt64> = []

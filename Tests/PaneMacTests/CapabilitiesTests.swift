@@ -50,6 +50,11 @@ import Testing
         #expect(!session.isAvailable(.axWindowID), "a session-disabled capability stays off")
     }
 
+    @Test func theCurrentSpaceLookupIsNilWhileSpacesAreOff() {
+        let off = CapabilitySession(loaded: { _ in false })
+        #expect(SkyLightSpaces.currentSpace(displayUUID: "any", session: off) == nil)
+    }
+
     @Test func aCapabilityThatDidNotLoadIsNeverAvailable() {
         let session = CapabilitySession(loaded: { _ in false })
         session.recordSuccess(.axWindowID)
