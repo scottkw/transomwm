@@ -5,11 +5,11 @@ import PaneModel
 import Testing
 
 /// A system and an ArrangeController that track only `fixture`, started, with every fixture window on a desk.
-@MainActor private func arranging(_ fixture: FixtureProcess) async throws -> (ArrangeController, [PaneModel.WindowRef]) {
+@MainActor private func arranging(_ fixture: FixtureProcess, store: LayoutStore? = nil) async throws -> (ArrangeController, [PaneModel.WindowRef]) {
     let fixturePID = fixture.pid
     let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
     await system.start()
-    let arrange = ArrangeController(system: system)
+    let arrange = ArrangeController(system: system, store: store)
     await arrange.start()
     var refs: [PaneModel.WindowRef] = []
     for window in fixture.windows {
@@ -46,8 +46,10 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
 }
 
 /// Two fixture windows docked side by side: [0 | 1 | Desktop]. Returns the controller, the refs and both tile frames.
-@MainActor private func dockedPair(_ fixture: FixtureProcess) async throws -> (ArrangeController, [PaneModel.WindowRef], Rect, Rect) {
-    let (arrange, refs) = try await arranging(fixture)
+@MainActor private func dockedPair(
+    _ fixture: FixtureProcess, store: LayoutStore? = nil
+) async throws -> (ArrangeController, [PaneModel.WindowRef], Rect, Rect) {
+    let (arrange, refs) = try await arranging(fixture, store: store)
     try #require(refs.count == 2)
     let visible = try mainVisibleFrame()
     // Dock acts where a drop at the window's centre lands (D-12), so place both centres at mid-height: window 0
@@ -185,6 +187,38 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
             return !f0.overlaps(f1)
         }
         #expect(floated, "window 0 did not float clear of window 1 within 5 s (fixture frames \(frames))")
+    }
+
+    /// SAFE-06 live: a fresh window system and controller on the same layout.json, with the fixture still running,
+    /// put each docked window back in its tile and move nothing. The store is a temporary directory, never the
+    /// user's real layout.json.
+    @Test(.timeLimit(.minutes(1)))
+    func aFreshControllerOnTheSameStoreReattachesDockedWindowsWithoutMovingThem() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "pane-layout-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs, a, b) = try await dockedPair(fixture, store: LayoutStore(directory: directory))
+        defer { withExtendedLifetime(arrange) {} }  // its events loop ends with it
+        let saved = await waitUntil(timeout: .seconds(2)) {
+            let store = LayoutStore(directory: directory)
+            store.load()
+            return store.contents.map { $0.world == arrange.arranger.world && $0.world.desks.values.contains { $0.tree.windows.count == 2 } } ?? false
+        }
+        try #require(saved, "layout.json never held the docked pair")
+
+        let fixturePID = fixture.pid
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        await system.start()
+        let fresh = ArrangeController(system: system, store: LayoutStore(directory: directory))
+        defer { withExtendedLifetime(fresh) {} }
+        await fresh.start()
+        let same = await waitUntil(timeout: .seconds(5)) { fresh.arranger.world == arrange.arranger.world }
+        #expect(same, "the fresh controller's World differs from the saved one")
+        #expect(refs.allSatisfy { ref in fresh.arranger.world.desks.values.contains { $0.tree.state(of: ref) == .present } })
+        try await Task.sleep(for: .milliseconds(500))  // room for any write the fresh controller made to land
+        let after = [try await listedFrame(fixture, 0), try await listedFrame(fixture, 1)]
+        #expect(after[0].map { near($0, a) } == true && after[1].map { near($0, b) } == true, "fixture frames moved: \(after) vs \([a, b])")
     }
 
     /// Native fullscreen moves the window to its own Space, so macOS switches Spaces; opt in with PANE_LIVE_FULLSCREEN=1.

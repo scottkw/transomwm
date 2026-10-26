@@ -19,8 +19,11 @@ import os
     /// The Arranger's one pending wake-up; a newer `.wake` replaces it.
     private let wake = WakeTimer()
 
-    public init(system: AXWindowSystem) {
+    private let store: LayoutStore?
+
+    public init(system: AXWindowSystem, store: LayoutStore? = nil) {
         self.system = system
+        self.store = store
     }
 
     /// Feeds the current inventory, then starts the single events loop. Later calls only re-read the inventory.
@@ -74,6 +77,8 @@ import os
                 logger.info("\(message, privacy: .public)")
             case .notice(let notice):
                 present(notices.post(notice, at: .now))
+            case .save:
+                break  // RED stub
             case .wake(let instant):
                 wake.set(instant) { [weak self] in
                     guard let self else { return }

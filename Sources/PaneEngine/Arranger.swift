@@ -8,6 +8,13 @@ public enum ArrangerInput: Sendable {
     case requeried(RevivedWindows, [(WindowRef, WindowState)])
     /// The instant a `wake` asked for has come.
     case tick
+    /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
+    case restore(World, homeFrames: [WindowIdentity: Rect])
+}
+
+/// How soon the shell writes layout.json: about 0.5 s after the latest request, or at once (before a park, plan 08).
+public enum SaveUrgency: Equatable, Sendable {
+    case debounced, now
 }
 
 /// What the shell runs, in order. `fault` names window identities only (never titles); the shell logs it.
@@ -23,6 +30,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case notice(Notice)
     /// Feed `.tick` at this instant. A newer wake replaces an older one.
     case wake(at: ContinuousClock.Instant)
+    /// The World changed: write layout.json.
+    case save(SaveUrgency)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -36,6 +45,8 @@ public struct Arranger: Sendable {
     /// The latest info per tracked window, docked or not.
     public private(set) var windows: [WindowIdentity: WindowInfo] = [:]
     public private(set) var displays: [DisplayInfo] = []
+    /// Where each parked window goes back to (plan 08); restored from layout.json.
+    public private(set) var homeFrames: [WindowIdentity: Rect] = [:]
     public var gap: Double
     /// The last frame requested for each window that is still planned; a frame within 0.5 pt of it is not written
     /// again, so an app echoing frames cannot cause a write storm (T-03-08).
@@ -98,7 +109,14 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
+        case .restore:
+            return []  // RED stub
         }
+    }
+
+    /// What layout.json should hold now.
+    public var snapshot: (world: World, homeFrames: [WindowIdentity: Rect]) {
+        (world, homeFrames)
     }
 
     /// The desk holding `window`, docked or floating.
