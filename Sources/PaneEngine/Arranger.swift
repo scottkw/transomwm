@@ -115,6 +115,8 @@ public struct Arranger: Sendable {
     private static let correctionInterval: Duration = .seconds(1)
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
+    /// A saved layout that could not be re-attached: still what is saved, so this session cannot overwrite it (WR-04).
+    private var unattached: (world: World, homeFrames: [WindowIdentity: Rect])?
     /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
     private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
@@ -276,9 +278,10 @@ public struct Arranger: Sendable {
         }
     }
 
-    /// What layout.json should hold now: while a restore waits, the saved layout itself, so a write then loses nothing.
+    /// What layout.json should hold now: while a restore waits, or after it failed, the saved layout itself, so a write
+    /// then loses nothing.
     public var snapshot: (world: World, homeFrames: [WindowIdentity: Rect]) {
-        pendingRestore ?? (world, homeFrames)
+        pendingRestore ?? unattached ?? (world, homeFrames)
     }
 
     /// Adds every window of `inventory` no desk holds, after re-homing the ones whose display or Space changed.
@@ -301,8 +304,9 @@ public struct Arranger: Sendable {
 
     /// Replaces the World with the saved one re-attached by identity (SAFE-06), with each window's real state and, for
     /// a present floating window, its real frame. Each docked window's current frame counts as already requested, so
-    /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). If the saved layout cannot
-    /// be re-attached, the World starts empty. `unplaced` counts the tracked windows the saved layout did not hold.
+    /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). A window whose real state
+    /// or frame cannot be applied keeps its saved one. If the saved layout cannot be re-attached at all, the World starts
+    /// empty and the saved layout stays what is saved. `unplaced` counts the tracked windows the saved layout did not hold.
     private mutating func reattach(
         _ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo]
     ) -> (effects: [ArrangerEffect], unplaced: Int) {
@@ -311,22 +315,28 @@ public struct Arranger: Sendable {
             let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked)
             var candidate = reattached.world
             var seeded: [WindowIdentity: Rect] = [:]
+            var faults: [ArrangerEffect] = []
             for info in tracked where info.state != .closed {
                 guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
                     continue
                 }
-                if desk.state(of: info.window) != info.state { try candidate.apply(info.state, for: info.window, on: key, history: &history) }
-                if !desk.desktop.contains(info.window) {
-                    seeded[info.window.identity] = info.frame
-                } else if info.state == .present {
-                    try candidate.recordFloatingFrame(info.frame, for: info.window)
+                do throws(LayoutError) {
+                    if desk.state(of: info.window) != info.state { try candidate.apply(info.state, for: info.window, on: key, history: &history) }
+                    if !desk.desktop.contains(info.window) {
+                        seeded[info.window.identity] = info.frame
+                    } else if info.state == .present {
+                        try candidate.recordFloatingFrame(info.frame, for: info.window)
+                    }
+                } catch {
+                    faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))  // WR-04
                 }
             }
             world = candidate
             lastRequested = seeded
-            return ([], reattached.unplaced.count)
+            return (faults, reattached.unplaced.count)
         } catch {
-            return ([.fault("could not re-attach the saved layout; starting empty: \(error)")], 0)
+            unattached = restore
+            return ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
         }
     }
 

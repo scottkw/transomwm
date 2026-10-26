@@ -77,6 +77,25 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(restored.history.depth(for: key) == 0)
     }
 
+    /// WR-04: one window whose live frame cannot be recorded must not throw the whole saved layout away (the next
+    /// save would then overwrite layout.json with it).
+    @Test func aWindowWhoseFrameCannotBeRecordedDoesNotLoseTheSavedLayout() async throws {
+        let source = await twoDocked(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Rect(x: 1000, y: 600, width: 150, height: 120)])
+        let saved = source.arranger.snapshot.world
+        try #require(saved[key]?.desktop.contains(c) == true)
+        var inventory = await source.fake.inventory()
+        let i = try #require(inventory.windows.firstIndex { $0.window == c })
+        inventory.windows[i].frame = Rect(x: 2_000_000, y: 0, width: 150, height: 120)  // out of range: not recordable
+        var restored = Arranger()
+        _ = restored.handle(.restore(saved, homeFrames: [:]), now: .now)
+
+        let effects = restored.handle(.inventory(inventory), now: .now)
+
+        #expect(restored.world[key].map { Set($0.tree.windows) } == [a, b], "the saved layout was dropped")
+        #expect(restored.world[key]?.desktop.frame(of: c) == saved[key]?.desktop.frame(of: c))
+        #expect(effects.contains { if case .fault = $0 { true } else { false } })
+    }
+
     @Test func reattachAppliesRealStatesAndFloatsWindowsTheLayoutDoesNotKnow() async throws {
         let source = await twoDocked()
         let saved = source.arranger.world
