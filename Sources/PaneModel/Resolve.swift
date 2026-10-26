@@ -31,6 +31,9 @@ public struct Resolution: Equatable, Sendable {
 ///   WindowIdentity. Victims are then re-admitted in removal order wherever they fit (D-11).
 /// - The area is snapped inward to whole points and the gap rounded, so every rect is whole points;
 ///   along a split each child but the last gets floor(share) and the last the remainder (D-13).
+/// - A visible Desktop tile takes part with `desktopMinimum` (rounded up like a window's) and is never
+///   unfit: when room runs out a docked window is. A hidden one takes no part, so its siblings share
+///   its space. If the Desktop alone cannot fit, it gets what there is.
 public func resolve(
     _ tree: LayoutTree, in area: Rect, mins: [WindowRef: Size], gap: Double, desktopMinimum: Size = Size(width: 1, height: 1)
 ) throws(LayoutError) -> Resolution {
@@ -41,6 +44,7 @@ public func resolve(
     if let bad = mins.filter({ !isValid($0.value) }).keys.min(by: { $0.identity < $1.identity }) {
         throw .invalidMinimum(bad)
     }
+    guard isValid(desktopMinimum) else { throw .invalidGeometry("desktop minimum") }
 
     var result = Resolution()
     guard let root = tree.root else { return result }
@@ -52,7 +56,9 @@ public func resolve(
         width: max(0, area.maxX.rounded(.down) - gap - minX),
         height: max(0, area.maxY.rounded(.down) - gap - minY))
 
-    var solver = Solver(tree: tree, gap: gap)
+    var solver = Solver(
+        tree: tree, gap: gap,
+        desktopMinimum: Size(width: max(1, desktopMinimum.width.rounded(.up)), height: max(1, desktopMinimum.height.rounded(.up))))
     var candidates: [(leaf: NodeID, window: WindowRef, min: Size)] = []
     for (id, node) in tree.nodes {
         let windows: [WindowRef]
@@ -80,9 +86,10 @@ public func resolve(
     while let need = try solver.aggregate(root), need.width > inner.width || need.height > inner.height {
         let wide = need.width > inner.width, tall = need.height > inner.height
         func key(_ s: Size) -> Double { wide && tall ? s.width * s.height : wide ? s.width : s.height }
-        let victim = candidates.filter { solver.active.contains($0.window) }.max { l, r in
+        // No window left to take out: only the Desktop's own minimum is too big, and it gets what there is.
+        guard let victim = candidates.filter({ solver.active.contains($0.window) }).max(by: { l, r in
             (key(l.min), l.leaf, l.window.identity) < (key(r.min), r.leaf, r.window.identity)
-        }!
+        }) else { break }
         solver.active.remove(victim.window)
         removed.append(victim.window)
     }
@@ -102,6 +109,7 @@ public func resolve(
 private struct Solver {
     let tree: LayoutTree
     let gap: Double
+    let desktopMinimum: Size
     var minimum: [WindowRef: Size] = [:]
     var active: Set<WindowRef> = []
 
@@ -121,8 +129,8 @@ private struct Solver {
             let sizes = windows.filter(active.contains).compactMap { minimum[$0] }
             guard !sizes.isEmpty else { return nil }
             return Size(width: sizes.map(\.width).max()!, height: sizes.map(\.height).max()!)
-        case .desktop:
-            return nil
+        case let .desktop(hidden):
+            return hidden ? nil : desktopMinimum
         case let .split(axis, children, _):
             var sizes: [Size] = []
             for child in children { if let size = try aggregate(child) { sizes.append(size) } }
@@ -143,7 +151,7 @@ private struct Solver {
         case let .tabs(windows, _):
             for window in windows where active.contains(window) { result.windowRects[window] = rect }
         case .desktop:
-            break
+            break  // its rect is the nodeRects entry recorded above
         case let .split(axis, children, weights):
             var parts: [(id: NodeID, weight: Double, min: Double)] = []
             let horizontal = axis == .horizontal

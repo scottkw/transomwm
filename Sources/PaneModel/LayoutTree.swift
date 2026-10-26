@@ -109,7 +109,7 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                 }
                 for window in windows { try see(window) }
             case .desktop:
-                break
+                guard id == .desktop else { throw .invariantViolated("node \(id) is a Desktop tile; only \(NodeID.desktop) may be") }
             }
         }
         guard visited.count == nodes.count else {

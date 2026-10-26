@@ -4,7 +4,7 @@ public struct Desk: Codable, Equatable, Sendable {
     public var tree: LayoutTree
     public var desktop: DesktopLayer
 
-    public init(tree: LayoutTree = LayoutTree(), desktop: DesktopLayer = DesktopLayer()) {
+    public init(tree: LayoutTree = .withDesktop(), desktop: DesktopLayer = DesktopLayer()) {
         self.tree = tree
         self.desktop = desktop
     }
@@ -42,9 +42,11 @@ public struct Desk: Codable, Equatable, Sendable {
         }
     }
 
-    /// Tree and Desktop layer are each valid, and no window is both docked and floating.
+    /// Tree and Desktop layer are each valid, the tree holds the Desktop tile (D-24), and no window is
+    /// both docked and floating.
     public func validate() throws(LayoutError) {
         try tree.validate()
+        guard tree.isDesktopHidden != nil else { throw .invariantViolated("desk has no Desktop tile \(NodeID.desktop)") }
         try desktop.validate()
         if let both = desktop.windows.first(where: { tree.state(of: $0.window) != nil }) {
             throw .duplicateWindow(both.window)
@@ -66,8 +68,10 @@ public struct World: Codable, Equatable, Sendable {
 
     /// The load path (`init(from:)` uses it). Besides `validate()`, requires `ids` to have half its range
     /// left, which no real session approaches, so a hostile file cannot load with an ID source about to
-    /// run out. Edits are not held to this bound: they stop only where `IDSource.make()` throws.
+    /// run out. Edits are not held to this bound: they stop only where `IDSource.make()` throws. Also
+    /// requires `ids.next >= 1`, so the source can never mint the reserved `NodeID.desktop`.
     public init(ids: IDSource, desks: [DeskKey: Desk]) throws(LayoutError) {
+        guard ids.next >= 1 else { throw .invariantViolated("ID source 0 would mint the Desktop tile's \(NodeID.desktop)") }
         guard ids.next <= UInt64.max / 2 else {
             throw .invariantViolated("ID source \(ids.next) is too close to exhaustion")
         }
