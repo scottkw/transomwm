@@ -31,8 +31,8 @@ import os
     private var scheduler: RefreshScheduler?
     /// False while the registry starts the apps already running, which are not "launched".
     private var followingLaunches = false
-    /// The window a focus hint named, emitted as `windowFocused` after its pid's refresh.
-    private var pendingFocus: [Int32: UInt32] = [:]
+    /// The latest focus hint per pid, emitted as `windowFocused` after the refresh in which its window is tracked.
+    private var pendingFocus = PendingFocus()
     /// Per pid: the window named by the latest `windowFocused`, and the visible window ID whose latest
     /// observation was AXMain. `focusedWindow(of:)` reads them.
     private var focusedIdentities: [Int32: WindowIdentity] = [:]
@@ -322,11 +322,11 @@ import os
             return
         }
         ingest(observation, cgWindows: cgWindows, initial: initial, readGeneration: readGeneration)
-        // Through the shown tab: a focus hint on a non-leader tab names the group's visible member, not its identity.
-        if let windowID = pendingFocus.removeValue(forKey: pid),
-           let info = tracker.sortedWindows().first(where: { $0.window.pid == pid && ($0.visibleMemberID ?? $0.window.windowID) == windowID })
-        {
-            emit([.windowFocused(info.window)])
+        // A hint for a window still settling stays until a later refresh tracks it (G-03-5). A no-ID hint resolves
+        // through AXMain from this observation only if its AXWindows read succeeded (T-03-54).
+        let mainID = observation.listFailure == nil ? mainWindowIDs[pid] : nil
+        if let ref = pendingFocus.resolve(pid: pid, mainID: mainID, windows: tracker.sortedWindows()) {
+            emit([.windowFocused(ref)])
         }
         if followUp.remove(pid) != nil { scheduler?.schedule(pid: pid, after: .zero) }
     }
@@ -444,7 +444,7 @@ import os
                 let pid = from.pid
                 if focusedIdentities[pid] == from.identity { focusedIdentities[pid] = info.window.identity }
                 if mainWindowIDs[pid] == from.windowID { mainWindowIDs[pid] = info.visibleMemberID ?? info.window.windowID }
-                if pendingFocus[pid] == from.windowID { pendingFocus[pid] = info.visibleMemberID ?? info.window.windowID }
+                pendingFocus.rekey(pid: pid, from: from.windowID, to: info.visibleMemberID ?? info.window.windowID)
                 reportedMinimums[from.identity] = nil
                 reportedMinimums[info.window.identity] = info.learnedMinimum
             default: break
@@ -473,7 +473,8 @@ import os
     private func handle(_ hint: AXEventHint) {
         guard threads[hint.pid] != nil else { return }
         let focus = hint.notification == kAXFocusedWindowChangedNotification || hint.notification == kAXMainWindowChangedNotification
-        if focus, let windowID = hint.windowID { pendingFocus[hint.pid] = windowID }
+        // A nil ID (an element the thread has not cached yet, such as a new window) resolves through AXMain.
+        if focus { pendingFocus.hint(pid: hint.pid, windowID: hint.windowID) }
         scheduler?.schedule(pid: hint.pid)
     }
 
@@ -497,7 +498,7 @@ import os
         guard let thread = threads.removeValue(forKey: pid) else { return }
         thread.stop()
         scheduler?.cancel(pid: pid)
-        pendingFocus[pid] = nil
+        pendingFocus.forget(pid: pid)
         focusedIdentities[pid] = nil
         mainWindowIDs[pid] = nil
         probes.removeValue(forKey: pid)?.cancel()
