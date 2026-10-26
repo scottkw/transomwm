@@ -124,14 +124,14 @@ Plans:
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
   7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
-**Plans:** 1/17 plans executed
+**Plans:** 2/17 plans executed
 
 Plans:
 **Wave 1**
 - [x] 03-01-PLAN.md — Desktop tile in the model: `Node.desktop(hidden:)`, reserved `NodeID.desktop`, hide/show, persisted from schema 1
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03-02-PLAN.md — Layout edits and geometry: swap, balance, rotate (its own inverse), flip, grow/shrink, two-child resize, neighbour and boundary lookups, snap targets
+- [x] 03-02-PLAN.md — Layout edits and geometry: swap, balance, rotate (its own inverse), flip, grow/shrink, two-child resize, neighbour and boundary lookups, snap targets
 - [ ] 03-03-PLAN.md — Non-undo World paths: `windowRekeyed` re-points desks and undo snapshots, floating-frame facts, reflow, Undo keeps floating positions
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -296,7 +296,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 17/17 | In Progress | - |
-| 3. Tiling MVP | 1/17 | In Progress | - |
+| 3. Tiling MVP | 2/17 | In Progress | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |

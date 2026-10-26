@@ -36,16 +36,16 @@
 - [ ] **TILE-02**: Holding a bypass modifier while dragging moves the window freely without docking
 - [ ] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
 - [ ] **TILE-04**: User can set the gap between windows
-- [ ] **TILE-05**: Dragging the gap between two windows resizes both
+- [x] **TILE-05**: Dragging the gap between two windows resizes both
 - [ ] **TILE-06**: The green button toggles a window between docked and floating on the Desktop
 - [ ] **TILE-07**: New windows open floating on the Desktop tile, never auto-split into the layout
 - [ ] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [ ] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
 - [ ] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
-- [ ] **TILE-11**: User can swap two docked windows' tiles, by hotkey or by dragging with a modifier
-- [ ] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
-- [ ] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
-- [ ] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
+- [x] **TILE-11**: User can swap two docked windows' tiles, by hotkey or by dragging with a modifier
+- [x] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
+- [x] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
+- [x] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
 - [ ] **TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL
 - [ ] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" returns every window to the Desktop as a normal Mac layout
 - [ ] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
@@ -176,16 +176,16 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-02 | Phase 3 | Pending |
 | TILE-03 | Phase 3 | Pending |
 | TILE-04 | Phase 3 | Pending |
-| TILE-05 | Phase 3 | Pending |
+| TILE-05 | Phase 3 | Complete |
 | TILE-06 | Phase 3 | Pending |
 | TILE-07 | Phase 3 | Pending |
 | TILE-08 | Phase 3 | Pending |
 | TILE-09 | Phase 3 | Pending |
 | TILE-10 | Phase 3 | Pending |
-| TILE-11 | Phase 3 | Pending |
-| TILE-12 | Phase 3 | Pending |
-| TILE-13 | Phase 3 | Pending |
-| TILE-14 | Phase 3 | Pending |
+| TILE-11 | Phase 3 | Complete |
+| TILE-12 | Phase 3 | Complete |
+| TILE-13 | Phase 3 | Complete |
+| TILE-14 | Phase 3 | Complete |
 | TILE-15 | Phase 3 | Pending |
 | TILE-16 | Phase 3 | Pending |
 | TILE-17 | Phase 3 | Pending |
