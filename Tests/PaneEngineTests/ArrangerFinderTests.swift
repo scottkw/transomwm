@@ -24,15 +24,15 @@ private struct Scene {
     let start = ContinuousClock.now
     let area: Rect
 
-    init(width: Double, height: Double, others: [WindowRef] = []) {
+    init(width: Double, height: Double, others: [WindowRef] = [], minimums: [WindowRef: Size] = [:]) {
         area = Rect(x: 0, y: 25, width: width, height: height)
         let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: width, height: height + 25), visibleFrame: area, currentSpaceID: nil)
         // a's centre is near the left edge halfway down, so its dock lands on the Desktop's left edge.
         let frameA = Rect(x: 40, y: area.midY - 116, width: 320, height: 232)
         let floating = ([f] + others).enumerated().map { i, window in
-            info(window, Rect(x: area.maxX - 200, y: 60 + 130 * Double(i), width: 150, height: 120))
+            info(window, Rect(x: area.maxX - 200, y: 60 + 130 * Double(i), width: 150, height: 120), minimum: minimums[window])
         }
-        let inventory = WindowInventory(displays: [display], windows: [info(a, frameA)] + floating, initialRefreshComplete: true)
+        let inventory = WindowInventory(displays: [display], windows: [info(a, frameA, minimum: minimums[a])] + floating, initialRefreshComplete: true)
         _ = arranger.handle(.inventory(inventory), now: start)
         _ = arranger.handle(.command(.dock, focused: a), now: start)
     }
@@ -50,8 +50,8 @@ private struct Scene {
     }
 
     @discardableResult
-    mutating func arrive(_ window: WindowRef, after delay: Duration = .milliseconds(400)) -> [ArrangerEffect] {
-        arranger.handle(.event(.windowCreated(info(window, Rect(x: 600, y: 200, width: 400, height: 300)))), now: start + delay)
+    mutating func arrive(_ window: WindowRef, after delay: Duration = .milliseconds(400), minimum: Size? = nil) -> [ArrangerEffect] {
+        arranger.handle(.event(.windowCreated(info(window, Rect(x: 600, y: 200, width: 400, height: 300), minimum: minimum))), now: start + delay)
     }
 
     func isDocked(_ window: WindowRef) -> Bool { desk?.tree.leaf(containing: window) != nil }
@@ -105,5 +105,79 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(scene.isFloating(other) && !scene.isDocked(other), "a non-Finder window was taken")
         scene.arrive(n)
         #expect(scene.isDocked(n), "the new Finder window did not dock after the others")
+    }
+
+    // MARK: No window, a second press, no room, and the Desktop target
+
+    @Test func withNoNewFinderWindowByTheDeadlineN9ShowsAndTheLayoutIsUnchanged() throws {
+        var scene = Scene(width: 1600, height: 600)
+        scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)
+        let world = scene.arranger.world
+
+        let effects = scene.arranger.handle(.tick, now: scene.start + .seconds(2))
+
+        #expect(effects.contains(.notice(.finderNoWindow)))
+        #expect(scene.arranger.world == world)
+        scene.arrive(n, after: .milliseconds(2500))
+        #expect(scene.isFloating(n) && !scene.isDocked(n), "a Finder window after the deadline was docked")
+        #expect(scene.arranger.handle(.tick, now: scene.start + .seconds(3)).contains(.notice(.finderNoWindow)) == false, "N9 shown twice")
+    }
+
+    @Test func aFinderWindowAfterTheDeadlineFloatsEvenBeforeTheTick() {
+        var scene = Scene(width: 1600, height: 600)
+        scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)
+        scene.arrive(n, after: .milliseconds(2100))
+        #expect(scene.isFloating(n) && !scene.isDocked(n))
+    }
+
+    @Test func aSecondPressReplacesTheFirstAndOnlyOneWindowIsTaken() throws {
+        var scene = Scene(width: 1600, height: 600)
+        scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)
+        scene.arranger.handle(.command(.finderSplit, focused: nil), now: scene.start + .milliseconds(100))
+
+        scene.arrive(n)
+        let m = finderRef(12)
+        scene.arrive(m, after: .milliseconds(500))
+
+        // The second press targets the Desktop tile, so n docks to its right, at the area's right edge.
+        let desktop = try #require(try scene.plan().desktopRect)
+        let tile = try scene.tile(of: n)
+        #expect(tile.minX > desktop.maxX - 1 && near(tile.maxX, scene.area.maxX - 8), "\(tile) beside Desktop \(desktop)")
+        #expect(scene.isFloating(m) && !scene.isDocked(m), "a second Finder window was taken")
+    }
+
+    @Test func aFinderWindowThatWouldLeaveAWindowWithoutRoomFloatsWithABeep() {
+        // Floating, n only widens the Desktop (a 200 + 800); docked beside a it needs 200 + 800 + 700 for f's Desktop.
+        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
+        #expect(scene.isDocked(a), "precondition: a did not dock")
+        scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)
+        let depth = scene.arranger.history.depth(for: key)
+
+        let effects = scene.arrive(n, minimum: Size(width: 800, height: 100))
+
+        #expect(effects.contains(.beep) && effects.contains(.announce("Not enough room to dock here")))
+        #expect(scene.isFloating(n) && !scene.isDocked(n))
+        #expect(scene.isDocked(a))
+        #expect(scene.arranger.history.depth(for: key) == depth)
+    }
+
+    @Test func aFloatingFocusedWindowSplitsTheDesktopTile() throws {
+        var scene = Scene(width: 1600, height: 600)
+        let desktop = try #require(try scene.plan().desktopRect)
+        #expect(desktop.width >= desktop.height, "precondition: the Desktop tile is not wide: \(desktop)")
+        scene.arranger.handle(.command(.finderSplit, focused: f), now: scene.start)
+        scene.arrive(n)
+        let tile = try scene.tile(of: n)
+        let after = try #require(try scene.plan().desktopRect)
+        #expect(tile.minX > after.maxX - 1 && near(tile.minY, after.minY) && near(tile.height, after.height), "\(after) | \(tile)")
+    }
+
+    @Test func withNoFocusedWindowTheMainDisplaysDesktopTileIsSplit() throws {
+        var scene = Scene(width: 1600, height: 600)
+        scene.arranger.handle(.command(.finderSplit, focused: nil), now: scene.start)
+        scene.arrive(n)
+        let tile = try scene.tile(of: n)
+        let after = try #require(try scene.plan().desktopRect)
+        #expect(tile.minX > after.maxX - 1 && near(tile.height, after.height), "\(after) | \(tile)")
     }
 }

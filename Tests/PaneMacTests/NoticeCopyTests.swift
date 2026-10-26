@@ -28,4 +28,9 @@ private func ref(_ id: UInt32) -> WindowRef {
     @Test func theLostRoomGlyphIsMacwindow() {
         #expect(NoticeCopy.glyph(for: .lostRoom([ref(1)])) == "macwindow")
     }
+
+    @Test func finderNoWindowIsN9() {
+        #expect(NoticeCopy.text(for: .finderNoWindow, appName: { _ in "Finder" }) == "Finder didn't open a new window.")
+        #expect(NoticeCopy.glyph(for: .finderNoWindow) == "info.circle")
+    }
 }

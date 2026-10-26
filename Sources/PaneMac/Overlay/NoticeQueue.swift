@@ -59,10 +59,12 @@ nonisolated public struct NoticeQueue<Item: QueueableNotice>: Sendable {
 }
 
 nonisolated extension Notice: QueueableNotice {
-    /// Two lost-room notices become one naming every window once.
+    /// Two lost-room notices become one naming every window once; two N9s are one.
     public func merged(with other: Notice) -> Notice? {
         switch (self, other) {
         case (.lostRoom(let windows), .lostRoom(let more)): .lostRoom(windows + more.filter { !windows.contains($0) })
+        case (.finderNoWindow, .finderNoWindow): .finderNoWindow
+        case (.lostRoom, _), (.finderNoWindow, _): nil
         }
     }
 }
