@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Runs live AX integration suites inside the Tart test VM, never on this Mac: builds the test bundles here
 # (nothing runs), copies them plus Xcode's test runtime into the VM, and runs them there with PANE_LIVE=1.
-# Usage: PANE_VM_KEY=<ssh key> scripts/vm-live-test.sh <filter> [VAR=value ...]
+# Usage: scripts/vm-live-test.sh <filter> [VAR=value ...]
 #   e.g. scripts/vm-live-test.sh FixtureShapesTests        scripts/vm-live-test.sh ArrangeIntegrationTests PANE_LIVE_DRAG=1
-# Env: PANE_VM (tart VM name, default pane-test), PANE_VM_USER (default admin), PANE_VM_KEY (required).
+# Env: PANE_VM (tart VM name, default pane-test), PANE_VM_USER (default admin), PANE_VM_KEY (default ~/.ssh/pane_vm_ed25519).
 # The VM's SSH session needs the Accessibility grant (sshd-keygen-wrapper), as the UAT harness already has.
 # Pane is quit in the VM for the run (its tiling would fight the fixtures) and relaunched after if it was running.
 set -euo pipefail
@@ -13,7 +13,7 @@ shift
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 vm="${PANE_VM:-pane-test}"
-key="${PANE_VM_KEY:?set PANE_VM_KEY to the SSH key the VM accepts}"
+key="${PANE_VM_KEY:-$HOME/.ssh/pane_vm_ed25519}"
 host="${PANE_VM_USER:-admin}@$(tart ip "$vm")"
 ssh_opts=(-i "$key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
