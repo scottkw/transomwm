@@ -124,7 +124,7 @@ Plans:
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
   7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
-**Plans:** 17/17 plans executed
+**Plans:** 17/22 plans executed (5 gap-closure plans from UAT)
 
 Plans:
 **Wave 1**
@@ -175,6 +175,15 @@ Plans:
 
 **Wave 16** *(blocked on Wave 15 completion)*
 - [x] 03-17-PLAN.md — `scripts/release.sh`: secure timestamp, notarise, staple, DMG; local notarised 0.3.0 DMG, public release held for the Transom rename (blocking checkpoint for the notarised run)
+
+**Gap closure, Wave 1** *(from 03-UAT.md)*
+- [ ] 03-18-PLAN.md — G-03-4: the tap's window-0 fallback picks the topmost layer-0 window (pure, tested), so plain green-button clicks toggle dock/float; D-33 kept
+- [ ] 03-19-PLAN.md — G-03-5: PendingFocus keeps a focus hint until the new window is tracked, so commands act on a second window of an app
+- [ ] 03-20-PLAN.md — G-03-3: gap drag re-bases split weights to laid-out sizes (pinned side) and holds the live move across mid-drag replans
+- [ ] 03-21-PLAN.md — G-03-6: the Desktop minimum ignores floaters that would push docked windows out
+
+**Gap closure, Wave 2** *(blocked on 03-20 and 03-21)*
+- [ ] 03-22-PLAN.md — G-03-6: a docked window refusing its tile from its minimum is retried once and learned, then floats; under-32 pt overflow tolerated
 
 **UI hint**: yes
 **Research**: Standard patterns; drop-zone geometry starts from yabai's numbers (edge bands ~25%, centre ~50%) and is tuned in UAT
