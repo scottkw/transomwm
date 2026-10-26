@@ -15,6 +15,11 @@ private func ref(_ id: UInt32) -> WindowRef {
 private let a = ref(1)
 private let b = ref(2)
 private let c = ref(3)
+private let y = ref(9)
+
+private func info(_ window: WindowRef) -> WindowInfo {
+    WindowInfo(window: window, frame: frame, state: .present, displayUUID: "D1")
+}
 
 /// Desk `key` with `windows` docked left to right beside the Desktop tile, one user edit (and so one undo snapshot) per window.
 private func world(_ windows: [WindowRef], history: inout UndoHistory) throws -> World {
@@ -151,8 +156,6 @@ private func fake(knowing known: [WindowRef], minimised: [WindowRef] = []) async
         .windowResized(ref(1), frame),
         .windowFocused(ref(1)),
         .windowChanged(WindowInfo(window: ref(1), frame: frame, state: .absent, displayUUID: "D1")),
-        // Phase 3 re-points desk refs; LifecycleSync applies nothing for it.
-        .windowRekeyed(from: ref(1), to: WindowInfo(window: ref(9), frame: frame, state: .present, displayUUID: "D1")),
         .frameApplied(ref(1), requested: frame, actual: frame),
         .appResponsiveness(pid: pid, degraded: true),
         .sessionPaused(true),
@@ -169,6 +172,39 @@ private func fake(knowing known: [WindowRef], minimised: [WindowRef] = []) async
         #expect(try !LifecycleSync.handle(event, world: &world, history: &history))
         #expect(world == worldBefore)
         #expect(history == historyBefore)
+    }
+
+    // MARK: 03-03 — a rekey re-points the desk and undo snapshots without an undo step
+
+    @Test func aRekeyedDockedWindowKeepsItsTileWithNoUndoStep() throws {
+        var history = UndoHistory()
+        var world = try world([a, b], history: &history)
+        try world.apply(.absent, for: a, on: key, history: &history)
+        let depth = history.depth(for: key)
+
+        #expect(try LifecycleSync.handle(.windowRekeyed(from: a, to: info(y)), world: &world, history: &history))
+        #expect(world[key]?.tree.windows == [y, b])
+        #expect(world[key]?.state(of: y) == .absent)
+        #expect(!onAnyDesk(a, world))
+        #expect(history.depth(for: key) == depth)
+        // Undo of docking b restores the snapshot under the new ID.
+        #expect(try LifecycleSync.undo(key, world: &world, history: &history) == RevivedWindows(key: key, windows: []))
+        #expect(world[key]?.tree.windows == [y])
+    }
+
+    @Test func undoAfterARekeyRevivesTheNewIDAndRequeryFindsIt() async throws {
+        let system = await fake(knowing: [a, y])
+        var history = UndoHistory()
+        var world = try world([a, b], history: &history)
+        try userRemoves(b, from: &world, history: &history)
+
+        #expect(try LifecycleSync.handle(.windowRekeyed(from: b, to: info(y)), world: &world, history: &history))
+        let revived = try #require(try LifecycleSync.undo(key, world: &world, history: &history))
+        #expect(revived.windows == [y])
+        let states = await LifecycleSync.requery(revived, using: system)
+        #expect(states.map(\.1) == [.present])
+        try LifecycleSync.applyRequeried(states, on: key, world: &world, history: &history)
+        #expect(world[key]?.tree.windows == [a, y])
     }
 
     // MARK: Task 2 — undo re-queries every revived window
