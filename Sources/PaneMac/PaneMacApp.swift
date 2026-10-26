@@ -15,6 +15,7 @@ public enum PaneMacApp {
     /// Takes the event tap down the moment access leaves `.ready`, and brings it back with access (Pitfall 4).
     private static var accessSubscription: AnyCancellable?
     private static var trackedWindows: TrackedWindowsWindowController?
+    private static var conflicts: ConflictController?
     /// NSApplication holds its delegate weakly.
     private static var delegate: AppDelegate?
     private static let freezeTest = FreezeTest()
@@ -61,9 +62,12 @@ public enum PaneMacApp {
         arrangeController.isReady = { permissionController.state.phase == .ready }
         // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).
         let dispatch: @MainActor (Command) -> Void = { command in Task { await arrangeController.dispatch(command) } }
+        // The only store on the real com.apple.WindowManager domain (SAFE-04); Stage Manager pauses arranging (D-22).
+        let conflictController = ConflictController(store: CFPreferencesStore(domain: ConflictPolicy.domain))
+        conflictController.setStageManagerPaused = { on in Task { await arrangeController.setPaused(.stageManager, on) } }
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
-            exclusions: exclusions, freezeTest: freezeTest, showTrackedWindows: { trackedController.show() },
+            exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController, showTrackedWindows: { trackedController.show() },
             showSetup: { setupController.show() }
         )
         controller.onInventory = { trackedController.feed.inventory = $0 }
@@ -73,6 +77,8 @@ public enum PaneMacApp {
         arrange = arrangeController
         permission = permissionController
         setupWindow = setupController
+        conflicts = conflictController
+        conflictController.start()
         permissionController.onTrackingStarted = {
             await arrangeController.start()
             arrangeController.startTap()  // drags (TILE-01)

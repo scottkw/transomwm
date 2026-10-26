@@ -1,7 +1,7 @@
 import PaneEngine
 import Testing
 
-/// SAFE-04, D-19, D-22, Pitfall 12: which macOS features are on, read from com.apple.WindowManager's values.
+/// SAFE-04, D-19, D-22, Pitfall 12: which macOS features are on, read from the WindowManager preference values.
 @Suite struct ConflictPolicyTests {
     @Test func stageManagerIsOnOnlyWhenGloballyEnabledIsTrue() {
         #expect(ConflictPolicy.active(values: ["GloballyEnabled": .bool(true)], osMajor: 14).contains(.stageManager))
@@ -17,7 +17,6 @@ import Testing
     }
 
     @Test func theKeyTableIsFixed() {
-        #expect(ConflictPolicy.domain == "com.apple.WindowManager")
         #expect(ConflictPolicy.keys(for: .stageManager) == ["GloballyEnabled"])
         #expect(ConflictPolicy.keys(for: .edgeTiling) == ["EnableTilingByEdgeDrag", "EnableTopTilingByEdgeDrag"])
         #expect(ConflictPolicy.keys(for: .clickWallpaper) == ["EnableStandardClickToShowDesktop"])

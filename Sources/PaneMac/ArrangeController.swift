@@ -76,6 +76,11 @@ import os
         await run(arranger.handle(.gap(gap), now: .now))
     }
 
+    /// Sets or clears one pause reason (Stage Manager, from ConflictController).
+    public func setPaused(_ reason: PauseReason, _ on: Bool) async {
+        await run(arranger.handle(.setPaused(reason, on), now: .now))
+    }
+
     /// Feeds the current inventory, then starts the single events loop. Later calls only re-read the inventory.
     public func start() async {
         let inventory = await system.inventory()

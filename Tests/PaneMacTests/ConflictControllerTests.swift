@@ -3,7 +3,7 @@ import PaneEngine
 @testable import PaneMac
 import Testing
 
-/// An in-memory com.apple.WindowManager. Keys in `stuck` ignore writes, as a managed or refused setting would.
+/// An in-memory stand-in for the WindowManager preferences. Keys in `stuck` ignore writes, as a managed or refused setting would.
 @MainActor final class MemoryPreferences: PreferencesStore {
     var values: [String: PrefValue] = [:]
     var stuck: Set<String> = []

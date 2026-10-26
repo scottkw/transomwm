@@ -15,6 +15,7 @@ import os
     private let gaps: GapPreference
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
+    private let conflicts: ConflictController
     private let showSetup: () -> Void
     private let showTrackedWindows: () -> Void
     private var permissionSubscription: AnyCancellable?
@@ -37,7 +38,7 @@ import os
     /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
         system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
-        gaps: GapPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        gaps: GapPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.arrange = arrange
@@ -46,6 +47,7 @@ import os
         self.gaps = gaps
         self.exclusions = exclusions
         self.freezeTest = freezeTest
+        self.conflicts = conflicts
         self.showTrackedWindows = showTrackedWindows
         self.showSetup = showSetup
         super.init()
@@ -69,6 +71,7 @@ import os
         menu.removeAllItems()
         frontmost = NSWorkspace.shared.frontmostApplication
         addStatusItems(to: menu)
+        addConflictItems(to: menu)
         menu.addItem(.separator())
         addArrangeItems(to: menu)
         menu.addItem(.separator())
@@ -167,6 +170,25 @@ import os
         if let degraded = MenuCopy.degradedLine(count: latest.degradedPIDs.count) {
             menu.addItem(Self.info(degraded))
         }
+    }
+
+    /// Item 5: one line per active conflict, in the fixed order; a click turns the feature off at once (D-19).
+    private func addConflictItems(to menu: NSMenu) {
+        for conflict in Conflict.allCases where conflicts.active.contains(conflict) {
+            let item = NSMenuItem(title: ConflictCopy.menuTitle(conflict), action: #selector(turnOffConflict), keyEquivalent: "")
+            item.target = self
+            item.representedObject = conflict.rawValue
+            item.toolTip = ConflictCopy.tooltip(conflict)
+            let image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: ConflictCopy.imageDescription)
+            image?.isTemplate = true
+            item.image = image
+            menu.addItem(item)
+        }
+    }
+
+    @objc private func turnOffConflict(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let conflict = Conflict(rawValue: raw) else { return }
+        Task { await conflicts.turnOff(conflict) }
     }
 
     /// Items 24 and 25: the frontmost app's Don't Arrange toggle (⌃⌥⌘E, D-29) and the Never Arrange submenu (D-12).
