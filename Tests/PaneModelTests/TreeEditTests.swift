@@ -276,4 +276,28 @@ private let tabRemovals: [(selected: Int, removed: Int, after: [WindowRef], sele
         #expect(throws: LayoutError.invalidGeometry("delta must be finite")) { try t.resizeBoundary(in: n(1), after: 0, by: delta) }
         #expect(t == before)
     }
+
+    // MARK: setWeights (G-03-3)
+
+    @Test func setWeightsStoresTheValuesNormalisedToOne() throws {
+        var t = try threeWide()
+        try t.setWeights(in: n(1), [2, 1, 1])
+        expectWeights(weights(t), [0.5, 0.25, 0.25])
+    }
+
+    @Test(arguments: [[0.5, 0.5], [0.5, 0.3, 0.1, 0.1], [0.5, .nan, 0.5], [0.5, .infinity, 0.5], [0.5, 0, 0.5], [0.6, -0.1, 0.5]])
+    func setWeightsRejectsAWrongCountOrABadValue(values: [Double]) throws {
+        var t = try threeWide()
+        let before = t
+        #expect(throws: LayoutError.self) { try t.setWeights(in: n(1), values) }
+        #expect(t == before)
+    }
+
+    @Test func setWeightsRejectsUnknownNodesAndNonSplits() throws {
+        var t = try threeWide()
+        let before = t
+        #expect(throws: LayoutError.nodeNotFound(n(99))) { try t.setWeights(in: n(99), [1, 1, 1]) }
+        #expect(throws: LayoutError.notASplit(n(2))) { try t.setWeights(in: n(2), [1, 1, 1]) }
+        #expect(t == before)
+    }
 }

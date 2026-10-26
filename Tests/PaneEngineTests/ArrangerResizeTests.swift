@@ -174,11 +174,12 @@ private func gapHandles(_ effects: [ArrangerEffect]) -> [[GapHandle]] {
     effects.compactMap { if case .gapHandles(let handles, "main") = $0 { handles } else { nil } }
 }
 
-/// The handle between children `first` and `second` of the root split.
-private func handle(_ arranger: Arranger, _ first: Int, _ second: Int) throws -> GapHandle {
+/// The handle between children `first` and `second` of the root split, or of the split holding `parentOf`.
+private func handle(_ arranger: Arranger, _ first: Int, _ second: Int, parentOf window: WindowRef? = nil) throws -> GapHandle {
     let desk = try #require(arranger.world[key])
+    let split = try window.map { try #require(desk.tree.parent(of: try leaf(desk, $0))) } ?? desk.tree.root
     let found = GapHandles.handles(tree: desk.tree, resolution: try plan(arranger).resolution, gap: gap)
-    return try #require(found.first { $0.split == desk.tree.root && $0.first == first && $0.second == second })
+    return try #require(found.first { $0.split == split && $0.first == first && $0.second == second })
 }
 
 /// TILE-05, D-07, Pitfall 9, UI-SPEC Surface 3: dragging a gap resizes both sides live and commits once on mouse-up.
@@ -250,5 +251,57 @@ extension ArrangerResizeTests {
 
         var moving = try arranger(row)
         #expect(gapHandles(moving.handle(.event(.spaceChanged(displayUUID: "main", spaceID: 7)), now: .now)).first == [])
+    }
+}
+
+/// G-03-3 H1: a gap whose growing side is held at a minimum above its weight share still moves by the drag.
+extension ArrangerResizeTests {
+    @Test func aGapNextToAPinnedSideMovesThatGapAndNoOther() throws {
+        let mins = [a: Size(width: 700, height: 100)]
+        var arranger = try arranger(minimums: mins, row)
+        let before = try plan(arranger, mins: mins)
+        let ta = try #require(before.frames[a]), tb = try #require(before.frames[b]), desktop = try #require(before.desktopRect)
+        #expect(near(ta.width, 700), "a is not pinned: \(ta)")
+        _ = arranger.handle(.gapDrag(try handle(arranger, 0, 1), delta: 50, ended: true), now: .now)
+        #expect(arranger.history.depth(for: key) == 1)
+        let after = try plan(arranger, mins: mins)
+        let na = try #require(after.frames[a]), nb = try #require(after.frames[b])
+        #expect(near(na.width, ta.width + 50), "\(ta) became \(na)")
+        #expect(near(nb.minX, tb.minX + 50) && near(nb.maxX, tb.maxX), "\(tb) became \(nb)")
+        let nd = try #require(after.desktopRect)
+        #expect(near(nd.minX, desktop.minX) && near(nd.width, desktop.width), "the Desktop moved: \(desktop) became \(nd)")
+    }
+
+    @Test func aTwoChildGapWithAPinnedGrowingSideIsNotFrozen() throws {
+        let mins = [a: Size(width: 1000, height: 100)]
+        var arranger = try arranger(minimums: mins, corner)
+        let before = try plan(arranger, mins: mins)
+        let ta = try #require(before.frames[a]), tb = try #require(before.frames[b])
+        #expect(near(ta.width, 1000), "a is not pinned: \(ta)")
+        _ = arranger.handle(.gapDrag(try handle(arranger, 0, 1, parentOf: a), delta: 50, ended: true), now: .now)
+        #expect(arranger.history.depth(for: key) == 1)
+        let after = try plan(arranger, mins: mins)
+        let na = try #require(after.frames[a]), nb = try #require(after.frames[b])
+        #expect(near(na.width, ta.width + 50) && near(nb.width, tb.width - 50) && near(nb.maxX, tb.maxX), "\(ta) \(tb) became \(na) \(nb)")
+    }
+
+    @Test func aDragIntoThePinnedSidesOwnMinimumMovesNothing() throws {
+        let mins = [a: Size(width: 1000, height: 100)]
+        var arranger = try arranger(minimums: mins, corner)
+        let before = try plan(arranger, mins: mins)
+        let effects = arranger.handle(.gapDrag(try handle(arranger, 0, 1, parentOf: a), delta: -50, ended: true), now: .now)
+        #expect(arranger.history.depth(for: key) == 0)
+        #expect(setFrames(effects).isEmpty, "something moved: \(effects)")
+        #expect(try plan(arranger, mins: mins).frames == before.frames)
+    }
+
+    @Test func theReBaseAloneIsNoEdit() throws {
+        let mins = [a: Size(width: 700, height: 100)]
+        var arranger = try arranger(minimums: mins, row)
+        let before = try plan(arranger, mins: mins)
+        let effects = arranger.handle(.gapDrag(try handle(arranger, 0, 1), delta: 0.4, ended: true), now: .now)
+        #expect(arranger.history.depth(for: key) == 0)
+        #expect(setFrames(effects).isEmpty, "something moved: \(effects)")
+        #expect(try plan(arranger, mins: mins).frames == before.frames)
     }
 }
