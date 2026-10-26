@@ -164,7 +164,7 @@ See `key-decisions` in the frontmatter. The move rule is the one deviation from 
 
 ### Auto-fixed Issues
 
-**1. [Rule 1 - Bug] A move next to a sibling on the move axis did nothing**
+**1. [Rule 1 - Bug] A move next to a sibling on the move axis did nothing** (approved by user 2026-10-26)
 - **Found during:** Task 1
 - **Issue:** The plan says to remove the window and insert it on the neighbour's near edge (`edge.opposite`). For `[a | b | Desktop]` with b moving left, that rebuilds exactly `[a | b | Desktop]`. The press would change nothing and still push an undo step, and the plan's own live truth ("moves it into the left window's tile area") could never pass.
 - **Fix:** When the window and its neighbour share a parent split, the window is inserted on the neighbour's far edge, so it takes the sibling's place (`H[b,a,D]`, the i3/AeroSpace "move" behaviour). Across a split boundary the near-edge rule stands: `H[a,V[b,c],D]` with c moving left gives `H[a,c,b,D]`, and `V[H[a,b],D]` with b moving down gives `V[a,b,D]`. Moving toward a sibling Desktop tile likewise passes it.
