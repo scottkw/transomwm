@@ -1,5 +1,6 @@
 import PaneEngine
 import PaneMac
+import PaneModel
 import Testing
 
 @Suite struct MenuCopyTests {
@@ -73,6 +74,25 @@ import Testing
         let body = MenuCopy.resetFailedBody(code: 64, appName: "Pane Debug")
         #expect(body.contains("tccutil stopped with code 64"))
         #expect(body.contains("\u{201C}Pane Debug\u{201D}"))
+    }
+
+    @Test func sectionTitlesNameTheThreeGroups() {
+        #expect(MenuCopy.arrangeSection == "Arrange")
+        #expect(MenuCopy.safetySection == "Safety")
+        #expect(MenuCopy.exclusionsSection == "Exclusions")
+    }
+
+    /// 02-UI-REVIEW fix 1: no count before the first sweep, and closed windows are never counted.
+    @Test func headerWaitsForTheFirstSweepAndSkipsClosedWindows() {
+        let ref = { (id: UInt32, pid: Int32) in WindowRef(identity: WindowIdentity(windowID: id, pid: pid, bundleID: "com.example.\(pid)")) }
+        let frame = Rect(x: 0, y: 0, width: 100, height: 100)
+        let windows = [
+            WindowInfo(window: ref(1, 1), frame: frame, state: .present, displayUUID: "main", kind: .dockable),
+            WindowInfo(window: ref(2, 1), frame: frame, state: .absent, displayUUID: "main", kind: .dockable),
+            WindowInfo(window: ref(3, 2), frame: frame, state: .closed, displayUUID: "main", kind: .dockable),
+        ]
+        #expect(MenuCopy.header(WindowInventory(displays: [], windows: windows)) == "Looking for windows\u{2026}")
+        #expect(MenuCopy.header(WindowInventory(displays: [], windows: windows, initialRefreshComplete: true)) == "Tracking 2 windows in 1 app")
     }
 
     @Test func exclusionCopyQuotesTheAppName() {
