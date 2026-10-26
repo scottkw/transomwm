@@ -200,6 +200,7 @@ public struct Arranger: Sendable {
             case .normal: return effects
             case .recovery: return effects + [.notice(.crashRecovered(unplaced: restored.unplaced))]
             case .crashLoop: return effects + [.notice(.crashLoop)]
+            case .unreadable: return effects
             }
         case .event(let event):
             // Until the saved layout is re-attached, the next complete inventory says everything an event would.
@@ -271,6 +272,8 @@ public struct Arranger: Sendable {
             return gapDrag(handle, delta: delta, ended: ended)
         case .launch(let mode):
             launch = mode
+            // No saved layout, but the first complete inventory still runs the restore path, so stranded windows are rescued.
+            if mode == .unreadable { pendingRestore = (World(), [:]) }
             // D-18: a crash loop starts paused; Resume clears it. Stranded windows still come on screen (UI-SPEC N3).
             guard mode == .crashLoop else { return [] }
             pauseReasons.insert(.crashLoop)

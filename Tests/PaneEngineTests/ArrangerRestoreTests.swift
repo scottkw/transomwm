@@ -253,6 +253,27 @@ extension ArrangerRestoreTests {
         #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
     }
 
+    /// WR-05: a layout.json that was rejected or is from a newer Pane says nothing about the last session, so stranded
+    /// windows are rescued as after a crash; with no layout restored, no recovery notice is shown.
+    @Test func anUnreadableLayoutLaunchRescuesStrandedWindowsWithNoNotice() async throws {
+        let source = await twoDocked()
+        let tileA = try #require(await source.frame(a))
+        await source.fake.userMove(1, to: Rect(x: 10000, y: 100, width: tileA.width, height: tileA.height))
+        await source.fake.refreshAll()
+        var restored = Arranger()
+        _ = restored.handle(.launch(.unreadable), now: .now)
+
+        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+
+        guard case .setFrame(a, let rescue)? = performs(effects).first?.first else {
+            Issue.record("the first command is not a's rescue: \(effects)")
+            return
+        }
+        #expect(inside(rescue, visibleFrame), "\(rescue) is not on screen")
+        #expect(notices(effects).isEmpty)
+        #expect(restored.world[key]?.desktop.contains(a) == true && restored.world[key]?.desktop.contains(b) == true)
+    }
+
     /// D-18: a crash loop starts paused. Stranded windows still come on screen; nothing else moves until Resume.
     @Test func aCrashLoopLaunchStartsPausedButStillRescuesStrandedWindows() async throws {
         let (launched, effects, tileA, saved) = try await recovering(.crashLoop)

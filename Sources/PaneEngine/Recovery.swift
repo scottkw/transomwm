@@ -5,6 +5,9 @@ public enum LaunchMode: Equatable, Sendable {
     case normal, recovery
     /// A second unclean exit within about a minute of a recovery launch: start paused (D-18).
     case crashLoop
+    /// layout.json was rejected or is from a newer Pane, so the last session's record is unknown: stranded windows are
+    /// rescued as after a crash, with no layout to restore and no notice (WR-05). Counts as a recovery launch.
+    case unreadable
 }
 
 /// The crash-recovery rules (SAFE-02, SAFE-03, D-17, D-18, RESEARCH Pattern 10, thresholds A6). Pure, in CloseRule's
@@ -16,6 +19,7 @@ public enum LaunchMode: Equatable, Sendable {
 /// | unclean, a recovery launch that survived 60 s    | recovery  |
 /// | unclean, a recovery launch that did not          | crashLoop |
 /// | unclean, a normal launch                         | recovery  |
+/// | unreadable (layout.json rejected or newer)       | unreadable|
 public enum Recovery {
     public static let minVisibleFraction = 0.5
     public static let minVisibleSize = Size(width: 40, height: 40)
@@ -73,7 +77,8 @@ public enum Recovery {
         return plan
     }
 
-    public static func launchMode(previous: SessionRecord?) -> LaunchMode {
+    public static func launchMode(previous: SessionRecord?, unreadable: Bool = false) -> LaunchMode {
+        if unreadable { return .unreadable }
         guard let previous, !previous.cleanExit else { return .normal }
         return previous.recoveryLaunch && !previous.survivedMinute ? .crashLoop : .recovery
     }

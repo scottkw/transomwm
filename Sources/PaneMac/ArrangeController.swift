@@ -97,7 +97,7 @@ import os
         if let store {
             store.load()
             // The record the last session left decides this launch; `contents` keeps it after this launch's first write.
-            launchMode = Recovery.launchMode(previous: store.contents?.session)
+            launchMode = Recovery.launchMode(previous: store.contents?.session, unreadable: store.loadError != nil)
             await run(arranger.handle(.launch(launchMode), now: .now))
             if let due = Recovery.survivedMinuteDue(launchedAt: .now, mode: launchMode) {
                 survivalTimer.set(due) { [weak self] in

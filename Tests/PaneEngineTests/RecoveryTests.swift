@@ -65,6 +65,12 @@ private let side = DisplayInfo(
         #expect(Recovery.launchMode(previous: SessionRecord(cleanExit: true, launchedAt: Date())) == .normal)
     }
 
+    /// WR-05: an unreadable layout.json hides the last session's record, whatever it said.
+    @Test func anUnreadableLayoutIsAnUnreadableLaunch() {
+        #expect(Recovery.launchMode(previous: nil, unreadable: true) == .unreadable)
+        #expect(Recovery.launchMode(previous: nil, unreadable: false) == .normal)
+    }
+
     @Test func anUncleanPreviousSessionIsARecoveryLaunch() {
         #expect(Recovery.launchMode(previous: SessionRecord(cleanExit: false, launchedAt: Date())) == .recovery)
     }
