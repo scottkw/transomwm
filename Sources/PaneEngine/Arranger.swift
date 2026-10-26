@@ -331,7 +331,12 @@ public struct Arranger: Sendable {
 
     /// Corrects the docked windows whose second has passed and that are still off their tile.
     private mutating func tick(now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        if let expected = finderExpectation, now >= expected.deadline { finderExpectation = nil }
+        // D-14: no new Finder window by the deadline. The layout was never touched, so only N9 is shown.
+        var missed: [ArrangerEffect] = []
+        if let expected = finderExpectation, now >= expected.deadline {
+            finderExpectation = nil
+            missed = [.notice(.finderNoWindow)]
+        }
         let due = pendingCorrections.filter { id in lastCorrection[id].map { now >= $0 + Self.correctionInterval } ?? true }
         pendingCorrections.subtract(due)
         let off = due.filter { id in
@@ -339,7 +344,7 @@ public struct Arranger: Sendable {
             return world.desks.values.contains { $0.tree.state(of: info.window) == .present } && !Self.near(info.frame, tile, within: 2)
         }
         let effects = off.isEmpty ? [] : correct(off, now: now)
-        return effects + (nextWake.map { [.wake(at: $0)] } ?? [])
+        return missed + effects + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
     /// Forgets the tile last sent, so the re-plan writes it again.

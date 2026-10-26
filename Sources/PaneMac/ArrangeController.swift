@@ -113,14 +113,30 @@ import os
         }
     }
 
-    /// Presses Finder's ⌘N menu item on Finder's AX thread (RESEARCH Pattern 14): no Apple Events, no Automation prompt.
+    /// Presses Finder's ⌘N menu item on Finder's AX thread (RESEARCH Pattern 14): no Apple Events, no Automation
+    /// prompt. A quit Finder is launched first and pressed once Pane tracks it, within most of the Arranger's 2 s wait.
+    /// With no such item to press, Pane opens the home folder instead; the Arranger docks whatever new window comes.
     private func openFinderWindow() async {
-        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: Arranger.finderBundleID).first?.processIdentifier,
-            await system.pressNewWindowItem(pid: pid)
-        else {
-            logger.info("could not press Finder's New Finder Window item")
-            return
+        let bundleID = Arranger.finderBundleID
+        var giveUp = ContinuousClock.now
+        if NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty,
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        {
+            do {
+                _ = try await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            } catch {
+                logger.error("could not launch Finder: \(String(describing: error), privacy: .public)")
+            }
+            giveUp = .now + .milliseconds(1500)
         }
+        while true {
+            let pid = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.processIdentifier
+            if let pid, await system.pressNewWindowItem(pid: pid) { return }
+            if ContinuousClock.now >= giveUp { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        logger.info("no New Finder Window item to press; opening the home folder")
+        NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser)
     }
 
     /// Writes layout.json one last time with `cleanExit: true` when Pane quits normally. Nothing is written if

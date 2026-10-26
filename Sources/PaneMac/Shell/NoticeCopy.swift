@@ -13,7 +13,7 @@ nonisolated public enum NoticeCopy {
                 "\(windows.count) windows no longer fit their tiles, so they're floating on the Desktop."
             }
         case .finderNoWindow:
-            ""
+            "Finder didn't open a new window."
         }
     }
 
@@ -21,7 +21,7 @@ nonisolated public enum NoticeCopy {
     public static func glyph(for notice: Notice) -> String {
         switch notice {
         case .lostRoom: "macwindow"
-        case .finderNoWindow: ""
+        case .finderNoWindow: "info.circle"
         }
     }
 }
