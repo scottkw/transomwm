@@ -88,6 +88,8 @@ public actor FakeWindowSystem: WindowSystem {
     public private(set) var dropped: [WindowCommand] = []
     /// Windows a `park` moved to their display's corner; a later `setFrame` takes a window out.
     public private(set) var parked: Set<WindowIdentity> = []
+    /// Every admitted `.raise`, in order.
+    public private(set) var raised: [WindowRef] = []
     private var excluded: Set<String> = []
     public private(set) var clock: ContinuousClock.Instant
     private var tracker = WindowTracker()

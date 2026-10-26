@@ -220,6 +220,10 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         } ?? (.otherFailure, .zero)
     }
 
+    func focusWindow(windowID: UInt32) async -> Bool { false }
+
+    func raiseWindow(windowID: UInt32) async -> Bool { false }
+
     /// Puts `rect` in the window's slot, replacing any frame still waiting, and schedules a drain if none is.
     func enqueueFrame(windowID: UInt32, rect: Rect, ref: PaneModel.WindowRef) {
         let schedule = frames.withLock { queue in

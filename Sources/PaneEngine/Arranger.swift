@@ -66,6 +66,8 @@ public struct Arranger: Sendable {
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
     private var parkRequested: Set<WindowIdentity> = []
+    /// Window identities, the most recently focused first: focus ties go to the earliest (D-11).
+    public private(set) var focusOrder: [WindowIdentity] = []
 
     public init(gap: Double = 8) {
         self.gap = gap
@@ -104,7 +106,7 @@ public struct Arranger: Sendable {
                 case (.float, let window?): return try float(window)
                 case (.undo, _): return try undo(focused)
                 case (.toggleDesktop, _): return try toggleDesktop(focused)
-                case (.dock, nil), (.float, nil): return [.beep]
+                case (.dock, nil), (.float, nil), (.focus, _): return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -194,6 +196,8 @@ public struct Arranger: Sendable {
             return world.desks.values.contains { $0.tree.state(of: focused) != nil }
         case .undo:
             return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
+        case .focus:
+            return false
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }

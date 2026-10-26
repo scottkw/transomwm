@@ -53,4 +53,30 @@ private func intersection(_ a: Rect, _ b: Rect) -> (width: Double, height: Doubl
         }
         #expect(back, "setFrame did not bring it back to \(old)")
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func focusMakesTheFixtureFrontmostWithThatWindowKeyAndRaiseSucceeds() async throws {
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
+        defer { fixture.terminate() }
+        let (system, refs) = try await tracking(fixture)
+        #expect(refs.count == 2)
+        for index in [0, 1] {
+            await system.perform([.focus(refs[index])])
+            var reply: [String] = []
+            let focused = await waitUntil(timeout: .seconds(2)) {
+                reply = (try? await fixture.send("frontmost")) ?? []
+                return reply.contains("frontmost index=\(index)")
+            }
+            #expect(focused, "after focusing window \(index) the fixture answers \(reply)")
+        }
+
+        await system.perform([.raise(refs[0])])
+        // The same job on a thread of its own, so its result can be read.
+        let (_, hints) = AsyncStream<AXEventHint>.makeStream()
+        let thread = AXAppThread(pid: fixture.pid, bundleID: "test.raise", hints: hints)
+        defer { thread.stop() }
+        _ = await thread.observe()
+        #expect(await thread.raiseWindow(windowID: refs[0].windowID), "AXRaise failed on a fixture window")
+        #expect(await thread.focusWindow(windowID: 0xDEAD_BEEF) == false, "an unknown window was focused")
+    }
 }
