@@ -192,3 +192,77 @@ func info(_ id: UInt32, frame: Rect, kind: WindowKind = .dockable, excluded: Boo
         #expect(setFrames(effects).isEmpty)
     }
 }
+
+/// TILE-09: Float and Undo, each one undo step, and the availability rule shared by menu items and hotkeys.
+extension ArrangerLifecycleTests {
+    @Test func floatPutsADockedWindowOnTheDesktopAtItsClampedTileRect() async throws {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: w1))
+        await harness.send(.command(.dock, focused: w2))
+        let tile = try #require(await harness.frame(w1))
+        let effects = await harness.send(.command(.float, focused: w1))
+        let desk = try #require(harness.arranger.world[key])
+        #expect(desk.tree.state(of: w1) == nil)
+        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
+        #expect(desk.desktop.frame(of: w1) == Planner.clamp(tile, into: desktop))
+        #expect(setFrames(effects)[w2] != nil, "the neighbour was not re-planned")
+        #expect(harness.arranger.history.depth(for: key) == 3)
+        #expect(await harness.frame(w1) == desk.desktop.frame(of: w1))
+    }
+
+    @Test func floatOfAFloatingWindowOrWithNoFocusBeepsAndChangesNothing() async {
+        var harness = await Harness.started()
+        let world = harness.arranger.world
+        #expect(await harness.send(.command(.float, focused: w1)) == [.beep])
+        #expect(await harness.send(.command(.float, focused: nil)) == [.beep])
+        #expect(harness.arranger.world == world)
+    }
+
+    @Test func undoOfADockReplansDirectlyAndPutsTheWindowBack() async throws {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: w1))
+        let effects = await harness.send(.command(.undo, focused: w1))
+        #expect(!effects.contains { if case .requery = $0 { true } else { false } })
+        let desk = try #require(harness.arranger.world[key])
+        #expect(desk.tree.windows.isEmpty)
+        #expect(desk.desktop.frame(of: w1) == frame1)
+        #expect(setFrames(effects)[w1] == frame1)
+        #expect(await harness.frame(w1) == frame1)
+        #expect(harness.arranger.history.depth(for: key) == 0)
+    }
+
+    @Test func undoWithNoFocusUsesTheMainDisplaysDesk() async {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: w1))
+        #expect(harness.arranger.isAvailable(.undo, focused: nil))
+        await harness.send(.command(.undo, focused: nil))
+        #expect(harness.arranger.history.depth(for: key) == 0)
+    }
+
+    @Test func undoWithEmptyHistoryBeeps() async {
+        var harness = await Harness.started()
+        #expect(await harness.send(.command(.undo, focused: w1)) == [.beep])
+        #expect(await harness.send(.command(.undo, focused: nil)) == [.beep])
+    }
+
+    @Test func aRequeriedCloseRemovesTheRevivedWindow() async throws {
+        var harness = await Harness.started()
+        await harness.send(.requeried(RevivedWindows(key: key, windows: [w2]), [(w2, .closed)]))
+        let desk = try #require(harness.arranger.world[key])
+        #expect(!desk.contains(w2) && desk.contains(w1))
+    }
+
+    @Test func availabilityFollowsTheFocusedWindow() async {
+        var harness = await Harness.started()
+        #expect(harness.arranger.isAvailable(.dock, focused: w1))
+        #expect(!harness.arranger.isAvailable(.dock, focused: nil))
+        #expect(!harness.arranger.isAvailable(.float, focused: w1))
+        #expect(!harness.arranger.isAvailable(.undo, focused: w1))
+        await harness.send(.command(.dock, focused: w1))
+        #expect(!harness.arranger.isAvailable(.dock, focused: w1))
+        #expect(harness.arranger.isAvailable(.float, focused: w1))
+        #expect(harness.arranger.isAvailable(.undo, focused: w1))
+        // A window no desk holds (never-dock, excluded or unknown) cannot be docked.
+        #expect(!harness.arranger.isAvailable(.dock, focused: ref(99)))
+    }
+}
