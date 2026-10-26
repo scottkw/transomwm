@@ -124,7 +124,58 @@ Plans:
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
   7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
-**Plans**: TBD
+**Plans:** 17 plans
+
+Plans:
+**Wave 1**
+- [ ] 03-01-PLAN.md — Desktop tile in the model: `Node.desktop(hidden:)`, reserved `NodeID.desktop`, hide/show, persisted from schema 1
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-02-PLAN.md — Layout edits and geometry: swap, balance, rotate (its own inverse), flip, grow/shrink, two-child resize, neighbour and boundary lookups, snap targets
+- [ ] 03-03-PLAN.md — Non-undo World paths: `windowRekeyed` re-points desks and undo snapshots, floating-frame facts, reflow, Undo keeps floating positions
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-04-PLAN.md — Tracer: pure Arranger + ArrangeController (the single events reader), ⌃⌥⌘D/F/Z via KeyboardShortcuts 3.1.0, reflow on close, minimise and fullscreen
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03-05-PLAN.md — One layout per display and Space: current Space from SkyLight, `spaceChanged`, fullscreen Spaces get no desk, re-home rule
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03-06-PLAN.md — Layout stays correct: echo rule, app-initiated moves, floating facts, windows that lose their room float (N1 toast)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03-07-PLAN.md — layout.json: validated atomic store, re-attach by window ID on relaunch (SAFE-06), no titles stored
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03-08-PLAN.md — park/focus/raise in both window systems; hide/show the Desktop tile (save before park); ⌃⌥⌘ arrows focus neighbours
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 03-09-PLAN.md — Split with New Finder Window by AX menu press (no Apple Events), N9
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 03-10-PLAN.md — Menu regrouped (Arrange/Safety/Exclusions, Debug with ⌥) through one dispatcher, items built once; Pause/Resume; Gaps; Don't Arrange ⌃⌥⌘E
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 03-11-PLAN.md — Drag to dock: active event tap with watchdog, drag sessions, 150 ms WYSIWYG preview, ⇧ bypass, ⌘ swap, blocked drops
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 03-12-PLAN.md — Keyboard layout commands: move/snap halves, swap previous, grow/shrink, balance/rotate/flip, thirds/quarters/maximise/centre, Arrange All, Float All
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 03-13-PLAN.md — Green button toggles dock/float (⌥ keeps native zoom), edge resize, gap handles
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 03-14-PLAN.md — Crash recovery: stranded windows first, layout re-applied, crash loop starts paused; Restore All Windows ⌃⌥⌘0
+
+**Wave 14** *(blocked on Wave 13 completion)*
+- [ ] 03-15-PLAN.md — Quit restore with bounded per-app writes; `pane://restore`, `toggle-desktop`, `split-finder`
+
+**Wave 15** *(blocked on Wave 14 completion)*
+- [ ] 03-16-PLAN.md — macOS conflicts: Stage Manager pause, edge tiling, click wallpaper; Turn Off with read-back, alerts, Restore macOS Window Settings
+
+**Wave 16** *(blocked on Wave 15 completion)*
+- [ ] 03-17-PLAN.md — `scripts/release.sh`: secure timestamp, notarise, staple, DMG; 0.3.0 pre-release (blocking checkpoint for the notarised run)
+
 **UI hint**: yes
 **Research**: Standard patterns; drop-zone geometry starts from yabai's numbers (edge bands ~25%, centre ~50%) and is tuned in UAT
 **Scope notes**: First usable release. Pulled forward per research: crash restore, edge-tiling detection and a minimal signed + notarised pipeline (an enabler for SHIP-05, which completes in Phase 9 with the Homebrew cask; confirm notarisation works with dlopen of private frameworks). Drags are detected from frame deltas, not mouse-down hit-tests; keep the top-edge zone clear of Mission Control. Includes the event-tap wrapper with re-enable watchdog, persisted home frames, default exclusions and single-display correctness. The `pane://` scheme is registered here with `restore`, `toggle-desktop` and `split-finder` (TILE-15, TILE-17); Phase 8 generalises it. Basic layout restore (SAFE-06) re-attaches by unchanged window IDs while apps keep running; reboot/app-relaunch re-matching stays in Phase 8 (VIEW-04). Default hotkeys for all new commands are Pane's own choices (clean-room rule: no copying TrellisWM's settings values).
@@ -245,7 +296,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 17/17 | In Progress | - |
-| 3. Tiling MVP | 0/TBD | Not started | - |
+| 3. Tiling MVP | 0/17 | Planned | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
