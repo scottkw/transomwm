@@ -32,6 +32,15 @@ import Testing
         #expect(sent == [command])
     }
 
+    @Test(arguments: [(Command.arrangeAll, "Arrange All Windows", "d"), (.floatAll, "Float All Windows", "f")])
+    func theAllWindowItemsShowTheirShiftedChordAndDispatchTheirCommand(command: Command, title: String, key: String) throws {
+        var sent: [Command] = []
+        let item = CommandMenu { sent.append($0) }.item(for: command)
+        #expect(item.title == title && item.keyEquivalent == key && item.keyEquivalentModifierMask == base.union(.shift))
+        _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item)
+        #expect(sent == [command])
+    }
+
     @Test func dockShowsControlOptionCommandD() {
         let item = CommandMenu { _ in }.item(for: .dock)
         #expect(item.keyEquivalent == "d")

@@ -14,14 +14,14 @@ private func ref(_ id: UInt32) -> WindowRef {
 }
 
 private let a = ref(1), b = ref(2), c = ref(3), f = ref(4)
-private let names: [WindowRef: String] = [a: "a", b: "b", c: "c", f: "f"]
+private let names: [WindowRef: String] = [a: "a", b: "b", c: "c", f: "f", ref(5): "x"]
 private let somewhere = Rect(x: 200, y: 200, width: 400, height: 300)
 
 /// An Arranger whose main desk holds the layout `build` makes, re-attached from a saved World (so the shape does
 /// not depend on where Dock would put each window). Every window in `frames` is tracked; those `build` does not
 /// dock float on the Desktop at their frame. Then focused, in order: `focus`.
 private func arranger(
-    frames: [WindowRef: Rect], minimums: [WindowRef: Size] = [:], focus: [WindowRef] = [],
+    frames: [WindowRef: Rect], minimums: [WindowRef: Size] = [:], focus: [WindowRef] = [], extra: [WindowInfo] = [],
     _ build: (inout Desk, inout IDSource) throws(LayoutError) -> Void = { _, _ in }
 ) throws -> Arranger {
     var world = World()
@@ -32,7 +32,7 @@ private func arranger(
     _ = arranger.handle(.restore(world, homeFrames: [:]), now: .now)
     let windows = frames.sorted { $0.key.identity < $1.key.identity }.map { window, frame in
         WindowInfo(window: window, frame: frame, state: .present, displayUUID: "main", learnedMinimum: minimums[window])
-    }
+    } + extra
     _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: windows, initialRefreshComplete: true)), now: .now)
     for window in focus { _ = arranger.handle(.event(.windowFocused(window)), now: .now) }
     return arranger
@@ -251,5 +251,97 @@ extension ArrangerCommandTests {
         #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
         #expect(depth(arranger) == 0)
         #expect(arranger.handle(.command(.snap(target), focused: a), now: .now) == [.beep])
+    }
+}
+
+private func notices(_ effects: [ArrangerEffect]) -> [Notice] {
+    effects.compactMap { if case .notice(let notice) = $0 { notice } else { nil } }
+}
+
+/// TILE-16, D-13: Arrange All Windows and Float All Windows, each one undo step.
+extension ArrangerCommandTests {
+    /// Screen order is top to bottom, then left to right: b (100, 100), a (500, 100), c (100, 600). Each docks on the
+    /// longer side of the largest tile (ties to the smaller NodeID, so the Desktop first).
+    @Test func arrangeAllDocksEveryFloatingWindowInScreenOrderAsOneUndoStep() throws {
+        let size = (width: 300.0, height: 200.0)
+        var arranger = try arranger(frames: [
+            a: Rect(x: 500, y: 100, width: size.width, height: size.height), b: Rect(x: 100, y: 100, width: size.width, height: size.height),
+            c: Rect(x: 100, y: 600, width: size.width, height: size.height),
+        ])
+        #expect(arranger.isAvailable(.arrangeAll, focused: nil))
+        let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+        let desk = try #require(arranger.world[key])
+        // Desktop | b; then the Desktop (now taller than wide) over a; then b (tallest) over c.
+        #expect(shape(desk.tree) == "H[V[D,a],V[b,c]]")
+        #expect(desk.desktop.windows.isEmpty)
+        #expect(notices(effects).isEmpty)
+        #expect(depth(arranger) == 1)
+        _ = arranger.handle(.command(.undo, focused: nil), now: .now)
+        let undone = try #require(arranger.world[key])
+        #expect(shape(undone.tree) == "D" && Set(undone.desktop.windows.map(\.window)) == [a, b, c])
+    }
+
+    @Test func aWindowThatDoesNotFitStaysFloatingAndIsCounted() throws {
+        var arranger = try arranger(
+            frames: [a: Rect(x: 100, y: 100, width: 300, height: 200), b: Rect(x: 500, y: 100, width: 300, height: 200)],
+            minimums: [b: Size(width: 1430, height: 100)])
+        let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+        let desk = try #require(arranger.world[key])
+        #expect(desk.tree.windows == [a] && desk.desktop.contains(b))
+        #expect(notices(effects) == [.arrangeLeftovers(count: 1)])
+    }
+
+    @Test func whenNothingFitsArrangeAllBeepsAndFlashesTheFirstWindowsBlockedFrame() throws {
+        var arranger = try arranger(frames: [b: Rect(x: 500, y: 100, width: 300, height: 200)], minimums: [b: Size(width: 1430, height: 100)])
+        let world = arranger.world, history = arranger.history
+        let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+        #expect(effects.first == .beep)
+        #expect(effects.contains { if case .flashBlocked(_, "main") = $0 { true } else { false } }, "got \(effects)")
+        #expect(arranger.world == world && arranger.history == history)
+    }
+
+    @Test func excludedNeverDockAndMinimisedWindowsAreNotArranged() throws {
+        let x = ref(5)
+        var arranger = try arranger(
+            frames: [a: Rect(x: 100, y: 100, width: 300, height: 200), f: Rect(x: 500, y: 100, width: 300, height: 200)],
+            extra: [
+                WindowInfo(window: c, frame: somewhere, state: .present, displayUUID: "main", kind: .neverDock(.subrole)),
+                WindowInfo(window: x, frame: somewhere, state: .present, displayUUID: "main", isExcluded: true),
+            ])
+        _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: .now)
+        _ = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+        let desk = try #require(arranger.world[key])
+        #expect(desk.tree.windows == [a])
+        #expect(desk.desktop.contains(f) && arranger.deskKey(of: c) == nil && arranger.deskKey(of: x) == nil)
+    }
+
+    @Test func floatAllReturnsEveryDockedWindowToTheDesktopAtItsTileAsOneUndoStep() throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], columns)
+        let tiles = try plan(arranger).frames
+        #expect(arranger.isAvailable(.floatAll, focused: nil))
+        let effects = arranger.handle(.command(.floatAll, focused: nil), now: .now)
+        let desk = try #require(arranger.world[key])
+        #expect(shape(desk.tree) == "D")
+        for window in [a, b, c] { #expect(desk.desktop.frame(of: window) == tiles[window]) }
+        #expect(notices(effects) == [.floatedAll(count: 3)])
+        #expect(depth(arranger) == 1)
+        _ = arranger.handle(.command(.undo, focused: nil), now: .now)
+        #expect(shape(try #require(arranger.world[key]).tree) == "H[a,V[b,c],D]")
+    }
+
+    @Test func floatAllShowsAHiddenDesktopInTheSameStep() throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere], row)
+        _ = arranger.handle(.command(.toggleDesktop, focused: nil), now: .now)
+        #expect(arranger.world[key]?.tree.isDesktopHidden == true)
+        let history = depth(arranger)
+        _ = arranger.handle(.command(.floatAll, focused: nil), now: .now)
+        #expect(arranger.world[key]?.tree.isDesktopHidden == false)
+        #expect(arranger.world[key]?.desktop.windows.count == 2)
+        #expect(depth(arranger) == history + 1)
+    }
+
+    @Test func floatAllWithNothingDockedBeeps() throws {
+        var arranger = try arranger(frames: [f: somewhere])
+        #expect(arranger.handle(.command(.floatAll, focused: nil), now: .now) == [.beep])
     }
 }
