@@ -101,7 +101,7 @@ private let side = DisplayInfo(
         let parked = Self.window(1)
         let home = Rect(x: 1300, y: 700, width: 400, height: 300)
         let plan = Recovery.terminationPlan(
-            windows: [Self.info(parked, main.parkedFrame(size: Size(width: 400, height: 300)))], homeFrames: [parked.identity: home],
+            windows: [Self.info(parked, main.parkedFrame(size: Size(width: 400, height: 300), among: [main]))], homeFrames: [parked.identity: home],
             displays: [main], docked: [])
         #expect(plan == [parked: Rect(x: 1040, y: 600, width: 400, height: 300)])
     }
@@ -111,11 +111,33 @@ private let side = DisplayInfo(
     @Test func aParkedWindowGoesHomeEvenWhenItsParkCornerShowsOnANeighbouringDisplay() {
         let parked = Self.window(1)
         let home = Rect(x: 100, y: 100, width: 400, height: 300)
-        let corner = main.parkedFrame(size: Size(width: 400, height: 300))
+        // The bottom-right corner, where a window parked before CR-02 (or with both bottom corners taken) can still be.
+        let corner = Rect(x: visible.maxX - 1, y: visible.maxY - 1, width: 400, height: 300)
         #expect(!Recovery.isStranded(corner, displays: [main, side]))
         let plan = Recovery.terminationPlan(
             windows: [Self.info(parked, corner, display: "side")], homeFrames: [parked.identity: home], displays: [main, side], docked: [])
         #expect(plan == [parked: home])
+    }
+
+    /// CR-02: a parked window never lands on a neighbouring display, so it stays parked and counts as stranded.
+    @Test func theParkCornerAvoidsANeighbouringDisplay() {
+        let size = Size(width: 400, height: 300)
+        #expect(main.parkedFrame(size: size, among: [main]) == Rect(x: visible.maxX - 1, y: visible.maxY - 1, width: 400, height: 300))
+        let fromMain = main.parkedFrame(size: size, among: [main, side])
+        #expect(!fromMain.overlaps(side.frame), "parked onto the display to the right: \(fromMain)")
+        #expect(Recovery.isStranded(fromMain, displays: [main, side]))
+        let fromSide = side.parkedFrame(size: size, among: [main, side])
+        #expect(!fromSide.overlaps(main.frame), "parked onto the display to the left: \(fromSide)")
+    }
+
+    /// With both bottom corners next to another display, the window goes past the bottom-right of every display.
+    @Test func withBothBottomCornersTakenTheParkGoesPastEveryDisplay() {
+        let left = DisplayInfo(
+            uuid: "left", frame: Rect(x: -1920, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: -1920, y: 0, width: 1920, height: 1080),
+            currentSpaceID: nil)
+        let parked = main.parkedFrame(size: Size(width: 400, height: 300), among: [left, main, side])
+        #expect(parked == Rect(x: 3359, y: 1079, width: 400, height: 300))
+        #expect(!parked.overlaps(left.frame) && !parked.overlaps(main.frame))
     }
 
     @Test func anOffScreenFloatingWindowWithNoHomeIsCentredOnItsDisplay() {

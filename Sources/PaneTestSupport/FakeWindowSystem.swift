@@ -412,7 +412,7 @@ public actor FakeWindowSystem: WindowSystem {
                 guard let display = displays.first(where: { $0.uuid == uuid }), let size = tracker.info(for: ref.identity)?.frame.size
                 else { continue }
                 parked.insert(ref.identity)
-                apply(display.parkedFrame(size: size), to: ref)
+                apply(display.parkedFrame(size: size, among: displays), to: ref)
             case .focus(let ref):
                 if let info = tracker.info(for: ref.identity) { continuation.yield(.windowFocused(info.window)) }
             case .raise(let ref):

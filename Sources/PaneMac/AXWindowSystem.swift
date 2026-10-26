@@ -198,7 +198,7 @@ import os
                     logger.error("dropping park for \(ref.description, privacy: .public): display \(uuid, privacy: .public) unknown")
                     continue
                 }
-                thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: info.frame.size), ref: info.window)
+                thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: info.frame.size, among: displays), ref: info.window)
             case .focus:
                 Task { await focus(windowID, of: info.window, on: thread) }
             case .raise:

@@ -16,10 +16,18 @@ public struct DisplayInfo: Equatable, Sendable {
 }
 
 extension DisplayInfo {
-    /// Where `park` puts a window of `size`: its top-left at the visibleFrame's bottom-right corner minus 1 pt, so
-    /// macOS keeps only a sliver on screen (RESEARCH Pattern 15, AeroSpace prior art).
-    public func parkedFrame(size: Size) -> Rect {
-        Rect(x: visibleFrame.maxX - 1, y: visibleFrame.maxY - 1, width: size.width, height: size.height)
+    /// Where `park` puts a window of `size`: just past a bottom corner of the visibleFrame, so macOS keeps only a 1 pt
+    /// sliver on screen (RESEARCH Pattern 15, AeroSpace prior art). The bottom-right corner unless the window would then
+    /// overlap another of `displays`, else the bottom-left (CR-02); with both taken, the bottom-right corner of all the
+    /// displays together, which no display extends past.
+    public func parkedFrame(size: Size, among displays: [DisplayInfo]) -> Rect {
+        let others = displays.filter { $0.uuid != uuid }.map(\.frame)
+        for x in [visibleFrame.maxX - 1, visibleFrame.minX - size.width + 1] {
+            let rect = Rect(x: x, y: visibleFrame.maxY - 1, width: size.width, height: size.height)
+            if !others.contains(where: rect.overlaps) { return rect }
+        }
+        let all = others + [frame]
+        return Rect(x: (all.map(\.maxX).max() ?? frame.maxX) - 1, y: (all.map(\.maxY).max() ?? frame.maxY) - 1, width: size.width, height: size.height)
     }
 }
 

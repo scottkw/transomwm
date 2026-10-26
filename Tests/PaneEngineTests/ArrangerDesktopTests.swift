@@ -117,6 +117,23 @@ private func parks(_ effects: [ArrangerEffect]) -> [WindowCommand] {
         #expect(harness.arranger.homeFrames.isEmpty)
     }
 
+    /// CR-02: with a second display to the right, hiding the Desktop must not park its windows onto that display.
+    @Test func hidingNeverParksAWindowOntoTheDisplayBeside() async throws {
+        var harness = await docked()
+        let side = DisplayInfo(
+            uuid: "side", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 1440, y: 0, width: 1920, height: 1080),
+            currentSpaceID: nil)
+        await harness.fake.setDisplays([DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visible, currentSpaceID: nil), side])
+
+        await harness.send(.command(.toggleDesktop, focused: a))
+
+        #expect(await harness.fake.parked == [f.identity, g.identity])
+        for window in [f, g] {
+            let frame = try #require(await harness.frame(window))
+            #expect(!frame.overlaps(side.frame), "\(window) was parked onto the display beside: \(frame)")
+        }
+    }
+
     @Test func undoOfTheHideShowsTheDesktopAndUnparks() async throws {
         var harness = await docked()
         let before = try #require(await harness.frame(a))
