@@ -87,6 +87,8 @@ Not in this phase:
   - CI and the Homebrew cask come in Phase 9.
 
 ### Claude's Discretion
+- `setHidden` stays logged and dropped in Phase 3 (RESEARCH line 602). Park, focus and raise are implemented. setHidden is deferred to the phase that first needs it, and must go through `ExclusionFilter.admit` when it lands. Lead-accepted on 2026-10-25 (plan check warning 1).
+- **Verification rule for every plan:** a `swift test --filter …` gate passes only if at least one test actually ran. SwiftPM exits 0 when a filter matches nothing. Check that the output shows a non-zero executed or passed count for the named suites, and treat "0 tests" or "no matching tests" as a failure.
 - How to recognise Pane's own frame writes (`frameApplied`) so they are never mistaken for user drags.
 - Internal structure of the Reconciler or Planner that owns the layout model.
 - Exact preview styling, within the UI-SPEC.
