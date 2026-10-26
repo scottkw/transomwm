@@ -12,11 +12,14 @@ import os
     private let arrange: ArrangeController
     private let commands: CommandMenu
     private let permission: PermissionController
+    private let gaps: GapPreference
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
     private let showSetup: () -> Void
     private let showTrackedWindows: () -> Void
     private var permissionSubscription: AnyCancellable?
+    /// The last access state the subscription saw (it fires before `permission.state` updates).
+    private var ready = false
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let logger = Logger(subsystem: "com.eightabyte.pane", category: "shell")
     private(set) var latest = WindowInventory(displays: [], windows: []) {
@@ -34,19 +37,24 @@ import os
     /// `showSetup` opens the "Set Up Pane" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
         system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
-        exclusions: ExclusionStore, freezeTest: FreezeTest, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        gaps: GapPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.arrange = arrange
         commands = CommandMenu(dispatch: dispatch)
         self.permission = permission
+        self.gaps = gaps
         self.exclusions = exclusions
         self.freezeTest = freezeTest
         self.showTrackedWindows = showTrackedWindows
         self.showSetup = showSetup
         super.init()
         permissionSubscription = permission.$state.map { $0.phase == .ready }.removeDuplicates()
-            .sink { [weak self] ready in self?.updateGlyph(ready: ready) }
+            .sink { [weak self] ready in
+                self?.ready = ready
+                self?.updateGlyph()
+            }
+        arrange.onPauseChanged = { [weak self] in self?.updateGlyph() }
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -65,6 +73,9 @@ import os
         addArrangeItems(to: menu)
         menu.addItem(.separator())
         menu.addItem(.sectionHeader(title: MenuCopy.safetySection))
+        let pause = commands.item(for: .togglePause)
+        pause.title = MenuCopy.pauseToggle(paused: !arrange.arranger.pauseReasons.isEmpty)
+        menu.addItem(pause)
         menu.addItem(.separator())
         menu.addItem(.sectionHeader(title: MenuCopy.exclusionsSection))
         addExclusionItems(to: menu)
@@ -99,18 +110,41 @@ import os
         menu.addItem(commands.splitMenu)
         menu.addItem(.separator())
         menu.addItem(commands.item(for: .toggleDesktop))
+        menu.addItem(gapsMenuItem())
     }
 
-    /// Template glyph per UI-SPEC Surface 1: the warning triangle until access is ready.
-    private func updateGlyph(ready: Bool) {
+    /// Gaps ▸, a radio list; enabled while paused, where the change waits for Resume (D-27).
+    private func gapsMenuItem() -> NSMenuItem {
+        let submenu = NSMenu(title: MenuCopy.gapsMenu)
+        for (index, gap) in GapPreference.allowed.enumerated() {
+            let item = NSMenuItem(title: MenuCopy.gapTitle(gap), action: #selector(chooseGap), keyEquivalent: "")
+            item.target = self
+            item.tag = index
+            item.state = gap == gaps.value ? .on : .off
+            submenu.addItem(item)
+        }
+        let item = NSMenuItem(title: MenuCopy.gapsMenu, action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
+    @objc private func chooseGap(_ sender: NSMenuItem) {
+        _ = gaps.set(GapPreference.allowed[sender.tag])
+    }
+
+    /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.
+    private func updateGlyph() {
         guard let button = statusItem.button else { return }
+        let paused = ready && !arrange.arranger.pauseReasons.isEmpty
         let (symbol, description) =
-            ready ? ("rectangle.split.2x1", "Pane") : ("exclamationmark.triangle", "Pane: Accessibility access needed")
+            !ready ? ("exclamationmark.triangle", "Pane: Accessibility access needed")
+            : paused ? ("rectangle.split.2x1", MenuCopy.pausedGlyphDescription) : ("rectangle.split.2x1", "Pane")
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
         image?.isTemplate = true
         button.image = image
-        button.toolTip = ready ? Self.bundleName(logger: logger) : description
+        button.appearsDisabled = paused
+        button.toolTip = ready && !paused ? Self.bundleName(logger: logger) : description
     }
 
     private func addStatusItems(to menu: NSMenu) {
@@ -124,6 +158,7 @@ import os
             return
         }
         menu.addItem(Self.info(MenuCopy.header(latest)))
+        if let line = MenuCopy.pauseLine(arrange.arranger.pauseReasons) { menu.addItem(Self.info(line)) }
         if let degraded = MenuCopy.degradedLine(count: latest.degradedPIDs.count) {
             menu.addItem(Self.info(degraded))
         }

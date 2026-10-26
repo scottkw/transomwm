@@ -12,7 +12,16 @@ import os
     private var started = false
     /// Each re-read inventory: the menu header and the Tracked Windows feed.
     public var onInventory: ((WindowInventory) -> Void)?
-    public private(set) var arranger = Arranger()
+    public private(set) var arranger: Arranger {
+        didSet {
+            guard arranger.pauseReasons != reportedPause else { return }
+            reportedPause = arranger.pauseReasons
+            onPauseChanged?()
+        }
+    }
+    private var reportedPause: Set<PauseReason> = []
+    /// Fires when the set of pause reasons changes (the status glyph dims while paused).
+    public var onPauseChanged: (() -> Void)?
     private var notices = NoticeQueue<Notice>()
     private lazy var toast = ToastPresenter()
     private let noticeExpiry = WakeTimer()
@@ -26,9 +35,15 @@ import os
     private let saveTimer = WakeTimer()
     private var fedCompleteInventory = false
 
-    public init(system: AXWindowSystem, store: LayoutStore? = nil) {
+    public init(system: AXWindowSystem, store: LayoutStore? = nil, gap: Double = 8) {
         self.system = system
         self.store = store
+        arranger = Arranger(gap: gap)
+    }
+
+    /// A new gap from the Gaps submenu: applied at once, or on Resume while paused (D-27).
+    public func setGap(_ gap: Double) async {
+        await run(arranger.handle(.gap(gap), now: .now))
     }
 
     /// Feeds the current inventory, then starts the single events loop. Later calls only re-read the inventory.

@@ -10,6 +10,8 @@ public enum Command: Hashable, Sendable {
     case focus(Edge)
     /// Split the current tile with a new Finder window (D-14, TILE-17).
     case finderSplit
+    /// Pause Arranging when nothing pauses it, otherwise Resume Arranging (TILE-08, D-23).
+    case togglePause
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and

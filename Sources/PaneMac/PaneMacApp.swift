@@ -50,12 +50,14 @@ public enum PaneMacApp {
         // The only reader of system.events: it re-reads the inventory after each event and feeds the menu.
         // The layout survives a quit and relaunch (SAFE-06); the store loads when tracking starts.
         let layoutStore = LayoutStore(directory: MinimumHintsStore.defaultDirectory)
-        let arrangeController = ArrangeController(system: system, store: layoutStore)
+        let gaps = GapPreference()
+        let arrangeController = ArrangeController(system: system, store: layoutStore, gap: gaps.value)
+        gaps.onChange = { gap in Task { await arrangeController.setGap(gap) } }
         arrangeController.isReady = { permissionController.state.phase == .ready }
         // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).
         let dispatch: @MainActor (Command) -> Void = { command in Task { await arrangeController.dispatch(command) } }
         let controller = StatusItemController(
-            system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController,
+            system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
             exclusions: exclusions, freezeTest: freezeTest, showTrackedWindows: { trackedController.show() },
             showSetup: { setupController.show() }
         )

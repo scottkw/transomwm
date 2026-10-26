@@ -10,6 +10,18 @@ public enum ArrangerInput: Sendable {
     case tick
     /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
     case restore(World, homeFrames: [WindowIdentity: Rect])
+    /// Sets or clears one pause reason; Stage Manager (plan 16) and the crash loop (plan 14) arrive this way.
+    case setPaused(PauseReason, Bool)
+    /// The gap between tiles (D-27), already validated by the shell's allow-list.
+    case gap(Double)
+}
+
+/// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
+/// which picks the menu's pause line.
+public enum PauseReason: Int, Comparable, Hashable, Sendable {
+    case stageManager = 0, crashLoop = 1, user = 2
+
+    public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
 /// How soon the shell writes layout.json: about 0.5 s after the latest request, or at once (before a park, plan 08).
@@ -53,6 +65,8 @@ public struct Arranger: Sendable {
     /// Where each parked window goes back to (plan 08); restored from layout.json.
     public private(set) var homeFrames: [WindowIdentity: Rect] = [:]
     public var gap: Double
+    /// While any reason is set, facts still change the World but no window command is sent (TILE-08).
+    public private(set) var pauseReasons: Set<PauseReason> = []
     /// The last frame requested for each window that is still planned; a frame within 0.5 pt of it is not written
     /// again, so an app echoing frames cannot cause a write storm (T-03-08).
     private var lastRequested: [WindowIdentity: Rect] = [:]
@@ -124,6 +138,7 @@ public struct Arranger: Sendable {
                 case (.toggleDesktop, _): return try toggleDesktop(focused)
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
                 case (.finderSplit, _): return try finderSplit(focused, now: now)
+                case (.togglePause, _): return togglePause()
                 case (.dock, nil), (.float, nil), (.focus, nil): return [.beep]
                 }
             } catch {
@@ -141,6 +156,13 @@ public struct Arranger: Sendable {
         case .restore(let world, let homeFrames):
             pendingRestore = (world, homeFrames)
             return []
+        case .setPaused(let reason, let on):
+            let wasPaused = !pauseReasons.isEmpty
+            if on { pauseReasons.insert(reason) } else { pauseReasons.remove(reason) }
+            return wasPaused && pauseReasons.isEmpty ? resume() : []
+        case .gap(let value):
+            gap = value
+            return replan()
         }
     }
 
@@ -211,6 +233,9 @@ public struct Arranger: Sendable {
     /// is not excluded; nothing in the Arrange section acts without Accessibility access.
     public func availability(_ command: Command, context: CommandContext) -> Bool {
         guard context.ready else { return false }
+        // Paused, only Resume acts; Stage Manager's pause ends through its conflict item, not Resume.
+        if command == .togglePause { return pauseReasons != [.stageManager] }
+        guard pauseReasons.isEmpty else { return false }
         let focused = context.focused
         let trackable = focused.flatMap { windows[$0.identity] }.map { $0.kind == .dockable && !$0.isExcluded } ?? false
         switch command {
@@ -226,6 +251,8 @@ public struct Arranger: Sendable {
             return trackable && focused.flatMap(deskKey(of:)) != nil
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
+        case .togglePause:
+            return true  // answered above
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }
@@ -324,6 +351,7 @@ public struct Arranger: Sendable {
         // A parked window keeps its Desktop frame: the move is the park, and showing the Desktop brings it back there.
         if floating, desk.tree.isDesktopHidden == true { return [] }
         if floating { try world.recordFloatingFrame(frame, for: window) }
+        guard pauseReasons.isEmpty else { return [] }  // paused: the fact is recorded, nothing is answered (D-23)
         if let applied = lastApplied[window.identity], Self.near(applied, frame, within: 2) { return [] }
         if floating {
             if let area = display(for: key)?.visibleFrame, let desk = world[key],
@@ -564,6 +592,24 @@ public struct Arranger: Sendable {
         return []
     }
 
+    /// Pause Arranging adds `user`; Resume clears `user` and `crashLoop` and, once no reason is left, re-applies the
+    /// layout (D-23).
+    private mutating func togglePause() -> [ArrangerEffect] {
+        guard !pauseReasons.isEmpty else {
+            pauseReasons.insert(.user)
+            return []
+        }
+        pauseReasons.subtract([.user, .crashLoop])
+        return pauseReasons.isEmpty ? resume() : []
+    }
+
+    /// Leaving the paused state: a window moved off its tile while paused is no longer "already requested", so the
+    /// re-plan puts it back along with everything that changed.
+    private mutating func resume() -> [ArrangerEffect] {
+        lastRequested = lastRequested.filter { id, rect in windows[id].map { Self.near($0.frame, rect) } ?? false }
+        return replan()
+    }
+
     /// The change that shows a desk's Desktop tile, with each floating window that has a home frame back at it.
     private func showingDesktop() -> (inout Desk, inout IDSource) throws(LayoutError) -> Void {
         let homes = homeFrames
@@ -581,7 +627,7 @@ public struct Arranger: Sendable {
     /// windows left without room float first, and are named in one notice (D-26). A hidden Desktop's floating windows
     /// are parked once each, first in the perform, and only after an immediate save holding their home frames (D-16).
     private mutating func replan() -> [ArrangerEffect] {
-        guard !sessionPaused else { return [] }
+        guard !sessionPaused, pauseReasons.isEmpty else { return [] }
         var parks: [WindowCommand] = []
         var parkedNow: Set<WindowIdentity> = []
         var commands: [WindowCommand] = []

@@ -5,7 +5,7 @@ import Testing
 /// D-27, TILE-04, T-03-25: the gap is one of six values; anything else in the user-writable plist reads as 8.
 @Suite @MainActor struct GapPreferenceTests {
     /// A throwaway defaults domain, never the user's.
-    private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
+    private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
         let suite = "com.eightabyte.pane.tests.gap.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }

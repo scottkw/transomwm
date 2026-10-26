@@ -37,8 +37,26 @@ nonisolated public enum MenuCopy {
         case .focus(.top): "Up"
         case .focus(.bottom): "Down"
         case .finderSplit: "Split with New Finder Window"
+        case .togglePause: pauseToggle(paused: false)
         }
     }
+
+    public static func pauseToggle(paused: Bool) -> String { paused ? "Resume Arranging" : "Pause Arranging" }
+
+    /// Item 2, only while paused: the highest-priority reason (UI-SPEC Pause states).
+    public static func pauseLine(_ reasons: Set<PauseReason>) -> String? {
+        switch reasons.min() {
+        case nil: nil
+        case .stageManager: "Arranging paused: Stage Manager is on"
+        case .crashLoop: "Arranging paused after Pane quit unexpectedly"
+        case .user: "Arranging paused"
+        }
+    }
+
+    public static let pausedGlyphDescription = "Pane: arranging paused"
+
+    public static let gapsMenu = "Gaps"
+    public static func gapTitle(_ gap: Double) -> String { gap == 0 ? "None" : "\(Int(gap)) pt" }
 
     public static func desktopToggle(hidden: Bool) -> String { hidden ? "Show Desktop Tile" : "Hide Desktop Tile" }
 
