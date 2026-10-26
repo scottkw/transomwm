@@ -24,7 +24,10 @@ nonisolated public enum NoticeCopy {
             count == 0 ? "All windows were already on screen." : "Moved \(count == 1 ? "1 window" : "\(count) windows") back on screen."
         case .crashLoop:
             "Pane quit unexpectedly twice in a minute, so arranging is paused. Your windows are on screen. Choose Resume Arranging from the Pane menu when you're ready."
-        case .turnOffFailed, .settingsRestored: ""
+        case .turnOffFailed(let conflict):
+            "Couldn't turn off \(ConflictCopy.featureName(conflict)). Turn it off here in Desktop & Dock."
+        case .settingsRestored:
+            "macOS window settings restored."
         case .crashRecovered(let unplaced):
             "Pane quit unexpectedly. Your windows are back on screen and your layout is restored."
                 + (unplaced == 0 ? ""
@@ -39,10 +42,13 @@ nonisolated public enum NoticeCopy {
         case .lostRoom, .floatedAll, .arrangeLeftovers: "macwindow"
         case .finderNoWindow: "info.circle"
         case .crashRecovered, .crashLoop: "lifepreserver"
-        case .restored: "checkmark.circle"
-        case .turnOffFailed, .settingsRestored: ""
+        case .restored, .settingsRestored: "checkmark.circle"
+        case .turnOffFailed: "exclamationmark.triangle.fill"
         }
     }
 
-    public static func isWarning(_ notice: Notice) -> Bool { false }
+    /// N7's glyph is the one systemOrange use in Phase 3 (UI-SPEC colour); every other glyph is secondary.
+    public static func isWarning(_ notice: Notice) -> Bool {
+        if case .turnOffFailed = notice { true } else { false }
+    }
 }

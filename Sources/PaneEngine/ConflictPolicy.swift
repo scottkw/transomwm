@@ -42,7 +42,19 @@ public enum ConflictPolicy {
         allKeys.filter { values[$0] == .other }
     }
 
-    public static func restoreWrites(originals: [String: PrefValue]) -> [String: Bool?] { [:] }
+    /// Restore: each recorded boolean back, and nil (delete the key, so the system default applies) for a key that was
+    /// absent. Keys outside the allow-list and `.other` are never written.
+    public static func restoreWrites(originals: [String: PrefValue]) -> [String: Bool?] {
+        var writes: [String: Bool?] = [:]
+        for (key, value) in originals where allKeys.contains(key) {
+            switch value {
+            case .bool(let on): writes[key] = .some(on)
+            case .absent: writes[key] = .some(nil)
+            case .other: break
+            }
+        }
+        return writes
+    }
 
     /// Turn Off: false to each of the feature's keys.
     public static func turnOffWrites(for conflict: Conflict) -> [String: Bool] {

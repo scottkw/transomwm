@@ -10,10 +10,10 @@ import os
 
     /// `.setPaused(.stageManager, on)`, sent when Stage Manager's state first becomes known and on every change.
     var setStageManagerPaused: (Bool) -> Void = { _ in }
+    /// Toasts N7 and N8.
     var post: (Notice) -> Void = { _ in }
-    var openSettings: (URL) -> Void = { _ in }
-    var canRestore: Bool { false }
-    func restore() {}
+    var openSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
+    static let desktopAndDock = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!
     private(set) var active: Set<Conflict> = []
     /// Each written key's value before Pane first wrote it; `.absent` means Restore deletes the key.
     private(set) var originals: [String: PrefValue]
@@ -89,8 +89,24 @@ import os
         try? await Task.sleep(for: readBackDelay)
         store.synchronize()
         if keys.contains(where: { store.value($0) != writes[$0].map(PrefValue.bool) }) {
-            Self.logger.error("turning off \(conflict.rawValue, privacy: .public) did not take")
+            Self.logger.error("turning off \(conflict.rawValue, privacy: .public) did not take; opening Desktop & Dock")
+            openSettings(Self.desktopAndDock)
+            post(.turnOffFailed(conflict))
         }
+        poll()
+    }
+
+    /// Restore macOS Window Settings is enabled only with something recorded.
+    var canRestore: Bool { !originals.isEmpty }
+
+    /// Writes every recorded original back (deleting keys that were absent), forgets them and shows N8 (D-21). The
+    /// features this turns back on raise no alert.
+    func restore() {
+        guard canRestore else { return }
+        for (key, value) in ConflictPolicy.restoreWrites(originals: originals).sorted(by: { $0.key < $1.key }) { store.set(key, value) }
+        originals = [:]
+        defaults.removeObject(forKey: Self.originalsKey)
+        post(.settingsRestored)
         poll()
     }
 

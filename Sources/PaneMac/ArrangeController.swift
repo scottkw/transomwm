@@ -76,6 +76,11 @@ import os
         await run(arranger.handle(.gap(gap), now: .now))
     }
 
+    /// Queues a toast from outside the Arranger (ConflictController's N7 and N8).
+    public func post(_ notice: Notice) {
+        present(notices.post(notice, at: .now))
+    }
+
     /// Sets or clears one pause reason (Stage Manager, from ConflictController).
     public func setPaused(_ reason: PauseReason, _ on: Bool) async {
         await run(arranger.handle(.setPaused(reason, on), now: .now))
@@ -443,7 +448,9 @@ import os
     private func present(_ change: NoticeQueue<Notice>.Change) {
         switch change {
         case .show(let notice):
-            toast.show(NoticeCopy.text(for: notice, appName: Self.appName), glyph: NoticeCopy.glyph(for: notice), on: displayUUID(of: notice))
+            toast.show(
+                NoticeCopy.text(for: notice, appName: Self.appName), glyph: NoticeCopy.glyph(for: notice),
+                warning: NoticeCopy.isWarning(notice), on: displayUUID(of: notice))
             if let at = notices.expiresAt {
                 noticeExpiry.set(at) { [weak self] in
                     guard let self else { return }

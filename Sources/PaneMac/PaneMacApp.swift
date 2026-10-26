@@ -65,6 +65,7 @@ public enum PaneMacApp {
         // The only store on the real com.apple.WindowManager domain (SAFE-04); Stage Manager pauses arranging (D-22).
         let conflictController = ConflictController(store: CFPreferencesStore(domain: ConflictPolicy.domain))
         conflictController.setStageManagerPaused = { on in Task { await arrangeController.setPaused(.stageManager, on) } }
+        conflictController.post = { arrangeController.post($0) }
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
             exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController, showTrackedWindows: { trackedController.show() },

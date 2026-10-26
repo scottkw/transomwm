@@ -19,13 +19,14 @@ private final class ToastPanel: NSPanel {
 private struct ToastView: View {
     let text: String
     let glyph: String
+    let warning: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: glyph)
                 .font(.body)
                 .imageScale(.large)
-                .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                .foregroundStyle(Color(nsColor: warning ? .systemOrange : .secondaryLabelColor))
                 .accessibilityHidden(true)
             Text(verbatim: text)
                 .font(.body)
@@ -66,9 +67,9 @@ private struct ToastView: View {
 
     /// Shows `text` centred 16 pt below the top of `displayUUID`'s visible frame (the menu-bar display when nil or
     /// gone), fading in over 160 ms, and announces it.
-    func show(_ text: String, glyph: String, on displayUUID: String?) {
+    func show(_ text: String, glyph: String, warning: Bool = false, on displayUUID: String?) {
         generation += 1
-        let hosting = NSHostingView(rootView: ToastView(text: text, glyph: glyph))
+        let hosting = NSHostingView(rootView: ToastView(text: text, glyph: glyph, warning: warning))
         let size = hosting.fittingSize
         hosting.frame = NSRect(origin: .zero, size: size)
         effect.subviews.forEach { $0.removeFromSuperview() }

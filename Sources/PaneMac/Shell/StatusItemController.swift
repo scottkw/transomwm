@@ -80,6 +80,10 @@ import os
         pause.title = MenuCopy.pauseToggle(paused: !arrange.arranger.pauseReasons.isEmpty)
         menu.addItem(pause)
         menu.addItem(commands.item(for: .restoreAll))  // enabled while paused (Arranger.availability)
+        // Item 22, deliberately unbound (it changes macOS settings). No action greys it out under auto-enabling.
+        let restore = NSMenuItem(title: ConflictCopy.restoreItem, action: conflicts.canRestore ? #selector(restoreSettings) : nil, keyEquivalent: "")
+        restore.target = self
+        menu.addItem(restore)
         menu.addItem(.separator())
         menu.addItem(.sectionHeader(title: MenuCopy.exclusionsSection))
         addExclusionItems(to: menu)
@@ -189,6 +193,10 @@ import os
     @objc private func turnOffConflict(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let conflict = Conflict(rawValue: raw) else { return }
         Task { await conflicts.turnOff(conflict) }
+    }
+
+    @objc private func restoreSettings() {
+        conflicts.restore()
     }
 
     /// Items 24 and 25: the frontmost app's Don't Arrange toggle (⌃⌥⌘E, D-29) and the Never Arrange submenu (D-12).
