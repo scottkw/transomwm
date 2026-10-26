@@ -44,10 +44,10 @@
 - [ ] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
 - [x] **TILE-11**: User can swap two docked windows' tiles, by hotkey or by dragging with a modifier
 - [x] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
-- [ ] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
-- [ ] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
+- [x] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
+- [x] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
 - [ ] **TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL
-- [ ] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" returns every window to the Desktop as a normal Mac layout
+- [x] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" returns every window to the Desktop as a normal Mac layout
 - [ ] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
 - [x] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
 - [ ] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
@@ -184,10 +184,10 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-10 | Phase 3 | Pending |
 | TILE-11 | Phase 3 | Complete |
 | TILE-12 | Phase 3 | Complete |
-| TILE-13 | Phase 3 | Pending |
-| TILE-14 | Phase 3 | Pending |
+| TILE-13 | Phase 3 | Complete |
+| TILE-14 | Phase 3 | Complete |
 | TILE-15 | Phase 3 | Pending |
-| TILE-16 | Phase 3 | Pending |
+| TILE-16 | Phase 3 | Complete |
 | TILE-17 | Phase 3 | Pending |
 | TILE-18 | Phase 3 | Complete |
 | TILE-19 | Phase 3 | Pending |

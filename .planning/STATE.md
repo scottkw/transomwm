@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-11-PLAN.md
-last_updated: "2026-10-26T05:00:46.808Z"
+stopped_at: Completed 03-12-PLAN.md
+last_updated: "2026-10-26T05:20:07.369Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: dbccbc8b2e5bec2d0c507dab80484294816aa020
+state_head: 7574955c6d55cdeefee897c9cb30904c1216e39a
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 34
+  completed_plans: 35
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 12 of 17
+Plan: 13 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -90,6 +90,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 03 P09 | 9min | 2 tasks | 17 files |
 | Phase 03 P10 | 13 min | 3 tasks | 17 files |
 | Phase 3 P11 | 26 min | 3 tasks | 21 files |
+| Phase 03 P12 | 13min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,9 @@ Recent decisions affecting current work:
 - [Phase 3]: 03-11: one drop decision per held 150 ms hover, applied exactly on mouse-up; with none, the miss rules; the pressed window is never written, corrected or rehomed before mouse-up
 - [Phase 3]: 03-11: the window-under-pointer field is 0 at the session tap, so the press window comes from the topmost on-screen tracked window (CGWindowList.onScreenFrontToBack)
 - [Phase 3]: 03-11: the app starts the event tap after tracking starts and stops it when access leaves .ready; a 2 s watchdog re-enables it or invalidates it when a trial tap is refused
+- [Phase 03]: 03-12: Move to neighbour docks on the neighbour's near edge, but past a sibling in the same split (the near edge there is its own slot), taking its place
+- [Phase 03]: 03-12: Every keyboard tree command (move, swap, grow/shrink, balance, rotate, flip) dry-runs and refuses with beep + blocked flash when a window would lose its room
+- [Phase 03]: 03-12: Arrange All / Float All act on the focused window's desk or the main display's, stay enabled with nothing focused; a newer N4/N5 replaces the visible one
 
 ### Pending Todos
 
@@ -235,8 +239,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T05:00:46.667Z
-Stopped at: Completed 03-11-PLAN.md
+Last session: 2026-10-26T05:20:07.234Z
+Stopped at: Completed 03-12-PLAN.md
 Resume file: None
 
 ## Deferred Verification

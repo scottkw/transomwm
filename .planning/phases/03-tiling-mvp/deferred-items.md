@@ -13,3 +13,14 @@ Out-of-scope issues found while executing plans. Not fixed by the plan that foun
   window did not return within 3 s.
 - **`FreezeTestTests/itResumesByItself` is timing-sensitive.** It failed once under the full `swift test` load (the
   50 ms auto-resume with a 1 s deadline) and passed three times alone.
+
+## Found in 03-12
+
+- **A floating window whose minimum is larger than the display blocks every dock on its desk.** The Planner sizes the
+  Desktop tile to the largest present floating window's minimum, and the Desktop is never an unfit victim, so with such
+  a window floating, any docked tile comes out unfit. Arrange All then refuses every window (beep plus blocked flash),
+  and Dock does the same. Pre-existing Planner semantics, seen while writing the 03-12 leftover test. A window that
+  big can't sit on the Desktop either, so the fix probably belongs in how the Planner caps that minimum.
+- **`swift format lint --strict` is not clean on the existing code** (about 1,250 findings in Arranger.swift at
+  8038b4b under the default rules; there is no `.swift-format` file and no lint step in CI). New 03-12 code follows
+  the file's existing style (`var candidate = world, candidateHistory = history`).
