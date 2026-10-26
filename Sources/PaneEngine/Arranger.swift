@@ -691,7 +691,7 @@ public struct Arranger: Sendable {
     private mutating func pointer(_ event: PointerEvent, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch event.kind {
         case .down:
-            let stale = endDrag()  // a press whose mouse-up never arrived
+            let stale = abandonDrag()
             guard let pressed = event.pressWindow, let info = windows[pressed.identity], canDrag(info) else { return stale }
             drag = DragSession(window: info.window, start: event.location, startFrame: info.frame, modifiers: event.modifiers)
             return stale
@@ -714,6 +714,18 @@ public struct Arranger: Sendable {
             guard drag != nil else { return [] }
             drag?.modifiers = event.modifiers
             return release(now: now)
+        }
+    }
+
+    /// A press whose mouse-up never arrived (the tap was disabled for a moment): the miss rules, never its preview.
+    private mutating func abandonDrag() -> [ArrangerEffect] {
+        guard let session = drag else { return [] }
+        let effects = endDrag()
+        guard session.kind != nil, deskKey(of: session.window) != nil else { return effects }
+        do throws(LayoutError) {
+            return effects + (try missed(session.window))
+        } catch {
+            return effects + [.fault("could not settle the drag of \(session.window): \(error)")] + replan()
         }
     }
 

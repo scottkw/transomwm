@@ -376,3 +376,16 @@ extension ArrangerDragTests {
         #expect(effects.contains(.flashBlocked(loose, displayUUID: "main")), "got \(effects)")
     }
 }
+
+extension ArrangerDragTests {
+    /// A mouse-up the tap never delivered (it was disabled for a moment): the next press settles the old drag by the miss
+    /// rules, so a docked window does not stay off its tile.
+    @Test func aPressAfterALostMouseUpSnapsTheOldDragBack() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        _ = await drag(&harness, a, from: ra, to: centre(rb))
+        let next = await harness.send(pointer(.down, rb.midX, rb.minY + 10, press: b))
+        #expect(setFrames(next)[a] == ra, "the old drag was dropped without the miss rules")
+        #expect(harness.arranger.drag?.window == b)
+    }
+}
