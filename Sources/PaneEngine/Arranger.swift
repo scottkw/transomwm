@@ -254,23 +254,28 @@ public struct Arranger: Sendable {
 
     // MARK: Planning
 
-    /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt.
+    /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked
+    /// windows left without room float first, and are named in one notice (D-26).
     private mutating func replan() -> [ArrangerEffect] {
         guard !sessionPaused else { return [] }
         var commands: [WindowCommand] = []
         var faults: [ArrangerEffect] = []
         var planned: Set<WindowIdentity> = []
+        var lost: [WindowRef] = []
         let mins = minimums
         for display in displays {
             let key = Self.key(display)
-            guard let desk = world[key] else { continue }
+            guard world[key] != nil else { continue }
             let plan: FramePlan
             do throws(LayoutError) {
-                plan = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: mins)
+                let floated: [WindowRef]
+                (plan, floated) = try planFloatingLostRoom(key, area: display.visibleFrame, mins: mins)
+                lost += floated
             } catch {
                 faults.append(.fault("could not plan \(key): \(error)"))
                 continue
             }
+            guard let desk = world[key] else { continue }
             var desired = plan.frames
             // A floating window not where the model has it (after Float or Undo) is moved there.
             for floating in desk.desktop.windows where floating.state == .present && desired[floating.window] == nil {
@@ -293,6 +298,40 @@ public struct Arranger: Sendable {
         })
         lastRequested = lastRequested.filter { planned.contains($0.key) || hidden.contains($0.key) }
         return faults + (commands.isEmpty ? [] : [.perform(commands)])
+            + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))])
+    }
+
+    /// Plans `key`'s desk after floating every docked window it has no room for (D-26). A floated window's minimum
+    /// sizes the Desktop tile, which can leave a neighbour without room in turn, so this repeats until all fit. Each
+    /// float is an OS fact (`World.reflow`, no undo step), at the window's current frame clamped into the Desktop
+    /// rect it leaves. Dock and drops refuse up front, so this only runs for changes after a window docked.
+    private mutating func planFloatingLostRoom(
+        _ key: DeskKey, area: Rect, mins: [WindowRef: Size]
+    ) throws(LayoutError) -> (FramePlan, [WindowRef]) {
+        guard let desk = world[key] else { throw .deskNotFound(key) }
+        var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
+        var lost: [WindowRef] = []
+        // Each pass takes at least one window out of the tree, so this ends.
+        while !plan.unfit.isEmpty {
+            var unfit: [(WindowRef, Rect)] = []
+            for window in plan.unfit.sorted(by: { $0.identity < $1.identity }) {
+                guard let frame = windows[window.identity]?.frame else { throw .windowNotFound(window) }
+                unfit.append((window, frame))
+            }
+            let gap = gap
+            try world.reflow(key) { desk, _ throws(LayoutError) in
+                for (window, frame) in unfit {
+                    try desk.tree.remove(window)
+                    try desk.desktop.add(window, frame: frame)
+                }
+                let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
+                for (window, frame) in unfit { try desk.desktop.setFrame(Planner.clamp(frame, into: desktop), for: window) }
+            }
+            lost += unfit.map(\.0)
+            guard let desk = world[key] else { throw .deskNotFound(key) }
+            plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
+        }
+        return (plan, lost)
     }
 
     private var minimums: [WindowRef: Size] {

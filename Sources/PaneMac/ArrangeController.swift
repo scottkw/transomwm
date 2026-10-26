@@ -13,6 +13,9 @@ import os
     /// Each re-read inventory: the menu header and the Tracked Windows feed.
     public var onInventory: ((WindowInventory) -> Void)?
     public private(set) var arranger = Arranger()
+    private var notices = NoticeQueue<Notice>()
+    private lazy var toast = ToastPresenter()
+    private let noticeExpiry = WakeTimer()
 
     public init(system: AXWindowSystem) {
         self.system = system
@@ -62,16 +65,57 @@ import os
             case .beep:
                 NSSound.beep()
             case .announce(let text):
-                NSAccessibility.post(
-                    element: NSApplication.shared, notification: .announcementRequested,
-                    userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+                postAnnouncement(text)
             case .fault(let message):
                 logger.error("\(message, privacy: .public)")
             case .info(let message):
                 logger.info("\(message, privacy: .public)")
-            case .notice:
-                break
+            case .notice(let notice):
+                present(notices.post(notice, at: .now))
             }
+        }
+    }
+
+    /// Shows or hides the toast as the queue says, and schedules the visible notice's expiry.
+    private func present(_ change: NoticeQueue<Notice>.Change) {
+        switch change {
+        case .show(let notice):
+            toast.show(NoticeCopy.text(for: notice, appName: Self.appName), glyph: NoticeCopy.glyph(for: notice), on: displayUUID(of: notice))
+            if let at = notices.expiresAt {
+                noticeExpiry.set(at) { [weak self] in
+                    guard let self else { return }
+                    self.present(self.notices.expire(at: .now))
+                }
+            }
+        case .hide:
+            toast.hide()
+        case .unchanged:
+            break
+        }
+    }
+
+    /// The display the toast belongs on: the first named window's.
+    private func displayUUID(of notice: Notice) -> String? {
+        switch notice {
+        case .lostRoom(let windows): windows.first.flatMap { arranger.windows[$0.identity]?.displayUUID }
+        }
+    }
+
+    private static func appName(_ window: PaneModel.WindowRef) -> String {
+        NSRunningApplication(processIdentifier: window.pid)?.localizedName ?? window.bundleID
+    }
+}
+
+/// One pending wake-up: `set` replaces any earlier one, so only the latest instant fires.
+@MainActor final class WakeTimer {
+    private var task: Task<Void, Never>?
+
+    func set(_ instant: ContinuousClock.Instant, _ fire: @escaping @MainActor () async -> Void) {
+        task?.cancel()
+        task = Task {
+            try? await Task.sleep(until: instant, clock: .continuous)
+            guard !Task.isCancelled else { return }
+            await fire()
         }
     }
 }

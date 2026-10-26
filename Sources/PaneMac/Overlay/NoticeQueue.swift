@@ -24,19 +24,45 @@ nonisolated public struct NoticeQueue<Item: QueueableNotice>: Sendable {
     public private(set) var visible: Item?
     public private(set) var expiresAt: ContinuousClock.Instant?
 
+    private var queued: [Item] = []
+
     public init() {}
 
+    /// A notice merges into the visible one of its kind, or replaces it, unless that one is a crash notice: then it
+    /// waits, merged into a queued one of its kind or appended, with the oldest dropped past `maxQueued`.
     public mutating func post(_ notice: Item, at now: ContinuousClock.Instant) -> Change {
-        .unchanged
+        guard let current = visible else { return show(notice, at: now) }
+        guard current.isCrashNotice else { return show(current.merged(with: notice) ?? notice, at: now) }
+        if let i = queued.firstIndex(where: { $0.merged(with: notice) != nil }), let merged = queued[i].merged(with: notice) {
+            queued[i] = merged
+        } else {
+            queued.append(notice)
+            if queued.count > Self.maxQueued { queued.removeFirst() }
+        }
+        return .unchanged
     }
 
+    /// Once the visible notice's time is up, the oldest queued one shows, or the toast hides.
     public mutating func expire(at now: ContinuousClock.Instant) -> Change {
-        .unchanged
+        guard visible != nil, let expiresAt, now >= expiresAt else { return .unchanged }
+        guard queued.isEmpty else { return show(queued.removeFirst(), at: now) }
+        visible = nil
+        self.expiresAt = nil
+        return .hide
+    }
+
+    private mutating func show(_ notice: Item, at now: ContinuousClock.Instant) -> Change {
+        visible = notice
+        expiresAt = now + (notice.isCrashNotice ? Self.crashDuration : Self.duration)
+        return .show(notice)
     }
 }
 
 nonisolated extension Notice: QueueableNotice {
+    /// Two lost-room notices become one naming every window once.
     public func merged(with other: Notice) -> Notice? {
-        nil
+        switch (self, other) {
+        case (.lostRoom(let windows), .lostRoom(let more)): .lostRoom(windows + more.filter { !windows.contains($0) })
+        }
     }
 }

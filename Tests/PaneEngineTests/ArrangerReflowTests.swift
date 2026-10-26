@@ -84,3 +84,31 @@ private func twoDocked() async -> Harness {
         #expect(notices(effects) == [.lostRoom([a, c])])
     }
 }
+
+extension ArrangerReflowTests {
+    /// The live scenario through the fake: the minimums come from refused writes (02-15), not from the test.
+    /// 783 + 627 cannot share the 1424 pt row with the Desktop tile (+ 17), but 627 fits beside a Desktop tile
+    /// holding the 783 pt window (+ 8).
+    @Test func minimumsLearnedFromRefusedWritesFloatTheWiderWindowClearOfItsNeighbour() async throws {
+        var harness = await Harness.started(frames: [
+            1: Rect(x: 40, y: 312, width: 823, height: 300), 2: Rect(x: 900, y: 312, width: 667, height: 300),
+        ])
+        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 783, height: 150) }
+        await harness.fake.update(2) { $0.hiddenMinimum = Size(width: 627, height: 150) }
+        await harness.send(.command(.dock, focused: a))
+        await harness.fake.advance(by: .seconds(1.1))
+        _ = await harness.refresh()
+        #expect(harness.arranger.windows[a.identity]?.learnedMinimum?.width == 783)
+
+        await harness.send(.command(.dock, focused: b))
+        #expect(harness.arranger.world[key]?.tree.state(of: b) == .present)
+        await harness.fake.advance(by: .seconds(1.1))
+        let effects = await harness.refresh()
+        let desk = try #require(harness.arranger.world[key])
+        #expect(desk.desktop.contains(a) && desk.tree.state(of: b) == .present)
+        #expect(notices(effects) == [.lostRoom([a])])
+        let floated = try #require(await harness.frame(a)), docked = try #require(await harness.frame(b))
+        #expect(!floated.overlaps(docked))
+        #expect(floated.width == 783, "the floated window was written below its minimum")
+    }
+}

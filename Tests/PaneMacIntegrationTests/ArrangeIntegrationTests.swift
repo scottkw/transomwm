@@ -76,6 +76,16 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
     return (arrange, refs, frames[0], frames[1])
 }
 
+/// Whether the Arranger sees `window` within 1 pt of `frame` within 2 s.
+@MainActor private func seen(_ arrange: ArrangeController, _ window: PaneModel.WindowRef, _ frame: Rect) async -> Bool {
+    await waitUntil(timeout: .seconds(2)) {
+        arrange.arranger.windows[window.identity].map { info in
+            abs(info.frame.x - frame.x) <= 1 && abs(info.frame.y - frame.y) <= 1
+                && abs(info.frame.width - frame.width) <= 1 && abs(info.frame.height - frame.height) <= 1
+        } ?? false
+    }
+}
+
 /// Polls window `index`'s listed frame until `condition` holds; returns that frame, or nil after `timeout`.
 private func waitFor(_ fixture: FixtureProcess, _ index: Int, timeout: Duration, _ condition: @escaping @Sendable (Rect) -> Bool) async -> Rect? {
     var last: Rect?
@@ -138,14 +148,14 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         // minimum is learned (02-15). Window 0's centre is in the left half, so it docks on the left.
         _ = try await fixture.send("resize 0 \(min0 + 40) \(Int(height))")
         _ = try await fixture.send("resize 1 \(min1 + 40) \(Int(height))")
-        _ = try await fixture.send("move 0 \(Int(visible.minX) + 40) \(Int(top))")
-        let moved = await waitUntil(timeout: .seconds(2)) {
-            arrange.arranger.windows[refs[0].identity].map { abs($0.frame.x - visible.minX - 40) <= 1 } ?? false
-        }
-        try #require(moved, "the Arranger never saw window 0 move")
+        let start0 = Rect(x: visible.minX + 40, y: top, width: Double(min0 + 40), height: height)
+        _ = try await fixture.send("move 0 \(Int(start0.x)) \(Int(start0.y))")
+        // The whole frame, not just x: a write is learned from only if the tracker saw the window at its size first.
+        try #require(await seen(arrange, refs[0], start0), "the Arranger never saw window 0 at \(start0)")
         await arrange.dispatch(.dock, focused: refs[0])
         let learned = await waitUntil(timeout: .seconds(4)) { arrange.arranger.windows[refs[0].identity]?.learnedMinimum != nil }
-        try #require(learned, "window 0's minimum was never learned")
+        let tracked0 = arrange.arranger.windows[refs[0].identity]?.frame
+        try #require(learned, "window 0's minimum was never learned (tracked \(String(describing: tracked0)), minimum \(min0))")
 
         // Window 1's centre at mid-height inside the Desktop tile, so Dock puts it beside that tile, in the same row.
         let key = try #require(arrange.arranger.deskKey(of: refs[0]))
@@ -154,11 +164,15 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
             info.learnedMinimum.map { (info.window, $0) }
         })
         let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: mins).desktopRect)
-        _ = try await fixture.send("move 1 \(Int(desktop.minX)) \(Int(top))")
-        let seen = await waitUntil(timeout: .seconds(2)) {
-            arrange.arranger.windows[refs[1].identity].map { abs($0.frame.x - desktop.minX) <= 1 } ?? false
+        // Window 1 overlaps window 0's grown tile, so Pane clamps it into the Desktop tile first.
+        let clamped = await waitUntil(timeout: .seconds(2)) {
+            arrange.arranger.windows[refs[1].identity].map { $0.frame.minX >= desktop.minX - 1 && $0.frame.maxX <= desktop.maxX + 1 } ?? false
         }
-        try #require(seen, "the Arranger never saw window 1 move")
+        try #require(clamped, "Pane never clamped window 1 into the Desktop tile \(desktop)")
+        let size1 = try #require(arrange.arranger.windows[refs[1].identity]).frame.size
+        let start1 = Rect(x: desktop.minX, y: top, width: size1.width, height: size1.height)
+        _ = try await fixture.send("move 1 \(Int(start1.x)) \(Int(start1.y))")
+        try #require(await seen(arrange, refs[1], start1), "the Arranger never saw window 1 at \(start1)")
         await arrange.dispatch(.dock, focused: refs[1])
         try #require(arrange.arranger.world[key]?.tree.state(of: refs[1]) == .present, "window 1 did not dock")
 
