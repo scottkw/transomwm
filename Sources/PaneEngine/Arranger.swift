@@ -53,14 +53,16 @@ public struct Arranger: Sendable {
         case .event(let event):
             return handle(event)
         case .command(let command, let focused):
-            guard let focused, isAvailable(command, focused: focused) else { return [.beep] }
+            guard isAvailable(command, focused: focused) else { return [.beep] }
             do throws(LayoutError) {
-                switch command {
-                case .dock: return try dock(focused)
-                case .float, .undo: return [.beep]
+                switch (command, focused) {
+                case (.dock, let window?): return try dock(window)
+                case (.float, let window?): return try float(window)
+                case (.undo, _): return try undo(focused)
+                case (.dock, nil), (.float, nil): return [.beep]
                 }
             } catch {
-                return [.beep, .fault("\(command) of \(focused) failed: \(error)")]
+                return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
             }
         case .requeried(let revived, let states):
             do throws(LayoutError) {
@@ -89,9 +91,13 @@ public struct Arranger: Sendable {
             guard let focused else { return false }
             return world.desks.values.contains { $0.tree.state(of: focused) != nil }
         case .undo:
-            guard let key = focused.flatMap(deskKey(of:)) ?? displays.first.map(Self.key) else { return false }
-            return history.depth(for: key) > 0
+            return undoKey(focused).map { history.depth(for: $0) > 0 } ?? false
         }
+    }
+
+    /// The focused window's desk or, with none focused (or one on no desk), the main display's visible desk.
+    private func undoKey(_ focused: WindowRef?) -> DeskKey? {
+        focused.flatMap(deskKey(of:)) ?? displays.first.map(Self.key)
     }
 
     // MARK: Events
@@ -171,6 +177,33 @@ public struct Arranger: Sendable {
         world = candidate
         history = candidateHistory
         return replan()
+    }
+
+    /// Undocks a window to the Desktop at its tile rect, clamped into the Desktop rect the undock leaves (TILE-09).
+    private mutating func float(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame,
+            let state = desk.tree.state(of: window)
+        else { return [.beep] }
+        let mins = minimums
+        guard let tile = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).frames[window] ?? windows[window.identity]?.frame
+        else { return [.beep] }
+        let gap = gap
+        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in
+            try desk.tree.remove(window)
+            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
+            try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
+            if state != .present { try desk.desktop.setState(state, for: window) }
+        }
+        return replan()
+    }
+
+    /// Restores the previous layout of the focused window's desk (TILE-09). Windows the undo revived get their real
+    /// states first (`requery`, then `requeried`); otherwise the desk is re-planned at once.
+    private mutating func undo(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = undoKey(focused), let revived = try LifecycleSync.undo(key, world: &world, history: &history) else {
+            return [.beep]
+        }
+        return revived.windows.isEmpty ? replan() : [.requery(revived)]
     }
 
     // MARK: Planning

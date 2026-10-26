@@ -61,6 +61,8 @@ public enum PaneMacApp {
         permission = permissionController
         setupWindow = setupController
         permissionController.onTrackingStarted = { await arrangeController.start() }
+        // ⌃⌥⌘D/F/Z; a command the Arranger refuses beeps (UI-SPEC: no hotkey fails silently).
+        Hotkeys.register { command in Task { await arrangeController.dispatch(command) } }
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
         // Quit Pane during a freeze resumes the app now rather than at the next launch.
