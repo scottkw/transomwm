@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
 status: verifying
-stopped_at: Completed 02-17-PLAN.md
-last_updated: "2026-10-25T20:37:02.372Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-10-26T01:49:20.789Z"
 last_activity: 2026-10-24
 last_activity_desc: Phase 2 execution started
-state_head: 2a13fbab5a4e20e60d2265bad728310d9166d36e
+state_head: f1267b3cc02ffb6891f89ac761b1e3a8773d4510
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 23
-  completed_plans: 23
+  total_plans: 40
+  completed_plans: 24
   percent: 11
 ---
 
@@ -79,6 +79,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 2 P15 | 8 min | 2 tasks | 10 files |
 | Phase 2 P16 | 19 min | 3 tasks | 16 files |
 | Phase 2 P17 | 8 min | 2 tasks | 9 files |
+| Phase 3 P01 | 9 min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,8 @@ Recent decisions affecting current work:
 - [Phase 2]: 02-17: 'the hidden-tab fold or merge' is one rule, a tracked standalone window taken as a hidden tab; the room-rule join and the Cmd-T opener are not refused in a flagged update
 - [Phase 2]: 02-17: a Space-switch mark is consumed only by a full AXWindows answer whose reads began at or after the notification; a notification during the reads flags that update and the next one
 - [Phase 2]: 02-17: with Space data a flagged update resolves exactly as an unflagged one; the flag only matters in single-Space fallback
+- [Phase 3]: Desktop tile uses reserved NodeID.desktop (raw 0); World requires ids.next >= 1 so it is never minted
+- [Phase 3]: resolve: a desktopMinimum too big for the area makes every docked window unfit and gives the Desktop the whole area (no throw)
 
 ### Pending Todos
 
@@ -192,8 +195,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-25T20:37:02.261Z
-Stopped at: Completed 02-17-PLAN.md
+Last session: 2026-10-26T01:49:20.470Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
 
 ## Deferred Verification
