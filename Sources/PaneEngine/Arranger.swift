@@ -106,7 +106,8 @@ public struct Arranger: Sendable {
                 case (.float, let window?): return try float(window)
                 case (.undo, _): return try undo(focused)
                 case (.toggleDesktop, _): return try toggleDesktop(focused)
-                case (.dock, nil), (.float, nil), (.focus, _): return [.beep]
+                case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
+                case (.dock, nil), (.float, nil), (.focus, nil): return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -197,7 +198,7 @@ public struct Arranger: Sendable {
         case .undo:
             return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
         case .focus:
-            return false
+            return focused.flatMap(deskKey(of:)) != nil
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }
@@ -228,6 +229,7 @@ public struct Arranger: Sendable {
                 if pendingCorrections.remove(from.identity) != nil { pendingCorrections.insert(to.window.identity) }
                 if parkRequested.remove(from.identity) != nil { parkRequested.insert(to.window.identity) }
                 if let home = homeFrames.removeValue(forKey: from.identity) { homeFrames[to.window.identity] = home }
+                focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
                 windows[window.identity]?.frame = frame
@@ -245,7 +247,10 @@ public struct Arranger: Sendable {
             case .spaceChanged(let uuid, let spaceID):
                 // Only the shown Space's desk is planned; the one left keeps its layout untouched (D-25).
                 if let i = displays.firstIndex(where: { $0.uuid == uuid }) { displays[i].currentSpaceID = spaceID }
-            case .windowFocused, .appResponsiveness, .appLaunched, .appTerminated, .displaysChanged:
+            case .windowFocused(let window):
+                focusOrder.removeAll { $0 == window.identity }
+                focusOrder.insert(window.identity, at: 0)
+            case .appResponsiveness, .appLaunched, .appTerminated, .displaysChanged:
                 break
             }
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
@@ -266,6 +271,7 @@ public struct Arranger: Sendable {
         pendingCorrections.remove(window.identity)
         parkRequested.remove(window.identity)
         homeFrames[window.identity] = nil
+        focusOrder.removeAll { $0 == window.identity }
     }
 
     // MARK: Moves
@@ -438,6 +444,34 @@ public struct Arranger: Sendable {
             try world.edit(key, history: &history) { desk, _ throws(LayoutError) in try desk.tree.setDesktopHidden(true) }
         }
         return replan()
+    }
+
+    /// Focuses the nearest tile across `edge` of the window's tile, or of its frame when it floats (D-11, TILE-09).
+    /// Ties go to the most recently focused; the Desktop tile stands for its floating windows there. A Desktop
+    /// neighbour focuses its most recently focused present floating window. No neighbour, or an empty Desktop: beep.
+    private func focusNeighbour(of window: WindowRef, toward edge: Edge) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let resolution = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution
+        let leaf = desk.tree.leaf(containing: window)
+        guard let rect = leaf.flatMap({ resolution.nodeRects[$0] }) ?? desk.desktop.frame(of: window) else { return [.beep] }
+        let floating = desk.desktop.windows.filter { $0.state == .present }.map(\.window)
+        let recency = focusOrder.compactMap { id -> NodeID? in
+            if floating.contains(where: { $0.identity == id }) { return .desktop }
+            return desk.tree.windows.first { $0.identity == id }.flatMap(desk.tree.leaf(containing:))
+        }
+        guard let id = Neighbours.neighbour(
+            of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: resolution, gap: gap, recency: recency)
+        else { return [.beep] }
+        let target: WindowRef?
+        switch desk.tree.node(id) {
+        case .panel(let panel)?: target = panel
+        case .tabs(let tabs, let selected)?: target = tabs[selected]  // LayoutTree.validate keeps selected in range
+        case .desktop?:
+            // Never-focused floating windows come after every focused one, in Desktop order.
+            target = floating.min { (focusOrder.firstIndex(of: $0.identity) ?? .max) < (focusOrder.firstIndex(of: $1.identity) ?? .max) }
+        case .split?, nil: target = nil
+        }
+        return target.map { [.perform([.focus($0)])] } ?? [.beep]
     }
 
     /// The change that shows a desk's Desktop tile, with each floating window that has a home frame back at it.

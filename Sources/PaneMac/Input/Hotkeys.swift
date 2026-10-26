@@ -8,6 +8,10 @@ extension KeyboardShortcuts.Name {
     static let float = Self("float", initial: .init(.f, modifiers: [.control, .option, .command]))
     static let undo = Self("undo", initial: .init(.z, modifiers: [.control, .option, .command]))
     static let toggleDesktop = Self("toggleDesktop", initial: .init(.h, modifiers: [.control, .option, .command]))
+    static let focusLeft = Self("focusLeft", initial: .init(.leftArrow, modifiers: [.control, .option, .command]))
+    static let focusRight = Self("focusRight", initial: .init(.rightArrow, modifiers: [.control, .option, .command]))
+    static let focusUp = Self("focusUp", initial: .init(.upArrow, modifiers: [.control, .option, .command]))
+    static let focusDown = Self("focusDown", initial: .init(.downArrow, modifiers: [.control, .option, .command]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -17,6 +21,10 @@ enum Hotkeys {
         (.float, .float),
         (.undo, .undo),
         (.toggleDesktop, .toggleDesktop),
+        (.focusLeft, .focus(.left)),
+        (.focusRight, .focus(.right)),
+        (.focusUp, .focus(.top)),
+        (.focusDown, .focus(.bottom)),
     ]
 
     /// Installs a key-down handler per entry. Call once.

@@ -379,7 +379,7 @@ public actor FakeWindowSystem: WindowSystem {
 
     /// Applies `.setFrame` to tracked windows with valid rects; a hung or degraded app's latest frame per window
     /// is held instead. `.park` is a frame write too, to its display's `parkedFrame` at the window's size, and marks
-    /// the window `parked` until a `.setFrame` for it. Every command is recorded in `performed`; those for excluded
+    /// the window `parked` until a `.setFrame` for it. `.focus` yields `windowFocused`; `.raise` is recorded. Every command is recorded in `performed`; those for excluded
     /// apps go to `dropped` and nowhere else (D-12). `.setHidden` does nothing (Pattern 15).
     public func perform(_ commands: [WindowCommand]) async {
         performed += commands
@@ -395,7 +395,11 @@ public actor FakeWindowSystem: WindowSystem {
                 else { continue }
                 parked.insert(ref.identity)
                 apply(display.parkedFrame(size: size), to: ref)
-            case .setFrame, .focus, .raise, .setHidden:
+            case .focus(let ref):
+                if let info = tracker.info(for: ref.identity) { continuation.yield(.windowFocused(info.window)) }
+            case .raise(let ref):
+                raised.append(ref)
+            case .setFrame, .setHidden:
                 break
             }
         }

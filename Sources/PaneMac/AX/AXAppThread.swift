@@ -220,9 +220,30 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         } ?? (.otherFailure, .zero)
     }
 
-    func focusWindow(windowID: UInt32) async -> Bool { false }
+    /// Makes the cached window its app's main window and raises it (Pattern 15). False when the element is unknown
+    /// or AX refused either step. Runs on this thread, so a hung app only times out here (T-03-21).
+    func focusWindow(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            let main = AXUIElementSetAttributeValue(element, kAXMainAttribute as CFString, kCFBooleanTrue)
+            return main == .success && AXUIElementPerformAction(element, kAXRaiseAction as CFString) == .success
+        } ?? false
+    }
 
-    func raiseWindow(windowID: UInt32) async -> Bool { false }
+    /// Raises the cached window within its app, without making it main.
+    func raiseWindow(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            return AXUIElementPerformAction(element, kAXRaiseAction as CFString) == .success
+        } ?? false
+    }
+
+    /// Sets the app element's AXFrontmost: the activation fallback when `NSRunningApplication.activate` was declined.
+    func setFrontmost() async -> Bool {
+        await perform { app -> Bool in
+            AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue) == .success
+        } ?? false
+    }
 
     /// Puts `rect` in the window's slot, replacing any frame still waiting, and schedules a drain if none is.
     func enqueueFrame(windowID: UInt32, rect: Rect, ref: PaneModel.WindowRef) {

@@ -171,6 +171,7 @@ import os
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
     /// `Geometry.maxCoordinate`, and windows Pane does not track, are dropped and logged (T-02-32). `.park` is a
     /// frame write through the same slot, to its display's `parkedFrame` at the window's tracked size (Pattern 15).
+    /// `.focus` and `.raise` run as jobs on the app's thread and never hold up the caller (`focus(_:of:on:)`).
     /// `setHidden` is logged and dropped: no phase needs it yet, and it stays in the protocol for later ones.
     /// Commands for an excluded app are dropped before anything else, logged once per bundle ID (D-12).
     public func perform(_ commands: [WindowCommand]) async {
@@ -198,10 +199,30 @@ import os
                     continue
                 }
                 thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: info.frame.size), ref: info.window)
-            case .focus, .raise, .setHidden:
-                logger.info("dropping a command other than setFrame or park: not implemented yet")
+            case .focus:
+                Task { await focus(windowID, of: info.window, on: thread) }
+            case .raise:
+                Task {
+                    if !(await thread.raiseWindow(windowID: windowID)) {
+                        logger.info("raise of \(ref.description, privacy: .public) failed")
+                    }
+                }
+            case .setHidden:
+                logger.info("dropping setHidden for \(ref.description, privacy: .public): not implemented yet")
             }
         }
+    }
+
+    /// AXMain and AXRaise on the app's thread, then activation on main. macOS 14+ activation is cooperative, so
+    /// when the app is still not frontmost about 200 ms later its AXFrontmost is set instead (Pattern 15).
+    private func focus(_ windowID: UInt32, of ref: PaneModel.WindowRef, on thread: AXAppThread) async {
+        if !(await thread.focusWindow(windowID: windowID)) {
+            logger.info("focus of \(ref.description, privacy: .public): AXMain or AXRaise failed")
+        }
+        NSRunningApplication(processIdentifier: ref.pid)?.activate()
+        try? await Task.sleep(for: .milliseconds(200))
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier != ref.pid else { return }
+        if !(await thread.setFrontmost()) { logger.info("focus of \(ref.description, privacy: .public): AXFrontmost failed") }
     }
 
     /// One frame write finished on `thread`. A write the app did not answer counts toward degrading it.

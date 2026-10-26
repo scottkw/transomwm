@@ -15,6 +15,7 @@ import AppKit
 //   open <spec> | close <i> | move <i> <x> <y> | resize <i> <w> <h> | minimize <i> | deminimize <i>
 //   fullscreen <i> | exit-fullscreen <i> (ok once the transition finished, 5 s limit)
 //   select-tab <i> | title <i> <text> | hide-app | unhide-app | list | quit
+//   frontmost: prints `frontmost index=<i>` while this app is active with window i key, else `frontmost none`
 // Closing stdin quits the fixture, so a crashed test never leaves it running.
 
 /// Global top-left -> AppKit bottom-left, computed here independently of PaneEngine (an oracle).
@@ -215,6 +216,9 @@ final class Fixture: NSObject, NSApplicationDelegate {
                 NSApp.unhide(nil)
             case "list":
                 for index in entries.indices where entries[index].open { emitWindow(index) }
+            case "frontmost":
+                let key = NSApp.isActive ? entries.firstIndex { $0.open && $0.window === NSApp.keyWindow } : nil
+                emit(key.map { "frontmost index=\($0)" } ?? "frontmost none")
             case "quit":
                 emit("ok quit")
                 exit(0)
