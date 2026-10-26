@@ -19,7 +19,12 @@ import os
     /// The Arranger's one pending wake-up; a newer `.wake` replaces it.
     private let wake = WakeTimer()
 
+    /// layout.json; nil in tests that do not persist.
     private let store: LayoutStore?
+    private let launchedAt = Date()
+    /// The one pending debounced write: a newer request replaces it, so it lands 0.5 s after the latest.
+    private let saveTimer = WakeTimer()
+    private var fedCompleteInventory = false
 
     public init(system: AXWindowSystem, store: LayoutStore? = nil) {
         self.system = system
@@ -34,6 +39,15 @@ import os
             return
         }
         started = true
+        if let store {
+            store.load()
+            if let saved = store.contents {
+                await run(arranger.handle(.restore(saved.world, homeFrames: saved.homeFrameMap), now: .now))
+            }
+            // This launch's session record (cleanExit false) goes down at once, with the saved layout still in it.
+            write()
+        }
+        fedCompleteInventory = inventory.initialRefreshComplete
         await run(arranger.handle(.inventory(inventory), now: .now))
         onInventory?(inventory)
         Task { [weak self, system] in
@@ -42,8 +56,14 @@ import os
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
-                // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03).
-                if case .displaysChanged = event { await self.run(self.arranger.handle(.inventory(inventory), now: .now)) }
+                // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does
+                // the first complete inventory, which a saved layout waits for (SAFE-06).
+                var feed = !self.fedCompleteInventory && inventory.initialRefreshComplete
+                if case .displaysChanged = event { feed = true }
+                if feed {
+                    self.fedCompleteInventory = self.fedCompleteInventory || inventory.initialRefreshComplete
+                    await self.run(self.arranger.handle(.inventory(inventory), now: .now))
+                }
                 self.onInventory?(inventory)
             }
         }
@@ -77,14 +97,36 @@ import os
                 logger.info("\(message, privacy: .public)")
             case .notice(let notice):
                 present(notices.post(notice, at: .now))
-            case .save:
-                break  // RED stub
+            case .save(.debounced):
+                saveTimer.set(.now + .milliseconds(500)) { [weak self] in self?.write() }
+            case .save(.now):
+                write()
             case .wake(let instant):
                 wake.set(instant) { [weak self] in
                     guard let self else { return }
                     await self.run(self.arranger.handle(.tick, now: .now))
                 }
             }
+        }
+    }
+
+    /// Writes layout.json one last time with `cleanExit: true` when Pane quits normally. Nothing is written if
+    /// tracking never started, so a quit before the first sweep cannot replace a saved layout with an empty one.
+    public func writeCleanExit() {
+        guard started else { return }
+        saveTimer.cancel()
+        write(cleanExit: true)
+    }
+
+    private func write(cleanExit: Bool = false) {
+        guard let store else { return }
+        let snapshot = arranger.snapshot
+        let file = LayoutFile(
+            world: snapshot.world, homeFrames: snapshot.homeFrames, session: SessionRecord(cleanExit: cleanExit, launchedAt: launchedAt))
+        do {
+            try store.save(file)
+        } catch {
+            logger.error("could not save \(LayoutStore.fileName, privacy: .public): \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -121,6 +163,8 @@ import os
 /// One pending wake-up: `set` replaces any earlier one, so only the latest instant fires.
 @MainActor final class WakeTimer {
     private var task: Task<Void, Never>?
+
+    func cancel() { task?.cancel() }
 
     func set(_ instant: ContinuousClock.Instant, _ fire: @escaping @MainActor () async -> Void) {
         task?.cancel()

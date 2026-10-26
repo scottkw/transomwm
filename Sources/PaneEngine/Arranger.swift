@@ -62,31 +62,37 @@ public struct Arranger: Sendable {
     private var lastCorrection: [WindowIdentity: ContinuousClock.Instant] = [:]
     private var pendingCorrections: Set<WindowIdentity> = []
     private static let correctionInterval: Duration = .seconds(1)
+    /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
+    private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
 
     public init(gap: Double = 8) {
         self.gap = gap
     }
 
+    /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        let before = world
+        let effects = process(input, now: now)
+        return world == before ? effects : effects + [.save(.debounced)]
+    }
+
+    private mutating func process(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch input {
         case .inventory(let inventory):
             displays = inventory.displays
             sessionPaused = inventory.sessionPaused
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
-            var faults: [ArrangerEffect] = []
-            if !reportedSpacesOff, !displays.isEmpty, displays.allSatisfy({ $0.currentSpaceID == nil }) {
-                reportedSpacesOff = true
-                faults.append(.info("Spaces lookup off: one layout per display"))
+            guard let restore = pendingRestore else { return place(inventory) }
+            // The saved layout waits for every app's first answer, so no saved window is dropped as untracked.
+            guard inventory.initialRefreshComplete else { return [] }
+            pendingRestore = nil
+            // Re-planned quietly: a window that lost its room still floats, but with no toast.
+            return reattach(restore, tracked: inventory.windows) + place(inventory).filter {
+                if case .notice = $0 { false } else { true }
             }
-            // A display change arrives as a new inventory: windows whose display or Space changed are re-homed first.
-            for info in inventory.windows {
-                do throws(LayoutError) {
-                    try rehome(info)
-                    try admit(info)
-                } catch { faults.append(.fault("could not add \(info.window): \(error)")) }
-            }
-            return faults + replan()
         case .event(let event):
+            // Until the saved layout is re-attached, the next complete inventory says everything an event would.
+            guard pendingRestore == nil else { return [] }
             return handle(event, now: now)
         case .command(let command, let focused):
             guard isAvailable(command, focused: focused) else { return [.beep] }
@@ -109,14 +115,62 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore:
-            return []  // RED stub
+        case .restore(let world, let homeFrames):
+            pendingRestore = (world, homeFrames)
+            return []
         }
     }
 
-    /// What layout.json should hold now.
+    /// What layout.json should hold now: while a restore waits, the saved layout itself, so a write then loses nothing.
     public var snapshot: (world: World, homeFrames: [WindowIdentity: Rect]) {
-        (world, homeFrames)
+        pendingRestore ?? (world, homeFrames)
+    }
+
+    /// Adds every window of `inventory` no desk holds, after re-homing the ones whose display or Space changed.
+    private mutating func place(_ inventory: WindowInventory) -> [ArrangerEffect] {
+        var faults: [ArrangerEffect] = []
+        if !reportedSpacesOff, !displays.isEmpty, displays.allSatisfy({ $0.currentSpaceID == nil }) {
+            reportedSpacesOff = true
+            faults.append(.info("Spaces lookup off: one layout per display"))
+        }
+        // A display change arrives as a new inventory: windows whose display or Space changed are re-homed first.
+        for info in inventory.windows {
+            do throws(LayoutError) {
+                try rehome(info)
+                try admit(info)
+            } catch { faults.append(.fault("could not add \(info.window): \(error)")) }
+        }
+        return faults + replan()
+    }
+
+    /// Replaces the World with the saved one re-attached by identity (SAFE-06), with each window's real state and, for
+    /// a present floating window, its real frame. Each docked window's current frame counts as already requested, so
+    /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). Home frames are kept only
+    /// for windows tracked under a real ID. If the saved layout cannot be re-attached, the World starts empty.
+    private mutating func reattach(_ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo]) -> [ArrangerEffect] {
+        history = UndoHistory()
+        let real = Set(tracked.filter { $0.idSource != .synthetic }.map(\.window.identity))
+        homeFrames = restore.homeFrames.filter { real.contains($0.key) }
+        do throws(LayoutError) {
+            var candidate = try LayoutRestore.reattach(restore.world, tracked: tracked).world
+            var seeded: [WindowIdentity: Rect] = [:]
+            for info in tracked where info.state != .closed {
+                guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
+                    continue
+                }
+                if desk.state(of: info.window) != info.state { try candidate.apply(info.state, for: info.window, on: key, history: &history) }
+                if !desk.desktop.contains(info.window) {
+                    seeded[info.window.identity] = info.frame
+                } else if info.state == .present {
+                    try candidate.recordFloatingFrame(info.frame, for: info.window)
+                }
+            }
+            world = candidate
+            lastRequested = seeded
+            return []
+        } catch {
+            return [.fault("could not re-attach the saved layout; starting empty: \(error)")]
+        }
     }
 
     /// The desk holding `window`, docked or floating.

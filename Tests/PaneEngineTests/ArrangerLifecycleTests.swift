@@ -320,7 +320,8 @@ extension ArrangerLifecycleTests {
     @Test func nothingIsWrittenWhileThePauseLastsAndTheDeskIsReplannedOnResume() async throws {
         var (harness, _, b) = try await twoDocked()
         #expect(await harness.send(.event(.sessionPaused(true))).isEmpty)
-        #expect(await harness.send(.event(.windowDestroyed(w1))).isEmpty)
+        // The close is still recorded (and saved); no window is written.
+        #expect(await harness.send(.event(.windowDestroyed(w1))) == [.save(.debounced)])
         let resumed = await harness.send(.event(.sessionPaused(false)))
         #expect(resumed.count == 1)
         #expect(try #require(setFrames(resumed)[w2]).width > b.width)
