@@ -34,6 +34,9 @@ import os
     private let launchedAt = Date()
     /// How this launch treats the saved layout (D-17); a non-normal one is recorded as `recoveryLaunch`.
     private var launchMode: LaunchMode = .normal
+    /// Set 60 s into a recovery or crash-loop launch, so a crash after that is a plain recovery again (D-18).
+    private var survivedMinute = false
+    private let survivalTimer = WakeTimer()
     /// The one pending debounced write: a newer request replaces it, so it lands 0.5 s after the latest.
     private let saveTimer = WakeTimer()
     private var fedCompleteInventory = false
@@ -86,6 +89,12 @@ import os
             // The record the last session left decides this launch; `contents` keeps it after this launch's first write.
             launchMode = Recovery.launchMode(previous: store.contents?.session)
             await run(arranger.handle(.launch(launchMode), now: .now))
+            if let due = Recovery.survivedMinuteDue(launchedAt: .now, mode: launchMode) {
+                survivalTimer.set(due) { [weak self] in
+                    self?.survivedMinute = true
+                    self?.write()
+                }
+            }
             if let saved = store.contents {
                 await run(arranger.handle(.restore(saved.world, homeFrames: saved.homeFrameMap), now: .now))
             }
@@ -388,14 +397,16 @@ import os
     public func writeCleanExit() {
         guard started else { return }
         saveTimer.cancel()
+        survivalTimer.cancel()  // a later write would record the clean exit as unclean
         write(cleanExit: true)
     }
 
     private func write(cleanExit: Bool = false) {
         guard let store else { return }
         let snapshot = arranger.snapshot
-        let file = LayoutFile(
-            world: snapshot.world, homeFrames: snapshot.homeFrames, session: SessionRecord(cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal))
+        let session = SessionRecord(
+            cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal, survivedMinute: survivedMinute)
+        let file = LayoutFile(world: snapshot.world, homeFrames: snapshot.homeFrames, session: session)
         do {
             try store.save(file)
         } catch {

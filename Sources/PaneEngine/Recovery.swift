@@ -11,7 +11,9 @@ public enum LaunchMode: Equatable, Sendable {
 /// | Previous session record                          | Launch    |
 /// |--------------------------------------------------|-----------|
 /// | none, or cleanExit                               | normal    |
-/// | unclean                                          | recovery  |
+/// | unclean, a recovery launch that survived 60 s    | recovery  |
+/// | unclean, a recovery launch that did not          | crashLoop |
+/// | unclean, a normal launch                         | recovery  |
 public enum Recovery {
     public static let minVisibleFraction = 0.5
     public static let minVisibleSize = Size(width: 40, height: 40)
@@ -45,12 +47,13 @@ public enum Recovery {
         return Rect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height)
     }
 
+    /// When a recovery or crash-loop launch records that it survived its first minute; a normal launch never does.
     public static func survivedMinuteDue(launchedAt: ContinuousClock.Instant, mode: LaunchMode) -> ContinuousClock.Instant? {
-        nil
+        mode == .normal ? nil : launchedAt + crashLoopWindow
     }
 
     public static func launchMode(previous: SessionRecord?) -> LaunchMode {
         guard let previous, !previous.cleanExit else { return .normal }
-        return .recovery
+        return previous.recoveryLaunch && !previous.survivedMinute ? .crashLoop : .recovery
     }
 }

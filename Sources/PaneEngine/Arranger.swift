@@ -189,7 +189,8 @@ public struct Arranger: Sendable {
             effects += place(inventory).filter { if case .notice = $0 { false } else { true } }
             switch launch {
             case .normal: return effects
-            case .recovery, .crashLoop: return effects + [.notice(.crashRecovered(unplaced: restored.unplaced))]
+            case .recovery: return effects + [.notice(.crashRecovered(unplaced: restored.unplaced))]
+            case .crashLoop: return effects + [.notice(.crashLoop)]
             }
         case .event(let event):
             // Until the saved layout is re-attached, the next complete inventory says everything an event would.
@@ -260,7 +261,10 @@ public struct Arranger: Sendable {
             return gapDrag(handle, delta: delta, ended: ended)
         case .launch(let mode):
             launch = mode
-            return []
+            // D-18: a crash loop starts paused; Resume clears it. Stranded windows still come on screen (UI-SPEC N3).
+            guard mode == .crashLoop else { return [] }
+            pauseReasons.insert(.crashLoop)
+            return hideHandles()
         }
     }
 

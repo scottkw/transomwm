@@ -21,8 +21,8 @@ public enum Notice: Equatable, Sendable {
     /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
-        case .crashRecovered: true
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashLoop: false
+        case .crashRecovered, .crashLoop: true
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers: false
         }
     }
 }

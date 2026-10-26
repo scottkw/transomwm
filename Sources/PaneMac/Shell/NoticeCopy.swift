@@ -21,7 +21,7 @@ nonisolated public enum NoticeCopy {
                 ? "1 window didn't fit, so it stays floating on the Desktop."
                 : "\(count) windows didn't fit, so they stay floating on the Desktop."
         case .crashLoop:
-            ""
+            "Pane quit unexpectedly twice in a minute, so arranging is paused. Your windows are on screen. Choose Resume Arranging from the Pane menu when you're ready."
         case .crashRecovered(let unplaced):
             "Pane quit unexpectedly. Your windows are back on screen and your layout is restored."
                 + (unplaced == 0 ? ""
@@ -35,8 +35,7 @@ nonisolated public enum NoticeCopy {
         switch notice {
         case .lostRoom, .floatedAll, .arrangeLeftovers: "macwindow"
         case .finderNoWindow: "info.circle"
-        case .crashRecovered: "lifepreserver"
-        case .crashLoop: ""
+        case .crashRecovered, .crashLoop: "lifepreserver"
         }
     }
 }
