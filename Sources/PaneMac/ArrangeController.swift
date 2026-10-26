@@ -9,7 +9,7 @@ import os
 @MainActor public final class ArrangeController {
     private let system: AXWindowSystem
     private let logger = Logger(subsystem: "com.eightabyte.pane", category: "arrange")
-    /// One line per press and per release (WR-03, the Safari drag diagnosis).
+    /// One debug line per press and per release (WR-03); see them with `log stream --level debug`.
     private let dragLog = Logger(subsystem: "com.eightabyte.pane", category: "drag")
     /// What the press has seen so far: dragged tap events, and the first and last CG samples of the frame poll.
     private var dragTrace: (dragged: Int, polls: Int, firstCG: Rect?, lastCG: Rect?) = (0, 0, nil, nil)
@@ -262,19 +262,19 @@ import os
     private func logPress(_ press: PaneModel.WindowRef?, underPointer number: Int64, at point: Point) {
         dragTrace = (0, 0, nil, nil)
         guard let press else {
-            dragLog.info("press at \(Self.text(point), privacy: .public) on CG window \(number, privacy: .public): no tracked window")
+            dragLog.debug("press at \(Self.text(point), privacy: .public) on CG window \(number, privacy: .public): no tracked window")
             return
         }
         let info = arranger.windows[press.identity]
         let cgID = info?.visibleMemberID ?? press.windowID
         let cg = Self.text(DragFramePoller.bounds(of: cgID))
         guard let session = arranger.drag else {
-            dragLog.info(
+            dragLog.debug(
                 "press on \(press.bundleID, privacy: .public) window \(press.windowID, privacy: .public) (CG \(number, privacy: .public)): no session; kind \(String(describing: info?.kind), privacy: .public) state \(String(describing: info?.state), privacy: .public) excluded \(String(describing: info?.isExcluded), privacy: .public) desk \(self.arranger.deskKey(of: press) != nil, privacy: .public) paused \(!self.arranger.pauseReasons.isEmpty, privacy: .public)"
             )
             return
         }
-        dragLog.info(
+        dragLog.debug(
             "start \(press.bundleID, privacy: .public) window \(press.windowID, privacy: .public) (CG \(number, privacy: .public), member \(cgID, privacy: .public)) at \(Self.text(point), privacy: .public): AX \(Self.text(session.startFrame), privacy: .public) CG \(cg, privacy: .public)"
         )
     }
@@ -285,7 +285,7 @@ import os
         let upTravel = hypot(point.x - session.start.x, point.y - session.start.y)
         let info = arranger.windows[session.window.identity]
         let cgNow = Self.text(DragFramePoller.bounds(of: info?.visibleMemberID ?? session.window.windowID))
-        dragLog.info(
+        dragLog.debug(
             "end \(session.window.bundleID, privacy: .public) window \(session.window.windowID, privacy: .public): kind \(String(describing: session.kind), privacy: .public) travel \(travel, privacy: .public) (up \(upTravel, privacy: .public)) dragged \(self.dragTrace.dragged, privacy: .public) polls \(self.dragTrace.polls, privacy: .public) polling \(session.polling, privacy: .public) AX start \(Self.text(session.startFrame), privacy: .public) first CG \(Self.text(self.dragTrace.firstCG), privacy: .public) last CG \(Self.text(self.dragTrace.lastCG), privacy: .public) CG at up \(cgNow, privacy: .public) dry runs \(session.dryRuns, privacy: .public) decision \(session.decisionSummary, privacy: .public) shown \(String(describing: session.shown), privacy: .public)"
         )
     }
