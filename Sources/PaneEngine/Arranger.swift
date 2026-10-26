@@ -14,6 +14,10 @@ public enum ArrangerInput: Sendable {
     case setPaused(PauseReason, Bool)
     /// The gap between tiles (D-27), already validated by the shell's allow-list.
     case gap(Double)
+    /// A left-button or modifier event from the event tap (TILE-01).
+    case pointer(PointerEvent)
+    /// The pressed window's CG bounds from the 60 Hz drag poll.
+    case dragFrame(WindowIdentity, Rect)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -46,6 +50,12 @@ public enum ArrangerEffect: Equatable, Sendable {
     case save(SaveUrgency)
     /// Open a new Finder window by pressing Finder's own ⌘N menu item (RESEARCH Pattern 14).
     case openFinderWindow
+    /// Show this drop preview on that display, or withdraw it (nil).
+    case preview(PreviewState?, displayUUID: String?)
+    /// Poll this window's CG bounds at 60 Hz and feed `.dragFrame`; nil stops the poll.
+    case pollDragFrame(WindowRef?)
+    /// Flash the blocked preview at this frame for 600 ms (a refused keyboard Dock, UI-SPEC keyboard parity).
+    case flashBlocked(Rect, displayUUID: String)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -85,6 +95,10 @@ public struct Arranger: Sendable {
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
     private var parkRequested: Set<WindowIdentity> = []
+    /// The left-button press in progress, if any (TILE-01).
+    public private(set) var drag: DragSession?
+    /// A title-bar drag is under way (plan 16 defers alerts while it is).
+    public var isDragging: Bool { drag?.kind == .move }
     /// Window identities, the most recently focused first: focus ties go to the earliest (D-11).
     public private(set) var focusOrder: [WindowIdentity] = []
     /// The split ⌃⌥⌘N asked for, waiting for Finder's new window; a newer one replaces it.
@@ -164,6 +178,8 @@ public struct Arranger: Sendable {
         case .gap(let value):
             gap = value
             return replan()
+        case .pointer, .dragFrame:
+            return []
         }
     }
 

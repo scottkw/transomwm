@@ -162,6 +162,8 @@ import os
                     guard let self else { return }
                     await self.run(self.arranger.handle(.tick, now: .now))
                 }
+            case .preview, .pollDragFrame, .flashBlocked:
+                break
             }
         }
     }
