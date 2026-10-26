@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
-status: executing
-stopped_at: Completed 03-16-PLAN.md
-last_updated: "2026-10-26T06:35:37.061Z"
+status: verifying
+stopped_at: Completed 03-17-PLAN.md
+last_updated: "2026-10-26T14:25:45.356Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: e3253c08215566979cb5575232809a8e87cebdad
+state_head: f33ca805955fa122e5d6e59ca39d3579d64450b3
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 39
+  completed_plans: 40
   percent: 11
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 Phase: 3 (Tiling MVP) — EXECUTING
 Plan: 17 of 17
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-25 — Phase 3 execution started
 
 Progress: [█░░░░░░░░░] 11%
@@ -95,6 +95,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 3 P14 | 13 min | 3 tasks | 22 files |
 | Phase 03 P15 | 10 min | 2 tasks | 15 files |
 | Phase 3 P16 | 11 min | 3 tasks | 19 files |
+| Phase 03 P17 | 13h wall (checkpoint wait) | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -230,6 +231,8 @@ Recent decisions affecting current work:
 - [Phase 3]: 03-16: A non-boolean WindowManager value is never written over; Turn Off skips that key
 - [Phase 3]: 03-16: Conflict alerts are modeless NSAlerts (no runModal); presentAlert nil means no alert UI in unit tests
 - [Phase 3]: 03-16: Restore macOS Window Settings is a plain status-menu item, not a Command (no hotkey, no Arranger rule)
+- [Phase 03]: 03-17: 0.3.0 clean-Mac install check done in a fresh Tart VM (macOS 15.7.7) instead of the host, by user choice; DMG steps hand-finished after the release.sh hdiutil fallback failed
+- [Phase 03]: 03-17: 0.3.0 DMG sha256 ee940af0c6badf8f16e2a4124f4083507d6c775dc45eeee2c9fa4028a0dc5761 stays local; nothing published until the Transom rename
 
 ### Pending Todos
 
@@ -257,8 +260,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T06:35:36.910Z
-Stopped at: Completed 03-16-PLAN.md
+Last session: 2026-10-26T14:25:45.111Z
+Stopped at: Completed 03-17-PLAN.md
 Resume file: None
 
 ## Deferred Verification

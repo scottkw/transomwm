@@ -33,3 +33,24 @@ Out-of-scope issues found while executing plans. Not fixed by the plan that foun
   user's data. A shared helper that also deletes the file, or one fixed suite name per test file, would stop the pile-up.
 - **The plan's `killall` grep baseline is out of date.** `grep -rn killall Sources` finds one hit at 16d0692: the
   03-15 doc comment in `AppDelegate.swift` describing `killall Pane` sending SIGTERM. 03-16 adds none.
+
+## Found in 03-17
+
+Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7.7, 2026-10-26). Not fixed by 03-17.
+
+- **`release.sh`'s hdiutil fallback lost the DMG.** create-dmg is not installed, so the script took the hdiutil path.
+  `hdiutil create` printed "created: …/build/Pane-0.3.0.dmg", but the file was not there afterwards and the next
+  `codesign` of the DMG failed (exit 1). Running the same hdiutil command by hand produced the file. Root cause is
+  unknown. It may be timing, or a sandbox effect of running under the Claude Code Bash tool. Options: check the file
+  exists after `hdiutil create` and retry once, or install create-dmg. The app was already notarised and stapled when
+  this happened; the DMG steps were finished by hand.
+- **An Accessibility grant made while Pane is running is not picked up until relaunch.** On first launch the log shows
+  no permission transition and no tracking. After a relaunch it shows notTrusted -> probing -> ready. The likely cause
+  is that polling only starts inside the Set Up Pane flow (`PermissionController` `.startPolling`). It is not known
+  whether the Set Up Pane window appeared on first launch.
+- **Safari windows do not dock when dragged by their title area (unified toolbar).** TextEdit docks fine. Safari stays
+  floating on the desktop area.
+- **The app icon is a blank placeholder in Pane's alerts.** iconservices logs STORE_LOOKUP not-found. The Release build
+  may have no AppIcon asset.
+- **A floating Safari window was placed at the bottom of the desktop region, with empty space above it.** Cosmetic.
+  Check whether this placement is intended.

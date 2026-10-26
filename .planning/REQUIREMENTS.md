@@ -41,7 +41,7 @@
 - [x] **TILE-07**: New windows open floating on the Desktop tile, never auto-split into the layout
 - [x] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [x] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
-- [ ] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
+- [x] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
 - [x] **TILE-11**: User can swap two docked windows' tiles, by hotkey or by dragging with a modifier
 - [x] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
 - [x] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
@@ -181,7 +181,7 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-07 | Phase 3 | Complete |
 | TILE-08 | Phase 3 | Complete |
 | TILE-09 | Phase 3 | Complete |
-| TILE-10 | Phase 3 | Pending |
+| TILE-10 | Phase 3 | Complete |
 | TILE-11 | Phase 3 | Complete |
 | TILE-12 | Phase 3 | Complete |
 | TILE-13 | Phase 3 | Complete |
