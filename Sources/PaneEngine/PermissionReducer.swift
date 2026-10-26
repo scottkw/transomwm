@@ -72,9 +72,15 @@ public enum PermissionReducer {
     public static func reduce(_ state: inout PermissionState, _ event: PermissionEvent) -> [PermissionEffect] {
         switch (state.phase, event) {
         case (.notTrusted, .launched(let trusted)):
-            if !trusted { return [] }
+            // Polls from launch, so a grant made in System Settings or the system prompt is noticed without a click.
+            if !trusted { return [.startPolling] }
             state.phase = .probing
             return [.runProbe]
+
+        case (.notTrusted, .pollTick(let trusted, _)):
+            guard trusted else { return [] }
+            state.phase = .probing
+            return [.stopPolling, .runProbe]
 
         case (.notTrusted, .openSettingsClicked(let at)):
             state.phase = .waitingForGrant

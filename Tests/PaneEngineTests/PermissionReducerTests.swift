@@ -25,10 +25,20 @@ private let staleB: [PermissionEvent] = [.launched(trusted: false), firstClick, 
         #expect(state.resetFailedCode == nil && state.phaseBeforeReset == nil)
     }
 
-    @Test func untrustedLaunchStaysNotTrustedWithNoEffects() {
+    @Test func untrustedLaunchStaysNotTrustedAndPolls() {
         var state = PermissionState()
-        #expect(PermissionReducer.reduce(&state, .launched(trusted: false)).isEmpty)
+        #expect(PermissionReducer.reduce(&state, .launched(trusted: false)) == [.startPolling])
         #expect(state.phase == .notTrusted)
+    }
+
+    /// WR-02: a grant made in System Settings or the system prompt, without the Set Up button, is still noticed.
+    @Test func aGrantMadeWithoutTheSettingsButtonIsNoticedByThePoll() {
+        var state = state(after: [.launched(trusted: false)])
+        #expect(PermissionReducer.reduce(&state, .pollTick(trusted: false, at: .seconds(20))).isEmpty)
+        #expect(state.phase == .notTrusted)
+        #expect(!state.showStaleFormB)
+        #expect(PermissionReducer.reduce(&state, .pollTick(trusted: true, at: .seconds(21))) == [.stopPolling, .runProbe])
+        #expect(state.phase == .probing)
     }
 
     @Test func trustedLaunchProbes() {
