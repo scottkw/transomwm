@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-13-PLAN.md
-last_updated: "2026-10-26T05:46:50.556Z"
+stopped_at: Completed 03-14-PLAN.md
+last_updated: "2026-10-26T06:06:47.272Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: e2275676790a40c94d067fc0428d62403ca84120
+state_head: cead94248deffab9f97f1ae84483138428a5d196
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 36
+  completed_plans: 37
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 14 of 17
+Plan: 15 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -92,6 +92,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 3 P11 | 26 min | 3 tasks | 21 files |
 | Phase 03 P12 | 13min | 3 tasks | 16 files |
 | Phase 3 P13 | 17 min | 3 tasks | 21 files |
+| Phase 3 P14 | 13 min | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -217,6 +218,9 @@ Recent decisions affecting current work:
 - [Phase 3]: A press with no pointer travel whose frame changed (option-zoom, title-bar double-click) is answered at mouse-up as the app's own change (D-33)
 - [Phase 3]: Edge resize and gap drag share BoundaryMove/boundaryChange: points to weight through the split length, cut to what the shrinking side can give before its minimum, so weights match the screen
 - [Phase 3]: Gap handles are sent per display only when they change; hidden while paused, during a window drag and on a Space change
+- [Phase 3]: Recovery and crash-loop launches show hidden Desktop tiles holding parked windows (no undo step), so the first plan does not park rescued windows again
+- [Phase 3]: A rescued window goes to its saved desk's display, else its nearest; survivedMinute written 60 s into a recovery launch and cancelled by a clean quit
+- [Phase 3]: Restore All shows hidden Desktops holding windows as one undo step per desk and acts while paused; SAFE-03 waits for pane://restore (plan 15)
 
 ### Pending Todos
 
@@ -244,8 +248,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T05:46:50.414Z
-Stopped at: Completed 03-13-PLAN.md
+Last session: 2026-10-26T06:06:47.131Z
+Stopped at: Completed 03-14-PLAN.md
 Resume file: None
 
 ## Deferred Verification

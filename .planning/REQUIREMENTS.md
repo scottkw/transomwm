@@ -56,7 +56,7 @@
 ### Safety & Recovery
 
 - [ ] **SAFE-01**: On quit, every window Pane moved returns to a sensible on-screen frame
-- [ ] **SAFE-02**: After a crash or force-quit, the next launch restores stranded windows on-screen
+- [x] **SAFE-02**: After a crash or force-quit, the next launch restores stranded windows on-screen
 - [ ] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
 - [ ] **SAFE-04**: Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
 - [x] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
@@ -193,7 +193,7 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-19 | Phase 3 | Complete |
 | TILE-20 | Phase 3 | Complete |
 | SAFE-01 | Phase 3 | Pending |
-| SAFE-02 | Phase 3 | Pending |
+| SAFE-02 | Phase 3 | Complete |
 | SAFE-03 | Phase 3 | Pending |
 | SAFE-04 | Phase 3 | Pending |
 | SAFE-05 | Phase 2 | Complete |
