@@ -9,6 +9,8 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     GENERATE_INFOPLIST_FILE: YES
+    # Merged into the generated Info.plist: only CFBundleURLTypes, with the per-configuration PANE_URL_SCHEME.
+    INFOPLIST_FILE: Pane-Info.plist
     INFOPLIST_KEY_LSUIElement: YES
     MARKETING_VERSION: "0.2.0"
     CURRENT_PROJECT_VERSION: "1"
@@ -37,9 +39,12 @@ targets:
         Debug:
           PRODUCT_NAME: "Pane Debug"
           PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.pane.debug
+          # Debug registers its own scheme so LaunchServices never routes a URL to the wrong build (A8).
+          PANE_URL_SCHEME: pane-debug
         Release:
           PRODUCT_NAME: Pane
           PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.pane
+          PANE_URL_SCHEME: pane
           SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
           # No debugger-attach (get-task-allow) entitlement in Release (T-02-05).
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO

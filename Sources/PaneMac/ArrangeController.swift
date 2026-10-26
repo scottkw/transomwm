@@ -289,27 +289,26 @@ import os
         return CommandContext(focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady())
     }
 
-    public var beep: () -> Void = { NSSound.beep() }
+    /// The refusal sound; a seam for tests.
+    var beep: () -> Void = { NSSound.beep() }
 
-    public func dispatch(_ command: Command, from source: CommandSource) async {
-        await dispatch(command)  // RED stub
-    }
-
-    /// Every route (hotkey, menu item) calls this. A command the availability rule refuses beeps (UI-SPEC: no
-    /// hotkey fails silently).
-    public func dispatch(_ command: Command) async {
+    /// Every route (hotkey, menu item, URL) calls this. A command that cannot act beeps (UI-SPEC: no hotkey fails
+    /// silently), except from a URL, whose user may not be at the keyboard (Pitfall 21).
+    public func dispatch(_ command: Command, from source: CommandSource = .hotkey) async {
+        let refuse = source == .url ? {} : beep
         if command == .toggleExcludeFrontmost {
             // The store's onChange hands the list to the window system, whose windowChanged events float the windows.
             if let exclusions, Self.toggleExclusion(of: NSWorkspace.shared.frontmostApplication, in: exclusions) { return }
-            NSSound.beep()
+            refuse()
             return
         }
         let context = commandContext()
         guard arranger.availability(command, context: context) else {
-            beep()
+            refuse()
             return
         }
-        await dispatch(command, focused: context.focused)
+        let effects = arranger.handle(.command(command, focused: context.focused), now: .now)
+        await run(source == .url ? effects.filter { $0 != .beep } : effects)
     }
 
     public func dispatch(_ command: Command, focused: PaneModel.WindowRef?) async {
@@ -339,7 +338,7 @@ import os
                 let states = await LifecycleSync.requery(revived, using: system)
                 await run(arranger.handle(.requeried(revived, states), now: .now))
             case .beep:
-                NSSound.beep()
+                beep()
             case .announce(let text):
                 postAnnouncement(text)
             case .fault(let message):
@@ -466,6 +465,7 @@ import os
     }
 }
 
+/// Where a command came from: only a URL dispatch is silent when it cannot act.
 public enum CommandSource { case hotkey, menu, url }
 
 /// One pending wake-up: `set` replaces any earlier one, so only the latest instant fires.

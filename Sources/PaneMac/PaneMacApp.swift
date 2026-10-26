@@ -85,7 +85,8 @@ public enum PaneMacApp {
         // A quit first returns parked and off-screen windows, then records cleanExit in layout.json (SAFE-01).
         let appDelegate = AppDelegate(
             restore: { arrangeController.restoreForTermination() }, writeCleanExit: { arrangeController.writeCleanExit() },
-            open: { command in Task { await arrangeController.dispatch(command, from: .url) } }, urlScheme: nil)
+            open: { command in Task { await arrangeController.dispatch(command, from: .url) } },
+            urlScheme: AppDelegate.registeredScheme())
         appDelegate.handleSIGTERM()
         delegate = appDelegate
         app.delegate = appDelegate
