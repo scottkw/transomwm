@@ -42,6 +42,8 @@ import os
     private let tap = InputTap()
     private var tapReader: Task<Void, Never>?
     private let dragPoller = DragFramePoller()
+    /// The drop preview panels, one per display; made when tracking starts.
+    private lazy var previews = PreviewPresenter()
 
     public init(system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8) {
         self.system = system
@@ -91,6 +93,7 @@ import os
                 self.onInventory?(inventory)
             }
         }
+        _ = previews  // the panels exist before the first drag (UI-SPEC: created at launch, never per drag)
         startTap()
     }
 
@@ -254,8 +257,10 @@ import os
                 }
             case .pollDragFrame(let window):
                 pollDragFrame(window)
-            case .preview, .flashBlocked:
-                break  // the preview panel arrives with the rest of the drop states
+            case .preview(let state, let displayUUID):
+                previews.show(state, on: displayUUID)
+            case .flashBlocked(let rect, let displayUUID):
+                previews.flashBlocked(rect, on: displayUUID)
             }
         }
     }

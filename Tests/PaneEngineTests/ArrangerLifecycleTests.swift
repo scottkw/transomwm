@@ -180,7 +180,10 @@ func info(_ id: UInt32, frame: Rect, kind: WindowKind = .dockable, excluded: Boo
         let inventory = WindowInventory(displays: [display], windows: [info(1, frame: frame1, minimum: big), info(2, frame: frame2, minimum: big)])
         _ = arranger.handle(.inventory(inventory), now: .now)
         let world = arranger.world, history = arranger.history
-        #expect(arranger.handle(.command(.dock, focused: w1), now: .now) == refusal)
+        // The refusal also flashes the blocked preview (03-11, UI-SPEC keyboard parity; ArrangerDragTests checks its frame).
+        let effects = arranger.handle(.command(.dock, focused: w1), now: .now)
+        #expect(Array(effects.prefix(2)) == refusal)
+        #expect(effects.dropFirst(2).allSatisfy { if case .flashBlocked = $0 { true } else { false } })
         #expect(arranger.world == world)
         #expect(arranger.history == history)
     }

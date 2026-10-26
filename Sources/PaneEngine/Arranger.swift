@@ -63,6 +63,10 @@ public enum ArrangerEffect: Equatable, Sendable {
 /// OS facts change the World through `LifecycleSync` and `World.reflow`, user commands through `World.edit`.
 public struct Arranger: Sendable {
     public static let noRoom = "Not enough room to dock here"
+    /// Announced when a ⌘-drop swaps two windows (UI-SPEC Accessibility).
+    public static let swapped = "Swapped"
+    /// The bypass with the Desktop tile hidden: the snap-back ghost's label and the announcement (UI-SPEC Surface 2).
+    public static let showDesktopToFloat = "Show the Desktop Tile to float windows"
     public static let finderBundleID = "com.apple.finder"
     /// How long ⌃⌥⌘N waits for Finder's new window (D-14).
     public static let finderWait: Duration = .seconds(2)
@@ -104,6 +108,8 @@ public struct Arranger: Sendable {
 
     private enum DragPlanKey: Hashable {
         case desk(DeskKey)
+        /// The pressed docked window's desk with it floating at its press frame: where a ⇧-drop would put it.
+        case undock
     }
     /// Window identities, the most recently focused first: focus ties go to the earliest (D-11).
     public private(set) var focusOrder: [WindowIdentity] = []
@@ -518,8 +524,11 @@ public struct Arranger: Sendable {
             try desk.desktop.remove(window)
             try desk.tree.applyDrop(target, window: window, ids: &ids)
         }
-        guard let docked = candidate[key], try Planner.plan(desk: docked, area: area, gap: gap, mins: mins).unfit.isEmpty else {
-            return [.beep, .announce(Self.noRoom)]
+        guard let docked = candidate[key] else { return [.beep] }
+        guard try Planner.plan(desk: docked, area: area, gap: gap, mins: mins).unfit.isEmpty else {
+            // Keyboard parity (UI-SPEC Surface 2): the blocked preview flashes at the frame it would have had.
+            let frame = try Planner.plan(desk: docked, area: area, gap: gap, mins: [:]).frames[window]
+            return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
         }
         world = candidate
         history = candidateHistory
@@ -765,7 +774,21 @@ public struct Arranger: Sendable {
         let docked = ownDesk.tree.state(of: window) != nil
         let frame = windows[window.identity]?.frame ?? session.startFrame
         let point = session.pointer
+        if session.modifiers.contains(.shift) {
+            // Anywhere goes: only whether the frame would cross a docked tile, once floating, matters (TILE-02).
+            let plan = ownDesk.tree.isDesktopHidden == true ? nil : docked ? dragPlan(.undock) : ownPlan
+            return Hover(
+                displayUUID: ownKey.displayUUID, modifiers: [.shift],
+                crossesTiles: plan.map { Self.crosses(frame, $0, except: window) } ?? false)
+        }
         let display = displays.first { $0.frame.contains(point) }
+        // ⌘ over any part of another docked panel of the same desk swaps (TILE-11); ⌘ is ignored for a floating window.
+        if docked, session.modifiers.contains(.command), let display, Self.key(display) == ownKey,
+            let other = ownPlan.resolution.windowRects.first(where: { $0.key != window && $0.value.contains(point) })?.key,
+            let leaf = ownDesk.tree.leaf(containing: other), case .panel? = ownDesk.tree.node(leaf)
+        {
+            return Hover(displayUUID: ownKey.displayUUID, swapWith: other, modifiers: [.command])
+        }
         var target: DropTarget?
         if let display, let plan = dragPlan(.desk(Self.key(display))) {
             let key = Self.key(display)
@@ -781,10 +804,37 @@ public struct Arranger: Sendable {
             crossesTiles: !docked && target == nil && Self.crosses(frame, ownPlan, except: window))
     }
 
-    /// The dry run for one held hover: a copy of the World with the drop applied, then planned.
+    /// The dry run for one held hover (UI-SPEC Surface 2 state matrix): a copy of the World with the drop applied, then
+    /// planned. A drop that leaves any window without room is blocked, showing the frame it would get ignoring minimums.
     private mutating func decide(_ hover: Hover, window: WindowRef) -> Decision {
-        guard let ownKey = deskKey(of: window) else { return Decision(action: .miss) }
-        let miss = Decision(action: .miss, display: ownKey.displayUUID)
+        guard let ownKey = deskKey(of: window), let ownDesk = world[ownKey], let ownPlan = dragPlan(.desk(ownKey)) else {
+            return Decision(action: .miss)
+        }
+        let docked = ownDesk.tree.state(of: window) != nil
+        let own = ownKey.displayUUID
+        let origin = ownPlan.frames[window]
+        let miss = docked
+            ? Decision(preview: origin.map { .snapBack($0, label: nil) }, action: .miss, display: own)
+            : Decision(action: .miss, display: own, clampInto: hover.crossesTiles ? ownPlan.desktopRect : nil)
+        if hover.modifiers.contains(.shift) {
+            // A floating window can't exist while the Desktop tile is hidden (D-31).
+            if ownDesk.tree.isDesktopHidden == true {
+                return Decision(
+                    preview: origin.map { .snapBack($0, label: Self.showDesktopToFloat) }, action: .refuse(Self.showDesktopToFloat), display: own)
+            }
+            guard docked else { return miss }
+            let minimum = minimums[window] ?? Size(width: 1, height: 1)
+            guard let plan = dragPlan(.undock), let desktop = plan.desktopRect, plan.unfit.isEmpty,
+                minimum.width <= desktop.width, minimum.height <= desktop.height
+            else {
+                let over = dragPlan(.undock)?.desktopRect ?? display(for: ownKey)?.visibleFrame
+                return Decision(preview: over.map(PreviewState.blocked), action: .refuse(Self.noRoom), display: own)
+            }
+            return Decision(action: .undock, display: own, clampInto: hover.crossesTiles ? desktop : nil)
+        }
+        if let other = hover.swapWith, let origin, let rect = ownPlan.frames[other] {
+            return Decision(preview: .swap(target: rect, origin: origin), action: .swap(other), display: own)
+        }
         guard let target = hover.target, let uuid = hover.displayUUID, let display = displays.first(where: { $0.uuid == uuid }) else {
             return miss
         }
@@ -792,8 +842,11 @@ public struct Arranger: Sendable {
         do throws(LayoutError) {
             guard let desk = try dropping(window, on: key, at: target).world[key] else { return miss }
             let plan = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums)
-            guard plan.unfit.isEmpty, let frame = plan.frames[window] else { return miss }
-            return Decision(preview: .dock(frame), action: .dock(key, target), display: uuid)
+            if plan.unfit.isEmpty, let frame = plan.frames[window] {
+                return Decision(preview: .dock(frame), action: .dock(key, target), display: uuid)
+            }
+            let loose = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]).frames[window]
+            return Decision(preview: loose.map(PreviewState.blocked), action: .refuse(Self.noRoom), display: uuid)
         } catch {
             return miss  // the target went stale since the hit test
         }
@@ -830,7 +883,10 @@ public struct Arranger: Sendable {
         do throws(LayoutError) {
             switch action {
             case .dock(let key, let target): effects += try commitDock(window, on: key, at: target)
-            case .swap, .undock, .refuse, .miss: effects += try missed(window)
+            case .swap(let other): effects += try commitSwap(window, with: other)
+            case .undock: effects += try commitUndock(window)
+            case .refuse(let text): effects += [.announce(text)] + (try missed(window))
+            case .miss: effects += try missed(window)
             }
         } catch {
             effects += [.fault("drop of \(window) failed: \(error)")] + replan()
@@ -845,6 +901,31 @@ public struct Arranger: Sendable {
         else { return [.announce(Self.noRoom)] + (try missed(window)) }
         world = candidate.world
         history = candidate.history
+        lastRequested[window.identity] = nil
+        return replan()
+    }
+
+    /// ⌘-drop: the two docked windows exchange tiles, one undo step (TILE-11).
+    private mutating func commitSwap(_ window: WindowRef, with other: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window) else { return try missed(window) }
+        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in try desk.tree.swap(window, other) }
+        lastRequested[window.identity] = nil
+        return replan() + [.announce(Self.swapped)]
+    }
+
+    /// ⇧-drop of a docked window: it floats at its release frame, clamped inside the Desktop rect the undock leaves if it
+    /// crosses a tile; one undo step (TILE-02).
+    private mutating func commitUndock(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let area = display(for: key)?.visibleFrame, let frame = windows[window.identity]?.frame
+        else { return try missed(window) }
+        let gap = gap, mins = minimums
+        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in
+            try desk.tree.remove(window)
+            try desk.desktop.add(window, frame: frame)
+            if let clamped = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).frames[window] {
+                try desk.desktop.setFrame(clamped, for: window)
+            }
+        }
         lastRequested[window.identity] = nil
         return replan()
     }
@@ -875,9 +956,23 @@ public struct Arranger: Sendable {
         case .desk(let desk):
             // A desk that cannot be planned has no drop targets; replan reports the same fault.
             plan = display(for: desk).flatMap { try? Planner.plan(desk: world[desk] ?? Desk(), area: $0.visibleFrame, gap: gap, mins: minimums) }
+        case .undock:
+            plan = undockPlan()
         }
         dragPlans[key] = plan
         return plan
+    }
+
+    private func undockPlan() -> FramePlan? {
+        guard let session = drag, let key = deskKey(of: session.window), var desk = world[key], let area = display(for: key)?.visibleFrame
+        else { return nil }
+        do throws(LayoutError) {
+            try desk.tree.remove(session.window)
+            try desk.desktop.add(session.window, frame: session.startFrame)
+            return try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
+        } catch {
+            return nil
+        }
     }
 
     /// `frame` overlaps a docked tile of `plan` other than `window`'s own.
