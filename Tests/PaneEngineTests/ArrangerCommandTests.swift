@@ -70,14 +70,6 @@ private func columns(_ desk: inout Desk, _ ids: inout IDSource) throws(LayoutErr
     try desk.tree.insert(c, at: .bottom, of: try leaf(desk, b), ids: &ids)
 }
 
-private func setFrames(_ effects: [ArrangerEffect]) -> [WindowRef: Rect] {
-    var frames: [WindowRef: Rect] = [:]
-    for case .perform(let commands) in effects {
-        for case .setFrame(let window, let rect) in commands { frames[window] = rect }
-    }
-    return frames
-}
-
 private func plan(_ arranger: Arranger, mins: [WindowRef: Size] = [:]) throws -> FramePlan {
     try Planner.plan(desk: try #require(arranger.world[key]), area: visible, gap: gap, mins: mins)
 }
@@ -86,7 +78,7 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
 
 /// TILE-13, TILE-14, D-09, D-11: ⌃⌥⌘⇧ arrows move a docked window into the neighbouring tile, or snap a floating one
 /// to that half of the Desktop tile.
-@Suite struct ArrangerMoveTests {
+@Suite struct ArrangerCommandTests {
     /// Next to a sibling on the move axis the near edge is the window's own slot, so it goes past the neighbour:
     /// the window takes the neighbour's place in the row (03-12 deviation; the near-edge insert changes nothing).
     @Test func movingLeftPastASiblingTakesItsPlaceInOneUndoStep() throws {

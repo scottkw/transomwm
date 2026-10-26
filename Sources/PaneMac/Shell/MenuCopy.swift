@@ -32,13 +32,42 @@ nonisolated public enum MenuCopy {
         case .float: "Float Window"
         case .undo: "Undo Layout Change"
         case .toggleDesktop: desktopToggle(hidden: false)
-        case .focus(.left): "Left"
-        case .focus(.right): "Right"
-        case .focus(.top): "Up"
-        case .focus(.bottom): "Down"
+        case .focus(let edge), .moveOrSnap(let edge): direction(edge)
         case .finderSplit: "Split with New Finder Window"
         case .togglePause: pauseToggle(paused: false)
         case .toggleExcludeFrontmost: dontArrangeFallback
+        }
+    }
+
+    public static let moveMenu = "Move Window"
+    public static let snapMenu = "Snap Floating Window"
+
+    /// A Focus or Move Window item.
+    public static func direction(_ edge: Edge) -> String {
+        switch edge {
+        case .left: "Left"
+        case .right: "Right"
+        case .top: "Up"
+        case .bottom: "Down"
+        }
+    }
+
+    /// A Snap Floating Window item.
+    public static func snapTitle(_ target: SnapTarget) -> String {
+        switch target {
+        case .leftHalf: "Left Half"
+        case .rightHalf: "Right Half"
+        case .topHalf: "Top Half"
+        case .bottomHalf: "Bottom Half"
+        case .leftThird: "Left Third"
+        case .centerThird: "Center Third"
+        case .rightThird: "Right Third"
+        case .topLeft: "Top Left Quarter"
+        case .topRight: "Top Right Quarter"
+        case .bottomLeft: "Bottom Left Quarter"
+        case .bottomRight: "Bottom Right Quarter"
+        case .maximize: "Maximize"
+        case .center: "Center"
         }
     }
 

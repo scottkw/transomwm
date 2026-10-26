@@ -15,6 +15,9 @@ public enum Command: Hashable, Sendable {
     /// Don't Arrange the frontmost app (TILE-18, D-29). The shell handles it with its exclusion list; the window
     /// system's `windowChanged` events then tell the Arranger.
     case toggleExcludeFrontmost
+    /// Move a docked window into the tile across that edge, or snap a floating one to that half of the Desktop tile
+    /// (D-09, D-11, TILE-13, TILE-14).
+    case moveOrSnap(Edge)
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and

@@ -71,8 +71,9 @@ public struct Arranger: Sendable {
     /// How long ⌃⌥⌘N waits for Finder's new window (D-14).
     public static let finderWait: Duration = .seconds(2)
 
-    public private(set) var world = World()
-    public private(set) var history = UndoHistory()
+    // internal(set): the command handlers in Arranger+Commands.swift edit them.
+    public internal(set) var world = World()
+    public internal(set) var history = UndoHistory()
     /// The latest info per tracked window, docked or not.
     public private(set) var windows: [WindowIdentity: WindowInfo] = [:]
     public private(set) var displays: [DisplayInfo] = []
@@ -166,9 +167,10 @@ public struct Arranger: Sendable {
                 case (.toggleDesktop, _): return try toggleDesktop(focused)
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
                 case (.finderSplit, _): return try finderSplit(focused, now: now)
+                case (.moveOrSnap(let edge), let window?): return try moveOrSnap(window, toward: edge)
                 case (.togglePause, _): return togglePause()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
-                case (.dock, nil), (.float, nil), (.focus, nil): return [.beep]
+                case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil): return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -288,6 +290,10 @@ public struct Arranger: Sendable {
             return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
         case .focus:
             return trackable && focused.flatMap(deskKey(of:)) != nil
+        case .moveOrSnap:
+            // Docked or floating alike; the menu shows the pair's matching item (`isFloating`).
+            guard trackable, let focused, let key = deskKey(of: focused) else { return false }
+            return world[key]?.state(of: focused) == .present
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
         case .togglePause, .toggleExcludeFrontmost:
@@ -304,8 +310,13 @@ public struct Arranger: Sendable {
         targetKey(focused).flatMap { world[$0]?.tree.isDesktopHidden } == true
     }
 
+    /// Whether `window` floats on a desk's Desktop layer: which of Move Window or Snap Floating Window the menu enables.
+    public func isFloating(_ window: WindowRef?) -> Bool {
+        window.map { window in world.desks.values.contains { $0.desktop.contains(window) } } ?? false
+    }
+
     /// The focused window's desk or, with none focused (or one on no desk), the main display's visible desk.
-    private func targetKey(_ focused: WindowRef?) -> DeskKey? {
+    func targetKey(_ focused: WindowRef?) -> DeskKey? {
         focused.flatMap(deskKey(of:)) ?? displays.first.map(Self.key)
     }
 
@@ -590,12 +601,8 @@ public struct Arranger: Sendable {
         let leaf = desk.tree.leaf(containing: window)
         guard let rect = leaf.flatMap({ resolution.nodeRects[$0] }) ?? desk.desktop.frame(of: window) else { return [.beep] }
         let floating = desk.desktop.windows.filter { $0.state == .present }.map(\.window)
-        let recency = focusOrder.compactMap { id -> NodeID? in
-            if floating.contains(where: { $0.identity == id }) { return .desktop }
-            return desk.tree.windows.first { $0.identity == id }.flatMap(desk.tree.leaf(containing:))
-        }
         guard let id = Neighbours.neighbour(
-            of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: resolution, gap: gap, recency: recency)
+            of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: resolution, gap: gap, recency: recency(on: desk))
         else { return [.beep] }
         let target: WindowRef?
         switch desk.tree.node(id) {
@@ -607,6 +614,14 @@ public struct Arranger: Sendable {
         case .split?, nil: target = nil
         }
         return target.map { [.perform([.focus($0)])] } ?? [.beep]
+    }
+
+    /// The desk's leaves, the most recently focused first: the Desktop tile stands for its present floating windows.
+    func recency(on desk: Desk) -> [NodeID] {
+        focusOrder.compactMap { id -> NodeID? in
+            if desk.desktop.windows.contains(where: { $0.state == .present && $0.window.identity == id }) { return .desktop }
+            return desk.tree.windows.first { $0.identity == id }.flatMap(desk.tree.leaf(containing:))
+        }
     }
 
     /// Waits for a new Finder window to split the current tile along its longer side: width >= height splits to the
@@ -997,7 +1012,7 @@ public struct Arranger: Sendable {
     /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked
     /// windows left without room float first, and are named in one notice (D-26). A hidden Desktop's floating windows
     /// are parked once each, first in the perform, and only after an immediate save holding their home frames (D-16).
-    private mutating func replan() -> [ArrangerEffect] {
+    mutating func replan() -> [ArrangerEffect] {
         guard !sessionPaused, pauseReasons.isEmpty else { return [] }
         var parks: [WindowCommand] = []
         var parkedNow: Set<WindowIdentity> = []
@@ -1096,12 +1111,12 @@ public struct Arranger: Sendable {
     }
 
     /// Excluded windows have none: they never dock, and the Desktop tile is not sized for them.
-    private var minimums: [WindowRef: Size] {
+    var minimums: [WindowRef: Size] {
         Dictionary(
             windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }, uniquingKeysWith: { $1 })
     }
 
-    private func display(for key: DeskKey) -> DisplayInfo? {
+    func display(for key: DeskKey) -> DisplayInfo? {
         displays.first { Self.key($0) == key }
     }
 

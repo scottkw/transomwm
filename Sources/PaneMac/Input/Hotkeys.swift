@@ -15,6 +15,10 @@ extension KeyboardShortcuts.Name {
     static let finderSplit = Self("finderSplit", initial: .init(.n, modifiers: [.control, .option, .command]))
     static let togglePause = Self("togglePause", initial: .init(.p, modifiers: [.control, .option, .command]))
     static let toggleExcludeFrontmost = Self("toggleExcludeFrontmost", initial: .init(.e, modifiers: [.control, .option, .command]))
+    static let moveLeft = Self("moveLeft", initial: .init(.leftArrow, modifiers: [.control, .option, .command, .shift]))
+    static let moveRight = Self("moveRight", initial: .init(.rightArrow, modifiers: [.control, .option, .command, .shift]))
+    static let moveUp = Self("moveUp", initial: .init(.upArrow, modifiers: [.control, .option, .command, .shift]))
+    static let moveDown = Self("moveDown", initial: .init(.downArrow, modifiers: [.control, .option, .command, .shift]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -31,6 +35,10 @@ enum Hotkeys {
         (.finderSplit, .finderSplit),
         (.togglePause, .togglePause),
         (.toggleExcludeFrontmost, .toggleExcludeFrontmost),
+        (.moveLeft, .moveOrSnap(.left)),
+        (.moveRight, .moveOrSnap(.right)),
+        (.moveUp, .moveOrSnap(.top)),
+        (.moveDown, .moveOrSnap(.bottom)),
     ]
 
     /// Installs a key-down handler per entry. Call once.

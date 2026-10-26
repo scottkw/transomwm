@@ -102,12 +102,14 @@ import os
     /// Items 6–18: the Arrange section, enabled by the one availability rule.
     private func addArrangeItems(to menu: NSMenu) {
         let context = arrange.commandContext()
-        commands.update { arrange.arranger.availability($0, context: context) }
+        commands.update(focusedFloats: arrange.arranger.isFloating(context.focused)) { arrange.arranger.availability($0, context: context) }
         commands.item(for: .toggleDesktop).title = MenuCopy.desktopToggle(hidden: arrange.arranger.isDesktopHidden(focused: context.focused))
         menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
         for command in [Command.dock, .float, .undo] { menu.addItem(commands.item(for: command)) }
         menu.addItem(commands.focusMenu)
+        menu.addItem(commands.moveMenu)
         menu.addItem(commands.splitMenu)
+        menu.addItem(commands.snapMenu)
         menu.addItem(.separator())
         menu.addItem(commands.item(for: .toggleDesktop))
         menu.addItem(gapsMenuItem())

@@ -1,6 +1,7 @@
 import AppKit
 import KeyboardShortcuts
 import PaneEngine
+import PaneModel
 
 /// The status menu's command items (TILE-09, D-09). Each is created once and given its hotkey once, so
 /// KeyboardShortcuts' `setShortcut` observers never pile up across menu opens (RESEARCH Pattern 9); the menu
@@ -10,13 +11,20 @@ import PaneEngine
     /// Every command with a menu item, in no particular order: the status menu places them.
     static let commands: [Command] = [
         .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
-        .togglePause, .toggleExcludeFrontmost,
+        .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
     ]
 
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
     let splitMenu = NSMenuItem(title: "Split", action: nil, keyEquivalent: "")
+    let moveMenu = NSMenuItem(title: MenuCopy.moveMenu, action: nil, keyEquivalent: "")
+    let snapMenu = NSMenuItem(title: MenuCopy.snapMenu, action: nil, keyEquivalent: "")
     private let dispatch: (Command) -> Void
     private var items: [Command: NSMenuItem] = [:]
+    /// Snap Floating Window's halves: the one deliberate duplicate (UI-SPEC). Each runs its Move Window item's command
+    /// with the same shortcut; `update` enables only the one that matches the focused window.
+    private var halfItems: [Edge: NSMenuItem] = [:]
+    private static let edges: [Edge] = [.left, .right, .top, .bottom]
+    private static let halves: [Edge: SnapTarget] = [.left: .leftHalf, .right: .rightHalf, .top: .topHalf, .bottom: .bottomHalf]
 
     init(dispatch: @escaping (Command) -> Void) {
         self.dispatch = dispatch
@@ -28,8 +36,25 @@ import PaneEngine
             if let name = Hotkeys.entries.first(where: { $0.command == command })?.name { item.setShortcut(for: name) }
             items[command] = item
         }
+        for edge in Self.edges {
+            guard let target = Self.halves[edge], let tag = Self.commands.firstIndex(of: .moveOrSnap(edge)) else { continue }
+            let item = NSMenuItem(title: MenuCopy.snapTitle(target), action: #selector(run), keyEquivalent: "")
+            item.target = self
+            item.tag = tag
+            if let name = Hotkeys.entries.first(where: { $0.command == .moveOrSnap(edge) })?.name { item.setShortcut(for: name) }
+            halfItems[edge] = item
+        }
         focusMenu.submenu = submenu("Focus", [.focus(.left), .focus(.right), .focus(.top), .focus(.bottom)])
         splitMenu.submenu = submenu("Split", [.finderSplit])
+        moveMenu.submenu = submenu(MenuCopy.moveMenu, Self.edges.map { .moveOrSnap($0) })
+        let snap = NSMenu(title: MenuCopy.snapMenu)
+        for edge in Self.edges { snap.addItem(halfItem(edge)) }
+        snapMenu.submenu = snap
+    }
+
+    func halfItem(_ edge: Edge) -> NSMenuItem {
+        guard let item = halfItems[edge] else { preconditionFailure("no Snap Floating Window half for \(edge)") }
+        return item
     }
 
     func item(for command: Command) -> NSMenuItem {
@@ -37,9 +62,15 @@ import PaneEngine
         return item
     }
 
-    /// Greys each item the availability rule refuses; titles stay as they are (UI-SPEC disabled-state rules).
-    func update(availability: (Command) -> Bool) {
+    /// Greys each item the availability rule refuses; titles stay as they are (UI-SPEC disabled-state rules). Of each
+    /// Move Window item and its Snap Floating Window half, only the one for a floating (or docked) window is enabled.
+    func update(focusedFloats: Bool = false, availability: (Command) -> Bool) {
         for (command, item) in items { item.isEnabled = availability(command) }
+        for (edge, half) in halfItems {
+            let available = availability(.moveOrSnap(edge))
+            half.isEnabled = available && focusedFloats
+            items[.moveOrSnap(edge)]?.isEnabled = available && !focusedFloats
+        }
     }
 
     /// NSMenu re-validates on open and on key equivalents; the state `update` set is the answer.
