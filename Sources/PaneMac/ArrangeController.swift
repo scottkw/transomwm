@@ -72,6 +72,8 @@ import os
                 logger.info("\(message, privacy: .public)")
             case .notice(let notice):
                 present(notices.post(notice, at: .now))
+            case .wake:
+                break
             }
         }
     }

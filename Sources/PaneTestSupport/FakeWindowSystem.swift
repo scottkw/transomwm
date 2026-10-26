@@ -126,6 +126,13 @@ public actor FakeWindowSystem: WindowSystem {
         windows[id] = window
     }
 
+    /// The user or the app moved or resized window `id`: its frame changes and a refresh of its app reports
+    /// `windowMoved`/`windowResized`, with no `frameApplied`, as a move Pane did not make arrives live.
+    public func userMove(_ id: UInt32, to frame: Rect) {
+        update(id) { $0.frame = frame }
+        if let pid = windows[id]?.pid { refresh(pid: pid) }
+    }
+
     /// Native fullscreen on or off (WIN-07): sets only `snapshot.fullScreen`, like `update`; the next refresh reports it.
     public func setFullscreen(_ id: UInt32, _ on: Bool) {
         update(id) { $0.snapshot.fullScreen = on }

@@ -6,6 +6,8 @@ public enum ArrangerInput: Sendable {
     case event(WindowEvent)
     case command(Command, focused: WindowRef?)
     case requeried(RevivedWindows, [(WindowRef, WindowState)])
+    /// The instant a `wake` asked for has come.
+    case tick
 }
 
 /// What the shell runs, in order. `fault` names window identities only (never titles); the shell logs it.
@@ -19,6 +21,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case info(String)
     /// A toast for the user (the shell queues it).
     case notice(Notice)
+    /// Feed `.tick` at this instant. A newer wake replaces an older one.
+    case wake(at: ContinuousClock.Instant)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -85,6 +89,8 @@ public struct Arranger: Sendable {
                 return [.fault("could not apply re-queried states on \(revived.key): \(error)")] + replan()
             }
             return replan()
+        case .tick:
+            return []
         }
     }
 

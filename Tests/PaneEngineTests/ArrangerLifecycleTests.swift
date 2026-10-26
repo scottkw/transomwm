@@ -45,6 +45,8 @@ struct Harness {
     let fake = FakeWindowSystem()
     let inbox: EventInbox
     var arranger = Arranger()
+    /// The instant every input is fed at; tests of the once-per-second correction move it.
+    var now = ContinuousClock.now
 
     init() {
         inbox = EventInbox(fake.events)
@@ -65,7 +67,7 @@ struct Harness {
     /// Feeds one input, runs its `.perform` effects on the fake, then feeds the events those writes caused.
     @discardableResult
     mutating func send(_ input: ArrangerInput) async -> [ArrangerEffect] {
-        let effects = arranger.handle(input, now: .now)
+        let effects = arranger.handle(input, now: now)
         await run(effects)
         await settle()
         return effects
@@ -76,7 +78,7 @@ struct Harness {
         for _ in 0..<5 {
             let events = await inbox.take()
             if events.isEmpty { return }
-            for event in events { await run(arranger.handle(.event(event), now: .now)) }
+            for event in events { await run(arranger.handle(.event(event), now: now)) }
         }
     }
 
@@ -85,7 +87,7 @@ struct Harness {
         await fake.refresh(pid: pid)
         var effects: [ArrangerEffect] = []
         for event in await inbox.take() {
-            let next = arranger.handle(.event(event), now: .now)
+            let next = arranger.handle(.event(event), now: now)
             effects += next
             await run(next)
         }

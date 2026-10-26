@@ -112,3 +112,113 @@ extension ArrangerReflowTests {
         #expect(floated.width == 783, "the floated window was written below its minimum")
     }
 }
+
+private func setFrameCount(_ effects: [ArrangerEffect]) -> Int {
+    effects.reduce(0) { count, effect in
+        guard case .perform(let commands) = effect else { return count }
+        return count + commands.filter { if case .setFrame = $0 { true } else { false } }.count
+    }
+}
+
+private func wakes(_ effects: [ArrangerEffect]) -> [ContinuousClock.Instant] {
+    effects.compactMap { if case .wake(let at) = $0 { at } else { nil } }
+}
+
+private func moved(_ rect: Rect, by dx: Double, _ dy: Double) -> Rect {
+    Rect(x: rect.x + dx, y: rect.y + dy, width: rect.width, height: rect.height)
+}
+
+/// The echo rule (03-01 discretion) and TILE-07: Pane's own writes are not moves; a docked window its app moved
+/// goes back to its tile at most once per second; a floating window stays where it was left unless that is on a tile.
+extension ArrangerReflowTests {
+    @Test func panesOwnWriteComingBackWithin2PointsIsNotAMove() async throws {
+        var harness = await twoDocked()
+        let tile = try #require(await harness.frame(a))
+        let performed = await harness.fake.performed.count
+        let effects = await harness.send(.event(.windowMoved(a, moved(tile, by: 1.5, -1))))
+        #expect(effects.isEmpty)
+        #expect(await harness.fake.performed.count == performed)
+    }
+
+    @Test func aDockedWindowItsAppMovedIsPutBackAtMostOncePerSecond() async throws {
+        var harness = await twoDocked()
+        let tile = try #require(await harness.frame(a))
+        let t0 = harness.now
+        await harness.fake.userMove(1, to: moved(tile, by: 40, 30))
+        let first = await harness.refresh()
+        #expect(setFrameCount(first) == 1)
+        #expect(setFrames(first)[a] == tile)
+        #expect(await harness.frame(a) == tile)
+
+        harness.now = t0 + .milliseconds(300)
+        await harness.fake.userMove(1, to: moved(tile, by: 60, 10))
+        let second = await harness.refresh()
+        #expect(setFrameCount(second) == 0, "corrected twice within a second")
+        #expect(wakes(second) == [t0 + .seconds(1)])
+
+        harness.now = t0 + .seconds(1)
+        let tick = await harness.send(.tick)
+        #expect(setFrameCount(tick) == 1)
+        #expect(setFrames(tick)[a] == tile)
+        #expect(await harness.frame(a) == tile)
+    }
+
+    @Test func aFloatingWindowMovedInsideTheDesktopIsRecordedWhereItWasLeft() async throws {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: a))
+        let depth = harness.arranger.history.depth(for: key)
+        let target = Rect(x: 900, y: 300, width: 150, height: 120)
+        await harness.fake.userMove(2, to: target)
+        let effects = await harness.refresh()
+        #expect(harness.arranger.world[key]?.desktop.frame(of: b) == target)
+        #expect(harness.arranger.history.depth(for: key) == depth)
+        #expect(setFrameCount(effects) == 0)
+    }
+
+    @Test func aFloatingWindowMovedOntoADockedTileIsClampedIntoTheDesktop() async throws {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: a))
+        let depth = harness.arranger.history.depth(for: key)
+        let target = Rect(x: 600, y: 300, width: 150, height: 120)
+        await harness.fake.userMove(2, to: target)
+        let effects = await harness.refresh()
+        let desk = try #require(harness.arranger.world[key])
+        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
+        let clamped = Planner.clamp(target, into: desktop)
+        #expect(setFrameCount(effects) == 1)
+        #expect(setFrames(effects)[b] == clamped)
+        #expect(desk.desktop.frame(of: b) == clamped)
+        #expect(harness.arranger.history.depth(for: key) == depth)
+    }
+
+    @Test func aRefusedWriteReadBackIsAnEchoNotAMoveToUndo() async throws {
+        var harness = await Harness.started()
+        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 900, height: 100) }
+        let effects = await harness.send(.command(.dock, focused: a))
+        #expect(setFrameCount(effects) == 1)
+        let actual = try #require(await harness.frame(a))
+        #expect(actual.width == 900)
+        // The frameApplied and windowResized the write caused were fed by `send`: nothing was written again.
+        #expect(await harness.fake.performed.count == 1)
+        let again = await harness.send(.event(.windowResized(a, actual)))
+        #expect(again.isEmpty)
+        #expect(await harness.fake.performed.count == 1)
+    }
+
+    @Test func aNarrowerDisplayThatLeavesADockedWindowNoRoomFloatsItWithOneNotice() async throws {
+        var harness = await twoDocked()
+        var inventory = await harness.fake.inventory()
+        for i in inventory.windows.indices {
+            inventory.windows[i].learnedMinimum = Size(width: inventory.windows[i].window == a ? 700 : 400, height: 100)
+        }
+        #expect(notices(await harness.send(.inventory(inventory))).isEmpty)
+        let narrow = Rect(x: 0, y: 25, width: 1100, height: 875)
+        inventory.displays = [DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1100, height: 900), visibleFrame: narrow, currentSpaceID: nil)]
+        let effects = await harness.send(.inventory(inventory))
+        let lost = notices(effects)
+        #expect(lost.count == 1)
+        guard case .lostRoom(let windows)? = lost.first else { return }
+        #expect(windows.contains(a))
+        #expect(harness.arranger.world[key]?.desktop.contains(a) == true)
+    }
+}
