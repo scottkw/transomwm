@@ -301,3 +301,20 @@ The same happens to any floating window left with a home frame whenever `replan`
 _Reviewed: 2026-10-26T14:42:37Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+## Fix log
+
+**Fixed:** 2026-10-26 (gsd-code-fixer, iteration 1)
+**Scope:** CR-01, CR-02, WR-01, WR-02, WR-04, WR-05, WR-06. WR-03 is deferred until a live Safari drag log shows which condition fails. IN-01 to IN-09 are out of scope.
+**Verification:** headless only, run in the isolated review-fix worktree: `swift test --filter "PaneModelTests|PaneEngineTests|PaneMacTests"` gave 190 + 188 + 448 tests passing, and `scripts/check-no-appkit.sh` passed. No integration or live tests were run.
+
+| ID | Status | Commit | Fix | Regression tests |
+|----|--------|--------|-----|------------------|
+| CR-01 | fixed: requires human verification | adb93d2 | `Arranger.undo` re-applies `release` and `admit` to every tracked window after `World.undo`. | `ArrangerLifecycleTests.undoKeepsAWindowAdmittedSinceTheUndoneEdit`, `ArrangerExclusionTests.undoNeverDocksAWindowExcludedSinceTheSnapshot` |
+| CR-02 | fixed | d8a66cd | `DisplayInfo.parkedFrame(size:among:)` uses the bottom-right corner, else the bottom-left, whichever overlaps no other display. If both overlap, it falls back to the bottom-right corner of all displays together. `AXWindowSystem` and `FakeWindowSystem` pass their displays. The quit path still trusts the home frame (`Recovery.swift` note). | `RecoveryTests.theParkCornerAvoidsANeighbouringDisplay`, `RecoveryTests.withBothBottomCornersTakenTheParkGoesPastEveryDisplay`, `ArrangerDesktopTests.hidingNeverParksAWindowOntoTheDisplayBeside` |
+| WR-01 | fixed: requires human verification | 5e614e2 | The Arranger keeps each display's last known Space when an inventory or a `spaceChanged` reports nil. Desks stay planned and no phantom `(uuid, nil)` desk appears. Limit: once the capability is off for the session, Space switches can no longer be seen, so the last shown Space's desk stays the planned one. | `ArrangerSpacesTests.aSpaceLookupLostMidSessionKeepsTheLastShownSpacesDesk` |
+| WR-02 | fixed | e008eb0 | `.launched(trusted: false)` starts polling, and `.pollTick(trusted: true)` in `.notTrusted` goes to probing. | `PermissionReducerTests.untrustedLaunchStaysNotTrustedAndPolls` (was `…WithNoEffects`), `PermissionReducerTests.aGrantMadeWithoutTheSettingsButtonIsNoticedByThePoll` |
+| WR-03 | skipped | — | Needs a live Safari drag log first (user decision). | — |
+| WR-04 | fixed | 641b02b | Re-attach failures are now isolated per window: such a window keeps its saved state and frame. A whole re-attach failure keeps the saved layout as `snapshot` for the rest of the session. | `ArrangerRestoreTests.aWindowWhoseFrameCannotBeRecordedDoesNotLoseTheSavedLayout` |
+| WR-05 | fixed: requires human verification | 04ba317 | New `LaunchMode.unreadable`, used when `store.loadError != nil`. The first complete inventory runs the restore path with an empty layout, so stranded windows are rescued, with no notice. It counts as a recovery launch for crash-loop accounting. | `RecoveryTests.anUnreadableLayoutIsAnUnreadableLaunch`, `ArrangerRestoreTests.anUnreadableLayoutLaunchRescuesStrandedWindowsWithNoNotice` |
+| WR-06 | fixed | 82f767c | `Arranger.handle` spends the home frames on every desk whose Desktop is shown after each input. The copy inside `replan` is removed. | `ArrangerRestoreTests.restoreAllWhilePausedSpendsTheHomeFramesSoAQuitLeavesMovedWindowsAlone` |
