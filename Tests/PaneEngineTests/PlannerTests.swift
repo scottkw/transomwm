@@ -93,3 +93,66 @@ private func desk(floating: [(WindowRef, Rect)] = []) throws -> Desk {
         #expect(Planner.dockTarget(at: below, desk: desk, area: area, resolution: plan.resolution) == .tile(.desktop, .edge(.bottom)))
     }
 }
+
+/// G-03-6: on a 1024 pt display, H[Desktop, Notes] with Notes' 642 pt minimum, plus the given floaters.
+private let small = Rect(x: 0, y: 25, width: 1024, height: 688)
+private let notes = ref(10)
+
+private func notesDesk(floating: [(WindowRef, Rect)]) throws -> Desk {
+    var desk = Desk()
+    var ids = IDSource()
+    try desk.tree.insert(notes, at: .right, of: .desktop, ids: &ids)
+    for (window, frame) in floating { try desk.desktop.add(window, frame: frame) }
+    return desk
+}
+
+/// G-03-6: a floater whose minimum would push docked windows out does not size the Desktop tile.
+extension PlannerTests {
+    @Test func aFloaterTooBigForTheRoomDoesNotPushTheDockedWindowOut() throws {
+        let big = ref(11)
+        let frame = Rect(x: 100, y: 40, width: 800, height: 600)
+        let desk = try notesDesk(floating: [(big, frame)])
+        let mins = [notes: Size(width: 642, height: 100), big: Size(width: 768, height: 692)]
+        let plan = try Planner.plan(desk: desk, area: small, gap: 12, mins: mins)
+        #expect(plan.unfit.isEmpty)
+        let tile = try #require(plan.frames[notes])
+        #expect(tile.width >= 642)
+        let desktop = try #require(plan.desktopRect)
+        let alone = try resolve(desk.tree, in: small, mins: [notes: Size(width: 642, height: 100)], gap: 12)
+        #expect(desktop == alone.desktopRect)
+        #expect(tile == alone.windowRects[notes])
+        #expect(plan.frames[big] == Planner.clamp(frame, into: desktop))
+    }
+
+    @Test func aFloaterThatFitsStillWidensTheDesktop() throws {
+        let safari = ref(12)
+        let desk = try notesDesk(floating: [(safari, Rect(x: 20, y: 40, width: 300, height: 300))])
+        let mins = [notes: Size(width: 300, height: 100), safari: Size(width: 574, height: 100)]
+        let plan = try Planner.plan(desk: desk, area: small, gap: 12, mins: mins)
+        #expect(plan.unfit.isEmpty)
+        #expect(try #require(plan.desktopRect).width >= 574)
+    }
+
+    @Test func theLargestFloaterIsDroppedAndASmallerOneStillSizesTheDesktop() throws {
+        let safari = ref(12), big = ref(11)
+        let desk = try notesDesk(floating: [
+            (safari, Rect(x: 20, y: 40, width: 300, height: 300)), (big, Rect(x: 40, y: 60, width: 300, height: 300)),
+        ])
+        let mins = [notes: Size(width: 300, height: 100), safari: Size(width: 574, height: 100), big: Size(width: 768, height: 100)]
+        let plan = try Planner.plan(desk: desk, area: small, gap: 12, mins: mins)
+        #expect(plan.unfit.isEmpty)
+        let desktop = try #require(plan.desktopRect)
+        #expect(desktop.width >= 574)
+        #expect(desktop.width < 768)
+    }
+
+    @Test func aDockedWindowTooBigOnItsOwnIsStillUnfit() throws {
+        let safari = ref(12)
+        let desk = try notesDesk(floating: [(safari, Rect(x: 20, y: 40, width: 300, height: 300))])
+        let mins = [notes: Size(width: 1100, height: 100), safari: Size(width: 574, height: 100)]
+        let plan = try Planner.plan(desk: desk, area: small, gap: 12, mins: mins)
+        #expect(plan.unfit == [notes])
+        // Dropping the floater would not make room, so it keeps sizing the Desktop tile.
+        #expect(try #require(plan.desktopRect).width >= 574)
+    }
+}

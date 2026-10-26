@@ -172,3 +172,26 @@ private func parks(_ effects: [ArrangerEffect]) -> [WindowCommand] {
         #expect(harness.arranger.homeFrames[x.identity] == nil)
     }
 }
+
+extension ArrangerDesktopTests {
+    /// G-03-6: f's 768 pt minimum cannot sit beside a's 800 pt one (1424 inner width), so f stops sizing the Desktop
+    /// tile instead of a floating off its tile.
+    @Test func aFloaterTooBigForTheRoomLeavesTheDockedWindowDocked() async throws {
+        var harness = await docked()
+        func learned(_ window: WindowRef, width: Double) throws -> WindowInfo {
+            var info = try #require(harness.arranger.windows[window.identity])
+            info.learnedMinimum = Size(width: width, height: 100)
+            return info
+        }
+        await harness.send(.event(.windowChanged(try learned(a, width: 800))))
+
+        let effects = await harness.send(.event(.windowChanged(try learned(f, width: 768))))
+
+        #expect(!effects.contains { if case .notice(.lostRoom) = $0 { true } else { false } })
+        let desk = try #require(harness.arranger.world[key])
+        #expect(desk.tree.state(of: a) == .present)
+        #expect(desk.desktop.contains(f))
+        let again = await harness.send(.event(.windowChanged(try learned(f, width: 768))))
+        #expect(setFrames(again).isEmpty)
+    }
+}
