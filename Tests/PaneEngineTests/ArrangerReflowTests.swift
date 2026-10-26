@@ -70,11 +70,11 @@ private func twoDocked() async -> Harness {
         let docked = try #require(harness.arranger.world[key]).tree
         #expect(docked.state(of: a) == .present && docked.state(of: b) == .present && docked.state(of: c) == .present)
 
-        // a (760) cannot share the row with c (700); floated, its minimum sizes the Desktop tile, and then c cannot
-        // share the row with that tile either. b (no minimum) keeps its tile.
+        // a and c (1430 each) are wider than the 1424 pt inner area, so neither fits even on its own. b (no minimum)
+        // keeps its tile. (A floater's minimum no longer pushes a docked window out, G-03-6.)
         var inventory = await harness.fake.inventory()
         for i in inventory.windows.indices {
-            let width: Double? = [1: 760, 3: 700][inventory.windows[i].window.windowID]
+            let width: Double? = [1: 1430, 3: 1430][inventory.windows[i].window.windowID]
             inventory.windows[i].learnedMinimum = width.map { Size(width: $0, height: 100) }
         }
         let effects = await harness.send(.inventory(inventory))

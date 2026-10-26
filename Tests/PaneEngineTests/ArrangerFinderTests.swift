@@ -147,13 +147,14 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     }
 
     @Test func aFinderWindowThatWouldLeaveAWindowWithoutRoomFloatsWithABeep() {
-        // Floating, n only widens the Desktop (a 200 + 800); docked beside a it needs 200 + 800 + 700 for f's Desktop.
+        // Docked beside a, n needs 200 + 1450 + a 1x1 Desktop + gaps > 1600, with or without f's 700 pt minimum.
+        // Floating, n's minimum is too big to size the Desktop beside a, so a keeps its tile (G-03-6).
         var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
         #expect(scene.isDocked(a), "precondition: a did not dock")
         scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)
         let depth = scene.arranger.history.depth(for: key)
 
-        let effects = scene.arrive(n, minimum: Size(width: 800, height: 100))
+        let effects = scene.arrive(n, minimum: Size(width: 1450, height: 100))
 
         #expect(effects.contains(.beep) && effects.contains(.announce("Not enough room to dock here")))
         #expect(scene.isFloating(n) && !scene.isDocked(n))

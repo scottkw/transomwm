@@ -14,13 +14,30 @@ public struct FramePlan: Equatable, Sendable {
 /// Pure layout of one desk: no state, no AppKit.
 public enum Planner {
     /// Lays `desk` out in `area` (the display's visibleFrame). The Desktop tile's minimum is the per-axis maximum
-    /// of its present floating windows' minimums, so they keep room to sit in it.
+    /// of its present floating windows' minimums, so they keep room to sit in it. Docked windows win over floaters
+    /// (G-03-6): if that leaves docked windows unfit that would fit beside a 1x1 Desktop, the floaters with the
+    /// largest minimum area are dropped from it one at a time until they do. A dropped floater is only clamped, and
+    /// may still overlap a tile if its app refuses to shrink (T-03-58).
     public static func plan(desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size]) throws(LayoutError) -> FramePlan {
         let floating = desk.desktop.windows.filter { $0.state == .present }
-        let floatingMins = floating.compactMap { mins[$0.window] }
-        let desktopMinimum = Size(
-            width: floatingMins.map(\.width).max() ?? 1, height: floatingMins.map(\.height).max() ?? 1)
-        let resolution = try resolve(desk.tree, in: area, mins: mins, gap: gap, desktopMinimum: desktopMinimum)
+        var sizing = floating.compactMap { window in mins[window.window].map { (window: window.window, min: $0) } }
+            .sorted { lhs, rhs in
+                let l = lhs.min.width * lhs.min.height, r = rhs.min.width * rhs.min.height
+                return l != r ? l > r : lhs.window.identity < rhs.window.identity
+            }
+        func resolved(_ sizing: [(window: WindowRef, min: Size)]) throws(LayoutError) -> Resolution {
+            let desktopMinimum = Size(width: sizing.map(\.min.width).max() ?? 1, height: sizing.map(\.min.height).max() ?? 1)
+            return try resolve(desk.tree, in: area, mins: mins, gap: gap, desktopMinimum: desktopMinimum)
+        }
+        var resolution = try resolved(sizing)
+        if !resolution.unfit.isEmpty {
+            let baselineUnfit = try resolved([]).unfit
+            // Ends: with no floater left, the resolution is the baseline.
+            while !resolution.unfit.isSubset(of: baselineUnfit) {
+                sizing.removeFirst()
+                resolution = try resolved(sizing)
+            }
+        }
         var frames = resolution.windowRects
         let parks = desk.tree.isDesktopHidden == true ? floating.map(\.window) : []
         if let desktop = resolution.desktopRect {

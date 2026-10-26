@@ -176,7 +176,9 @@ func info(_ id: UInt32, frame: Rect, kind: WindowKind = .dockable, excluded: Boo
 
     @Test func aDockWithoutRoomIsRefusedAndChangesNothing() {
         var arranger = Arranger()
-        let big = Size(width: 1000, height: 100)
+        // w1 is wider than the 1424 pt inner area, so it has no room even beside a 1x1 Desktop (a floater's minimum
+        // alone no longer refuses a dock, G-03-6).
+        let big = Size(width: 1500, height: 100)
         let inventory = WindowInventory(displays: [display], windows: [info(1, frame: frame1, minimum: big), info(2, frame: frame2, minimum: big)])
         _ = arranger.handle(.inventory(inventory), now: .now)
         let world = arranger.world, history = arranger.history
