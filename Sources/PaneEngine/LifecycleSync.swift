@@ -13,12 +13,14 @@ public struct RevivedWindows: Equatable, Sendable {
 }
 
 /// The one path from OS lifecycle facts into the layout model (D-10). Every change goes through
-/// `World.apply`, never `World.edit`, so no OS fact ever lands on the user's undo stack. No state of its own.
+/// `World.apply` or `World.rekey`, never `World.edit`, so no OS fact ever lands on the user's undo stack.
+/// No state of its own.
 public enum LifecycleSync {
     /// Applies a lifecycle event to `world`. Returns true when the event was applied: a state change for a
-    /// window some desk holds, or any close. A close always applies, even for a window no desk holds, so it is
-    /// purged from every undo snapshot. Every other event, and a state change for a window on no desk, returns
-    /// false and leaves `world` and `history` untouched. A throw from `World.apply` leaves both unchanged.
+    /// window some desk holds, any close, or any rekey. A close always applies, even for a window no desk holds, so
+    /// it is purged from every undo snapshot; a rekey likewise always re-points the snapshots (`World.rekey`).
+    /// Every other event, and a state change for a window on no desk, returns false and leaves `world` and
+    /// `history` untouched. A throw from `World.apply` or `World.rekey` leaves both unchanged.
     public static func handle(_ event: WindowEvent, world: inout World, history: inout UndoHistory) throws(LayoutError) -> Bool {
         switch event {
         case .windowDestroyed(let window), .windowStateChanged(let window, .closed):
@@ -31,8 +33,11 @@ public enum LifecycleSync {
             }
             try world.apply(state, for: window, on: key, history: &history)
             return true
-        // windowRekeyed is not a lifecycle fact: Phase 3 re-points desk refs from `from` to `to.window`.
-        case .windowCreated, .windowMoved, .windowResized, .windowFocused, .windowChanged, .windowRekeyed, .frameApplied,
+        case .windowRekeyed(let from, let to):
+            // An ID correction is an OS fact too: World.rekey re-points the desks and every undo snapshot, no undo step.
+            try world.rekey(from: from, to: to.window, history: &history)
+            return true
+        case .windowCreated, .windowMoved, .windowResized, .windowFocused, .windowChanged, .frameApplied,
              .appResponsiveness, .sessionPaused, .appLaunched, .appTerminated, .displaysChanged, .spaceChanged:
             return false
         }

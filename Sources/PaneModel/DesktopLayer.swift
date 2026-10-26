@@ -43,6 +43,14 @@ public struct DesktopLayer: Codable, Equatable, Sendable {
         windows[index].state = state
     }
 
+    /// Re-points a floating window to the ID macOS corrected it to (02-16), keeping its frame, state and
+    /// place in the stacking order.
+    public mutating func rekey(from: WindowRef, to: WindowRef) throws(LayoutError) {
+        guard let index = index(of: from) else { throw .windowNotFound(from) }
+        guard !contains(to) else { throw .duplicateWindow(to) }
+        windows[index] = FloatingWindow(window: to, frame: windows[index].frame, state: windows[index].state)
+    }
+
     public func frame(of window: WindowRef) -> Rect? {
         index(of: window).map { windows[$0].frame }
     }

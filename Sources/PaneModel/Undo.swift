@@ -35,4 +35,18 @@ public struct UndoHistory: Equatable, Sendable {
             }
         }
     }
+
+    /// Re-points `from` to `to` in every snapshot of every desk (macOS corrected the window's ID). A snapshot
+    /// that already holds `to` drops `from` instead, as `forget` does, so no snapshot holds the window twice.
+    mutating func rekey(from: WindowRef, to: WindowRef) {
+        for (key, stack) in stacks {
+            stacks[key] = stack.map { snapshot in
+                guard snapshot.contains(from) else { return snapshot }
+                var desk = snapshot
+                // Cannot fail: the desk holds `from`, and is renamed only when it does not hold `to`.
+                if snapshot.contains(to) { try! desk.close(from) } else { try! desk.rekey(from: from, to: to) }
+                return desk
+            }
+        }
+    }
 }

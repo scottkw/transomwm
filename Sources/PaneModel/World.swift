@@ -54,6 +54,34 @@ public struct Desk: Codable, Equatable, Sendable {
     }
 }
 
+extension Desk {
+    /// Re-points a docked or floating window to its corrected ID. Internal: only `World.rekey` and
+    /// `UndoHistory.rekey` call it, so every rekey reaches the desks and the snapshots together.
+    mutating func rekey(from: WindowRef, to: WindowRef) throws(LayoutError) {
+        if tree.state(of: from) != nil {
+            try tree.rekey(from: from, to: to)
+        } else {
+            try desktop.rekey(from: from, to: to)
+        }
+    }
+}
+
+extension LayoutTree {
+    /// Replaces `from` with `to` in its panel or tab group under the same NodeID, keeping its state and the
+    /// tab selection. Kept here rather than in TreeEdits.swift: it is an OS fact, not a user edit.
+    mutating func rekey(from: WindowRef, to: WindowRef) throws(LayoutError) {
+        guard let leaf = leaf(containing: from), let state = states[from.identity] else { throw .windowNotFound(from) }
+        guard states[to.identity] == nil else { throw .duplicateWindow(to) }
+        switch nodes[leaf] {
+        case .panel?: nodes[leaf] = .panel(to)
+        case let .tabs(windows, selected)?: nodes[leaf] = .tabs(windows: windows.map { $0 == from ? to : $0 }, selected: selected)
+        case .split?, .desktop?, nil: throw .notALeaf(leaf) // leaf(containing:) only returns panels and tab groups
+        }
+        states[from.identity] = nil
+        states[to.identity] = state
+    }
+}
+
 /// All desks, keyed by display (and optionally Space), plus the ID source their node IDs come from.
 public struct World: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 1
@@ -135,6 +163,27 @@ public struct World: Codable, Equatable, Sendable {
         try candidate.validate()
         self = candidate
         if state == .closed { history.forget(window) }
+    }
+
+    /// An OS fact (02-16): macOS corrected `from`'s ID to `to`, and it is the same window. Re-points it on
+    /// whichever desk holds it (panel, tab or Desktop layer, keeping its state and frame) and in every undo
+    /// snapshot, so a later undo brings it back under its new ID (Pitfall 3). Pushes no undo step. A window no
+    /// desk holds is re-pointed in the snapshots only. If a desk already holds `to`, the tracker merged two
+    /// entries: `from` is closed instead, exactly as `apply(.closed, …)`, so no window is held twice. Any throw
+    /// leaves `self` and `history` unchanged.
+    public mutating func rekey(from: WindowRef, to: WindowRef, history: inout UndoHistory) throws(LayoutError) {
+        guard from != to else { return }
+        if desks.values.contains(where: { $0.contains(to) }) {
+            try apply(.closed, for: from, on: DeskKey(displayUUID: "", spaceID: nil), history: &history)
+            return
+        }
+        var candidate = self
+        if let holder = desks.first(where: { $0.value.contains(from) })?.key {
+            try candidate.desks[holder]?.rekey(from: from, to: to)
+        }
+        try candidate.validate()
+        self = candidate
+        history.rekey(from: from, to: to)
     }
 
     /// Restores the newest snapshot of `key`'s desk, keeping the current lifecycle state of every
