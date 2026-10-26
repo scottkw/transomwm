@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Combine
 import PaneEngine
 import PanePrivate
 import os
@@ -11,6 +12,8 @@ public enum PaneMacApp {
     private static var arrange: ArrangeController?
     private static var permission: PermissionController?
     private static var setupWindow: SetupWindowController?
+    /// Takes the event tap down the moment access leaves `.ready`, and brings it back with access (Pitfall 4).
+    private static var accessSubscription: AnyCancellable?
     private static var trackedWindows: TrackedWindowsWindowController?
     private static let freezeTest = FreezeTest()
     private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "hints")
@@ -68,7 +71,12 @@ public enum PaneMacApp {
         arrange = arrangeController
         permission = permissionController
         setupWindow = setupController
-        permissionController.onTrackingStarted = { await arrangeController.start() }
+        permissionController.onTrackingStarted = {
+            await arrangeController.start()
+            arrangeController.startTap()  // drags (TILE-01)
+        }
+        accessSubscription = permissionController.$state.map { $0.phase == .ready }.removeDuplicates().dropFirst()
+            .sink { ready in arrangeController.accessChanged(ready: ready) }
         Hotkeys.register(dispatch)
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()

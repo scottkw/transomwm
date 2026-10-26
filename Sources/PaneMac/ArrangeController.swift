@@ -43,7 +43,12 @@ import os
     private var tapReader: Task<Void, Never>?
     private let dragPoller = DragFramePoller()
     /// The drop preview panels, one per display; made when tracking starts.
-    private lazy var previews = PreviewPresenter()
+    private var previews: PreviewPresenter?
+    /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
+    private var tapAllowed = true
+    private var watchdog: Task<Void, Never>?
+    private var activationObserver: NSObjectProtocol?
+    private var loggedTapRefusal = false
 
     public init(system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8) {
         self.system = system
@@ -93,20 +98,23 @@ import os
                 self.onInventory?(inventory)
             }
         }
-        _ = previews  // the panels exist before the first drag (UI-SPEC: created at launch, never per drag)
-        startTap()
     }
 
     /// Whether the event tap is running: drags are detected only while it is (the Debug line).
     public var isTapRunning: Bool { tap.isRunning }
 
-    /// Starts the event tap and its single reader. False when macOS refuses the tap (no Accessibility access).
+    /// Starts the event tap and its single reader, and the watchdog. False when macOS refuses the tap (no Accessibility
+    /// access). PaneMacApp calls it once tracking has started; tests that only arrange never install a tap.
     @discardableResult
     public func startTap() -> Bool {
+        if previews == nil { previews = PreviewPresenter() }  // the panels exist before the first drag, never per drag
+        startWatchdog()
         guard tap.start() else {
-            logger.error("event tap refused; drags are not detected")
+            if !loggedTapRefusal { logger.error("event tap refused; drags are not detected") }
+            loggedTapRefusal = true
             return false
         }
+        loggedTapRefusal = false
         if tapReader == nil {
             tapReader = Task { [weak self, tap] in
                 for await event in tap.events {
@@ -122,10 +130,45 @@ import os
     public func stopTap() {
         tap.stop()
         dragPoller.stop()
+        previews?.show(nil, on: nil)
+    }
+
+    /// Every 2 s and whenever an app activates: the tap's watchdog, and a restart once access is back (Pitfall 4).
+    private func startWatchdog() {
+        guard watchdog == nil else { return }
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self else { return }
+                self.watchdogTick()
+            }
+        }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.watchdogTick() }
+        }
+    }
+
+    private func watchdogTick() {
+        guard tap.isRunning else {
+            if tapAllowed, isReady() { startTap() }
+            return
+        }
+        tap.watchdogTick()
+        guard !tap.isRunning else { return }
+        logger.error("event tap refused by macOS; taken down, drags are not detected")
+        loggedTapRefusal = true
+        dragPoller.stop()
+        previews?.show(nil, on: nil)
     }
 
     /// Accessibility access changed (PermissionController's phase entered or left `.ready`).
-    public func accessChanged(ready: Bool) {}
+    /// Losing access takes the tap down at once; hotkeys and the menu keep working, only drags stop.
+    public func accessChanged(ready: Bool) {
+        tapAllowed = ready
+        if ready { startTap() } else { stopTap() }
+    }
 
     /// Feeds one tap event to the Arranger. The press window is resolved on mouse-down only.
     private func handle(_ event: TapEvent) async {
@@ -261,9 +304,9 @@ import os
             case .pollDragFrame(let window):
                 pollDragFrame(window)
             case .preview(let state, let displayUUID):
-                previews.show(state, on: displayUUID)
+                previews?.show(state, on: displayUUID)
             case .flashBlocked(let rect, let displayUUID):
-                previews.flashBlocked(rect, on: displayUUID)
+                previews?.flashBlocked(rect, on: displayUUID)
             }
         }
     }

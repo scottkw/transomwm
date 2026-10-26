@@ -83,8 +83,18 @@ nonisolated final class InputTap: @unchecked Sendable {
         thread = nil
     }
 
-    /// The 2 s watchdog (RESEARCH Pattern 6).
-    func watchdogTick() {}
+    /// The 2 s watchdog (RESEARCH Pattern 6): re-enables a tap macOS disabled, and takes the tap down at once when a
+    /// trial tap is refused. An active tap left running after Accessibility is revoked can block clicks system-wide,
+    /// while `AXIsProcessTrusted()` may still say yes (Pitfall 4, T-03-30).
+    func watchdogTick() {
+        guard let port, CFMachPortIsValid(port) else { return }
+        guard let trial = Self.makePort(nil) else {
+            stop()
+            return
+        }
+        CFMachPortInvalidate(trial)
+        if !CGEvent.tapIsEnabled(tap: port) { CGEvent.tapEnable(tap: port, enable: true) }
+    }
 
     /// The only place a tap is created, for Pane's tap and for the watchdog's trial. A nil `box` gives a tap whose
     /// callback passes everything through.

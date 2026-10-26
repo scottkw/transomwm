@@ -28,8 +28,9 @@ import Testing
         defer { tap.stop() }
         #expect(tap.start())
         let port = try #require(tap.port)
+        // macOS answers this disable with tapDisabledByUserInput, which the callback may already have re-enabled;
+        // either way one tick must leave the tap enabled.
         CGEvent.tapEnable(tap: port, enable: false)
-        #expect(!CGEvent.tapIsEnabled(tap: port))
         tap.watchdogTick()
         #expect(CGEvent.tapIsEnabled(tap: port), "the watchdog left the tap disabled")
         #expect(tap.isRunning)

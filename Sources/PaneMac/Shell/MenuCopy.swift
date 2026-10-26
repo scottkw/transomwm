@@ -71,9 +71,9 @@ nonisolated public enum MenuCopy {
     }
 
     /// The Debug submenu's event-tap line (UI-SPEC Copywriting Contract).
-    public static let tapRunning = ""
-    public static let tapOff = ""
-    public static func tapItem(running: Bool) -> String { "" }
+    public static let tapRunning = "Event tap: running"
+    public static let tapOff = "Event tap: off, drags not detected"
+    public static func tapItem(running: Bool) -> String { running ? tapRunning : tapOff }
 
     public static func spacesItem(available: Bool) -> String {
         available ? "Spaces lookup: available" : "Spaces lookup: off, single Space"
