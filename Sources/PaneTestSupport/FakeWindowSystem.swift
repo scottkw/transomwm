@@ -126,6 +126,9 @@ public actor FakeWindowSystem: WindowSystem {
         windows[id] = window
     }
 
+    /// Native fullscreen on or off (WIN-07): sets only `snapshot.fullScreen`, like `update`; the next refresh reports it.
+    public func setFullscreen(_ id: UInt32, _ on: Bool) {}
+
     /// A native tab group (D-08): standard windows sharing `frame` and `space`. Only `visible` is listed in AX and
     /// onscreen; the other tabs exist only in the CG list, offscreen.
     public func tabGroup(ids: [UInt32], frame: Rect, pid: Int32, visible: UInt32, space: UInt64? = nil) {

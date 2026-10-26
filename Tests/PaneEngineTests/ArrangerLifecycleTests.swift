@@ -266,3 +266,75 @@ extension ArrangerLifecycleTests {
         #expect(!harness.arranger.isAvailable(.dock, focused: ref(99)))
     }
 }
+
+/// TILE-20, WIN-07: a minimised or fullscreen docked window lends its space and comes back to the same tile;
+/// nothing is written while the session is paused.
+extension ArrangerLifecycleTests {
+    /// [w1 | w2 | Desktop], with both docked windows' frames.
+    private func twoDocked() async throws -> (Harness, Rect, Rect) {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: w1))
+        await harness.send(.command(.dock, focused: w2))
+        return (harness, try #require(await harness.frame(w1)), try #require(await harness.frame(w2)))
+    }
+
+    private func planned(_ harness: Harness) throws -> FramePlan {
+        try Planner.plan(desk: try #require(harness.arranger.world[key]), area: visible, gap: 8, mins: [:])
+    }
+
+    @Test func aMinimisedDockedWindowLendsItsTileAndReturnsToIt() async throws {
+        var (harness, a, b) = try await twoDocked()
+        await harness.fake.update(1) { $0.snapshot.minimized = true }
+        let lent = setFrames(await harness.refresh())
+        #expect(harness.arranger.world[key]?.tree.state(of: w1) == .absent)
+        let grown = try #require(lent[w2])
+        #expect(grown.minX == a.minX && grown.width > b.width)
+        #expect(lent[w1] == nil)
+
+        await harness.fake.update(1) { $0.snapshot.minimized = false }
+        let back = setFrames(await harness.refresh())
+        let plan = try planned(harness)
+        let returned = try #require(plan.frames[w1])
+        #expect(abs(returned.x - a.x) <= 0.5 && abs(returned.width - a.width) <= 0.5)
+        #expect(back[w2] == b)
+        #expect(await harness.frame(w1) == a)
+        #expect(await harness.frame(w2) == b)
+    }
+
+    @Test func aFullscreenDockedWindowKeepsItsLeafAndReturnsToItsTile() async throws {
+        var (harness, a, b) = try await twoDocked()
+        await harness.fake.setFullscreen(1, true)
+        let lent = setFrames(await harness.refresh())
+        #expect(harness.arranger.world[key]?.tree.state(of: w1) == .fullscreen)
+        #expect(lent[w1] == nil, "Pane wrote a fullscreen window")
+        #expect(try #require(lent[w2]).width > b.width)
+
+        await harness.fake.setFullscreen(1, false)
+        _ = await harness.refresh()
+        #expect(try planned(harness).frames[w1] == a)
+        #expect(await harness.frame(w2) == b)
+    }
+
+    @Test func nothingIsWrittenWhileThePauseLastsAndTheDeskIsReplannedOnResume() async throws {
+        var (harness, _, b) = try await twoDocked()
+        #expect(await harness.send(.event(.sessionPaused(true))).isEmpty)
+        #expect(await harness.send(.event(.windowDestroyed(w1))).isEmpty)
+        let resumed = await harness.send(.event(.sessionPaused(false)))
+        #expect(resumed.count == 1)
+        #expect(try #require(setFrames(resumed)[w2]).width > b.width)
+    }
+
+    @Test func aMinimisedFloatingWindowKeepsItsFrameAndStaysFloating() async throws {
+        var harness = await Harness.started()
+        await harness.fake.update(2) { $0.snapshot.minimized = true }
+        _ = await harness.refresh()
+        #expect(harness.arranger.world[key]?.state(of: w2) == .absent)
+        await harness.fake.update(2) { $0.snapshot.minimized = false }
+        let effects = await harness.refresh()
+        let desk = try #require(harness.arranger.world[key])
+        #expect(desk.state(of: w2) == .present)
+        #expect(desk.desktop.frame(of: w2) == frame2)
+        #expect(desk.tree.windows.isEmpty)
+        #expect(setFrames(effects).isEmpty)
+    }
+}
