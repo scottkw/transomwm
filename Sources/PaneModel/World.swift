@@ -135,13 +135,27 @@ public struct World: Codable, Equatable, Sendable {
     /// unchanged. Lifecycle states reported by the OS go through `apply` instead.
     public mutating func edit(_ key: DeskKey, history: inout UndoHistory, _ change: (inout Desk, inout IDSource) throws(LayoutError) -> Void) throws(LayoutError) {
         guard let before = desks[key] else { throw .deskNotFound(key) }
+        try reflow(key, change)
+        history.push(before, for: key)
+    }
+
+    /// `edit`'s exact contract minus the history push: `change` runs on copies, and is committed only if it
+    /// succeeds and the whole World still validates; any throw leaves `self` and `ids` unchanged. For OS facts
+    /// and automatic floats (a window that lost its room, D-26), never for user commands, which must be undoable.
+    public mutating func reflow(_ key: DeskKey, _ change: (inout Desk, inout IDSource) throws(LayoutError) -> Void) throws(LayoutError) {
+        guard var desk = desks[key] else { throw .deskNotFound(key) }
         var candidate = self
-        var desk = before
         try change(&desk, &candidate.ids)
         candidate.desks[key] = desk
         try candidate.validate()
-        history.push(before, for: key)
         self = candidate
+    }
+
+    /// Records where a floating window now is (TILE-07): a fact, so no undo step. Throws `invalidGeometry` for a
+    /// non-finite or out-of-range frame and `windowNotFound` when no desk floats the window; either way nothing changes.
+    public mutating func recordFloatingFrame(_ frame: Rect, for window: WindowRef) throws(LayoutError) {
+        guard let key = desks.first(where: { $0.value.desktop.contains(window) })?.key else { throw .windowNotFound(window) }
+        try reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.setFrame(frame, for: window) }
     }
 
     /// Records a lifecycle fact the OS reported (D-17) for a window on `key`'s desk, with the same
@@ -187,7 +201,8 @@ public struct World: Codable, Equatable, Sendable {
     }
 
     /// Restores the newest snapshot of `key`'s desk, keeping the current lifecycle state of every
-    /// window still on the desk (those are OS facts, not something the user edited). `ids` is never
+    /// window still on the desk, and the current frame of every window floating both now and in the snapshot
+    /// (those are OS facts, not something the user edited; Pitfall 10). `ids` is never
     /// rewound, so NodeIDs are not reused. If the restored desk would make the World invalid (for
     /// example a window that has since moved to another desk), throws and leaves the World unchanged,
     /// but the snapshot is still consumed so it cannot block the older ones.
@@ -207,6 +222,9 @@ public struct World: Codable, Equatable, Sendable {
             } else {
                 revived.append(window) // a window on another desk instead makes validate() throw below
             }
+        }
+        for floating in snapshot.desktop.windows {
+            if let frame = current.desktop.frame(of: floating.window) { try snapshot.desktop.setFrame(frame, for: floating.window) }
         }
         var candidate = self
         candidate.desks[key] = snapshot
