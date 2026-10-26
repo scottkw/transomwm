@@ -118,6 +118,61 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         #expect(await waitFor(fixture, 1, timeout: .seconds(3)) { near($0, b) } != nil, "window 1 did not shrink back to \(b)")
     }
 
+    /// D-26 live: window 0's real minimum is learned only after it docks, and with window 1's it leaves no room for
+    /// both tiles beside the Desktop tile. Window 0 floats to the Desktop tile and no longer overlaps window 1.
+    @Test(.timeLimit(.minutes(1)))
+    func aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop() async throws {
+        let visible = try mainVisibleFrame()
+        // The Arranger's inner width (8 pt gaps at the area edges). [0 | 1 | Desktop] needs min0 + min1 + 17; with
+        // window 0 floating, [1 | Desktop] needs min1 + min0 + 8. A sum of inner - 14 fails the first and passes
+        // the second, with 2 pt to spare either way.
+        let inner = (visible.maxX.rounded(.down) - 8) - (visible.minX.rounded(.up) + 8)
+        let min0 = Int(inner * 0.55), min1 = Int(inner) - 14 - min0
+        let fixture = try await FixtureProcess.launch(["minsize:\(min0)x150", "minsize:\(min1)x150"])
+        defer { fixture.terminate() }
+        let (arrange, refs) = try await arranging(fixture)
+        defer { withExtendedLifetime(arrange) {} }  // its events loop ends with it
+        let height = 300.0, top = (visible.midY - height / 2).rounded()
+
+        // Both start wider than their minimums, so a refused tile write moves them toward it: that is how a
+        // minimum is learned (02-15). Window 0's centre is in the left half, so it docks on the left.
+        _ = try await fixture.send("resize 0 \(min0 + 40) \(Int(height))")
+        _ = try await fixture.send("resize 1 \(min1 + 40) \(Int(height))")
+        _ = try await fixture.send("move 0 \(Int(visible.minX) + 40) \(Int(top))")
+        let moved = await waitUntil(timeout: .seconds(2)) {
+            arrange.arranger.windows[refs[0].identity].map { abs($0.frame.x - visible.minX - 40) <= 1 } ?? false
+        }
+        try #require(moved, "the Arranger never saw window 0 move")
+        await arrange.dispatch(.dock, focused: refs[0])
+        let learned = await waitUntil(timeout: .seconds(4)) { arrange.arranger.windows[refs[0].identity]?.learnedMinimum != nil }
+        try #require(learned, "window 0's minimum was never learned")
+
+        // Window 1's centre at mid-height inside the Desktop tile, so Dock puts it beside that tile, in the same row.
+        let key = try #require(arrange.arranger.deskKey(of: refs[0]))
+        let desk = try #require(arrange.arranger.world[key])
+        let mins = Dictionary(uniqueKeysWithValues: arrange.arranger.windows.values.compactMap { info in
+            info.learnedMinimum.map { (info.window, $0) }
+        })
+        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: mins).desktopRect)
+        _ = try await fixture.send("move 1 \(Int(desktop.minX)) \(Int(top))")
+        let seen = await waitUntil(timeout: .seconds(2)) {
+            arrange.arranger.windows[refs[1].identity].map { abs($0.frame.x - desktop.minX) <= 1 } ?? false
+        }
+        try #require(seen, "the Arranger never saw window 1 move")
+        await arrange.dispatch(.dock, focused: refs[1])
+        try #require(arrange.arranger.world[key]?.tree.state(of: refs[1]) == .present, "window 1 did not dock")
+
+        var frames: [Rect] = []
+        let floated = await waitUntil(timeout: .seconds(5)) {
+            guard let desk = arrange.arranger.world[key], desk.desktop.contains(refs[0]), desk.tree.state(of: refs[1]) == .present,
+                let f0 = try? await listedFrame(fixture, 0), let f1 = try? await listedFrame(fixture, 1)
+            else { return false }
+            frames = [f0, f1]
+            return !f0.overlaps(f1)
+        }
+        #expect(floated, "window 0 did not float clear of window 1 within 5 s (fixture frames \(frames))")
+    }
+
     /// Native fullscreen moves the window to its own Space, so macOS switches Spaces; opt in with PANE_LIVE_FULLSCREEN=1.
     @Test(
         .timeLimit(.minutes(1)),

@@ -17,6 +17,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case fault(String)
     /// Worth one info-level log line (the shell logs it with the arrange category).
     case info(String)
+    /// A toast for the user (the shell queues it).
+    case notice(Notice)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.

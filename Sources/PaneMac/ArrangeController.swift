@@ -69,6 +69,8 @@ import os
                 logger.error("\(message, privacy: .public)")
             case .info(let message):
                 logger.info("\(message, privacy: .public)")
+            case .notice:
+                break
             }
         }
     }
