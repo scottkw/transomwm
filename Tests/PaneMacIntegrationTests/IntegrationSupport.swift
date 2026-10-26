@@ -3,9 +3,10 @@ import Foundation
 import PaneModel
 import os
 
-/// Gate for suites that need a real Accessibility grant. CI sets `PANE_SKIP_AX_INTEGRATION`.
+/// Gate for suites that need a real Accessibility grant. Opt-in with `PANE_LIVE=1`: these suites open and move real
+/// windows, so they run only in the test VM (scripts/vm-live-test.sh), never by default on a developer's Mac.
 enum IntegrationEnv {
-    static let trusted = AXIsProcessTrusted() && ProcessInfo.processInfo.environment["PANE_SKIP_AX_INTEGRATION"] == nil
+    static let trusted = AXIsProcessTrusted() && ProcessInfo.processInfo.environment["PANE_LIVE"] == "1"
 
     /// Tests/PaneMacIntegrationTests/IntegrationSupport.swift -> repo root.
     static let repoRoot = URL(fileURLWithPath: #filePath)
