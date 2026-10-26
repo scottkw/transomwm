@@ -12,7 +12,7 @@ settings:
     # Merged into the generated Info.plist: only CFBundleURLTypes, with the per-configuration PANE_URL_SCHEME.
     INFOPLIST_FILE: Pane-Info.plist
     INFOPLIST_KEY_LSUIElement: YES
-    MARKETING_VERSION: "0.2.0"
+    MARKETING_VERSION: "0.3.0"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "Developer ID Application"
@@ -48,3 +48,5 @@ targets:
           SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
           # No debugger-attach (get-task-allow) entitlement in Release (T-02-05).
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          # Notarisation needs a secure timestamp; Debug stays fast and offline.
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
