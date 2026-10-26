@@ -68,4 +68,22 @@ private let side = DisplayInfo(
     @Test func anUncleanPreviousSessionIsARecoveryLaunch() {
         #expect(Recovery.launchMode(previous: SessionRecord(cleanExit: false, launchedAt: Date())) == .recovery)
     }
+
+    /// D-18: a second unclean exit before the recovery launch survived its first minute.
+    @Test func anUncleanRecoveryLaunchThatDidNotSurviveAMinuteIsACrashLoop() {
+        let now = Date()
+        #expect(Recovery.launchMode(previous: SessionRecord(cleanExit: false, launchedAt: now, recoveryLaunch: true, survivedMinute: false))
+            == .crashLoop)
+        #expect(Recovery.launchMode(previous: SessionRecord(cleanExit: false, launchedAt: now, recoveryLaunch: true, survivedMinute: true))
+            == .recovery)
+        #expect(Recovery.launchMode(previous: SessionRecord(cleanExit: false, launchedAt: now, recoveryLaunch: false)) == .recovery)
+        #expect(Recovery.launchMode(previous: SessionRecord(cleanExit: true, launchedAt: now, recoveryLaunch: true)) == .normal)
+    }
+
+    @Test func survivedMinuteIsDueAMinuteAfterARecoveryOrCrashLoopLaunch() {
+        let launched = ContinuousClock.now
+        #expect(Recovery.survivedMinuteDue(launchedAt: launched, mode: .recovery) == launched + .seconds(60))
+        #expect(Recovery.survivedMinuteDue(launchedAt: launched, mode: .crashLoop) == launched + .seconds(60))
+        #expect(Recovery.survivedMinuteDue(launchedAt: launched, mode: .normal) == nil)
+    }
 }

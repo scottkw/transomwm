@@ -45,6 +45,10 @@ public enum Recovery {
         return Rect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height)
     }
 
+    public static func survivedMinuteDue(launchedAt: ContinuousClock.Instant, mode: LaunchMode) -> ContinuousClock.Instant? {
+        nil
+    }
+
     public static func launchMode(previous: SessionRecord?) -> LaunchMode {
         guard let previous, !previous.cleanExit else { return .normal }
         return .recovery

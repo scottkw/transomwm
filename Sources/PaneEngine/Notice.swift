@@ -15,12 +15,14 @@ public enum Notice: Equatable, Sendable {
     /// N2: the launch after a crash put stranded windows back on screen and re-applied the layout; `unplaced` tracked
     /// windows were not in the saved layout and float on the Desktop.
     case crashRecovered(unplaced: Int)
+    /// N3: a second unclean exit within about a minute, so this launch started paused (D-18).
+    case crashLoop
 
     /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
         case .crashRecovered: true
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers: false
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashLoop: false
         }
     }
 }

@@ -56,4 +56,11 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(NoticeCopy.glyph(for: .crashRecovered(unplaced: 0)) == "lifepreserver")
         #expect(Notice.crashRecovered(unplaced: 0).isCrashNotice)
     }
+
+    @Test func crashLoopIsN3() {
+        #expect(NoticeCopy.text(for: .crashLoop, appName: { _ in "" })
+            == "Pane quit unexpectedly twice in a minute, so arranging is paused. Your windows are on screen. Choose Resume Arranging from the Pane menu when you're ready.")
+        #expect(NoticeCopy.glyph(for: .crashLoop) == "lifepreserver")
+        #expect(Notice.crashLoop.isCrashNotice)
+    }
 }

@@ -233,4 +233,25 @@ extension ArrangerRestoreTests {
         #expect(restored.world[key]?.desktop.frame(of: c) == home)
         #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
     }
+
+    /// D-18: a crash loop starts paused. Stranded windows still come on screen; nothing else moves until Resume.
+    @Test func aCrashLoopLaunchStartsPausedButStillRescuesStrandedWindows() async throws {
+        let (launched, effects, tileA, saved) = try await recovering(.crashLoop)
+        var restored = launched
+        #expect(restored.pauseReasons.contains(.crashLoop))
+        let sent = performs(effects)
+        try #require(sent.count == 1, "only the rescue is sent while paused: \(effects)")
+        #expect(sent[0].count == 1)
+        guard case .setFrame(a, let rescue)? = sent[0].first else {
+            Issue.record("the rescue is not a's frame write: \(sent[0])")
+            return
+        }
+        #expect(inside(rescue, visibleFrame))
+        #expect(notices(effects) == [.crashLoop])
+        #expect(restored.world == saved, "the layout is restored in the model, only not applied")
+
+        let resumed = restored.handle(.command(.togglePause, focused: nil), now: .now)
+        #expect(restored.pauseReasons.isEmpty)
+        #expect(setFrames(resumed)[a] == tileA, "Resume did not re-apply the layout: \(resumed)")
+    }
 }
