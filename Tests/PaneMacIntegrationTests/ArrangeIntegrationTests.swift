@@ -50,6 +50,19 @@ private func inside(_ rect: Rect, _ outer: Rect) -> Bool {
         let (arrange, refs) = try await arranging(fixture)
         try #require(refs.count == 2)
         let visible = try mainVisibleFrame()
+        // Dock acts where a drop at the window's centre lands (D-12), so place both centres at mid-height: window 0
+        // in the left part of the screen, window 1 just right of the middle, in the Desktop tile's left edge band
+        // once window 0 has docked. Then window 1 docks beside window 0 and closing it gives window 0 its space.
+        let placed = [(visible.minX + visible.width * 0.15, visible.midY), (visible.midX + visible.width * 0.1, visible.midY)]
+        for (index, centre) in placed.enumerated() {
+            let size = try #require(fixture.windows.first { $0.index == index }).frame.size
+            let x = (centre.0 - size.width / 2).rounded(), y = (centre.1 - size.height / 2).rounded()
+            _ = try await fixture.send("move \(index) \(Int(x)) \(Int(y))")
+            let seen = await waitUntil(timeout: .seconds(2)) {
+                arrange.arranger.windows[refs[index].identity].map { abs($0.frame.x - x) <= 1 && abs($0.frame.y - y) <= 1 } ?? false
+            }
+            try #require(seen, "the Arranger never saw window \(index) move")
+        }
 
         await arrange.dispatch(.dock, focused: refs[0])
         await arrange.dispatch(.dock, focused: refs[1])

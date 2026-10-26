@@ -8,6 +8,7 @@ import os
 public enum PaneMacApp {
     /// Keeps the menu-bar item (and through it the window system) alive for the process lifetime.
     private static var statusItem: StatusItemController?
+    private static var arrange: ArrangeController?
     private static var permission: PermissionController?
     private static var setupWindow: SetupWindowController?
     private static var trackedWindows: TrackedWindowsWindowController?
@@ -51,11 +52,15 @@ public enum PaneMacApp {
             showTrackedWindows: { trackedController.show() }, showSetup: { setupController.show() }
         )
         controller.onInventory = { trackedController.feed.inventory = $0 }
+        // The only reader of system.events: it re-reads the inventory after each event and feeds the menu.
+        let arrangeController = ArrangeController(system: system)
+        arrangeController.onInventory = { controller.update($0) }
         trackedWindows = trackedController
         statusItem = controller
+        arrange = arrangeController
         permission = permissionController
         setupWindow = setupController
-        permissionController.onTrackingStarted = { await controller.refresh() }
+        permissionController.onTrackingStarted = { await arrangeController.start() }
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
         // Quit Pane during a freeze resumes the app now rather than at the next launch.

@@ -19,7 +19,7 @@ import os
     private(set) var latest = WindowInventory(displays: [], windows: []) {
         didSet { onInventory?(latest) }
     }
-    /// Fan-out of each re-read inventory (the Tracked Windows feed); `system.events` has only this reader.
+    /// Fan-out of each inventory passed to `update(_:)` (the Tracked Windows feed).
     var onInventory: ((WindowInventory) -> Void)?
     /// The frontmost app when the menu opened; opening a status menu does not activate Pane.
     private var frontmost: NSRunningApplication?
@@ -43,17 +43,11 @@ import os
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
-        // inventory() serves the cache immediately, so re-reading it after each event is cheap.
-        Task { [weak self, system] in
-            for await _ in system.events {
-                self?.latest = await system.inventory()
-            }
-        }
     }
 
-    /// Re-reads the cached inventory, e.g. once the initial sweep has finished.
-    func refresh() async {
-        latest = await system.inventory()
+    /// The latest inventory, re-read by `ArrangeController` after each event (it is the only events reader).
+    func update(_ inventory: WindowInventory) {
+        latest = inventory
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
