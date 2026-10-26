@@ -120,6 +120,9 @@ public struct DragSession: Equatable, Sendable {
         self.modifiers = modifiers
     }
 
+    /// The drop the held hover decided, for the shell's drag log (WR-03); "none" until a dwell has passed.
+    public var decisionSummary: String { decision.map { "\($0.action)" } ?? "none" }
+
     /// The pointer has travelled at least `minimumTravel` from the press.
     public var travelled: Bool {
         let dx = pointer.x - start.x, dy = pointer.y - start.y

@@ -9,6 +9,10 @@ import os
 @MainActor public final class ArrangeController {
     private let system: AXWindowSystem
     private let logger = Logger(subsystem: "com.eightabyte.pane", category: "arrange")
+    /// One line per press and per release (WR-03, the Safari drag diagnosis).
+    private let dragLog = Logger(subsystem: "com.eightabyte.pane", category: "drag")
+    /// What the press has seen so far: dragged tap events, and the first and last CG samples of the frame poll.
+    private var dragTrace: (dragged: Int, polls: Int, firstCG: Rect?, lastCG: Rect?) = (0, 0, nil, nil)
     private var started = false
     /// Each re-read inventory: the menu header and the Tracked Windows feed.
     public var onInventory: ((WindowInventory) -> Void)?
@@ -247,8 +251,47 @@ import os
         let location = Point(x: event.location.x, y: event.location.y)
         let press = kind == .down ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
         let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press)
+        let session = arranger.drag  // mouse-up ends it
+        if kind == .dragged { dragTrace.dragged += 1 }
         await run(arranger.handle(.pointer(pointer), now: .now))
+        if kind == .down { logPress(press, underPointer: event.windowUnderPointer, at: location) }
+        if kind == .up, let session { logRelease(session, at: location) }
     }
+
+    /// The drag log's press line: whether a session started, with its AX start frame and the CG bounds beside it.
+    private func logPress(_ press: PaneModel.WindowRef?, underPointer number: Int64, at point: Point) {
+        dragTrace = (0, 0, nil, nil)
+        guard let press else {
+            dragLog.info("press at \(Self.text(point), privacy: .public) on CG window \(number, privacy: .public): no tracked window")
+            return
+        }
+        let info = arranger.windows[press.identity]
+        let cgID = info?.visibleMemberID ?? press.windowID
+        let cg = Self.text(DragFramePoller.bounds(of: cgID))
+        guard let session = arranger.drag else {
+            dragLog.info(
+                "press on \(press.bundleID, privacy: .public) window \(press.windowID, privacy: .public) (CG \(number, privacy: .public)): no session; kind \(String(describing: info?.kind), privacy: .public) state \(String(describing: info?.state), privacy: .public) excluded \(String(describing: info?.isExcluded), privacy: .public) desk \(self.arranger.deskKey(of: press) != nil, privacy: .public) paused \(!self.arranger.pauseReasons.isEmpty, privacy: .public)"
+            )
+            return
+        }
+        dragLog.info(
+            "start \(press.bundleID, privacy: .public) window \(press.windowID, privacy: .public) (CG \(number, privacy: .public), member \(cgID, privacy: .public)) at \(Self.text(point), privacy: .public): AX \(Self.text(session.startFrame), privacy: .public) CG \(cg, privacy: .public)"
+        )
+    }
+
+    /// The drag log's release line: how the press was classified and what the release did with it.
+    private func logRelease(_ session: DragSession, at point: Point) {
+        let travel = hypot(session.pointer.x - session.start.x, session.pointer.y - session.start.y)
+        let upTravel = hypot(point.x - session.start.x, point.y - session.start.y)
+        let info = arranger.windows[session.window.identity]
+        let cgNow = Self.text(DragFramePoller.bounds(of: info?.visibleMemberID ?? session.window.windowID))
+        dragLog.info(
+            "end \(session.window.bundleID, privacy: .public) window \(session.window.windowID, privacy: .public): kind \(String(describing: session.kind), privacy: .public) travel \(travel, privacy: .public) (up \(upTravel, privacy: .public)) dragged \(self.dragTrace.dragged, privacy: .public) polls \(self.dragTrace.polls, privacy: .public) polling \(session.polling, privacy: .public) AX start \(Self.text(session.startFrame), privacy: .public) first CG \(Self.text(self.dragTrace.firstCG), privacy: .public) last CG \(Self.text(self.dragTrace.lastCG), privacy: .public) CG at up \(cgNow, privacy: .public) dry runs \(session.dryRuns, privacy: .public) decision \(session.decisionSummary, privacy: .public) shown \(String(describing: session.shown), privacy: .public)"
+        )
+    }
+
+    private static func text(_ point: Point) -> String { "\(point.x),\(point.y)" }
+    private static func text(_ rect: Rect?) -> String { rect.map { "\($0.x),\($0.y) \($0.width)x\($0.height)" } ?? "nil" }
 
     static func modifiers(_ flags: CGEventFlags) -> Modifiers {
         var modifiers: Modifiers = []
@@ -285,6 +328,9 @@ import os
         dragPoller.start(windowID: id) { [weak self] frame in
             Task { [weak self] in
                 guard let self else { return }
+                self.dragTrace.polls += 1
+                if self.dragTrace.firstCG == nil { self.dragTrace.firstCG = frame }
+                self.dragTrace.lastCG = frame
                 await self.run(self.arranger.handle(.dragFrame(window.identity, frame), now: .now))
             }
         }
