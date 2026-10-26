@@ -152,6 +152,69 @@ extension LayoutTree {
         assertValid()
     }
 
+    /// Exchanges the windows of two docked panels (TILE-11). NodeIDs and weights stay put, so each window
+    /// takes the other's rect; states are keyed by identity and travel with their windows.
+    public mutating func swap(_ a: WindowRef, _ b: WindowRef) throws(LayoutError) {
+        guard let leafA = leaf(containing: a) else { throw .windowNotFound(a) }
+        guard let leafB = leaf(containing: b) else { throw .windowNotFound(b) }
+        guard leafA != leafB else { throw .invariantViolated("cannot swap \(leafA) with itself") }
+        guard case .panel? = nodes[leafA] else { throw .notALeaf(leafA) }
+        guard case .panel? = nodes[leafB] else { throw .notALeaf(leafB) }
+        var next = self
+        next.nodes[leafA] = .panel(b)
+        next.nodes[leafB] = .panel(a)
+        try next.validate()
+        self = next
+    }
+
+    /// Gives every child of `split` the same weight (TILE-12).
+    public mutating func balance(split: NodeID) throws(LayoutError) {
+        let (axis, children, _) = try splitParts(split)
+        try commit(split, .split(axis: axis, children: children, weights: Array(repeating: 1 / Double(children.count), count: children.count)))
+    }
+
+    /// Mirrors `split`: children and their weights in reverse order (TILE-12).
+    public mutating func flip(split: NodeID) throws(LayoutError) {
+        let (axis, children, weights) = try splitParts(split)
+        try commit(split, .split(axis: axis, children: children.reversed(), weights: weights.reversed()))
+    }
+
+    /// Turns the layout a quarter (TILE-12, D-32): toggles the axis of `split` and of every split below it,
+    /// keeping child order and weights. When `split` has a parent the flip starts at the root instead: a
+    /// nested split taking its parent's axis would merge into it, and a merged split cannot be rotated
+    /// back. Flipping every axis keeps parent and child axes apart, so nothing merges and Rotate is its
+    /// own inverse.
+    public mutating func rotate(split: NodeID) throws(LayoutError) {
+        _ = try splitParts(split)
+        guard let root else { throw .nodeNotFound(split) }
+        var next = self
+        // Iterative, and a valid tree is a tree within maxDepth / maxNodes (T-03-04).
+        var stack = [parent(of: split) == nil ? split : root]
+        while let id = stack.popLast() {
+            guard case let .split(axis, children, weights)? = nodes[id] else { continue }
+            next.nodes[id] = .split(axis: axis == .horizontal ? .vertical : .horizontal, children: children, weights: weights)
+            stack.append(contentsOf: children)
+        }
+        next.normalize()
+        try next.validate()
+        self = next
+    }
+
+    private func splitParts(_ id: NodeID) throws(LayoutError) -> (Axis, [NodeID], [Double]) {
+        guard let node = nodes[id] else { throw .nodeNotFound(id) }
+        guard case let .split(axis, children, weights) = node else { throw .notASplit(id) }
+        return (axis, children, weights)
+    }
+
+    /// Copy-then-commit for a one-node edit: normalised and validated before `self` changes.
+    private mutating func commit(_ id: NodeID, _ node: Node) throws(LayoutError) {
+        var next = self
+        next.nodes[id] = node
+        next.normalize()
+        try next.validate()
+        self = next
+    }
+
     /// Moves `delta` (a fraction of the split's length) across the boundary after child `index`,
     /// between those two children only (D-07). Both stay at or above `minWeight`; every other
     /// weight is left bit-identical.
