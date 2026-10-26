@@ -99,6 +99,12 @@ public struct Arranger: Sendable {
     public private(set) var drag: DragSession?
     /// A title-bar drag is under way (plan 16 defers alerts while it is).
     public var isDragging: Bool { drag?.kind == .move }
+    /// Desk plans a drag hit-tests against, computed once per drag (and again after the World changes).
+    private var dragPlans: [DragPlanKey: FramePlan] = [:]
+
+    private enum DragPlanKey: Hashable {
+        case desk(DeskKey)
+    }
     /// Window identities, the most recently focused first: focus ties go to the earliest (D-11).
     public private(set) var focusOrder: [WindowIdentity] = []
     /// The split ⌃⌥⌘N asked for, waiting for Finder's new window; a newer one replaces it.
@@ -121,7 +127,9 @@ public struct Arranger: Sendable {
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         let before = world
         let effects = process(input, now: now)
-        return world == before ? effects : effects + [.save(.debounced)]
+        guard world != before else { return effects }
+        dragPlans = [:]  // the plans a drag caches are of the World before
+        return effects + [.save(.debounced)]
     }
 
     private mutating func process(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
@@ -178,8 +186,13 @@ public struct Arranger: Sendable {
         case .gap(let value):
             gap = value
             return replan()
-        case .pointer, .dragFrame:
-            return []
+        case .pointer(let event):
+            return pointer(event, now: now)
+        case .dragFrame(let id, let frame):
+            guard drag?.window.identity == id else { return [] }
+            windows[id]?.frame = frame
+            drag?.observe(frame, lastApplied: lastApplied[id])
+            return follow(now: now)
         }
     }
 
@@ -335,7 +348,8 @@ public struct Arranger: Sendable {
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
             if case .windowChanged(let info) = event {
                 try release(info)
-                try rehome(info)
+                // The pressed window may be crossing displays; where it lands is decided at mouse-up.
+                if drag?.window != info.window { try rehome(info) }
             }
             // A window that just became dockable, present or known floats on its display's Desktop (D-24).
             if let subject, let info = windows[subject] { try admit(info) }
@@ -369,6 +383,11 @@ public struct Arranger: Sendable {
     /// window goes back to its tile, at most once per second (T-03-13). There is no pointer state yet, so every move
     /// counts as finished; plan 10 adds drag sessions so a user dragging a docked window is never fought.
     private mutating func moved(_ window: WindowRef, to frame: Rect, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
+        // The pressed window is never answered while the button is down; mouse-up decides (D-01).
+        if drag?.window == window {
+            drag?.observe(frame, lastApplied: lastApplied[window.identity])
+            return follow(now: now)
+        }
         guard let key = deskKey(of: window), let desk = world[key] else { return [] }
         let floating = desk.desktop.contains(window)
         // A parked window keeps its Desktop frame: the move is the park, and showing the Desktop brings it back there.
@@ -409,7 +428,7 @@ public struct Arranger: Sendable {
             return world.desks.values.contains { $0.tree.state(of: info.window) == .present } && !Self.near(info.frame, tile, within: 2)
         }
         let effects = off.isEmpty ? [] : correct(off, now: now)
-        return missed + effects + (nextWake.map { [.wake(at: $0)] } ?? [])
+        return missed + effects + settleDrag(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
     /// Forgets the tile last sent, so the re-plan writes it again.
@@ -421,10 +440,10 @@ public struct Arranger: Sendable {
         return replan()
     }
 
-    /// The earliest instant a waiting correction is due.
-    /// The earliest instant a waiting correction or the Finder deadline is due: the shell keeps one wake only.
+    /// The earliest instant a waiting correction, the Finder deadline or a drag's dwell is due: the shell keeps one wake.
     private var nextWake: ContinuousClock.Instant? {
-        (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } } + [finderExpectation?.deadline].compactMap { $0 }).min()
+        let dwell = drag?.kind == .move ? drag?.dwellEnds : nil
+        return (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } } + [finderExpectation?.deadline, dwell].compactMap { $0 }).min()
     }
 
     /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
@@ -656,6 +675,216 @@ public struct Arranger: Sendable {
         }
     }
 
+    // MARK: Drags
+
+    /// One left-button event (RESEARCH Pattern 4). A press on a tracked, dockable, present window of an app that is not
+    /// excluded starts a session; nothing starts while paused (D-23). Modifiers are read from every event (D-05).
+    private mutating func pointer(_ event: PointerEvent, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        switch event.kind {
+        case .down:
+            let stale = endDrag()  // a press whose mouse-up never arrived
+            guard let pressed = event.pressWindow, let info = windows[pressed.identity], canDrag(info) else { return stale }
+            drag = DragSession(window: info.window, start: event.location, startFrame: info.frame, modifiers: event.modifiers)
+            return stale
+        case .dragged, .flagsChanged:
+            guard var session = drag else { return [] }
+            guard pauseReasons.isEmpty else { return endDrag() }
+            session.pointer = event.location
+            session.modifiers = event.modifiers
+            var effects: [ArrangerEffect] = []
+            if !session.polling, session.travelled {
+                session.polling = true
+                effects.append(.pollDragFrame(session.window))
+            }
+            if let frame = windows[session.window.identity]?.frame {
+                session.observe(frame, lastApplied: lastApplied[session.window.identity])
+            }
+            drag = session
+            return effects + follow(now: now)
+        case .up:
+            guard drag != nil else { return [] }
+            drag?.modifiers = event.modifiers
+            return release(now: now)
+        }
+    }
+
+    private func canDrag(_ info: WindowInfo) -> Bool {
+        guard pauseReasons.isEmpty, !sessionPaused, info.kind == .dockable, !info.isExcluded, info.state == .present,
+            let key = deskKey(of: info.window), let desk = world[key], desk.state(of: info.window) == .present
+        else { return false }
+        return !(desk.desktop.contains(info.window) && desk.tree.isDesktopHidden == true)  // parked
+    }
+
+    /// Ends the session: stops the poll and withdraws the preview.
+    private mutating func endDrag() -> [ArrangerEffect] {
+        guard let session = drag else { return [] }
+        drag = nil
+        dragPlans = [:]
+        return (session.polling ? [.pollDragFrame(nil)] : []) + (session.shown != nil ? [.preview(nil, displayUUID: session.shownOn)] : [])
+    }
+
+    /// A move session's pointer or frame changed: a new hover withdraws the preview and restarts the dwell; a held one
+    /// shows its preview once the dwell has passed.
+    private mutating func follow(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard var session = drag, session.kind == .move else { return [] }
+        guard windows[session.window.identity]?.isExcluded == false, deskKey(of: session.window) != nil else { return endDrag() }
+        let hover = hover(for: session)
+        guard session.update(hover: hover, at: now) else { return settleDrag(now: now) }
+        var effects: [ArrangerEffect] = []
+        if session.shown != nil {
+            effects.append(.preview(nil, displayUUID: session.shownOn))
+            session.shown = nil
+            session.shownOn = nil
+        }
+        drag = session
+        return effects + (nextWake.map { [.wake(at: $0)] } ?? [])
+    }
+
+    /// Runs the dry run once the hover has held for the dwell, and shows (or moves) the preview it gives.
+    private mutating func settleDrag(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard var session = drag, session.kind == .move else { return [] }
+        let window = session.window
+        _ = session.settle(at: now) { decide($0, window: window) }
+        let frame = windows[window.identity]?.frame ?? session.startFrame
+        let preview = session.decision.flatMap { decision in decision.clampInto.map { .clamp(Planner.clamp(frame, into: $0)) } ?? decision.preview }
+        guard let decision = session.decision, preview != session.shown else {
+            drag = session
+            return []
+        }
+        session.shown = preview
+        session.shownOn = decision.display
+        drag = session
+        return [.preview(preview, displayUUID: decision.display)]
+    }
+
+    /// What the pointer is over, reduced to what decides the drop (UI-SPEC Surface 2): the dwell restarts only when this
+    /// changes. A docked window over its own tile, and any tile centre, are a miss.
+    private mutating func hover(for session: DragSession) -> Hover {
+        let window = session.window
+        guard let ownKey = deskKey(of: window), let ownDesk = world[ownKey], let ownPlan = dragPlan(.desk(ownKey)) else { return Hover() }
+        let docked = ownDesk.tree.state(of: window) != nil
+        let frame = windows[window.identity]?.frame ?? session.startFrame
+        let point = session.pointer
+        let display = displays.first { $0.frame.contains(point) }
+        var target: DropTarget?
+        if let display, let plan = dragPlan(.desk(Self.key(display))) {
+            let key = Self.key(display)
+            target = DropZones.target(at: point, in: display.visibleFrame, tree: (world[key] ?? Desk()).tree, resolution: plan.resolution)
+            switch target {
+            case .tile(_, .center)?: target = nil  // tab groups from a centre drop are Phase 7 (D-02)
+            case .tile(let id, _)? where docked && key == ownKey && id == ownDesk.tree.leaf(containing: window): target = nil
+            default: break
+            }
+        }
+        return Hover(
+            displayUUID: display?.uuid, target: target,
+            crossesTiles: !docked && target == nil && Self.crosses(frame, ownPlan, except: window))
+    }
+
+    /// The dry run for one held hover: a copy of the World with the drop applied, then planned.
+    private mutating func decide(_ hover: Hover, window: WindowRef) -> Decision {
+        guard let ownKey = deskKey(of: window) else { return Decision(action: .miss) }
+        let miss = Decision(action: .miss, display: ownKey.displayUUID)
+        guard let target = hover.target, let uuid = hover.displayUUID, let display = displays.first(where: { $0.uuid == uuid }) else {
+            return miss
+        }
+        let key = Self.key(display)
+        do throws(LayoutError) {
+            guard let desk = try dropping(window, on: key, at: target).world[key] else { return miss }
+            let plan = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums)
+            guard plan.unfit.isEmpty, let frame = plan.frames[window] else { return miss }
+            return Decision(preview: .dock(frame), action: .dock(key, target), display: uuid)
+        } catch {
+            return miss  // the target went stale since the hit test
+        }
+    }
+
+    /// The World and history with `window` taken off its desk and dropped on `key`'s at `target`: one undo step there.
+    private func dropping(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> (world: World, history: UndoHistory) {
+        var candidate = world, candidateHistory = history
+        if let from = deskKey(of: window), from != key {
+            // Leaving another display's desk is a fact of where it was dropped, not a second undo step.
+            try candidate.reflow(from) { desk, _ throws(LayoutError) in
+                if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
+            }
+            if candidate[key] == nil { try candidate.addDesk(key) }
+        }
+        try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
+            if desk.desktop.contains(window) {
+                try desk.desktop.remove(window)
+            } else if desk.tree.state(of: window) != nil {
+                try desk.tree.remove(window)
+            }
+            try desk.tree.applyDrop(target, window: window, ids: &ids)
+        }
+        return (candidate, candidateHistory)
+    }
+
+    /// Mouse-up: applies exactly the decision whose preview is on screen; with none, the miss rules (WYSIWYG).
+    private mutating func release(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard let session = drag else { return [] }
+        var effects = endDrag()
+        let window = session.window
+        guard let kind = session.kind, windows[window.identity]?.isExcluded == false, deskKey(of: window) != nil else { return effects }
+        let action = kind == .move ? session.decision?.action ?? .miss : .miss
+        do throws(LayoutError) {
+            switch action {
+            case .dock(let key, let target): effects += try commitDock(window, on: key, at: target)
+            case .swap, .undock, .refuse, .miss: effects += try missed(window)
+            }
+        } catch {
+            effects += [.fault("drop of \(window) failed: \(error)")] + replan()
+        }
+        return effects
+    }
+
+    private mutating func commitDock(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> [ArrangerEffect] {
+        let candidate = try dropping(window, on: key, at: target)
+        guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key],
+            try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty
+        else { return [.announce(Self.noRoom)] + (try missed(window)) }
+        world = candidate.world
+        history = candidate.history
+        lastRequested[window.identity] = nil
+        return replan()
+    }
+
+    /// The miss rules (D-01, D-06): a docked window snaps back to its tile; a floating one stays where it was released,
+    /// clamped into the Desktop rect if it crosses a docked tile, and moves to the desk of the display it is now on.
+    private mutating func missed(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let desk = world[key], let info = windows[window.identity] else { return replan() }
+        if desk.tree.state(of: window) != nil {
+            if let tile = lastRequested[window.identity], Self.near(info.frame, tile, within: 2) { return replan() }
+            lastRequested[window.identity] = nil
+            return replan()
+        }
+        try world.recordFloatingFrame(info.frame, for: window)
+        if let area = display(for: key)?.visibleFrame, let desk = world[key],
+            let clamped = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames[window]
+        {
+            try world.recordFloatingFrame(clamped, for: window)
+        }
+        try rehome(info)
+        return replan()
+    }
+
+    private mutating func dragPlan(_ key: DragPlanKey) -> FramePlan? {
+        if let plan = dragPlans[key] { return plan }
+        let plan: FramePlan?
+        switch key {
+        case .desk(let desk):
+            // A desk that cannot be planned has no drop targets; replan reports the same fault.
+            plan = display(for: desk).flatMap { try? Planner.plan(desk: world[desk] ?? Desk(), area: $0.visibleFrame, gap: gap, mins: minimums) }
+        }
+        dragPlans[key] = plan
+        return plan
+    }
+
+    /// `frame` overlaps a docked tile of `plan` other than `window`'s own.
+    private static func crosses(_ frame: Rect, _ plan: FramePlan, except window: WindowRef) -> Bool {
+        plan.resolution.windowRects.contains { $0.key != window && $0.value.overlaps(frame) }
+    }
+
     // MARK: Planning
 
     /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked
@@ -707,6 +936,7 @@ public struct Arranger: Sendable {
             }
             for (window, rect) in desired.sorted(by: { $0.key.identity < $1.key.identity }) {
                 planned.insert(window.identity)
+                if window == drag?.window { continue }  // never written before mouse-up (D-23)
                 if let last = lastRequested[window.identity], Self.near(last, rect) { continue }
                 lastRequested[window.identity] = rect
                 commands.append(.setFrame(window, rect))

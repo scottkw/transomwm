@@ -38,6 +38,11 @@ import os
     /// The exclusion list Don't Arrange toggles; nil in tests that never dispatch it.
     private let exclusions: ExclusionStore?
 
+    /// The active event tap that sees title-bar drags (TILE-01), and the poll of the dragged window's frame.
+    private let tap = InputTap()
+    private var tapReader: Task<Void, Never>?
+    private let dragPoller = DragFramePoller()
+
     public init(system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8) {
         self.system = system
         self.store = store
@@ -84,6 +89,91 @@ import os
                     await self.run(self.arranger.handle(.inventory(inventory), now: .now))
                 }
                 self.onInventory?(inventory)
+            }
+        }
+        startTap()
+    }
+
+    /// Whether the event tap is running: drags are detected only while it is (the Debug line).
+    public var isTapRunning: Bool { tap.isRunning }
+
+    /// Starts the event tap and its single reader. False when macOS refuses the tap (no Accessibility access).
+    @discardableResult
+    public func startTap() -> Bool {
+        guard tap.start() else {
+            logger.error("event tap refused; drags are not detected")
+            return false
+        }
+        if tapReader == nil {
+            tapReader = Task { [weak self, tap] in
+                for await event in tap.events {
+                    guard let self else { return }
+                    await self.handle(event)
+                }
+            }
+        }
+        return true
+    }
+
+    /// Takes the tap down (Accessibility left `.ready`, Pitfall 4). Hotkeys and the menu keep working.
+    public func stopTap() {
+        tap.stop()
+        dragPoller.stop()
+    }
+
+    /// Feeds one tap event to the Arranger. The press window is resolved on mouse-down only.
+    private func handle(_ event: TapEvent) async {
+        let kind: PointerEvent.Kind
+        switch event.type {
+        case .leftMouseDown: kind = .down
+        case .leftMouseDragged: kind = .dragged
+        case .leftMouseUp: kind = .up
+        case .flagsChanged: kind = .flagsChanged
+        default: return
+        }
+        let location = Point(x: event.location.x, y: event.location.y)
+        let press = kind == .down ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
+        let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press)
+        await run(arranger.handle(.pointer(pointer), now: .now))
+    }
+
+    static func modifiers(_ flags: CGEventFlags) -> Modifiers {
+        var modifiers: Modifiers = []
+        if flags.contains(.maskShift) { modifiers.insert(.shift) }
+        if flags.contains(.maskCommand) { modifiers.insert(.command) }
+        if flags.contains(.maskAlternate) { modifiers.insert(.option) }
+        if flags.contains(.maskControl) { modifiers.insert(.control) }
+        return modifiers
+    }
+
+    /// The tracked window the press is on: the CG window under the pointer mapped through the inventory
+    /// (`visibleMemberID ?? windowID`); failing that, the topmost tracked window containing the point in CG list order.
+    /// Pure geometry, no AX.
+    private func pressWindow(underPointer number: Int64, at point: Point) -> PaneModel.WindowRef? {
+        let tracked = arranger.windows.values
+        func info(for id: UInt32) -> WindowInfo? { tracked.first { ($0.visibleMemberID ?? $0.window.windowID) == id } }
+        if number > 0, let found = info(for: UInt32(truncatingIfNeeded: number)) { return found.window }
+        guard let list = CGWindowList.onScreenFrontToBack() else { return nil }
+        for entry in list where entry.layer == 0 && entry.bounds.contains(point) {
+            // A window under a synthetic ID matches its CG entry by app and frame.
+            let synthetic = tracked.first { $0.window.pid == entry.pid && $0.window.identity.isSyntheticWindowID && $0.frame == entry.bounds }
+            if let found = info(for: entry.windowID) ?? synthetic { return found.window }
+        }
+        return nil
+    }
+
+    /// Starts the 60 Hz frame poll of the pressed window (its visible tab), or stops it. A synthetic ID has no CG window.
+    private func pollDragFrame(_ window: PaneModel.WindowRef?) {
+        guard let window, let info = arranger.windows[window.identity] else {
+            dragPoller.stop()
+            return
+        }
+        let id = info.visibleMemberID ?? window.windowID
+        guard id < WindowIdentity.syntheticIDBase else { return }
+        dragPoller.start(windowID: id) { [weak self] frame in
+            Task { [weak self] in
+                guard let self else { return }
+                await self.run(self.arranger.handle(.dragFrame(window.identity, frame), now: .now))
             }
         }
     }
@@ -162,8 +252,10 @@ import os
                     guard let self else { return }
                     await self.run(self.arranger.handle(.tick, now: .now))
                 }
-            case .preview, .pollDragFrame, .flashBlocked:
-                break
+            case .pollDragFrame(let window):
+                pollDragFrame(window)
+            case .preview, .flashBlocked:
+                break  // the preview panel arrives with the rest of the drop states
             }
         }
     }

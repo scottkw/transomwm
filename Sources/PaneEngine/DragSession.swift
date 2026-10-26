@@ -121,17 +121,48 @@ public struct DragSession: Equatable, Sendable {
     }
 
     /// The pointer has travelled at least `minimumTravel` from the press.
-    public var travelled: Bool { false }
+    public var travelled: Bool {
+        let dx = pointer.x - start.x, dy = pointer.y - start.y
+        return (dx * dx + dy * dy).squareRoot() >= Self.minimumTravel
+    }
 
-    /// Classifies a frame report of the press window (RESEARCH Pattern 1).
-    public mutating func observe(_ frame: Rect, lastApplied: Rect?) {}
+    /// Classifies a frame report of the press window (RESEARCH Pattern 1): within 2 pt of Pane's last read-back it is an
+    /// echo; after 3 pt of travel a changed size is an edge resize and a changed origin with the same size a move.
+    public mutating func observe(_ frame: Rect, lastApplied: Rect?) {
+        guard kind == nil, travelled else { return }
+        if let lastApplied, Self.near(lastApplied, frame, within: Self.echoTolerance) { return }
+        if abs(frame.width - startFrame.width) > 1 || abs(frame.height - startFrame.height) > 1 {
+            kind = .resize
+        } else if frame.x != startFrame.x || frame.y != startFrame.y {
+            kind = .move
+        }
+    }
 
     /// Feeds the current hover; true when it changed, which restarts the dwell and drops the decision.
-    mutating func update(hover: Hover, at now: ContinuousClock.Instant) -> Bool { false }
+    mutating func update(hover: Hover, at now: ContinuousClock.Instant) -> Bool {
+        guard hover != self.hover else { return false }
+        self.hover = hover
+        hoverSince = now
+        decision = nil
+        return true
+    }
 
     /// When the held hover's dry run is due; nil once decided or with no hover.
-    var dwellEnds: ContinuousClock.Instant? { nil }
+    var dwellEnds: ContinuousClock.Instant? {
+        decision == nil ? hoverSince.map { $0 + Self.dwell } : nil
+    }
 
     /// Runs `dryRun` once for the held hover after the dwell; returns the new decision, or nil if none was due.
-    mutating func settle(at now: ContinuousClock.Instant, dryRun: (Hover) -> Decision) -> Decision? { nil }
+    mutating func settle(at now: ContinuousClock.Instant, dryRun: (Hover) -> Decision) -> Decision? {
+        guard let hover, let due = dwellEnds, now >= due else { return nil }
+        let decided = dryRun(hover)
+        decision = decided
+        dryRuns += 1
+        return decided
+    }
+
+    static func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
+        abs(a.x - b.x) <= tolerance && abs(a.y - b.y) <= tolerance && abs(a.width - b.width) <= tolerance
+            && abs(a.height - b.height) <= tolerance
+    }
 }

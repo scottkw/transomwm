@@ -10,8 +10,13 @@ public nonisolated enum CGWindowList {
 
     /// Every CG window (`optionAll`: on- and offscreen), bounds already in global top-left points. nil (logged) when
     /// the list could not be read: that is not "no windows", so callers must decide nothing from it.
-    public static func snapshot() -> [CGWindowEntry]? {
-        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else {
+    public static func snapshot() -> [CGWindowEntry]? { read([.optionAll]) }
+
+    /// The on-screen windows only, front to back (the order `optionAll` does not promise): for "topmost under a point".
+    public static func onScreenFrontToBack() -> [CGWindowEntry]? { read([.optionOnScreenOnly, .excludeDesktopElements]) }
+
+    private static func read(_ options: CGWindowListOption) -> [CGWindowEntry]? {
+        guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             logger.error("CG window list unavailable; skipping decisions that need it")
             return nil
         }
