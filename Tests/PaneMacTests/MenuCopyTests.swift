@@ -95,6 +95,21 @@ import Testing
         #expect(MenuCopy.header(WindowInventory(displays: [], windows: windows, initialRefreshComplete: true)) == "Tracking 2 windows in 1 app")
     }
 
+    @Test func thePauseLineNamesTheHighestPriorityReason() {
+        #expect(MenuCopy.pauseLine([]) == nil)
+        #expect(MenuCopy.pauseLine([.user]) == "Arranging paused")
+        #expect(MenuCopy.pauseLine([.user, .crashLoop]) == "Arranging paused after Pane quit unexpectedly")
+        #expect(MenuCopy.pauseLine([.user, .crashLoop, .stageManager]) == "Arranging paused: Stage Manager is on")
+    }
+
+    @Test func pauseAndGapTitles() {
+        #expect(MenuCopy.pauseToggle(paused: false) == "Pause Arranging")
+        #expect(MenuCopy.pauseToggle(paused: true) == "Resume Arranging")
+        #expect(MenuCopy.gapsMenu == "Gaps")
+        #expect([0.0, 4, 8, 12, 16, 24].map(MenuCopy.gapTitle) == ["None", "4 pt", "8 pt", "12 pt", "16 pt", "24 pt"])
+        #expect(MenuCopy.pausedGlyphDescription == "Pane: arranging paused")
+    }
+
     @Test func exclusionCopyQuotesTheAppName() {
         #expect(MenuCopy.dontArrange(appName: "Safari") == "Don't Arrange \u{201C}Safari\u{201D}")
         #expect(MenuCopy.dontArrangeFallback == "Don't Arrange Frontmost App")
