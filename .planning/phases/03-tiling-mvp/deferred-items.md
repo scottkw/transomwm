@@ -54,3 +54,12 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   may have no AppIcon asset.
 - **A floating Safari window was placed at the bottom of the desktop region, with empty space above it.** Cosmetic.
   Check whether this placement is intended.
+- **(03-18) A plain green click on a floating window that exactly fills the Desktop tile does nothing (beep).**
+  `Arranger.dock` targets the window's centre; that is the Desktop tile's centre, so `dockTarget` returns
+  `.tile(_, .center)` and dock beeps (tab groups are Phase 7, Arranger.swift:671). It happens after an Option-click
+  zoom on a floating window, because D-33 clamps it to the whole Desktop tile. Seen in the VM: a press preset to the
+  real window ID behaves the same, so it is not the tap's window lookup. TILE-06 expects "floating docks". Options:
+  fall back to a non-centre edge target when the centre hits the Desktop tile, or accept and announce.
+- **(03-18) Space 2's docked windows are dropped on every Pane relaunch.** Clean repro, twice in the VM: layout.json
+  had a second desk (spaceID 41) with Notes#150 and reminders#693 docked, both apps running; after quit and relaunch
+  on Space 1 the desk key stays but its docked list is empty. Matches the 03-UAT.md note on test 17.
