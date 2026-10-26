@@ -156,7 +156,7 @@ The menu is rebuilt in `menuNeedsUpdate(_:)` as in Phase 2. The frontmost app an
 | 10 | "Undo Layout Change" | item | ⌃⌥⌘Z | Enabled when the layout's undo history is non-empty. There is no Redo, because the model has none |
 | 11 | "Focus" ▸ | submenu | | Left / Right / Up / Down |
 | 12 | "Move Window" ▸ | submenu | | Left / Right / Up / Down (docked window) |
-| 13 | "Split" ▸ | submenu | | Grow Tile, Shrink Tile, —, Balance Split, Rotate Split, Flip Split, —, Split with New Finder Window |
+| 13 | "Split" ▸ | submenu | | Grow Tile, Shrink Tile, —, Balance Split, Rotate Layout, Flip Split, —, Split with New Finder Window |
 | 14 | "Snap Floating Window" ▸ | submenu | | Halves, —, thirds, —, quarters, —, Maximize, Center |
 | — | separator | | | |
 | 15 | "Arrange All Windows" | item | ⌃⌥⌘⇧D | TILE-16 |
@@ -183,7 +183,7 @@ The menu is rebuilt in `menuNeedsUpdate(_:)` as in Phase 2. The frontmost app an
 |---|---|
 | Focus | "Left" ⌃⌥⌘←, "Right" ⌃⌥⌘→, "Up" ⌃⌥⌘↑, "Down" ⌃⌥⌘↓ |
 | Move Window | "Left" ⌃⌥⌘⇧←, "Right" ⌃⌥⌘⇧→, "Up" ⌃⌥⌘⇧↑, "Down" ⌃⌥⌘⇧↓. Enabled only for a docked focused window |
-| Split | "Grow Tile" ⌃⌥⌘=, "Shrink Tile" ⌃⌥⌘-, —, "Balance Split" ⌃⌥⌘B, "Rotate Split" ⌃⌥⌘R, "Flip Split" ⌃⌥⌘X, —, "Split with New Finder Window" ⌃⌥⌘N. The first six need a docked focused window. Finder split needs a docked focused window, or acts on the Desktop tile when the focused window is floating |
+| Split | "Grow Tile" ⌃⌥⌘=, "Shrink Tile" ⌃⌥⌘-, —, "Balance Split" ⌃⌥⌘B, "Rotate Layout" ⌃⌥⌘R, "Flip Split" ⌃⌥⌘X, —, "Split with New Finder Window" ⌃⌥⌘N. The first six need a docked focused window. Finder split needs a docked focused window, or acts on the Desktop tile when the focused window is floating |
 | Snap Floating Window | "Left Half" ⌃⌥⌘⇧←, "Right Half" ⌃⌥⌘⇧→, "Top Half" ⌃⌥⌘⇧↑, "Bottom Half" ⌃⌥⌘⇧↓, —, "Left Third" ⌃⌥⌘1, "Center Third" ⌃⌥⌘2, "Right Third" ⌃⌥⌘3, —, "Top Left Quarter" ⌃⌥⌘U, "Top Right Quarter" ⌃⌥⌘I, "Bottom Left Quarter" ⌃⌥⌘J, "Bottom Right Quarter" ⌃⌥⌘K, —, "Maximize" ⌃⌥⌘↩, "Center" ⌃⌥⌘C. Enabled only for a floating focused window. Targets are relative to the **Desktop tile's rect**, not the screen |
 | Gaps | "None", "4 pt", "8 pt", "12 pt", "16 pt", "24 pt". The current value has `state = .on`. Saved in UserDefaults and applied at once (re-resolve). Stays enabled while paused, and takes effect on Resume |
 | Debug | "Show Tracked Windows" (moved here from the root, because it is a developer surface), "Nudge Focused Window" (Phase 2), "Freeze “App” for 10 Seconds…" (Debug builds, Phase 2), —, "Window ID lookup: …", "Spaces lookup: …" (Phase 2), "Event tap: running" / "Event tap: off, drags not detected" (new, from the tap watchdog) |
@@ -351,7 +351,7 @@ Every hotkey is on the **⌃⌥⌘** base (CONTEXT B). They are registered throu
 | Grow tile | Arrange ▸ Split ▸ Grow Tile | ⌃⌥⌘= | `growTile` | The focused tile's share of its parent split grows by 10% of the split's length, taken from its siblings in proportion and clamped by minimum sizes (TILE-13) |
 | Shrink tile | Arrange ▸ Split ▸ Shrink Tile | ⌃⌥⌘- | `shrinkTile` | The reverse of Grow Tile |
 | Balance | Arrange ▸ Split ▸ Balance Split | ⌃⌥⌘B | `balanceSplit` | Equalises the children of the focused tile's parent split (TILE-12) |
-| Rotate | Arrange ▸ Split ▸ Rotate Split | ⌃⌥⌘R | `rotateSplit` | Toggles that split between horizontal and vertical |
+| Rotate | Arrange ▸ Split ▸ Rotate Layout | ⌃⌥⌘R | `rotateSplit` | Flips every split axis in the layout, starting from the desk's root split (a nested split cannot take its parent's axis without merging, so rotating only it could not be undone by rotating again). The result is the same whether the focused tile's parent split is the root or nested; Rotate twice restores the layout. The `Name` stays `rotateSplit` (revised 2026-10-25 with 03-02/03-12) |
 | Flip | Arrange ▸ Split ▸ Flip Split | ⌃⌥⌘X | `flipSplit` | Reverses that split's child order |
 | Finder split | Arrange ▸ Split ▸ Split with New Finder Window | ⌃⌥⌘N | `finderSplit` | Splits the current tile along its longer side with a new Finder window (TILE-17). Also `pane://split-finder`. N9 if none appears within 2 s |
 | Thirds | Snap Floating Window ▸ Left / Center / Right Third | ⌃⌥⌘1 / 2 / 3 | `snapLeftThird` `snapCenterThird` `snapRightThird` | Floating only; relative to the Desktop tile |
@@ -416,7 +416,7 @@ Voice is unchanged from Phase 2: plain, second person, sentence case for body te
 | Window commands | "Dock Window", "Float Window", "Swap with Previous Window", "Undo Layout Change" |
 | Submenus | "Focus", "Move Window", "Split", "Snap Floating Window", "Gaps", "Debug" |
 | Direction items | "Left", "Right", "Up", "Down" |
-| Split items | "Grow Tile", "Shrink Tile", "Balance Split", "Rotate Split", "Flip Split", "Split with New Finder Window" |
+| Split items | "Grow Tile", "Shrink Tile", "Balance Split", "Rotate Layout", "Flip Split", "Split with New Finder Window" |
 | Snap items | "Left Half", "Right Half", "Top Half", "Bottom Half", "Left Third", "Center Third", "Right Third", "Top Left Quarter", "Top Right Quarter", "Bottom Left Quarter", "Bottom Right Quarter", "Maximize", "Center" |
 | All-window items | "Arrange All Windows", "Float All Windows", "Hide Desktop Tile" / "Show Desktop Tile" |
 | Gaps items | "None", "4 pt", "8 pt", "12 pt", "16 pt", "24 pt" |
