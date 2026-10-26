@@ -203,3 +203,7 @@ Resume file: None
 | 2 | verification_deferred_human | /gsd-verify-work 2 |
 
 Phase 2 automated verification: human_needed (144/150, no gaps, 02-VERIFICATION.md). 18 hands-on items in 02-UAT.md. Lead chose on 2026-10-25 to defer UAT and continue with Phase 3.
+
+## Pending: Rename to Transom
+
+Decided 2026-10-25: rename the app from "Pane" to "Transom". "Pane" is already used by several macOS window managers. This is a full rename covering the app name, bundle IDs, the `pane://` scheme, menu copy, the data folder, the SwiftPM modules, types, tests, the local directory and the GitHub repo. Schedule: immediately after Phase 3 completes. Hold the public 0.3.0 pre-release (03-17) until the rename is done.
