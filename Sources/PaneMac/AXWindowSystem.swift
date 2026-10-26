@@ -112,6 +112,7 @@ import os
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.spaceSwitches.spaceDidChange(pids: self.threads.keys)
+                self.spaceDidChange()
             }
         }
         let gate = SessionGate(
@@ -485,7 +486,18 @@ import os
     }
 
     /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.
+    /// Re-reads the displays and reports each one whose current Space changed (D-25).
+    private func spaceDidChange() {
+        let old = Dictionary(displays.map { ($0.uuid, $0.currentSpaceID) }, uniquingKeysWith: { first, _ in first })
+        displays = Displays.current()
+        for display in displays where old[display.uuid] != .some(display.currentSpaceID) {
+            continuation.yield(.spaceChanged(displayUUID: display.uuid, spaceID: display.currentSpaceID))
+        }
+    }
+
     private func displaysDidChange() {
+        // Read now, so the inventory the Arranger re-plans against already has the new visible frames (TILE-03).
+        displays = Displays.current()
         continuation.yield(.displaysChanged)
         scheduler?.scheduleAll(after: .milliseconds(500))
     }

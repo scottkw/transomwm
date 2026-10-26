@@ -168,12 +168,17 @@ public actor FakeWindowSystem: WindowSystem {
         }
     }
 
-    /// A Space switch: AX lists, and WindowServer shows onscreen, exactly the open windows on `space` that are not
-    /// hidden tabs. With `notifies` the switch marks every app's next full update, as the live
+    /// A Space switch on every display: AX lists, and WindowServer shows onscreen, exactly the open windows on `space`
+    /// that are not hidden tabs, and every display's `currentSpaceID` becomes `space`. With `notifies` the switch marks
+    /// every app's next full update and yields `.spaceChanged` per display, as the live
     /// `activeSpaceDidChangeNotification` does; without it the notification never arrived.
     public func showSpace(_ space: UInt64, notifies: Bool = true) {
         currentSpace = space
-        if notifies { spaceSwitches.spaceDidChange(pids: apps.keys) }
+        for i in displays.indices { displays[i].currentSpaceID = space }
+        if notifies {
+            spaceSwitches.spaceDidChange(pids: apps.keys)
+            for display in displays { continuation.yield(.spaceChanged(displayUUID: display.uuid, spaceID: space)) }
+        }
         for (id, window) in windows {
             let shown = window.space == space && !isHiddenTab(window) && window.axValid && window.inCGList
             windows[id]?.listedInAX = shown

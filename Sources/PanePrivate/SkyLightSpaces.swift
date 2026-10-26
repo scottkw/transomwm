@@ -2,7 +2,7 @@ import CoreFoundation
 import Darwin
 import Foundation
 
-/// Read-only per-window Space lookup through SkyLight (private, D-15). Reached only through `dlopen` + `dlsym`,
+/// Read-only per-window and per-display Space lookup through SkyLight (private, D-15). Reached only through `dlopen` + `dlsym`,
 /// never linked, so a removed symbol leaves the lookup nil and Pane runs single-Space behaviour (only tab grouping
 /// falls back). WindowServer IPC, not AX: safe to call on main.
 public enum SkyLightSpaces {
@@ -15,13 +15,20 @@ public enum SkyLightSpaces {
     /// A window on more Spaces than this has the rest ignored (T-02-38).
     static let maxSpacesPerWindow = 16
 
-    private static let functions: (connection: Int32, copySpaces: CopySpacesForWindows)? = {
+    /// (connection, display UUID) -> the display's current Space ID, 0 when unknown. The signature is prior art
+    /// (yabai's `SLSManagedDisplayGetCurrentSpace(int cid, CFStringRef uuid)`), cross-checked only by a probe on
+    /// macOS 27.0.1 that returned the Space `SLSCopyManagedDisplaySpaces` called current (03-RESEARCH).
+    typealias CurrentSpace = @convention(c) (Int32, CFString) -> UInt64
+
+    /// `currentSpace` is optional on its own, so a missing symbol never turns off the per-window lookup.
+    private static let functions: (connection: Int32, copySpaces: CopySpacesForWindows, currentSpace: CurrentSpace?)? = {
         guard !Capabilities.isForcedOff(.spaces),
               let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY),
               let main = dlsym(handle, "SLSMainConnectionID"),
               let copy = dlsym(handle, "SLSCopySpacesForWindows")
         else { return nil }
-        return (unsafeBitCast(main, to: MainConnectionID.self)(), unsafeBitCast(copy, to: CopySpacesForWindows.self))
+        let current = dlsym(handle, "SLSManagedDisplayGetCurrentSpace").map { unsafeBitCast($0, to: CurrentSpace.self) }
+        return (unsafeBitCast(main, to: MainConnectionID.self)(), unsafeBitCast(copy, to: CopySpacesForWindows.self), current)
     }()
 
     /// True only when both symbols resolved and the capability was not forced off at launch.
@@ -47,9 +54,12 @@ public enum SkyLightSpaces {
         return result
     }
 
-    /// The Space shown on a display right now. Stub (RED).
+    /// The Space shown on `displayUUID` right now (D-25). Nil when the capability is off in `session`, the symbol did
+    /// not resolve, or SkyLight answers 0 (unknown).
     public static func currentSpace(displayUUID: String, session: CapabilitySession = Capabilities.session) -> UInt64? {
-        nil
+        guard session.isAvailable(.spaces), let functions, let currentSpace = functions.currentSpace else { return nil }
+        let space = currentSpace(functions.connection, displayUUID as CFString)
+        return space == 0 ? nil : space
     }
 
     /// Only CFNumber elements count; 0 and anything past `maxSpacesPerWindow` are dropped (T-02-38).

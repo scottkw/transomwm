@@ -125,7 +125,10 @@ public struct Arranger: Sendable {
                 forget(window)
             case .sessionPaused(let paused):
                 sessionPaused = paused
-            case .windowFocused, .frameApplied, .appResponsiveness, .appLaunched, .appTerminated, .displaysChanged, .spaceChanged:
+            case .spaceChanged(let uuid, let spaceID):
+                // Only the shown Space's desk is planned; the one left keeps its layout untouched (D-25).
+                if let i = displays.firstIndex(where: { $0.uuid == uuid }) { displays[i].currentSpaceID = spaceID }
+            case .windowFocused, .frameApplied, .appResponsiveness, .appLaunched, .appTerminated, .displaysChanged:
                 break
             }
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
@@ -240,7 +243,12 @@ public struct Arranger: Sendable {
             }
         }
         // A window that left the plan (absent, fullscreen, floating clear of tiles) is written again when it returns.
-        lastRequested = lastRequested.filter { planned.contains($0.key) }
+        // A present window on a desk whose Space is not shown keeps its entry, so showing it again re-sends nothing.
+        let shown = Set(displays.map(Self.key))
+        let hidden = Set(world.desks.filter { !shown.contains($0.key) }.values.flatMap { desk in
+            (desk.tree.windows + desk.desktop.windows.map(\.window)).filter { desk.state(of: $0) == .present }.map(\.identity)
+        })
+        lastRequested = lastRequested.filter { planned.contains($0.key) || hidden.contains($0.key) }
         return faults + (commands.isEmpty ? [] : [.perform(commands)])
     }
 

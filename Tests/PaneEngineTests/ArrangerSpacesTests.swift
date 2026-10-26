@@ -93,6 +93,7 @@ extension Harness {
 
     @Test func aCloseOnAHiddenSpaceIsAppliedAndPlannedOnlyOnReturn() async throws {
         var harness = await Harness.onSpaceOne()
+        let tileA = try #require(await harness.frame(a))
         _ = await harness.switchTo(2)
         await harness.fake.close(2)
         let closed = await harness.refresh()
@@ -103,7 +104,7 @@ extension Harness {
         let frames = setFrames(back.effects)
         #expect(Set(frames.keys) == [a], "on return: \(frames)")
         let grown = try #require(frames[a])
-        #expect(grown.width > frameA.width + 400)
+        #expect(grown.width * grown.height > tileA.width * tileA.height, "a did not take b's space: \(tileA) -> \(grown)")
         #expect(setFrames(await harness.refresh()).isEmpty)
     }
 

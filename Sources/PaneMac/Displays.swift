@@ -1,6 +1,7 @@
 import AppKit
 import PaneEngine
 import PaneModel
+import PanePrivate
 import os
 
 /// The current displays, keyed by UUID (D-18). A `CGDirectDisplayID` is not durable across reconnects
@@ -9,7 +10,8 @@ public enum Displays {
     private static let logger = Logger(subsystem: "com.eightabyte.pane", category: "displays")
 
     /// `NSScreen.screens` in order (the primary first). `frame` from `CGDisplayBounds` is already top-left;
-    /// `visibleFrame` is AppKit and goes through `Coordinates`. `currentSpaceID` waits for SkyLight (Phase 6).
+    /// `visibleFrame` is AppKit and goes through `Coordinates`. `currentSpaceID` comes from SkyLight, nil while the
+    /// Spaces lookup is off (one desk per display, A7).
     public static func current() -> [DisplayInfo] {
         let screens = NSScreen.screens
         guard let primary = screens.first else { return [] }
@@ -28,7 +30,7 @@ public enum Displays {
                     fromAppKit: Rect(x: visible.minX, y: visible.minY, width: visible.width, height: visible.height),
                     primaryHeight: primaryHeight
                 ),
-                currentSpaceID: nil
+                currentSpaceID: SkyLightSpaces.currentSpace(displayUUID: uuid)
             )
         }
     }
