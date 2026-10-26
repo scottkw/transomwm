@@ -33,6 +33,8 @@ public enum LayoutError: Error, Equatable, Sendable {
     case nothingDocked
     /// The edit cannot apply to the Desktop tile at this NodeID (it holds no windows and never tabs).
     case desktopTile(NodeID)
+    /// A grow or shrink of a child of this split changed nothing: every weight it could move is at `minWeight`.
+    case atSizeLimit(NodeID)
 }
 
 /// A flat value tree: nodes refer to children by ID, so the whole layout is a cheap copy-on-write

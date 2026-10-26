@@ -219,18 +219,39 @@ extension LayoutTree {
     /// between those two children only (D-07). Both stay at or above `minWeight`; every other
     /// weight is left bit-identical.
     public mutating func resizeBoundary(in split: NodeID, after index: Int, by delta: Double) throws(LayoutError) {
-        guard let node = nodes[split] else { throw .nodeNotFound(split) }
-        guard case .split(let axis, let children, var weights) = node else { throw .notASplit(split) }
-        guard index >= 0, index < children.count - 1 else { throw .invalidBoundary(split: split, index: index) }
+        try resizeBetween(in: split, index, index + 1, by: delta)
+    }
+
+    /// Moves `delta` (a fraction of the split's length) from child `second` to child `first`, which need
+    /// not be adjacent; every other weight is left bit-identical, so a gap drag across a minimised sibling
+    /// never changes it (TILE-05, Pitfall 9). Both stay at or above `minWeight`.
+    public mutating func resizeBetween(in split: NodeID, _ first: Int, _ second: Int, by delta: Double) throws(LayoutError) {
+        let (axis, children, weights) = try splitParts(split)
+        guard first != second, children.indices.contains(first), children.indices.contains(second) else {
+            throw .invalidBoundary(split: split, index: first)
+        }
         guard delta.isFinite else { throw .invalidGeometry("delta must be finite") }
-        let total = weights[index] + weights[index + 1]
-        weights[index] = min(max(weights[index] + delta, Self.minWeight), total - Self.minWeight)
-        weights[index + 1] = total - weights[index]
-        var next = self
-        next.nodes[split] = .split(axis: axis, children: children, weights: weights)
-        next.normalize()
-        self = next
-        assertValid()
+        var result = weights
+        let total = weights[first] + weights[second]
+        result[first] = min(max(weights[first] + delta, Self.minWeight), total - Self.minWeight)
+        result[second] = total - result[first]
+        try commit(split, .split(axis: axis, children: children, weights: result))
+    }
+
+    /// Grows (positive `delta`) or shrinks child `index` by a fraction of the split's length (TILE-13). The
+    /// change comes from or goes to its siblings in proportion to their weights, each kept at `minWeight`
+    /// or above. Throws `atSizeLimit` when the clamps leave nothing to move.
+    public mutating func resizeChild(in split: NodeID, index: Int, by delta: Double) throws(LayoutError) {
+        let (axis, children, weights) = try splitParts(split)
+        guard children.indices.contains(index) else { throw .invalidBoundary(split: split, index: index) }
+        guard delta.isFinite else { throw .invalidGeometry("delta must be finite") }
+        let target = min(max(weights[index] + delta, Self.minWeight), 1 - Double(children.count - 1) * Self.minWeight)
+        var others = weights
+        others.remove(at: index)
+        var result = Self.clamped(others, total: 1 - target)
+        result.insert(target, at: index)
+        guard zip(result, weights).contains(where: { abs($0 - $1) > 1e-12 }) else { throw .atSizeLimit(split) }
+        try commit(split, .split(axis: axis, children: children, weights: result))
     }
 
     /// D-06, run on the working copy of every edit. Collapses and merges repeat until a pass finds
@@ -284,12 +305,13 @@ extension LayoutTree {
         weights.allSatisfy { $0 >= minWeight - 1e-12 } && abs(weights.reduce(0, +) - 1) <= 1e-12
     }
 
-    /// Divides by the sum, then pins weights below `minWeight` to it and shares the rest of 1 among
-    /// the others in proportion, until none is below. Terminates: the pinned set only grows, and
-    /// maxChildren × minWeight == 1 leaves the unpinned weights an average of at least minWeight.
-    private static func clamped(_ weights: [Double]) -> [Double] {
+    /// Scales to sum `total`, then pins weights below `minWeight` to it and shares the rest of `total`
+    /// among the others in proportion, until none is below. Terminates: the pinned set only grows, and
+    /// callers pass `total >= count × minWeight` (maxChildren × minWeight == 1), which leaves the unpinned
+    /// weights an average of at least minWeight.
+    private static func clamped(_ weights: [Double], total: Double = 1) -> [Double] {
         let sum = weights.reduce(0, +)
-        var result = weights.map { $0 / sum }
+        var result = weights.map { $0 / sum * total }
         var pinned: Set<Int> = []
         while true {
             let low = result.indices.filter { !pinned.contains($0) && result[$0] < minWeight }
@@ -297,7 +319,7 @@ extension LayoutTree {
             pinned.formUnion(low)
             let free = result.indices.filter { !pinned.contains($0) }
             let freeSum = free.reduce(0) { $0 + result[$1] }
-            let share = 1 - Double(pinned.count) * minWeight
+            let share = total - Double(pinned.count) * minWeight
             for i in pinned { result[i] = minWeight }
             for i in free { result[i] = result[i] / freeSum * share }
         }
