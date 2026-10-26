@@ -24,3 +24,12 @@ Out-of-scope issues found while executing plans. Not fixed by the plan that foun
 - **`swift format lint --strict` is not clean on the existing code** (about 1,250 findings in Arranger.swift at
   8038b4b under the default rules; there is no `.swift-format` file and no lint step in CI). New 03-12 code follows
   the file's existing style (`var candidate = world, candidateHistory = history`).
+
+## Found in 03-16
+
+- **Test UserDefaults suites leave empty plists behind.** `removePersistentDomain(forName:)` clears the domain but
+  cfprefsd leaves `~/Library/Preferences/com.eightabyte.pane.tests.<suite>.<UUID>.plist` files (102 from
+  `GapPreferenceTests` at 03-16; 03-16's own `conflicts` ones were removed by hand). Test-only domains, never the
+  user's data. A shared helper that also deletes the file, or one fixed suite name per test file, would stop the pile-up.
+- **The plan's `killall` grep baseline is out of date.** `grep -rn killall Sources` finds one hit at 16d0692: the
+  03-15 doc comment in `AppDelegate.swift` describing `killall Pane` sending SIGTERM. 03-16 adds none.

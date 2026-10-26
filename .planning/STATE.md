@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-15-PLAN.md
-last_updated: "2026-10-26T06:20:53.266Z"
+stopped_at: Completed 03-16-PLAN.md
+last_updated: "2026-10-26T06:35:37.061Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 8d6f2022b7e71b7c8593eab29290cf12a315f3e0
+state_head: e3253c08215566979cb5575232809a8e87cebdad
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 38
+  completed_plans: 39
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 16 of 17
+Plan: 17 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -94,6 +94,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 3 P13 | 17 min | 3 tasks | 21 files |
 | Phase 3 P14 | 13 min | 3 tasks | 22 files |
 | Phase 03 P15 | 10 min | 2 tasks | 15 files |
+| Phase 3 P16 | 11 min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,10 @@ Recent decisions affecting current work:
 - [Phase 03]: Quit restore: a non-docked window with a home frame counts as parked even when not stranded (park corner can show on a neighbouring display); it goes home on the display holding its home frame's centre
 - [Phase 03]: A URL-sourced command that cannot act is silent on both refusal paths: availability and the Arranger's own beep effects
 - [Phase 03]: pane-debug:// in Debug and pane:// in Release via PANE_URL_SCHEME merged from xcode/Pane-Info.plist; outside the bundle every URL is rejected
+- [Phase 3]: 03-16: Recorded WindowManager originals are JSON [String: PrefValue] under windowManagerOriginals; only allow-listed keys with a boolean or absent survive load
+- [Phase 3]: 03-16: A non-boolean WindowManager value is never written over; Turn Off skips that key
+- [Phase 3]: 03-16: Conflict alerts are modeless NSAlerts (no runModal); presentAlert nil means no alert UI in unit tests
+- [Phase 3]: 03-16: Restore macOS Window Settings is a plain status-menu item, not a Command (no hotkey, no Arranger rule)
 
 ### Pending Todos
 
@@ -252,8 +257,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T06:20:53.126Z
-Stopped at: Completed 03-15-PLAN.md
+Last session: 2026-10-26T06:35:36.910Z
+Stopped at: Completed 03-16-PLAN.md
 Resume file: None
 
 ## Deferred Verification
