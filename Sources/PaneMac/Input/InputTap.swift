@@ -4,6 +4,13 @@ import Foundation
 /// One pointer or modifier event, copied out of the CGEvent in the tap callback. `location` is in global top-left
 /// points, Pane's model space (A16, checked live).
 nonisolated struct TapEvent: Sendable {
+    enum Kind: Equatable, Sendable {
+        case pointer
+        /// A swallowed press on this window's green button (TILE-06).
+        case greenButton(windowID: UInt32)
+    }
+
+    var kind: Kind = .pointer
     let type: CGEventType
     let location: CGPoint
     let flags: CGEventFlags
@@ -44,6 +51,9 @@ nonisolated final class InputTap: @unchecked Sendable {
     }
 
     var isRunning: Bool { port.map(CFMachPortIsValid) ?? false }
+
+    /// The green buttons whose press Pane takes, in global top-left points, by CG window ID.
+    func setGreenButtons(_ rects: [UInt32: CGRect]) {}
 
     /// Creates the tap and starts its thread. False when macOS refuses the tap (no Accessibility access).
     func start() -> Bool {

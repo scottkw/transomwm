@@ -18,6 +18,8 @@ public enum ArrangerInput: Sendable {
     case pointer(PointerEvent)
     /// The pressed window's CG bounds from the 60 Hz drag poll.
     case dragFrame(WindowIdentity, Rect)
+    /// A press on this window's green button, which the tap swallowed (TILE-06).
+    case greenButton(WindowRef)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -212,6 +214,8 @@ public struct Arranger: Sendable {
             windows[id]?.frame = frame
             drag?.observe(frame, lastApplied: lastApplied[id])
             return follow(now: now)
+        case .greenButton:
+            return []
         }
     }
 

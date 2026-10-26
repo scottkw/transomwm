@@ -62,11 +62,14 @@ public struct WindowInfo: Equatable, Sendable {
     /// The Spaces the window is on (SkyLight, D-25). Nil means no Space data; empty means the lookup reported none,
     /// as for a hidden native tab (02-14).
     public var spaces: Set<UInt64>?
+    /// The green button's frame as an offset from `frame`'s top-left (`WindowSnapshot.greenButton`); nil when unknown.
+    public var greenButton: Rect?
 
     public init(
         window: WindowRef, frame: Rect, state: WindowState, displayUUID: String?,
         kind: WindowKind = .dockable, idSource: WindowIDSource = .axPrivate, visibleMemberID: UInt32? = nil,
-        tabCount: Int = 1, isExcluded: Bool = false, learnedMinimum: Size? = nil, spaces: Set<UInt64>? = nil
+        tabCount: Int = 1, isExcluded: Bool = false, learnedMinimum: Size? = nil, spaces: Set<UInt64>? = nil,
+        greenButton: Rect? = nil
     ) {
         self.window = window
         self.frame = frame
@@ -79,6 +82,7 @@ public struct WindowInfo: Equatable, Sendable {
         self.isExcluded = isExcluded
         self.learnedMinimum = learnedMinimum
         self.spaces = spaces
+        self.greenButton = greenButton
     }
 }
 

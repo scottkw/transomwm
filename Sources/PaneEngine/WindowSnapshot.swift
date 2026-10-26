@@ -58,13 +58,17 @@ public struct WindowSnapshot: Codable, Equatable, Sendable {
     public var sheetAttached: Bool?
     public var frame: Rect?
     public var cg: CGWindowFact?
+    /// The green button's frame (the fullscreen button, else the zoom button) as an offset from the window's
+    /// top-left, so it follows the window without new AX reads (RESEARCH Pattern 5). Optional: older corpus
+    /// fixtures have no such field.
+    public var greenButton: Rect?
 
     public init(
         role: String? = nil, subrole: String? = nil, modal: Bool? = nil, main: Bool? = nil,
         minimized: Bool? = nil, fullScreen: Bool? = nil, identifier: String? = nil,
         close: ButtonFact = .absent, minimize: ButtonFact = .absent, zoom: ButtonFact = .absent,
         fullScreenButton: ButtonFact = .absent, tabGroup: TabGroupFact? = nil, sheetAttached: Bool? = nil,
-        frame: Rect? = nil, cg: CGWindowFact? = nil
+        frame: Rect? = nil, cg: CGWindowFact? = nil, greenButton: Rect? = nil
     ) {
         self.role = role
         self.subrole = subrole
@@ -81,6 +85,7 @@ public struct WindowSnapshot: Codable, Equatable, Sendable {
         self.sheetAttached = sheetAttached
         self.frame = frame
         self.cg = cg
+        self.greenButton = greenButton
     }
 }
 
