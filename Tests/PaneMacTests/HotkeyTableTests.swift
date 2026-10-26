@@ -13,10 +13,14 @@ import Testing
         #expect(Hotkeys.entries.map(\.name.rawValue) == [
             "dock", "float", "undo", "toggleDesktop", "focusLeft", "focusRight", "focusUp", "focusDown", "finderSplit",
             "togglePause", "toggleExcludeFrontmost", "moveLeft", "moveRight", "moveUp", "moveDown",
+            "swapPrevious", "growTile", "shrinkTile", "balanceSplit", "rotateSplit", "flipSplit", "snapLeftThird", "snapCenterThird",
+            "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight", "snapMaximize", "snapCenter",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
             .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
             .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
+            .swapPrevious, .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .snap(.leftThird), .snap(.centerThird),
+            .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
         ])
     }
 
@@ -27,6 +31,10 @@ import Testing
             .init(.downArrow, modifiers: base), .init(.n, modifiers: base), .init(.p, modifiers: base),
             .init(.e, modifiers: base), .init(.leftArrow, modifiers: shifted), .init(.rightArrow, modifiers: shifted),
             .init(.upArrow, modifiers: shifted), .init(.downArrow, modifiers: shifted),
+            .init(.s, modifiers: base), .init(.equal, modifiers: base), .init(.minus, modifiers: base), .init(.b, modifiers: base),
+            .init(.r, modifiers: base), .init(.x, modifiers: base), .init(.one, modifiers: base), .init(.two, modifiers: base),
+            .init(.three, modifiers: base), .init(.u, modifiers: base), .init(.i, modifiers: base), .init(.j, modifiers: base),
+            .init(.k, modifiers: base), .init(.return, modifiers: base), .init(.c, modifiers: base),
         ]
         #expect(Hotkeys.entries.map(\.name.defaultShortcut) == expected)
     }

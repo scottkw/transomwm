@@ -159,3 +159,96 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
         #expect(arranger.isFloating(f) && !arranger.isFloating(a) && !arranger.isFloating(nil))
     }
 }
+
+/// The weights of the split holding `window`'s leaf.
+private func parentWeights(_ arranger: Arranger, _ window: WindowRef) throws -> [Double] {
+    let tree = try #require(arranger.world[key]).tree
+    let parent = try #require(tree.parent(of: try #require(tree.leaf(containing: window))))
+    guard case .split(_, _, let weights)? = tree.node(parent) else { throw LayoutError.notASplit(parent) }
+    return weights
+}
+
+/// TILE-11, TILE-12, TILE-13, TILE-14, D-32: swap with the previous window, grow and shrink, balance, rotate and flip,
+/// and the other snap targets.
+extension ArrangerCommandTests {
+    @Test func swapPreviousExchangesTheFocusedWindowWithTheDockedOneFocusedBeforeIt() throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, f: somewhere], focus: [a, f, b], row)
+        let history = depth(arranger)
+        let effects = arranger.handle(.command(.swapPrevious, focused: b), now: .now)
+        #expect(shape(try #require(arranger.world[key]).tree) == "H[b,a,D]")
+        #expect(depth(arranger) == history + 1)
+        #expect(setFrames(effects)[a] != nil && setFrames(effects)[b] != nil)
+    }
+
+    @Test func swapPreviousWithNoEarlierDockedWindowBeeps() throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, f: somewhere], focus: [f, b], row)
+        let world = arranger.world
+        #expect(!arranger.isAvailable(.swapPrevious, focused: b))
+        #expect(arranger.handle(.command(.swapPrevious, focused: b), now: .now) == [.beep])
+        #expect(arranger.world == world)
+    }
+
+    @Test func growAndShrinkMoveATenthOfTheSplitFromAndToTheSiblings() throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere], row)
+        let start = try parentWeights(arranger, b)
+        #expect(start.count == 3)
+        _ = arranger.handle(.command(.growTile, focused: b), now: .now)
+        let grown = try parentWeights(arranger, b)
+        #expect(abs(grown[1] - (start[1] + 0.1)) < 1e-9)
+        #expect(abs(grown[0] - grown[2]) < 1e-9, "the siblings did not give in proportion: \(grown)")
+        _ = arranger.handle(.command(.shrinkTile, focused: b), now: .now)
+        let shrunk = try parentWeights(arranger, b)
+        #expect(zip(shrunk, start).allSatisfy { abs($0 - $1) < 1e-9 }, "\(shrunk) vs \(start)")
+        #expect(depth(arranger) == 2)
+    }
+
+    /// a and the Desktop (sized by f's minimum) at their minimums leave b nothing to grow into.
+    @Test func growAtASizeLimitBeepsAndPushesNoUndoStep() throws {
+        let mins = [a: Size(width: 600, height: 100), f: Size(width: 600, height: 100)]
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, f: Rect(x: 900, y: 300, width: 600, height: 200)], minimums: mins, row)
+        let world = arranger.world, history = arranger.history
+        #expect(arranger.handle(.command(.growTile, focused: b), now: .now) == [.beep])
+        #expect(arranger.world == world && arranger.history == history)
+    }
+
+    @Test func balanceEvensTheParentSplitAndFlipReversesIt() throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere], row)
+        _ = arranger.handle(.command(.growTile, focused: b), now: .now)
+        _ = arranger.handle(.command(.balanceSplit, focused: b), now: .now)
+        #expect(try parentWeights(arranger, b).allSatisfy { abs($0 - 1.0 / 3) < 1e-9 })
+        _ = arranger.handle(.command(.flipSplit, focused: b), now: .now)
+        #expect(shape(try #require(arranger.world[key]).tree) == "H[D,b,a]")
+        #expect(depth(arranger) == 3)
+    }
+
+    @Test(arguments: [b, a])
+    func rotateTurnsTheWholeLayoutFromTheRootAndTwiceRestoresIt(focused: WindowRef) throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], columns)
+        let original = try #require(arranger.world[key]).tree
+        _ = arranger.handle(.command(.rotateSplit, focused: focused), now: .now)
+        #expect(shape(try #require(arranger.world[key]).tree) == "V[a,H[b,c],D]")
+        _ = arranger.handle(.command(.rotateSplit, focused: focused), now: .now)
+        #expect(arranger.world[key]?.tree == original)
+        #expect(depth(arranger) == 2)
+    }
+
+    @Test(arguments: [Command.growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .swapPrevious])
+    func treeCommandsBeepForAFloatingWindow(command: Command) throws {
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, f: somewhere], focus: [a, f], row)
+        #expect(arranger.handle(.command(command, focused: f), now: .now) == [.beep])
+    }
+
+    @Test(arguments: [SnapTarget.leftThird, .centerThird, .rightThird, .topLeft, .topRight, .bottomLeft, .bottomRight, .maximize, .center])
+    func snapPutsAFloatingWindowAtItsTargetAndADockedOneBeeps(target: SnapTarget) throws {
+        let start = Rect(x: 900, y: 300, width: 300, height: 200)
+        var arranger = try arranger(frames: [a: somewhere, f: start]) { desk, ids throws(LayoutError) in
+            try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        }
+        let desktop = try #require(try plan(arranger).desktopRect)
+        let expected = Snap.frame(target, window: start, desktop: desktop, gap: gap)
+        #expect(setFrames(arranger.handle(.command(.snap(target), focused: f), now: .now)) == [f: expected])
+        #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
+        #expect(depth(arranger) == 0)
+        #expect(arranger.handle(.command(.snap(target), focused: a), now: .now) == [.beep])
+    }
+}

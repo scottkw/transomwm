@@ -13,6 +13,11 @@ import Testing
         (Command.dock, "Dock Window"), (.float, "Float Window"), (.undo, "Undo Layout Change"),
         (.toggleDesktop, "Hide Desktop Tile"), (.finderSplit, "Split with New Finder Window"),
         (.focus(.left), "Left"), (.focus(.right), "Right"), (.focus(.top), "Up"), (.focus(.bottom), "Down"),
+        (.swapPrevious, "Swap with Previous Window"), (.growTile, "Grow Tile"), (.shrinkTile, "Shrink Tile"),
+        (.balanceSplit, "Balance Split"), (.rotateSplit, "Rotate Layout"), (.flipSplit, "Flip Split"),
+        (.snap(.leftThird), "Left Third"), (.snap(.centerThird), "Center Third"), (.snap(.rightThird), "Right Third"),
+        (.snap(.topLeft), "Top Left Quarter"), (.snap(.topRight), "Top Right Quarter"), (.snap(.bottomLeft), "Bottom Left Quarter"),
+        (.snap(.bottomRight), "Bottom Right Quarter"), (.snap(.maximize), "Maximize"), (.snap(.center), "Center"),
     ])
     func eachItemIsBuiltOnceShowsItsHotkeyAndDispatchesItsCommand(command: Command, title: String) throws {
         var sent: [Command] = []
@@ -64,6 +69,21 @@ import Testing
         #expect(!moveItem.isEnabled && halfItem.isEnabled)
         menu.update(focusedFloats: true) { _ in false }
         #expect(!moveItem.isEnabled && !halfItem.isEnabled)
+    }
+
+    /// UI-SPEC Surface 1 submenu orders; nil is a separator.
+    @Test func theSplitAndSnapSubmenusFollowTheUISpecOrder() throws {
+        let menu = CommandMenu { _ in }
+        func titles(_ item: NSMenuItem) throws -> [String?] {
+            try #require(item.submenu).items.map { $0.isSeparatorItem ? nil : $0.title }
+        }
+        #expect(try titles(menu.splitMenu) == [
+            "Grow Tile", "Shrink Tile", nil, "Balance Split", "Rotate Layout", "Flip Split", nil, "Split with New Finder Window",
+        ])
+        #expect(try titles(menu.snapMenu) == [
+            "Left Half", "Right Half", "Top Half", "Bottom Half", nil, "Left Third", "Center Third", "Right Third", nil,
+            "Top Left Quarter", "Top Right Quarter", "Bottom Left Quarter", "Bottom Right Quarter", nil, "Maximize", "Center",
+        ])
     }
 
     @Test func theFocusAndSplitSubmenusHoldThePersistentItems() {
