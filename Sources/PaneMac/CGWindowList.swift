@@ -15,6 +15,13 @@ public nonisolated enum CGWindowList {
     /// The on-screen windows only, front to back (the order `optionAll` does not promise): for "topmost under a point".
     public static func onScreenFrontToBack() -> [CGWindowEntry]? { read([.optionOnScreenOnly, .excludeDesktopElements]) }
 
+    /// The topmost visible window of another process under `point`: the tap's fallback when an event carries no window
+    /// (0 at the session tap, 03-11), so a green button under another window is never taken.
+    static func topmostWindow(at point: Point) -> UInt32? {
+        let own = getpid()
+        return onScreenFrontToBack()?.first { $0.pid != own && $0.alpha > 0 && $0.bounds.contains(point) }?.windowID
+    }
+
     private static func read(_ options: CGWindowListOption) -> [CGWindowEntry]? {
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             logger.error("CG window list unavailable; skipping decisions that need it")

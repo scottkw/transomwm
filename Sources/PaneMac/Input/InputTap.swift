@@ -1,5 +1,7 @@
 import CoreGraphics
 import Foundation
+import PaneModel
+import os
 
 /// One pointer or modifier event, copied out of the CGEvent in the tap callback. `location` is in global top-left
 /// points, Pane's model space (A16, checked live).
@@ -22,18 +24,23 @@ nonisolated struct TapEvent: Sendable {
 /// read.
 nonisolated private final class TapBox: @unchecked Sendable {
     let continuation: AsyncStream<TapEvent>.Continuation
+    let greenButtons: OSAllocatedUnfairLock<[UInt32: CGRect]>
+    /// A green-button press was taken and its click is not over yet. Read and written on the tap thread only.
+    var swallowing = false
     var port: CFMachPort?
     var runLoop: CFRunLoop?
 
-    init(_ continuation: AsyncStream<TapEvent>.Continuation) {
+    init(_ continuation: AsyncStream<TapEvent>.Continuation, greenButtons: OSAllocatedUnfairLock<[UInt32: CGRect]>) {
         self.continuation = continuation
+        self.greenButtons = greenButtons
     }
 }
 
 /// The one active session event tap (RESEARCH Pattern 6): left mouse down, dragged and up, and flagsChanged. No keyboard
 /// key events are in the mask, so Pane never sees typed characters (T-03-28). It runs on its own thread with its own
 /// CFRunLoop, never main (Pitfall 5). The callback copies four fields and returns the event unchanged: no AX, no file
-/// I/O, no logging (T-03-29). Call `start`, `stop` and `watchdogTick` from one thread (main).
+/// I/O, no logging (T-03-29). The one exception is a press on a published green button, which it takes (TILE-06).
+/// Call `start`, `stop` and `watchdogTick` from one thread (main).
 nonisolated final class InputTap: @unchecked Sendable {
     let events: AsyncStream<TapEvent>
     private let continuation: AsyncStream<TapEvent>.Continuation
@@ -41,6 +48,8 @@ nonisolated final class InputTap: @unchecked Sendable {
     /// The running tap's port (kept after `stop`, invalidated, so a check can read it).
     private(set) var port: CFMachPort?
     private(set) var thread: Thread?
+    /// Writers swap the whole dictionary; the callback holds the lock only to copy it (T-03-35).
+    private let greenButtons = OSAllocatedUnfairLock(initialState: [UInt32: CGRect]())
 
     private static let mask: CGEventMask = (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue)
         | (1 << CGEventType.leftMouseDragged.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
@@ -53,12 +62,14 @@ nonisolated final class InputTap: @unchecked Sendable {
     var isRunning: Bool { port.map(CFMachPortIsValid) ?? false }
 
     /// The green buttons whose press Pane takes, in global top-left points, by CG window ID.
-    func setGreenButtons(_ rects: [UInt32: CGRect]) {}
+    func setGreenButtons(_ rects: [UInt32: CGRect]) {
+        greenButtons.withLock { $0 = rects }
+    }
 
     /// Creates the tap and starts its thread. False when macOS refuses the tap (no Accessibility access).
     func start() -> Bool {
         if isRunning { return true }
-        let box = TapBox(continuation)
+        let box = TapBox(continuation, greenButtons: greenButtons)
         guard let port = Self.makePort(box) else { return false }
         box.port = port
         let ready = DispatchSemaphore(value: 0)
@@ -116,9 +127,21 @@ nonisolated final class InputTap: @unchecked Sendable {
                 if let port = box.port { CGEvent.tapEnable(tap: port, enable: true) }
                 return Unmanaged.passUnretained(event)
             }
-            box.continuation.yield(TapEvent(
-                type: type, location: event.location, flags: event.flags,
-                windowUnderPointer: event.getIntegerValueField(.mouseEventWindowUnderMousePointer)))
+            let location = event.location
+            var window = event.getIntegerValueField(.mouseEventWindowUnderMousePointer)
+            let rects = box.greenButtons.withLock { $0 }
+            // No window in the event: only a press inside some button pays for one CG list read, to find who is on top.
+            if type == .leftMouseDown, window == 0, rects.values.contains(where: { $0.contains(location) }) {
+                window = Int64(CGWindowList.topmostWindow(at: Point(x: location.x, y: location.y)) ?? 0)
+            }
+            let id = UInt32(truncatingIfNeeded: window)
+            if GreenButton.shouldSwallow(type: type, location: location, flags: event.flags, windowID: id, rects: rects, swallowing: &box.swallowing) {
+                if type == .leftMouseDown {
+                    box.continuation.yield(TapEvent(kind: .greenButton(windowID: id), type: type, location: location, flags: event.flags, windowUnderPointer: window))
+                }
+                return nil
+            }
+            box.continuation.yield(TapEvent(type: type, location: location, flags: event.flags, windowUnderPointer: window))
             return Unmanaged.passUnretained(event)
         }
         return CGEvent.tapCreate(

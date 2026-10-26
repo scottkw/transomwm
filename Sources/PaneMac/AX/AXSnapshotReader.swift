@@ -107,7 +107,9 @@ public nonisolated enum AXSnapshotReader {
             fullScreenButton: button(values[13])
         )
         if let origin = point(values[8]), let size = size(values[9]) {
-            snapshot.frame = Rect(x: origin.x, y: origin.y, width: size.width, height: size.height)
+            let frame = Rect(x: origin.x, y: origin.y, width: size.width, height: size.height)
+            snapshot.frame = frame
+            snapshot.greenButton = greenButton(values[13], else: values[12], in: frame)
         }
         if let children = values[14] as? [AXUIElement] {
             var sheetAttached = false
@@ -147,6 +149,24 @@ public nonisolated enum AXSnapshotReader {
         var enabled: CFTypeRef?
         let ok = AXUIElementCopyAttributeValue(value as! AXUIElement, kAXEnabledAttribute as CFString, &enabled) == .success
         return ButtonFact(present: true, enabled: ok && enabled as? Bool == true)
+    }
+
+    /// The green button (the fullscreen button, else the zoom button) as an offset from the window's top-left, read with
+    /// one batched call (RESEARCH Pattern 5). An app reports these values itself, so a rect that is not finite or not
+    /// inside the window is dropped: a bogus one can only ever cover that window (T-03-36).
+    private static func greenButton(_ fullScreen: CFTypeRef, else zoom: CFTypeRef, in frame: Rect) -> Rect? {
+        let isElement = { (value: CFTypeRef) in CFGetTypeID(value) == AXUIElementGetTypeID() }
+        guard let value = isElement(fullScreen) ? fullScreen : isElement(zoom) ? zoom : nil else { return nil }
+        var array: CFArray?
+        let names = [kAXPositionAttribute, kAXSizeAttribute] as CFArray
+        guard AXUIElementCopyMultipleAttributeValues(value as! AXUIElement, names, AXCopyMultipleAttributeOptions(rawValue: 0), &array) == .success,
+            let values = array as? [CFTypeRef], values.count == 2, let origin = point(values[0]), let size = size(values[1])
+        else { return nil }
+        let offset = Rect(x: origin.x - frame.x, y: origin.y - frame.y, width: size.width, height: size.height)
+        guard offset.isValidGeometry, offset.width > 0, offset.height > 0, offset.minX >= 0, offset.minY >= 0,
+            offset.maxX <= frame.width, offset.maxY <= frame.height
+        else { return nil }
+        return offset
     }
 
     static func point(_ value: CFTypeRef) -> CGPoint? {

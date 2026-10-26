@@ -155,6 +155,8 @@ public struct WindowTracker: Sendable {
             info.displayUUID = Coordinates.displayUUID(for: frame, among: context.displays)
             info.isExcluded = excluded.contains(identity.bundleID.lowercased())
             info.spaces = context.windowSpaces?[windowID]
+            // Drift under a point keeps the old offset, so it never adds up unreported.
+            if old == nil || Self.buttonMoved(old?.greenButton, snapshot.greenButton) { info.greenButton = snapshot.greenButton }
             if old == nil, let hint = bundleHints[identity.bundleID] {
                 learner.seed(identity, minimum: hint)
                 info.learnedMinimum = learner.minimum(for: identity)
@@ -183,6 +185,7 @@ public struct WindowTracker: Sendable {
             if old.frame.size != frame.size { events.append(.windowResized(ref, frame)) }
             if old.window.titleHint != ref.titleHint || old.kind != kind || old.tabCount != info.tabCount
                 || old.displayUUID != info.displayUUID || old.learnedMinimum != info.learnedMinimum || old.spaces != info.spaces
+                || Self.buttonMoved(old.greenButton, info.greenButton)
             {
                 changed.append(identity)
             }
@@ -283,6 +286,12 @@ public struct WindowTracker: Sendable {
             events.append(.windowChanged(info))
         }
         return events
+    }
+
+    /// A green button that appeared, went or moved by more than 1 pt; smaller drift is no event (RESEARCH Pattern 5).
+    private static func buttonMoved(_ old: Rect?, _ new: Rect?) -> Bool {
+        guard let old, let new else { return (old == nil) != (new == nil) }
+        return abs(old.x - new.x) > 1 || abs(old.y - new.y) > 1 || abs(old.width - new.width) > 1 || abs(old.height - new.height) > 1
     }
 
     /// Per-bundle minimums from earlier sessions (D-13): the learned minimum a window of that bundle starts from.

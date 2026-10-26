@@ -214,8 +214,12 @@ public struct Arranger: Sendable {
             windows[id]?.frame = frame
             drag?.observe(frame, lastApplied: lastApplied[id])
             return follow(now: now)
-        case .greenButton:
-            return []
+        case .greenButton(let window):
+            // The shell publishes no button for these, but a stale press must not act either (T-03-34).
+            guard pauseReasons.isEmpty, let info = windows[window.identity], info.kind == .dockable, !info.isExcluded,
+                deskKey(of: info.window) != nil
+            else { return [] }
+            return process(.command(isFloating(info.window) ? .dock : .float, focused: info.window), now: now)
         }
     }
 
@@ -929,7 +933,18 @@ public struct Arranger: Sendable {
         guard let session = drag else { return [] }
         var effects = endDrag()
         let window = session.window
-        guard let kind = session.kind, windows[window.identity]?.isExcluded == false, deskKey(of: window) != nil else { return effects }
+        guard windows[window.identity]?.isExcluded == false, deskKey(of: window) != nil else { return effects }
+        guard let kind = session.kind else {
+            // No pointer travel (a click, an ⌥-zoom, a title-bar double-click): a frame change during the press is the
+            // app's own, answered like one after it (D-33, Pitfall 6).
+            guard let frame = windows[window.identity]?.frame, !Self.near(frame, session.startFrame, within: DragSession.echoTolerance)
+            else { return effects }
+            do throws(LayoutError) {
+                return effects + (try moved(window, to: frame, now: now))
+            } catch {
+                return effects + [.fault("could not answer the frame change of \(window): \(error)")] + replan()
+            }
+        }
         let action = kind == .move ? session.decision?.action ?? .miss : .miss
         do throws(LayoutError) {
             switch action {

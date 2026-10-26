@@ -14,6 +14,7 @@ import os
     public var onInventory: ((WindowInventory) -> Void)?
     public private(set) var arranger: Arranger {
         didSet {
+            publishGreenButtons()
             guard arranger.pauseReasons != reportedPause else { return }
             reportedPause = arranger.pauseReasons
             onPauseChanged?()
@@ -170,8 +171,38 @@ import os
         if ready { startTap() } else { stopTap() }
     }
 
+    /// The green buttons the tap last got, so an unchanged set is not swapped in again.
+    private var publishedGreenButtons: [UInt32: CGRect] = [:]
+
+    /// Hands the tap the global green-button rect of every present, dockable, non-excluded window on a desk, by the CG
+    /// window it shows; none while paused (TILE-06, T-03-34). Runs after every Arranger change, so the rects follow
+    /// every frame Pane knows of without an AX read.
+    private func publishGreenButtons() {
+        var rects: [UInt32: CGRect] = [:]
+        if arranger.pauseReasons.isEmpty {
+            for info in arranger.windows.values where info.kind == .dockable && !info.isExcluded && info.state == .present {
+                guard let offset = info.greenButton, arranger.deskKey(of: info.window) != nil else { continue }
+                rects[info.visibleMemberID ?? info.window.windowID] = CGRect(
+                    x: info.frame.x + offset.x, y: info.frame.y + offset.y, width: offset.width, height: offset.height)
+            }
+        }
+        guard rects != publishedGreenButtons else { return }
+        publishedGreenButtons = rects
+        tap.setGreenButtons(rects)
+    }
+
+    /// The tracked window showing CG window `id` (`visibleMemberID ?? windowID`).
+    private func trackedWindow(cgID id: UInt32) -> PaneModel.WindowRef? {
+        arranger.windows.values.first { ($0.visibleMemberID ?? $0.window.windowID) == id }?.window
+    }
+
     /// Feeds one tap event to the Arranger. The press window is resolved on mouse-down only.
     private func handle(_ event: TapEvent) async {
+        if case .greenButton(let id) = event.kind {
+            guard let window = trackedWindow(cgID: id) else { return }
+            await run(arranger.handle(.greenButton(window), now: .now))
+            return
+        }
         let kind: PointerEvent.Kind
         switch event.type {
         case .leftMouseDown: kind = .down
@@ -200,13 +231,12 @@ import os
     /// Pure geometry, no AX.
     private func pressWindow(underPointer number: Int64, at point: Point) -> PaneModel.WindowRef? {
         let tracked = arranger.windows.values
-        func info(for id: UInt32) -> WindowInfo? { tracked.first { ($0.visibleMemberID ?? $0.window.windowID) == id } }
-        if number > 0, let found = info(for: UInt32(truncatingIfNeeded: number)) { return found.window }
+        if number > 0, let found = trackedWindow(cgID: UInt32(truncatingIfNeeded: number)) { return found }
         guard let list = CGWindowList.onScreenFrontToBack() else { return nil }
         for entry in list where entry.layer == 0 && entry.bounds.contains(point) {
             // A window under a synthetic ID matches its CG entry by app and frame.
             let synthetic = tracked.first { $0.window.pid == entry.pid && $0.window.identity.isSyntheticWindowID && $0.frame == entry.bounds }
-            if let found = info(for: entry.windowID) ?? synthetic { return found.window }
+            if let found = trackedWindow(cgID: entry.windowID) ?? synthetic?.window { return found }
         }
         return nil
     }
