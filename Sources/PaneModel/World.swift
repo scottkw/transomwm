@@ -124,6 +124,10 @@ public struct World: Codable, Equatable, Sendable {
 
     public subscript(key: DeskKey) -> Desk? { desks[key] }
 
+    public func withoutTitleHints() -> World {
+        self  // RED stub
+    }
+
     public mutating func addDesk(_ key: DeskKey) throws(LayoutError) {
         guard desks[key] == nil else { throw .deskExists(key) }
         desks[key] = Desk()

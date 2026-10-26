@@ -78,7 +78,7 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
     }
 
     @Test func reattachAppliesRealStatesAndFloatsWindowsTheLayoutDoesNotKnow() async throws {
-        var source = await twoDocked()
+        let source = await twoDocked()
         let saved = source.arranger.world
         let tileB = try #require(await source.frame(b))
         await source.fake.update(1) { $0.snapshot.minimized = true }
