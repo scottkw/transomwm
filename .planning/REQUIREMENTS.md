@@ -34,11 +34,11 @@
 
 - [ ] **TILE-01**: Dragging a window by its title bar to a screen edge or another window's edge shows a drop preview and docks it there on release
 - [ ] **TILE-02**: Holding a bypass modifier while dragging moves the window freely without docking
-- [ ] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
+- [x] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
 - [ ] **TILE-04**: User can set the gap between windows
 - [ ] **TILE-05**: Dragging the gap between two windows resizes both
 - [ ] **TILE-06**: The green button toggles a window between docked and floating on the Desktop
-- [ ] **TILE-07**: New windows open floating on the Desktop tile, never auto-split into the layout
+- [x] **TILE-07**: New windows open floating on the Desktop tile, never auto-split into the layout
 - [ ] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [ ] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
 - [ ] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
@@ -51,7 +51,7 @@
 - [ ] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
 - [ ] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
 - [ ] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
-- [ ] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
+- [x] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
 
 ### Safety & Recovery
 
@@ -174,11 +174,11 @@ Populated by the roadmapper on 2026-10-23.
 | WIN-09 | Phase 2 | Complete |
 | TILE-01 | Phase 3 | Pending |
 | TILE-02 | Phase 3 | Pending |
-| TILE-03 | Phase 3 | Pending |
+| TILE-03 | Phase 3 | Complete |
 | TILE-04 | Phase 3 | Pending |
 | TILE-05 | Phase 3 | Pending |
 | TILE-06 | Phase 3 | Pending |
-| TILE-07 | Phase 3 | Pending |
+| TILE-07 | Phase 3 | Complete |
 | TILE-08 | Phase 3 | Pending |
 | TILE-09 | Phase 3 | Pending |
 | TILE-10 | Phase 3 | Pending |
@@ -191,7 +191,7 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-17 | Phase 3 | Pending |
 | TILE-18 | Phase 3 | Pending |
 | TILE-19 | Phase 3 | Pending |
-| TILE-20 | Phase 3 | Pending |
+| TILE-20 | Phase 3 | Complete |
 | SAFE-01 | Phase 3 | Pending |
 | SAFE-02 | Phase 3 | Pending |
 | SAFE-03 | Phase 3 | Pending |

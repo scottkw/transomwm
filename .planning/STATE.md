@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-10-26T02:05:33.445Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-10-26T02:35:27.069Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 952db3e8e4adaa06666335db27551119b21251f2
+state_head: 38e6781e28734449784525244113f4fd4c334b5c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 26
+  completed_plans: 27
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 4 of 17
+Plan: 5 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -82,6 +82,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 3 P01 | 9 min | 2 tasks | 17 files |
 | Phase 03 P02 | 6min | 3 tasks | 7 files |
 | Phase 03 P03 | 5min | 2 tasks | 7 files |
+| Phase 03 P04 | 27min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -174,6 +175,10 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-02: resizeBoundary delegates to resizeBetween(i, i+1) and now validates in every build
 - [Phase 03]: 03-03: A rekey onto an ID a desk already holds closes the old ID; a rekey to the same ID is a no-op
 - [Phase 03]: 03-03: World.edit = World.reflow + history push; OS facts and automatic floats use reflow/recordFloatingFrame, never edit
+- [Phase 03]: 03-04: Dock uses the planned (clamped) frame of a just-clamped window, else its floating frame
+- [Phase 03]: 03-04: lastRequested is pruned to planned windows, so a window returning from minimise or fullscreen gets its tile rect rewritten
+- [Phase 03]: 03-04: Undo with no focused window acts on the main display's visible desk
+- [Phase 03]: 03-04: Live fullscreen test is opt-in (PANE_LIVE_FULLSCREEN=1) because native fullscreen switches Spaces
 
 ### Pending Todos
 
@@ -201,8 +206,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T02:05:33.127Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-10-26T02:35:26.858Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification
