@@ -16,10 +16,11 @@ public enum Notice: Equatable, Sendable {
     /// windows were not in the saved layout and float on the Desktop.
     case crashRecovered(unplaced: Int)
 
-    /// Crash notices (N2/N3, plan 13) are never replaced by a newer toast and stay up longer.
+    /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered: false
+        case .crashRecovered: true
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers: false
         }
     }
 }

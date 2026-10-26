@@ -32,6 +32,8 @@ import os
     /// layout.json; nil in tests that do not persist.
     private let store: LayoutStore?
     private let launchedAt = Date()
+    /// How this launch treats the saved layout (D-17); a non-normal one is recorded as `recoveryLaunch`.
+    private var launchMode: LaunchMode = .normal
     /// The one pending debounced write: a newer request replaces it, so it lands 0.5 s after the latest.
     private let saveTimer = WakeTimer()
     private var fedCompleteInventory = false
@@ -81,6 +83,9 @@ import os
         started = true
         if let store {
             store.load()
+            // The record the last session left decides this launch; `contents` keeps it after this launch's first write.
+            launchMode = Recovery.launchMode(previous: store.contents?.session)
+            await run(arranger.handle(.launch(launchMode), now: .now))
             if let saved = store.contents {
                 await run(arranger.handle(.restore(saved.world, homeFrames: saved.homeFrameMap), now: .now))
             }
@@ -390,7 +395,7 @@ import os
         guard let store else { return }
         let snapshot = arranger.snapshot
         let file = LayoutFile(
-            world: snapshot.world, homeFrames: snapshot.homeFrames, session: SessionRecord(cleanExit: cleanExit, launchedAt: launchedAt))
+            world: snapshot.world, homeFrames: snapshot.homeFrames, session: SessionRecord(cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal))
         do {
             try store.save(file)
         } catch {

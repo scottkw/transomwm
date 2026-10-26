@@ -20,8 +20,11 @@ nonisolated public enum NoticeCopy {
             count == 1
                 ? "1 window didn't fit, so it stays floating on the Desktop."
                 : "\(count) windows didn't fit, so they stay floating on the Desktop."
-        case .crashRecovered:
-            ""
+        case .crashRecovered(let unplaced):
+            "Pane quit unexpectedly. Your windows are back on screen and your layout is restored."
+                + (unplaced == 0 ? ""
+                    : unplaced == 1 ? " 1 window couldn't be placed and is floating on the Desktop."
+                    : " \(unplaced) windows couldn't be placed and are floating on the Desktop.")
         }
     }
 
@@ -30,7 +33,7 @@ nonisolated public enum NoticeCopy {
         switch notice {
         case .lostRoom, .floatedAll, .arrangeLeftovers: "macwindow"
         case .finderNoWindow: "info.circle"
-        case .crashRecovered: ""
+        case .crashRecovered: "lifepreserver"
         }
     }
 }

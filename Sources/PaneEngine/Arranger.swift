@@ -115,6 +115,8 @@ public struct Arranger: Sendable {
     private static let correctionInterval: Duration = .seconds(1)
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
+    /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
+    private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
     private var parkRequested: Set<WindowIdentity> = []
     /// The left-button press in progress, if any (TILE-01).
@@ -160,7 +162,7 @@ public struct Arranger: Sendable {
 
     private mutating func process(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch input {
-        case .inventory(let inventory):
+        case .inventory(var inventory):
             displays = inventory.displays
             sessionPaused = inventory.sessionPaused
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
@@ -168,9 +170,26 @@ public struct Arranger: Sendable {
             // The saved layout waits for every app's first answer, so no saved window is dropped as untracked.
             guard inventory.initialRefreshComplete else { return [] }
             pendingRestore = nil
-            // Re-planned quietly: a window that lost its room still floats, but with no toast.
-            return reattach(restore, tracked: inventory.windows) + place(inventory).filter {
-                if case .notice = $0 { false } else { true }
+            // Home frames are kept only for windows tracked under a real ID (synthetic IDs are session-only, 02-11).
+            let real = Set(inventory.windows.filter { $0.idSource != .synthetic }.map(\.window.identity))
+            homeFrames = restore.homeFrames.filter { real.contains($0.key) }
+            // After a crash, stranded windows come on screen first, before any layout work (D-17).
+            let rescued = launch == .normal ? [] : rescueStranded(desks: restore.world)
+            inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
+            let restored = reattach(restore, tracked: inventory.windows)
+            var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects
+            if launch != .normal {
+                do throws(LayoutError) {
+                    try showParkedDesktops(keeping: rescued, undoable: false)
+                } catch {
+                    effects.append(.fault("could not show the hidden Desktop tiles after a crash: \(error)"))
+                }
+            }
+            // Re-planned quietly: a window that lost its room still floats, but with no toast; only N2 says anything.
+            effects += place(inventory).filter { if case .notice = $0 { false } else { true } }
+            switch launch {
+            case .normal: return effects
+            case .recovery, .crashLoop: return effects + [.notice(.crashRecovered(unplaced: restored.unplaced))]
             }
         case .event(let event):
             // Until the saved layout is re-attached, the next complete inventory says everything an event would.
@@ -239,7 +258,8 @@ public struct Arranger: Sendable {
             return process(.command(isFloating(info.window) ? .dock : .float, focused: info.window), now: now)
         case .gapDrag(let handle, let delta, let ended):
             return gapDrag(handle, delta: delta, ended: ended)
-        case .launch:
+        case .launch(let mode):
+            launch = mode
             return []
         }
     }
@@ -269,14 +289,15 @@ public struct Arranger: Sendable {
 
     /// Replaces the World with the saved one re-attached by identity (SAFE-06), with each window's real state and, for
     /// a present floating window, its real frame. Each docked window's current frame counts as already requested, so
-    /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). Home frames are kept only
-    /// for windows tracked under a real ID. If the saved layout cannot be re-attached, the World starts empty.
-    private mutating func reattach(_ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo]) -> [ArrangerEffect] {
+    /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). If the saved layout cannot
+    /// be re-attached, the World starts empty. `unplaced` counts the tracked windows the saved layout did not hold.
+    private mutating func reattach(
+        _ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo]
+    ) -> (effects: [ArrangerEffect], unplaced: Int) {
         history = UndoHistory()
-        let real = Set(tracked.filter { $0.idSource != .synthetic }.map(\.window.identity))
-        homeFrames = restore.homeFrames.filter { real.contains($0.key) }
         do throws(LayoutError) {
-            var candidate = try LayoutRestore.reattach(restore.world, tracked: tracked).world
+            let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked)
+            var candidate = reattached.world
             var seeded: [WindowIdentity: Rect] = [:]
             for info in tracked where info.state != .closed {
                 guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
@@ -291,10 +312,41 @@ public struct Arranger: Sendable {
             }
             world = candidate
             lastRequested = seeded
-            return []
+            return ([], reattached.unplaced.count)
         } catch {
-            return [.fault("could not re-attach the saved layout; starting empty: \(error)")]
+            return ([.fault("could not re-attach the saved layout; starting empty: \(error)")], 0)
         }
+    }
+
+    /// Moves every stranded window Pane may move (tracked, dockable, present, not excluded) back on screen: its home
+    /// frame clamped on screen, else centred on its display, shrunk to fit (`Recovery.destination`). Its display is the
+    /// one its desk in `desks` is on, else the one it is nearest. Runs while paused (UI-SPEC N3, SAFE-03). Returns the
+    /// moves in identity order; the caller sends them before any layout work.
+    mutating func rescueStranded(desks: World) -> [WindowCommand] {
+        var moves: [WindowCommand] = []
+        for info in windows.values.sorted(by: { $0.window.identity < $1.window.identity })
+        where info.kind == .dockable && !info.isExcluded && info.state == .present && Recovery.isStranded(info.frame, displays: displays) {
+            let id = info.window.identity
+            let uuid = desks.desks.first { $0.value.contains(info.window) }?.key.displayUUID ?? info.displayUUID
+            guard let display = displays.first(where: { $0.uuid == uuid }) ?? displays.first else { continue }
+            let frame = Recovery.destination(for: info.frame, home: homeFrames[id], display: display)
+            windows[id]?.frame = frame
+            windows[id]?.displayUUID = display.uuid
+            lastRequested[id] = nil  // a docked one goes back to its tile at the next plan
+            parkRequested.remove(id)
+            moves.append(.setFrame(info.window, frame))
+        }
+        return moves
+    }
+
+    /// Shows every hidden Desktop tile that holds floating windows, since a parked window can't be on screen while its
+    /// Desktop is hidden (D-31), and keeps each rescued floating window at its rescue frame. Undoable, it is one step per
+    /// desk (Restore All); after a crash it is an OS fact.
+    mutating func showParkedDesktops(keeping moves: [WindowCommand], undoable: Bool) throws(LayoutError) {
+        for (key, desk) in world.desks.sorted(by: { $0.key < $1.key }) where desk.tree.isDesktopHidden == true && !desk.desktop.windows.isEmpty {
+            if undoable { try world.edit(key, history: &history, showingDesktop()) } else { try world.reflow(key, showingDesktop()) }
+        }
+        for case .setFrame(let window, let frame) in moves where isFloating(window) { try world.recordFloatingFrame(frame, for: window) }
     }
 
     /// The desk holding `window`, docked or floating.
