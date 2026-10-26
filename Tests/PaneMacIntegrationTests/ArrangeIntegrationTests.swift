@@ -130,6 +130,23 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         #expect(await waitFor(fixture, 1, timeout: .seconds(3)) { near($0, b) } != nil, "window 1 did not shrink back to \(b)")
     }
 
+    /// TILE-13 live: ⌃⌥⌘⇧← on the right-hand window of [0 | 1 | Desktop] moves it into window 0's tile area.
+    @Test(.timeLimit(.minutes(1)))
+    func moveLeftPutsTheRightWindowWhereTheLeftOneWas() async throws {
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs, a, _) = try await dockedPair(fixture)
+        defer { withExtendedLifetime(arrange) {} }  // its events loop ends with it
+        await arrange.dispatch(.moveOrSnap(.left), focused: refs[1])
+        var frames: [Rect] = []
+        let moved = await waitUntil(timeout: .seconds(2)) {
+            guard let f0 = try? await listedFrame(fixture, 0), let f1 = try? await listedFrame(fixture, 1) else { return false }
+            frames = [f0, f1]
+            return f1.minX >= a.minX - 1 && f1.maxX <= a.maxX + 1 && !f0.overlaps(f1)
+        }
+        #expect(moved, "window 1 is not in \(a)'s x-range clear of window 0 (fixture frames \(frames))")
+    }
+
     /// D-26 live: window 0's real minimum is learned only after it docks, and with window 1's it leaves no room for
     /// both tiles beside the Desktop tile. Window 0 floats to the Desktop tile and no longer overlaps window 1.
     @Test(.timeLimit(.minutes(1)))

@@ -1,6 +1,7 @@
 import AppKit
 import KeyboardShortcuts
 import PaneEngine
+import PaneModel
 @testable import PaneMac
 import Testing
 
@@ -40,6 +41,29 @@ import Testing
         #expect(menu.item(for: .float).isEnabled)
         menu.update { _ in true }
         #expect(menu.item(for: .dock).isEnabled)
+    }
+
+    /// UI-SPEC halves alias: Move Window ▸ Left and Snap Floating Window ▸ Left Half both run moveOrSnap(.left) on
+    /// ⌃⌥⌘⇧←, and exactly one of the pair is enabled for any focused window.
+    @Test(arguments: [(Edge.left, "Left", "Left Half"), (.right, "Right", "Right Half"), (.top, "Up", "Top Half"), (.bottom, "Down", "Bottom Half")])
+    func moveAndSnapHalfShareTheirCommandAndShortcutAndOnlyOneIsEnabled(edge: Edge, move: String, half: String) throws {
+        var sent: [Command] = []
+        let menu = CommandMenu { sent.append($0) }
+        let moveItem = menu.item(for: .moveOrSnap(edge)), halfItem = menu.halfItem(edge)
+        #expect(moveItem.title == move && halfItem.title == half)
+        #expect(menu.moveMenu.title == "Move Window" && menu.moveMenu.submenu?.items.contains { $0 === moveItem } == true)
+        #expect(menu.snapMenu.title == "Snap Floating Window" && menu.snapMenu.submenu?.items.contains { $0 === halfItem } == true)
+        #expect(!moveItem.keyEquivalent.isEmpty && halfItem.keyEquivalent == moveItem.keyEquivalent)
+        #expect(moveItem.keyEquivalentModifierMask == base.union(.shift) && halfItem.keyEquivalentModifierMask == moveItem.keyEquivalentModifierMask)
+        for item in [moveItem, halfItem] { _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item) }
+        #expect(sent == [.moveOrSnap(edge), .moveOrSnap(edge)])
+
+        menu.update(focusedFloats: false) { _ in true }
+        #expect(moveItem.isEnabled && !halfItem.isEnabled)
+        menu.update(focusedFloats: true) { _ in true }
+        #expect(!moveItem.isEnabled && halfItem.isEnabled)
+        menu.update(focusedFloats: true) { _ in false }
+        #expect(!moveItem.isEnabled && !halfItem.isEnabled)
     }
 
     @Test func theFocusAndSplitSubmenusHoldThePersistentItems() {
