@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-08-PLAN.md
-last_updated: "2026-10-26T03:55:56.373Z"
+stopped_at: Completed 03-09-PLAN.md
+last_updated: "2026-10-26T04:09:18.548Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 1d666f31115d3b0c4ba4dec16b13484e8de0e199
+state_head: f66386ca5cf63e4e7557ec6c24a3326519f6f425
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 31
+  completed_plans: 32
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 9 of 17
+Plan: 10 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -87,6 +87,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 3 P06 | 20 min | 2 tasks | 13 files |
 | Phase 3 P07 | 11 min | 2 tasks | 15 files |
 | Phase 3 P08 | 17min | 2 tasks | 16 files |
+| Phase 03 P09 | 9min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,8 @@ Recent decisions affecting current work:
 - [Phase 3]: 03-08: replan is the only place parks are sent, each window once, with its home frame recorded and .save(.now) emitted before the perform that parks it (D-16)
 - [Phase 3]: 03-08: a parked window's moves are not recorded and it is never re-homed; float, re-home and new windows onto a hidden Desktop show it first (D-31)
 - [Phase 3]: 03-08: focus and raise run as tasks off the effect loop; focus is AXMain+AXRaise on the app thread, then activate, with an AXFrontmost fallback after 200 ms
+- [Phase 03]: 03-09: nextWake includes the Finder deadline, since the shell keeps a single wake
+- [Phase 03]: 03-09: a Finder window opened on another display leaves that Desktop (reflow) and docks on the target desk
 
 ### Pending Todos
 
@@ -223,8 +226,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T03:55:56.220Z
-Stopped at: Completed 03-08-PLAN.md
+Last session: 2026-10-26T04:09:18.403Z
+Stopped at: Completed 03-09-PLAN.md
 Resume file: None
 
 ## Deferred Verification
