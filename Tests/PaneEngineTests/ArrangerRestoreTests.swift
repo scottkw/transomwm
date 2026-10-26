@@ -338,6 +338,23 @@ extension ArrangerRestoreTests {
         #expect(await harness.frame(c) == Self.home)
     }
 
+    /// WR-06: Restore All while paused shows the Desktop, so its home frames are spent there and then; a quit after the
+    /// user moves the window leaves it where it is instead of sending it back to the stale home.
+    @Test func restoreAllWhilePausedSpendsTheHomeFramesSoAQuitLeavesMovedWindowsAlone() async throws {
+        var harness = try await parkedC()
+        await harness.send(.command(.togglePause, focused: nil))
+        await harness.send(.command(.restoreAll, focused: nil))
+        let moved = Rect(x: 400, y: 500, width: 150, height: 120)
+        await harness.fake.userMove(3, to: moved)
+        _ = await harness.refresh()
+
+        #expect(harness.arranger.homeFrames.isEmpty, "home frames survived the shown Desktop: \(harness.arranger.homeFrames)")
+        let plan = Recovery.terminationPlan(
+            windows: Array(harness.arranger.windows.values), homeFrames: harness.arranger.homeFrames,
+            displays: harness.arranger.displays, docked: [a.identity, b.identity])
+        #expect(plan[c] == nil, "the quit sends c back to its stale home: \(String(describing: plan[c]))")
+    }
+
     @Test func restoreAllWithNoHiddenDesktopAddsNoUndoStep() async throws {
         var harness = await twoDocked()
         await harness.send(.command(.togglePause, focused: nil))

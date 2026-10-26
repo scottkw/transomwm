@@ -157,6 +157,12 @@ public struct Arranger: Sendable {
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         let before = world
         let effects = process(input, now: now)
+        // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
+        if !homeFrames.isEmpty {
+            for desk in world.desks.values where desk.tree.isDesktopHidden != true {
+                for floating in desk.desktop.windows { homeFrames[floating.window.identity] = nil }
+            }
+        }
         guard world != before else { return effects }
         dragPlans = [:]  // the plans a drag caches are of the World before
         return effects + [.save(.debounced)]
@@ -1289,8 +1295,6 @@ public struct Arranger: Sendable {
                 }
                 parks.append(.park(window, displayUUID: display.uuid))
             }
-            // Home frames are only for parked windows; on a shown Desktop they are spent.
-            if !desktopHidden { for floating in desk.desktop.windows { homeFrames[floating.window.identity] = nil } }
             // A floating window not where the model has it (after Float, Undo or Show Desktop) is moved there.
             for floating in desk.desktop.windows
             where !desktopHidden && floating.state == .present && desired[floating.window] == nil
