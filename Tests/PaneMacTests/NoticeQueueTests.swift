@@ -70,4 +70,14 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(queue.expire(at: t0 + .seconds(26)) == .show(.restored))
         #expect(queue.expire(at: t0 + .seconds(32)) == .hide)
     }
+
+    /// N2 (plan 14) is a real crash notice: 10 s on screen, and a later N1 waits behind it.
+    @Test func crashRecoveredStaysTenSecondsAndALaterNoticeQueuesBehindIt() {
+        var queue = NoticeQueue<Notice>()
+        #expect(queue.post(.crashRecovered(unplaced: 0), at: t0) == .show(.crashRecovered(unplaced: 0)))
+        #expect(queue.expiresAt == t0 + .seconds(10))
+        #expect(queue.post(.lostRoom([ref(1)]), at: t0 + .seconds(1)) == .unchanged)
+        #expect(queue.visible == .crashRecovered(unplaced: 0))
+        #expect(queue.expire(at: t0 + .seconds(10)) == .show(.lostRoom([ref(1)])))
+    }
 }

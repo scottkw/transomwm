@@ -65,7 +65,7 @@ nonisolated extension Notice: QueueableNotice {
         case (.lostRoom(let windows), .lostRoom(let more)): .lostRoom(windows + more.filter { !windows.contains($0) })
         case (.finderNoWindow, .finderNoWindow): .finderNoWindow
         // A newer Float All or Arrange All result replaces the older one: its count is the current one.
-        case (.lostRoom, _), (.finderNoWindow, _), (.floatedAll, _), (.arrangeLeftovers, _): nil
+        case (.lostRoom, _), (.finderNoWindow, _), (.floatedAll, _), (.arrangeLeftovers, _), (.crashRecovered, _): nil
         }
     }
 }

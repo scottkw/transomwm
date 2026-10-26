@@ -125,3 +125,112 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(setFrames(effects).isEmpty)
     }
 }
+
+private func performs(_ effects: [ArrangerEffect]) -> [[WindowCommand]] {
+    effects.compactMap { if case .perform(let commands) = $0 { commands } else { nil } }
+}
+
+private func notices(_ effects: [ArrangerEffect]) -> [Notice] {
+    effects.compactMap { if case .notice(let notice) = $0 { notice } else { nil } }
+}
+
+private let visibleFrame = Rect(x: 0, y: 25, width: 1440, height: 875)
+
+/// SAFE-02, D-17: the launch after a crash brings stranded windows on screen first, then re-applies the layout.
+extension ArrangerRestoreTests {
+    /// [a | b | Desktop] saved, then a pushed to x = 10000; a fresh Arranger on a recovery launch.
+    private func recovering(_ mode: LaunchMode = .recovery) async throws -> (Arranger, [ArrangerEffect], tileA: Rect, saved: World) {
+        let source = await twoDocked()
+        let saved = source.arranger.snapshot.world
+        let tileA = try #require(await source.frame(a))
+        await source.fake.userMove(1, to: Rect(x: 10000, y: 100, width: tileA.width, height: tileA.height))
+        await source.fake.refreshAll()
+        var restored = Arranger()
+        _ = restored.handle(.launch(mode), now: .now)
+        _ = restored.handle(.restore(saved, homeFrames: [:]), now: .now)
+        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        return (restored, effects, tileA, saved)
+    }
+
+    @Test func aRecoveryLaunchMovesTheStrandedWindowOnScreenBeforeReapplyingTheLayout() async throws {
+        let (restored, effects, tileA, saved) = try await recovering()
+        let sent = performs(effects)
+        try #require(sent.count == 2, "expected the rescue, then the layout: \(effects)")
+        try #require(sent[0].count == 1)
+        guard case .setFrame(let window, let rescue) = sent[0][0] else {
+            Issue.record("the first command is not a frame write: \(sent[0])")
+            return
+        }
+        #expect(window == a)
+        #expect(inside(rescue, visibleFrame), "\(rescue) is not on screen")
+        #expect(rescue.size == tileA.size, "the window kept its size")
+        #expect(sent[1].contains(.setFrame(a, tileA)), "the layout was not re-applied: \(sent[1])")
+        #expect(restored.world == saved)
+        #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
+        let lastPerform = try #require(effects.lastIndex { if case .perform = $0 { true } else { false } })
+        let notice = try #require(effects.firstIndex { if case .notice = $0 { true } else { false } })
+        #expect(notice > lastPerform, "N2 comes after the layout is re-applied")
+    }
+
+    @Test func aNormalLaunchShowsNoRecoveryNoticeAndRescuesNothing() async throws {
+        let (_, effects, tileA, _) = try await recovering(.normal)
+        #expect(notices(effects).isEmpty)
+        #expect(performs(effects).count == 1)
+        #expect(setFrames(effects) == [a: tileA])
+    }
+
+    @Test func aSavedWindowNoLongerTrackedIsNotCountedAsUnplaced() async throws {
+        let source = await twoDocked()
+        let saved = source.arranger.snapshot.world
+        await source.fake.close(2)
+        await source.fake.refreshAll()
+        var restored = Arranger()
+        _ = restored.handle(.launch(.recovery), now: .now)
+        _ = restored.handle(.restore(saved, homeFrames: [:]), now: .now)
+        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
+    }
+
+    @Test func aTrackedWindowTheSavedLayoutDoesNotKnowIsCountedAsUnplaced() async throws {
+        let source = await twoDocked()
+        let saved = source.arranger.snapshot.world
+        await source.fake.open(.standard(id: 3, pid: pid, frame: Rect(x: 1000, y: 600, width: 150, height: 120)))
+        await source.fake.refreshAll()
+        await source.fake.advance(by: .milliseconds(300))  // a new window waits out the settle delay
+        await source.fake.refreshAll()
+        var restored = Arranger()
+        _ = restored.handle(.launch(.recovery), now: .now)
+        _ = restored.handle(.restore(saved, homeFrames: [:]), now: .now)
+        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        #expect(notices(effects) == [.crashRecovered(unplaced: 1)])
+        #expect(restored.world[key]?.desktop.contains(c) == true)
+    }
+
+    /// The human check's case: a hidden Desktop with a parked floating window. The parked window comes back at its home
+    /// frame and the Desktop tile shows again, so the next plan does not park it again.
+    @Test func aRecoveryLaunchUnparksAWindowParkedByAHiddenDesktop() async throws {
+        var source = await twoDocked(frames: [
+            1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120),
+            3: Rect(x: 1000, y: 600, width: 150, height: 120),
+        ])
+        let home = Rect(x: 1000, y: 600, width: 150, height: 120)
+        await source.send(.command(.toggleDesktop, focused: a))
+        try #require(source.arranger.world[key]?.tree.isDesktopHidden == true)
+        let parked = try #require(await source.frame(c))
+        try #require(Recovery.isStranded(parked, displays: [DisplayInfo(uuid: "main", frame: visibleFrame, visibleFrame: visibleFrame, currentSpaceID: nil)]))
+        let snapshot = source.arranger.snapshot
+        try #require(snapshot.homeFrames[c.identity] == home)
+
+        var restored = Arranger()
+        _ = restored.handle(.launch(.recovery), now: .now)
+        _ = restored.handle(.restore(snapshot.world, homeFrames: snapshot.homeFrames), now: .now)
+        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        let sent = performs(effects)
+        try #require(!sent.isEmpty)
+        #expect(sent[0] == [.setFrame(c, home)])
+        #expect(!sent.joined().contains(.park(c, displayUUID: "main")), "the parked window was parked again")
+        #expect(restored.world[key]?.tree.isDesktopHidden != true)
+        #expect(restored.world[key]?.desktop.frame(of: c) == home)
+        #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
+    }
+}

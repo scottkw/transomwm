@@ -22,6 +22,8 @@ public enum ArrangerInput: Sendable {
     case greenButton(WindowRef)
     /// A gap handle dragged `delta` points along its axis from where the drag began; `ended` on mouse-up (TILE-05).
     case gapDrag(GapHandle, delta: Double, ended: Bool)
+    /// How this launch treats the saved layout (D-17, D-18); fed before `.restore`.
+    case launch(LaunchMode)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -237,6 +239,8 @@ public struct Arranger: Sendable {
             return process(.command(isFloating(info.window) ? .dock : .float, focused: info.window), now: now)
         case .gapDrag(let handle, let delta, let ended):
             return gapDrag(handle, delta: delta, ended: ended)
+        case .launch:
+            return []
         }
     }
 

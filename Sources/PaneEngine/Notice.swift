@@ -12,11 +12,14 @@ public enum Notice: Equatable, Sendable {
     case floatedAll(count: Int)
     /// N5: Arrange All Windows left this many windows floating, for lack of room.
     case arrangeLeftovers(count: Int)
+    /// N2: the launch after a crash put stranded windows back on screen and re-applied the layout; `unplaced` tracked
+    /// windows were not in the saved layout and float on the Desktop.
+    case crashRecovered(unplaced: Int)
 
     /// Crash notices (N2/N3, plan 13) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers: false
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered: false
         }
     }
 }

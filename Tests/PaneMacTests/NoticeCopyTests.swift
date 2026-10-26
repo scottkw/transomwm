@@ -45,4 +45,15 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(NoticeCopy.text(for: .arrangeLeftovers(count: 2), appName: { _ in "" }) == "2 windows didn't fit, so they stay floating on the Desktop.")
         #expect(NoticeCopy.glyph(for: .arrangeLeftovers(count: 2)) == "macwindow")
     }
+
+    @Test func crashRecoveredIsN2WithTheUnplacedSuffix() {
+        let base = "Pane quit unexpectedly. Your windows are back on screen and your layout is restored."
+        #expect(NoticeCopy.text(for: .crashRecovered(unplaced: 0), appName: { _ in "" }) == base)
+        #expect(NoticeCopy.text(for: .crashRecovered(unplaced: 1), appName: { _ in "" })
+            == base + " 1 window couldn't be placed and is floating on the Desktop.")
+        #expect(NoticeCopy.text(for: .crashRecovered(unplaced: 3), appName: { _ in "" })
+            == base + " 3 windows couldn't be placed and are floating on the Desktop.")
+        #expect(NoticeCopy.glyph(for: .crashRecovered(unplaced: 0)) == "lifepreserver")
+        #expect(Notice.crashRecovered(unplaced: 0).isCrashNotice)
+    }
 }
