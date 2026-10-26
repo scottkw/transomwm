@@ -70,6 +70,11 @@ nonisolated public enum MenuCopy {
         windowIDLookupAvailable ? "Window ID lookup: available" : "Window ID lookup: off, matching by frame"
     }
 
+    /// The Debug submenu's event-tap line (UI-SPEC Copywriting Contract).
+    public static let tapRunning = ""
+    public static let tapOff = ""
+    public static func tapItem(running: Bool) -> String { "" }
+
     public static func spacesItem(available: Bool) -> String {
         available ? "Spaces lookup: available" : "Spaces lookup: off, single Space"
     }

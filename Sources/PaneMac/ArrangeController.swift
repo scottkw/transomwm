@@ -124,6 +124,9 @@ import os
         dragPoller.stop()
     }
 
+    /// Accessibility access changed (PermissionController's phase entered or left `.ready`).
+    public func accessChanged(ready: Bool) {}
+
     /// Feeds one tap event to the Arranger. The press window is resolved on mouse-down only.
     private func handle(_ event: TapEvent) async {
         let kind: PointerEvent.Kind

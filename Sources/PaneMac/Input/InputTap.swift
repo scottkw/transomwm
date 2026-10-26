@@ -83,6 +83,9 @@ nonisolated final class InputTap: @unchecked Sendable {
         thread = nil
     }
 
+    /// The 2 s watchdog (RESEARCH Pattern 6).
+    func watchdogTick() {}
+
     /// The only place a tap is created, for Pane's tap and for the watchdog's trial. A nil `box` gives a tap whose
     /// callback passes everything through.
     private static func makePort(_ box: TapBox?) -> CFMachPort? {

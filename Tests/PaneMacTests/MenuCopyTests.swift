@@ -123,4 +123,11 @@ import Testing
         #expect(MenuCopy.nudgeExcluded == "Nudge Focused Window (app excluded)")
         #expect(MenuCopy.nudgeNoWindow == "Nudge Focused Window (no window)")
     }
+
+    @Test func theDebugTapLineNamesTheTapState() {
+        #expect(MenuCopy.tapRunning == "Event tap: running")
+        #expect(MenuCopy.tapOff == "Event tap: off, drags not detected")
+        #expect(MenuCopy.tapItem(running: true) == MenuCopy.tapRunning)
+        #expect(MenuCopy.tapItem(running: false) == MenuCopy.tapOff)
+    }
 }

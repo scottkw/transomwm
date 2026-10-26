@@ -21,4 +21,30 @@ import Testing
         #expect(!CGEvent.tapIsEnabled(tap: port))
         #expect(!tap.isRunning)
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func oneWatchdogTickReenablesADisabledTap() async throws {
+        let tap = InputTap()
+        defer { tap.stop() }
+        #expect(tap.start())
+        let port = try #require(tap.port)
+        CGEvent.tapEnable(tap: port, enable: false)
+        #expect(!CGEvent.tapIsEnabled(tap: port))
+        tap.watchdogTick()
+        #expect(CGEvent.tapIsEnabled(tap: port), "the watchdog left the tap disabled")
+        #expect(tap.isRunning)
+    }
+
+    /// Pitfall 4: leaving `.ready` takes the tap down at once; coming back brings drags back.
+    @Test(.timeLimit(.minutes(1)))
+    func losingAccessStopsTheTapAndRegainingItRestartsIt() async throws {
+        let controller = ArrangeController(system: AXWindowSystem())
+        defer { controller.stopTap() }
+        #expect(controller.startTap())
+        #expect(controller.isTapRunning)
+        controller.accessChanged(ready: false)
+        #expect(!controller.isTapRunning, "the tap kept running without access")
+        controller.accessChanged(ready: true)
+        #expect(controller.isTapRunning, "the tap did not come back with access")
+    }
 }
