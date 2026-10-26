@@ -376,19 +376,35 @@ public actor FakeWindowSystem: WindowSystem {
     }
 
     /// Applies `.setFrame` to tracked windows with valid rects; a hung or degraded app's latest frame per window
-    /// is held instead. Every command is recorded in `performed`; those for excluded apps go to `dropped` and
-    /// nowhere else (D-12). The other commands do nothing yet (Phase 3).
+    /// is held instead. `.park` is a frame write too, to its display's `parkedFrame` at the window's size, and marks
+    /// the window `parked` until a `.setFrame` for it. Every command is recorded in `performed`; those for excluded
+    /// apps go to `dropped` and nowhere else (D-12). `.setHidden` does nothing (Pattern 15).
     public func perform(_ commands: [WindowCommand]) async {
         performed += commands
         let split = ExclusionFilter.admit(commands, excluded: excluded)
         dropped += split.dropped
-        for case .setFrame(let ref, let rect) in split.admitted where rect.isValidGeometry {
-            guard let app = apps[ref.pid], !app.terminated else { continue }
-            if app.hung || !responsiveness.shouldRefresh(pid: ref.pid) {
-                heldFrames[ref.identity] = (ref, rect)
-            } else {
-                write(rect, to: ref)
+        for command in split.admitted {
+            switch command {
+            case .setFrame(let ref, let rect) where rect.isValidGeometry:
+                parked.remove(ref.identity)
+                apply(rect, to: ref)
+            case .park(let ref, let uuid):
+                guard let display = displays.first(where: { $0.uuid == uuid }), let size = tracker.info(for: ref.identity)?.frame.size
+                else { continue }
+                parked.insert(ref.identity)
+                apply(display.parkedFrame(size: size), to: ref)
+            case .setFrame, .focus, .raise, .setHidden:
+                break
             }
+        }
+    }
+
+    private func apply(_ rect: Rect, to ref: WindowRef) {
+        guard let app = apps[ref.pid], !app.terminated else { return }
+        if app.hung || !responsiveness.shouldRefresh(pid: ref.pid) {
+            heldFrames[ref.identity] = (ref, rect)
+        } else {
+            write(rect, to: ref)
         }
     }
 

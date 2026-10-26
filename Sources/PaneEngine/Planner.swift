@@ -2,8 +2,10 @@ import PaneModel
 
 /// Where every window of one desk should be. `frames` holds docked windows' tile rects and the clamped frames of
 /// floating windows that overlap a docked tile; floating windows clear of every tile are left where they are (D-24).
+/// While the Desktop tile is hidden, its present floating windows are in `parks` instead, with no frame.
 public struct FramePlan: Equatable, Sendable {
     public var frames: [WindowRef: Rect]
+    public var parks: [WindowRef]
     public var unfit: Set<WindowRef>
     public var desktopRect: Rect?
     public var resolution: Resolution
@@ -20,13 +22,14 @@ public enum Planner {
             width: floatingMins.map(\.width).max() ?? 1, height: floatingMins.map(\.height).max() ?? 1)
         let resolution = try resolve(desk.tree, in: area, mins: mins, gap: gap, desktopMinimum: desktopMinimum)
         var frames = resolution.windowRects
+        let parks = desk.tree.isDesktopHidden == true ? floating.map(\.window) : []
         if let desktop = resolution.desktopRect {
             let tiles = Array(resolution.windowRects.values)
             for window in floating where tiles.contains(where: window.frame.overlaps) {
                 frames[window.window] = clamp(window.frame, into: desktop)
             }
         }
-        return FramePlan(frames: frames, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
+        return FramePlan(frames: frames, parks: parks, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
     }
 
     /// `frame` moved (and shrunk only if it must be) so it lies inside `desktop`.

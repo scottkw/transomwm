@@ -64,6 +64,8 @@ public struct Arranger: Sendable {
     private static let correctionInterval: Duration = .seconds(1)
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
+    /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
+    private var parkRequested: Set<WindowIdentity> = []
 
     public init(gap: Double = 8) {
         self.gap = gap
@@ -101,7 +103,8 @@ public struct Arranger: Sendable {
                 case (.dock, let window?): return try dock(window)
                 case (.float, let window?): return try float(window)
                 case (.undo, _): return try undo(focused)
-                case (.dock, nil), (.float, nil), (.toggleDesktop, _): return [.beep]
+                case (.toggleDesktop, _): return try toggleDesktop(focused)
+                case (.dock, nil), (.float, nil): return [.beep]
                 }
             } catch {
                 return [.beep, .fault("\(command) of \(focused?.description ?? "no window") failed: \(error)")]
@@ -190,14 +193,16 @@ public struct Arranger: Sendable {
             guard let focused else { return false }
             return world.desks.values.contains { $0.tree.state(of: focused) != nil }
         case .undo:
-            return undoKey(focused).map { history.depth(for: $0) > 0 } ?? false
+            return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
         case .toggleDesktop:
-            return false
+            // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
+            guard let key = targetKey(focused), let desk = world[key] else { return false }
+            return desk.tree.isDesktopHidden == true || desk.tree.windows.contains { desk.tree.state(of: $0) == .present }
         }
     }
 
     /// The focused window's desk or, with none focused (or one on no desk), the main display's visible desk.
-    private func undoKey(_ focused: WindowRef?) -> DeskKey? {
+    private func targetKey(_ focused: WindowRef?) -> DeskKey? {
         focused.flatMap(deskKey(of:)) ?? displays.first.map(Self.key)
     }
 
@@ -217,6 +222,8 @@ public struct Arranger: Sendable {
                 lastApplied[to.window.identity] = lastApplied.removeValue(forKey: from.identity)
                 lastCorrection[to.window.identity] = lastCorrection.removeValue(forKey: from.identity)
                 if pendingCorrections.remove(from.identity) != nil { pendingCorrections.insert(to.window.identity) }
+                if parkRequested.remove(from.identity) != nil { parkRequested.insert(to.window.identity) }
+                if let home = homeFrames.removeValue(forKey: from.identity) { homeFrames[to.window.identity] = home }
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
                 windows[window.identity]?.frame = frame
@@ -253,6 +260,8 @@ public struct Arranger: Sendable {
         lastApplied[window.identity] = nil
         lastCorrection[window.identity] = nil
         pendingCorrections.remove(window.identity)
+        parkRequested.remove(window.identity)
+        homeFrames[window.identity] = nil
     }
 
     // MARK: Moves
@@ -265,6 +274,8 @@ public struct Arranger: Sendable {
     private mutating func moved(_ window: WindowRef, to frame: Rect, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key] else { return [] }
         let floating = desk.desktop.contains(window)
+        // A parked window keeps its Desktop frame: the move is the park, and showing the Desktop brings it back there.
+        if floating, desk.tree.isDesktopHidden == true { return [] }
         if floating { try world.recordFloatingFrame(frame, for: window) }
         if let applied = lastApplied[window.identity], Self.near(applied, frame, within: 2) { return [] }
         if floating {
@@ -318,6 +329,8 @@ public struct Arranger: Sendable {
             let key = home(of: info)
         else { return }
         if world[key] == nil { try world.addDesk(key) }
+        // D-31: a floating window can't exist while the Desktop is hidden, so a new one shows it again (no undo step).
+        if world[key]?.tree.isDesktopHidden == true { try world.reflow(key, showingDesktop()) }
         try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
     }
 
@@ -334,7 +347,8 @@ public struct Arranger: Sendable {
     /// on its home desk at its current frame, so no layout plans a window that is not there (D-25). An OS fact: it
     /// goes through `World.reflow`, with no undo step. An empty set (a hidden tab, 02-14) never moves a window.
     private mutating func rehome(_ info: WindowInfo) throws(LayoutError) {
-        guard info.state == .present, let from = deskKey(of: info.window), world[from]?.state(of: info.window) == .present,
+        guard info.state == .present, let from = deskKey(of: info.window), let desk = world[from], desk.state(of: info.window) == .present,
+            !(desk.tree.isDesktopHidden == true && desk.desktop.contains(info.window)),  // parked: off its display on purpose
             let to = home(of: info), to != from
         else { return }
         let spaces = info.spaces ?? []
@@ -345,6 +359,7 @@ public struct Arranger: Sendable {
             if desk.desktop.contains(info.window) { try desk.desktop.remove(info.window) } else { try desk.tree.remove(info.window) }
         }
         if candidate[to] == nil { try candidate.addDesk(to) }
+        if candidate[to]?.tree.isDesktopHidden == true { try candidate.reflow(to, showingDesktop()) }  // D-31
         try candidate.reflow(to) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
         world = candidate
     }
@@ -384,7 +399,10 @@ public struct Arranger: Sendable {
         guard let tile = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).frames[window] ?? windows[window.identity]?.frame
         else { return [.beep] }
         let gap = gap
-        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in
+        let show = showingDesktop()
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            // A floating window can't exist while the Desktop is hidden (UI-SPEC Surface 2), so floating shows it.
+            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
             try desk.tree.remove(window)
             let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
             try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
@@ -396,18 +414,48 @@ public struct Arranger: Sendable {
     /// Restores the previous layout of the focused window's desk (TILE-09). Windows the undo revived get their real
     /// states first (`requery`, then `requeried`); otherwise the desk is re-planned at once.
     private mutating func undo(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
-        guard let key = undoKey(focused), let revived = try LifecycleSync.undo(key, world: &world, history: &history) else {
+        guard let key = targetKey(focused), let revived = try LifecycleSync.undo(key, world: &world, history: &history) else {
             return [.beep]
         }
         return revived.windows.isEmpty ? replan() : [.requery(revived)]
     }
 
+    /// Hides the target desk's Desktop tile, so the docked tiles take its space and its floating windows are parked
+    /// (TILE-15, D-24), or shows it with every parked window back at its home frame. One undo step either way. The
+    /// home frames are recorded first; `replan` saves them at once, before any park is sent (D-16).
+    private mutating func toggleDesktop(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = targetKey(focused), let desk = world[key] else { return [.beep] }
+        if desk.tree.isDesktopHidden == true {
+            try world.edit(key, history: &history, showingDesktop())
+        } else {
+            for floating in desk.desktop.windows where windows[floating.window.identity]?.isExcluded != true {
+                homeFrames[floating.window.identity] = floating.frame
+            }
+            try world.edit(key, history: &history) { desk, _ throws(LayoutError) in try desk.tree.setDesktopHidden(true) }
+        }
+        return replan()
+    }
+
+    /// The change that shows a desk's Desktop tile, with each floating window that has a home frame back at it.
+    private func showingDesktop() -> (inout Desk, inout IDSource) throws(LayoutError) -> Void {
+        let homes = homeFrames
+        return { desk, _ throws(LayoutError) in
+            try desk.tree.setDesktopHidden(false)
+            for floating in desk.desktop.windows {
+                if let home = homes[floating.window.identity] { try desk.desktop.setFrame(home, for: floating.window) }
+            }
+        }
+    }
+
     // MARK: Planning
 
     /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked
-    /// windows left without room float first, and are named in one notice (D-26).
+    /// windows left without room float first, and are named in one notice (D-26). A hidden Desktop's floating windows
+    /// are parked once each, first in the perform, and only after an immediate save holding their home frames (D-16).
     private mutating func replan() -> [ArrangerEffect] {
         guard !sessionPaused else { return [] }
+        var parks: [WindowCommand] = []
+        var parkedNow: Set<WindowIdentity> = []
         var commands: [WindowCommand] = []
         var faults: [ArrangerEffect] = []
         var planned: Set<WindowIdentity> = []
@@ -427,8 +475,19 @@ public struct Arranger: Sendable {
             }
             guard let desk = world[key] else { continue }
             var desired = plan.frames
-            // A floating window not where the model has it (after Float or Undo) is moved there.
-            for floating in desk.desktop.windows where floating.state == .present && desired[floating.window] == nil {
+            let desktopHidden = desk.tree.isDesktopHidden == true
+            for window in plan.parks {
+                parkedNow.insert(window.identity)
+                guard parkRequested.insert(window.identity).inserted else { continue }
+                if homeFrames[window.identity] == nil, windows[window.identity]?.isExcluded != true {
+                    homeFrames[window.identity] = desk.desktop.frame(of: window)
+                }
+                parks.append(.park(window, displayUUID: display.uuid))
+            }
+            // Home frames are only for parked windows; on a shown Desktop they are spent.
+            if !desktopHidden { for floating in desk.desktop.windows { homeFrames[floating.window.identity] = nil } }
+            // A floating window not where the model has it (after Float, Undo or Show Desktop) is moved there.
+            for floating in desk.desktop.windows where !desktopHidden && floating.state == .present && desired[floating.window] == nil {
                 if let actual = windows[floating.window.identity]?.frame, !Self.near(actual, floating.frame) {
                     desired[floating.window] = floating.frame
                 }
@@ -447,7 +506,9 @@ public struct Arranger: Sendable {
             (desk.tree.windows + desk.desktop.windows.map(\.window)).filter { desk.state(of: $0) == .present }.map(\.identity)
         })
         lastRequested = lastRequested.filter { planned.contains($0.key) || hidden.contains($0.key) }
-        return faults + (commands.isEmpty ? [] : [.perform(commands)])
+        parkRequested = parkRequested.filter { parkedNow.contains($0) || hidden.contains($0) }
+        commands = parks + commands
+        return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
             + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))])
     }
 

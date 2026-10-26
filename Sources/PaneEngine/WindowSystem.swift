@@ -15,6 +15,14 @@ public struct DisplayInfo: Equatable, Sendable {
     }
 }
 
+extension DisplayInfo {
+    /// Where `park` puts a window of `size`: its top-left at the visibleFrame's bottom-right corner minus 1 pt, so
+    /// macOS keeps only a sliver on screen (RESEARCH Pattern 15, AeroSpace prior art).
+    public func parkedFrame(size: Size) -> Rect {
+        Rect(x: visibleFrame.maxX - 1, y: visibleFrame.maxY - 1, width: size.width, height: size.height)
+    }
+}
+
 /// Why a tracked window is never arranged into a tile.
 public enum NeverDockReason: String, Codable, Sendable, CaseIterable {
     case floatingLevel, subrole, modal, noCloseButton, noFullscreenButton

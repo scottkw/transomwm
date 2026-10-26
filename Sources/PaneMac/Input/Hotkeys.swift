@@ -7,6 +7,7 @@ extension KeyboardShortcuts.Name {
     static let dock = Self("dock", initial: .init(.d, modifiers: [.control, .option, .command]))
     static let float = Self("float", initial: .init(.f, modifiers: [.control, .option, .command]))
     static let undo = Self("undo", initial: .init(.z, modifiers: [.control, .option, .command]))
+    static let toggleDesktop = Self("toggleDesktop", initial: .init(.h, modifiers: [.control, .option, .command]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -15,6 +16,7 @@ enum Hotkeys {
         (.dock, .dock),
         (.float, .float),
         (.undo, .undo),
+        (.toggleDesktop, .toggleDesktop),
     ]
 
     /// Installs a key-down handler per entry. Call once.

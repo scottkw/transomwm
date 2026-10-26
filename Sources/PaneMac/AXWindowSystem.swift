@@ -169,8 +169,9 @@ import os
 
     /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
-    /// `Geometry.maxCoordinate`, and windows Pane does not track, are dropped and logged (T-02-32).
-    /// `park`, `focus`, `raise` and `setHidden` are logged and dropped: Phase 3 implements them.
+    /// `Geometry.maxCoordinate`, and windows Pane does not track, are dropped and logged (T-02-32). `.park` is a
+    /// frame write through the same slot, to its display's `parkedFrame` at the window's tracked size (Pattern 15).
+    /// `setHidden` is logged and dropped: no phase needs it yet, and it stays in the protocol for later ones.
     /// Commands for an excluded app are dropped before anything else, logged once per bundle ID (D-12).
     public func perform(_ commands: [WindowCommand]) async {
         let split = ExclusionFilter.admit(commands, excluded: excluded)
@@ -178,19 +179,28 @@ import os
             logger.notice("dropping commands for excluded app \(bundleID, privacy: .public)")
         }
         for command in split.admitted {
-            guard case .setFrame(let ref, let rect) = command else {
-                logger.info("dropping a command other than setFrame: not implemented before Phase 3")
-                continue
-            }
-            guard rect.isValidGeometry else {
-                logger.error("dropping setFrame for \(ref.description, privacy: .public): rect not finite or out of range")
-                continue
-            }
+            let ref = command.window
             guard let info = tracker.info(for: ref.identity), let thread = threads[ref.pid] else {
-                logger.info("dropping setFrame for \(ref.description, privacy: .public): window not tracked")
+                logger.info("dropping a command for \(ref.description, privacy: .public): window not tracked")
                 continue
             }
-            thread.enqueueFrame(windowID: info.visibleMemberID ?? ref.windowID, rect: rect, ref: info.window)
+            let windowID = info.visibleMemberID ?? ref.windowID
+            switch command {
+            case .setFrame(_, let rect):
+                guard rect.isValidGeometry else {
+                    logger.error("dropping setFrame for \(ref.description, privacy: .public): rect not finite or out of range")
+                    continue
+                }
+                thread.enqueueFrame(windowID: windowID, rect: rect, ref: info.window)
+            case .park(_, let uuid):
+                guard let display = displays.first(where: { $0.uuid == uuid }) else {
+                    logger.error("dropping park for \(ref.description, privacy: .public): display \(uuid, privacy: .public) unknown")
+                    continue
+                }
+                thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: info.frame.size), ref: info.window)
+            case .focus, .raise, .setHidden:
+                logger.info("dropping a command other than setFrame or park: not implemented yet")
+            }
         }
     }
 
