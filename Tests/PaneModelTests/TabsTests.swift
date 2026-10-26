@@ -87,7 +87,11 @@ private func pair() throws -> (LayoutTree, IDSource) {
     }
 
     @Test func tabsSurviveAWorldJSONRoundTrip() throws {
-        var (tree, ids) = try pair()
+        // As a desk holds them, beside the Desktop tile: H[A n1, C, Desktop].
+        var tree = LayoutTree.withDesktop()
+        var ids = IDSource()
+        try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try tree.insert(c, at: .right, of: n(1), ids: &ids)
         try tree.group(b, into: n(1))
         try tree.selectTab(a)
         let key = DeskKey(displayUUID: "D1", spaceID: nil)

@@ -16,11 +16,11 @@ private let invalidFrames: [Rect] = [
     Rect(x: 0, y: 0, width: .infinity, height: 100),
 ]
 
-/// A desk whose tree holds `docked`.
+/// A desk whose tree holds `docked` beside the Desktop tile.
 private func dockedDesk(_ docked: WindowRef, ids: inout IDSource) throws -> Desk {
-    var tree = LayoutTree()
-    try tree.insertRoot(docked, ids: &ids)
-    return Desk(tree: tree)
+    var desk = Desk()
+    try desk.tree.insert(docked, at: .left, of: .desktop, ids: &ids)
+    return desk
 }
 
 @Suite struct DesktopLayerTests {

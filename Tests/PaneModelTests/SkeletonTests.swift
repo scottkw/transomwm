@@ -29,7 +29,11 @@ func makeWindow(_ id: UInt32, title: String = "") -> WindowRef {
         #expect(resolution.windowRects[b] == Rect(x: 505, y: 10, width: 485, height: 480))
         #expect(resolution.unfit.isEmpty)
 
-        let world = try World(ids: ids, desks: [DeskKey(displayUUID: "D1", spaceID: nil): Desk(tree: tree)])
+        // A desk holds the same pair beside its Desktop tile (D-24).
+        var desk = Desk()
+        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.insert(b, at: .right, of: #require(desk.tree.leaf(containing: a)), ids: &ids)
+        let world = try World(ids: ids, desks: [DeskKey(displayUUID: "D1", spaceID: nil): desk])
         let data = try world.encoded()
         #expect(String(decoding: data, as: UTF8.self).contains("\"schemaVersion\":1"))
         let decoded = try World.decode(from: data)

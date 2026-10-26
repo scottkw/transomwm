@@ -23,6 +23,16 @@ private func triple() throws -> (LayoutTree, IDSource) {
     return (tree, ids)
 }
 
+/// The same windows docked as a desk holds them, beside the Desktop tile: H[A, B, C, Desktop].
+private func deskTriple() throws -> (LayoutTree, IDSource) {
+    var tree = LayoutTree.withDesktop()
+    var ids = IDSource()
+    try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+    try tree.insert(b, at: .right, of: #require(tree.leaf(containing: a)), ids: &ids)
+    try tree.insert(c, at: .right, of: #require(tree.leaf(containing: b)), ids: &ids)
+    return (tree, ids)
+}
+
 private func layout(_ tree: LayoutTree) throws -> Resolution {
     try resolve(tree, in: area, mins: [:], gap: 8)
 }
@@ -120,7 +130,7 @@ private func layout(_ tree: LayoutTree) throws -> Resolution {
     }
 
     @Test func deskSetStateRoutesDockedWindowsThroughTheTree() throws {
-        var (tree, _) = try triple()
+        var (tree, _) = try deskTriple()
         var desk = Desk(tree: tree)
         try desk.desktop.add(w, frame: floatFrame)
         try desk.setState(.fullscreen, for: b)
@@ -148,7 +158,7 @@ private func layout(_ tree: LayoutTree) throws -> Resolution {
     }
 
     @Test func lifecycleStatesSurviveAWorldJSONRoundTrip() throws {
-        let (tree, ids) = try triple()
+        let (tree, ids) = try deskTriple()
         var desk = Desk(tree: tree)
         try desk.desktop.add(w, frame: floatFrame)
         try desk.setState(.absent, for: b)

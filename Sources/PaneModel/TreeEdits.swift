@@ -68,6 +68,8 @@ extension LayoutTree {
     /// Removes `window` (D-05). A panel's share goes back to its siblings in proportion to their
     /// weights; a tab group left with one window becomes a panel under the same NodeID.
     /// Throws only `windowNotFound`: a confirmed `.closed` must always be able to drop the slot.
+    /// The Desktop tile is an ordinary leaf here, so the last docked window going collapses the tree back
+    /// to the Desktop alone, and a hidden Desktop is shown again (D-24).
     public mutating func remove(_ window: WindowRef) throws(LayoutError) {
         guard let leaf = leaf(containing: window) else { throw .windowNotFound(window) }
         var next = self
@@ -93,6 +95,7 @@ extension LayoutTree {
             }
         }
         next.normalize()
+        if next.windows.isEmpty, next.isDesktopHidden == true { next.nodes[.desktop] = .desktop(hidden: false) }
         self = next
         assertValid()
     }
@@ -106,15 +109,23 @@ extension LayoutTree {
         switch node {
         case let .panel(existing): next.nodes[target] = .tabs(windows: [existing, window], selected: 1)
         case let .tabs(windows, _): next.nodes[target] = .tabs(windows: windows + [window], selected: windows.count)
-        case .split, .desktop: throw .notALeaf(target)
+        case .split: throw .notALeaf(target)
+        case .desktop: throw .desktopTile(target)
         }
         next.states[window.identity] = .present
         self = next
         assertValid()
     }
 
-    // RED scaffolding: implemented in the GREEN commit.
-    public mutating func setDesktopHidden(_ hidden: Bool) throws(LayoutError) {}
+    /// Hides or shows the Desktop tile (TILE-15, D-24). Hidden, it gets no rect and the docked tiles share
+    /// its space; its stored weight is kept, so showing it brings back exactly the rects it had. Hiding is
+    /// refused while no window is docked.
+    public mutating func setDesktopHidden(_ hidden: Bool) throws(LayoutError) {
+        guard isDesktopHidden != nil else { throw .nodeNotFound(.desktop) }
+        guard !hidden || !windows.isEmpty else { throw .nothingDocked }
+        nodes[.desktop] = .desktop(hidden: hidden)
+        assertValid()
+    }
 
     /// Makes `window` the selected tab of its group.
     public mutating func selectTab(_ window: WindowRef) throws(LayoutError) {

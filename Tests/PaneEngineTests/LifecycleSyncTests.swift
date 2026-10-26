@@ -16,7 +16,7 @@ private let a = ref(1)
 private let b = ref(2)
 private let c = ref(3)
 
-/// Desk `key` with `windows` docked left to right, one user edit (and so one undo snapshot) per window.
+/// Desk `key` with `windows` docked left to right beside the Desktop tile, one user edit (and so one undo snapshot) per window.
 private func world(_ windows: [WindowRef], history: inout UndoHistory) throws -> World {
     var world = World()
     try world.addDesk(key)
@@ -26,7 +26,7 @@ private func world(_ windows: [WindowRef], history: inout UndoHistory) throws ->
             if let previous, let leaf = desk.tree.leaf(containing: previous) {
                 try desk.tree.insert(window, at: .right, of: leaf, ids: &ids)
             } else {
-                try desk.tree.insertRoot(window, ids: &ids)
+                try desk.tree.insert(window, at: .left, of: .desktop, ids: &ids)
             }
         }
         previous = window
