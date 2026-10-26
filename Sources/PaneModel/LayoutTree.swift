@@ -29,6 +29,10 @@ public enum LayoutError: Error, Equatable, Sendable {
     case deskNotFound(DeskKey)
     case deskExists(DeskKey)
     case invariantViolated(String)
+    /// Hiding the Desktop tile was asked while no window is docked; it would leave the desk with no tile.
+    case nothingDocked
+    /// The edit cannot apply to the Desktop tile at this NodeID (it holds no windows and never tabs).
+    case desktopTile(NodeID)
 }
 
 /// A flat value tree: nodes refer to children by ID, so the whole layout is a cheap copy-on-write

@@ -3,6 +3,7 @@ import Testing
 @testable import PaneModel
 
 private let a = makeWindow(1)
+private let b = makeWindow(2)
 private let key = DeskKey(displayUUID: "D1", spaceID: nil)
 private let screen = Rect(x: 0, y: 25, width: 1440, height: 875)
 
@@ -15,6 +16,14 @@ private func dockedBesideDesktop() throws -> World {
         try desk.tree.applyDrop(.tile(.desktop, .edge(.left)), window: a, ids: &ids)
     }
     return world
+}
+
+/// H[a, Desktop], built on a raw tree.
+private func besideDesktop() throws -> LayoutTree {
+    var ids = IDSource()
+    var tree = LayoutTree.withDesktop()
+    try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+    return tree
 }
 
 @Suite struct DesktopLeafTests {
@@ -77,5 +86,84 @@ private func dockedBesideDesktop() throws -> World {
 
     @Test func aWorldWhoseIDSourceCouldMintTheDesktopIDIsInvalid() {
         #expect(throws: LayoutError.self) { try World(ids: IDSource(next: 0), desks: [:]) }
+    }
+
+    @Test func hidingTheDesktopWhileNothingIsDockedIsRefused() {
+        var tree = LayoutTree.withDesktop()
+        #expect(throws: LayoutError.nothingDocked) { try tree.setDesktopHidden(true) }
+        #expect(tree == LayoutTree.withDesktop())
+    }
+
+    @Test func hidingTheDesktopGivesItsSpaceToTheDockedTilesAndShowingRestoresThem() throws {
+        var tree = try besideDesktop()
+        let before = try resolve(tree, in: screen, mins: [:], gap: 8)
+        try tree.setDesktopHidden(true)
+        #expect(tree.isDesktopHidden == true)
+
+        let hidden = try resolve(tree, in: screen, mins: [:], gap: 8)
+        #expect(hidden.desktopRect == nil)
+        #expect(hidden.windowRects[a] == (try resolve(Desk().tree, in: screen, mins: [:], gap: 8)).desktopRect)
+
+        try tree.setDesktopHidden(false)
+        #expect(try resolve(tree, in: screen, mins: [:], gap: 8) == before)
+    }
+
+    @Test(arguments: [false, true])
+    func removingTheLastDockedWindowLeavesTheVisibleDesktopAlone(hiddenFirst: Bool) throws {
+        var tree = try besideDesktop()
+        if hiddenFirst { try tree.setDesktopHidden(true) }
+        try tree.remove(a)
+        #expect(tree == LayoutTree.withDesktop())
+        #expect(tree.isDesktopHidden == false)
+    }
+
+    @Test func groupingAWindowIntoTheDesktopIsRefused() throws {
+        var tree = try besideDesktop()
+        let before = tree
+        #expect(throws: LayoutError.desktopTile(.desktop)) { try tree.group(b, into: .desktop) }
+        #expect(tree == before)
+    }
+
+    @Test func dockingBelowTheDesktopNestsBesideItAndNormalizeKeepsIt() throws {
+        var ids = IDSource(next: 10)
+        var tree = try besideDesktop()
+        try tree.insert(b, at: .bottom, of: .desktop, ids: &ids)
+        let aLeaf = try #require(tree.leaf(containing: a)), bLeaf = try #require(tree.leaf(containing: b))
+        let root = try #require(tree.root)
+        guard case let .split(.horizontal, children, _)? = tree.nodes[root], children.count == 2, children[0] == aLeaf else {
+            Issue.record("expected H[a, V[Desktop, b]], got \(tree.nodes)")
+            return
+        }
+        #expect(tree.nodes[children[1]] == .split(axis: .vertical, children: [.desktop, bLeaf], weights: [0.5, 0.5]))
+
+        try tree.remove(b)
+        #expect(tree.nodes[.desktop] == .desktop(hidden: false))
+        #expect(tree.nodes[root] == .split(axis: .horizontal, children: [aLeaf, .desktop], weights: [0.5, 0.5]))
+    }
+
+    @Test func theDesktopIsNeverTheUnfitTile() throws {
+        let area = Rect(x: 0, y: 0, width: 1440, height: 900)
+        let resolution = try resolve(
+            besideDesktop(), in: area, mins: [a: Size(width: 1000, height: 1)], gap: 8, desktopMinimum: Size(width: 600, height: 1))
+        #expect(resolution.unfit == [a])
+        #expect(resolution.desktopRect == Rect(x: 8, y: 8, width: 1424, height: 884))
+    }
+
+    @Test func aDesktopMinimumLargerThanTheAreaGetsTheWholeArea() throws {
+        let area = Rect(x: 0, y: 0, width: 1440, height: 900)
+        let resolution = try resolve(besideDesktop(), in: area, mins: [:], gap: 8, desktopMinimum: Size(width: 5000, height: 1))
+        #expect(resolution.unfit == [a])
+        #expect(resolution.desktopRect == Rect(x: 8, y: 8, width: 1424, height: 884))
+    }
+
+    @Test func anInvalidDesktopMinimumIsRefused() {
+        #expect(throws: LayoutError.invalidGeometry("desktop minimum")) {
+            try resolve(Desk().tree, in: screen, mins: [:], gap: 8, desktopMinimum: Size(width: -1, height: 1))
+        }
+    }
+
+    @Test func hidingATreeWithoutTheDesktopTileThrowsNodeNotFound() {
+        var tree = LayoutTree()
+        #expect(throws: LayoutError.nodeNotFound(.desktop)) { try tree.setDesktopHidden(true) }
     }
 }

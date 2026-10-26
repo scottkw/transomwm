@@ -113,6 +113,9 @@ extension LayoutTree {
         assertValid()
     }
 
+    // RED scaffolding: implemented in the GREEN commit.
+    public mutating func setDesktopHidden(_ hidden: Bool) throws(LayoutError) {}
+
     /// Makes `window` the selected tab of its group.
     public mutating func selectTab(_ window: WindowRef) throws(LayoutError) {
         guard let leaf = leaf(containing: window) else { throw .windowNotFound(window) }
