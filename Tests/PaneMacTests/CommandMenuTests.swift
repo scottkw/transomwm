@@ -50,3 +50,27 @@ import Testing
         #expect(menu.splitMenu.submenu?.items.contains { $0 === menu.item(for: .finderSplit) } == true)
     }
 }
+
+/// TILE-18: Don't Arrange acts on the frontmost regular app only; with none (or Pane itself) it changes nothing,
+/// and the caller beeps.
+@Suite @MainActor struct FrontmostExclusionTests {
+    @Test func withNoQualifyingFrontmostAppNothingChanges() throws {
+        let suite = "com.eightabyte.pane.tests.exclusions.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ExclusionStore(defaults: defaults)
+        #expect(!ArrangeController.toggleExclusion(of: nil, in: store))
+        #expect(!ArrangeController.toggleExclusion(of: NSRunningApplication.current, in: store), "Pane excluded itself")
+        #expect(store.bundleIDs.isEmpty)
+    }
+
+    @Test func theExcludeItemShowsControlOptionCommandEAndDispatchesItsCommand() throws {
+        var sent: [Command] = []
+        let menu = CommandMenu { sent.append($0) }
+        let item = menu.item(for: .toggleExcludeFrontmost)
+        #expect(item.title == "Don't Arrange Frontmost App")
+        #expect(item.keyEquivalent == "e" && item.keyEquivalentModifierMask == [.control, .option, .command])
+        _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item)
+        #expect(sent == [.toggleExcludeFrontmost])
+    }
+}

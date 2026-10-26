@@ -11,11 +11,11 @@ import Testing
     @Test func entriesMapStableNamesToCommands() {
         #expect(Hotkeys.entries.map(\.name.rawValue) == [
             "dock", "float", "undo", "toggleDesktop", "focusLeft", "focusRight", "focusUp", "focusDown", "finderSplit",
-            "togglePause",
+            "togglePause", "toggleExcludeFrontmost",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
             .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
-            .togglePause,
+            .togglePause, .toggleExcludeFrontmost,
         ])
     }
 
@@ -24,6 +24,7 @@ import Testing
             .init(.d, modifiers: base), .init(.f, modifiers: base), .init(.z, modifiers: base), .init(.h, modifiers: base),
             .init(.leftArrow, modifiers: base), .init(.rightArrow, modifiers: base), .init(.upArrow, modifiers: base),
             .init(.downArrow, modifiers: base), .init(.n, modifiers: base), .init(.p, modifiers: base),
+            .init(.e, modifiers: base),
         ]
         #expect(Hotkeys.entries.map(\.name.defaultShortcut) == expected)
     }
@@ -31,6 +32,11 @@ import Testing
     @Test func togglePauseIsControlOptionCommandP() {
         #expect(KeyboardShortcuts.Name.togglePause.rawValue == "togglePause")
         #expect(KeyboardShortcuts.Name.togglePause.defaultShortcut == .init(.p, modifiers: base))
+    }
+
+    @Test func toggleExcludeFrontmostIsControlOptionCommandE() {
+        #expect(KeyboardShortcuts.Name.toggleExcludeFrontmost.rawValue == "toggleExcludeFrontmost")
+        #expect(KeyboardShortcuts.Name.toggleExcludeFrontmost.defaultShortcut == .init(.e, modifiers: base))
     }
 
     @Test func namesAreUnique() {
