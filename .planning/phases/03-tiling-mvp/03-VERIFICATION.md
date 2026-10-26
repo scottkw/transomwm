@@ -1,37 +1,25 @@
 ---
 phase: 03-tiling-mvp
-verified: 2026-10-26T15:30:00Z
-status: gaps_found
-score: 5/7 must-haves verified
+verified: 2026-10-26T16:15:00Z
+status: human_needed
+score: 6/7 must-haves verified
 covered_files: [".planning/phases/03-tiling-mvp/03-01-PLAN.md",".planning/phases/03-tiling-mvp/03-01-SUMMARY.md",".planning/phases/03-tiling-mvp/03-02-PLAN.md",".planning/phases/03-tiling-mvp/03-02-SUMMARY.md",".planning/phases/03-tiling-mvp/03-03-PLAN.md",".planning/phases/03-tiling-mvp/03-03-SUMMARY.md",".planning/phases/03-tiling-mvp/03-04-PLAN.md",".planning/phases/03-tiling-mvp/03-04-SUMMARY.md",".planning/phases/03-tiling-mvp/03-05-PLAN.md",".planning/phases/03-tiling-mvp/03-05-SUMMARY.md",".planning/phases/03-tiling-mvp/03-06-PLAN.md",".planning/phases/03-tiling-mvp/03-06-SUMMARY.md",".planning/phases/03-tiling-mvp/03-07-PLAN.md",".planning/phases/03-tiling-mvp/03-07-SUMMARY.md",".planning/phases/03-tiling-mvp/03-08-PLAN.md",".planning/phases/03-tiling-mvp/03-08-SUMMARY.md",".planning/phases/03-tiling-mvp/03-09-PLAN.md",".planning/phases/03-tiling-mvp/03-09-SUMMARY.md",".planning/phases/03-tiling-mvp/03-10-PLAN.md",".planning/phases/03-tiling-mvp/03-10-SUMMARY.md",".planning/phases/03-tiling-mvp/03-11-PLAN.md",".planning/phases/03-tiling-mvp/03-11-SUMMARY.md",".planning/phases/03-tiling-mvp/03-12-PLAN.md",".planning/phases/03-tiling-mvp/03-12-SUMMARY.md",".planning/phases/03-tiling-mvp/03-13-PLAN.md",".planning/phases/03-tiling-mvp/03-13-SUMMARY.md",".planning/phases/03-tiling-mvp/03-14-PLAN.md",".planning/phases/03-tiling-mvp/03-14-SUMMARY.md",".planning/phases/03-tiling-mvp/03-15-PLAN.md",".planning/phases/03-tiling-mvp/03-15-SUMMARY.md",".planning/phases/03-tiling-mvp/03-16-PLAN.md",".planning/phases/03-tiling-mvp/03-16-SUMMARY.md",".planning/phases/03-tiling-mvp/03-17-PLAN.md",".planning/phases/03-tiling-mvp/03-17-SUMMARY.md","Package.resolved","Package.swift","Sources/PaneEngine/Arranger+Commands.swift","Sources/PaneEngine/Arranger.swift","Sources/PaneEngine/Command.swift","Sources/PaneEngine/ConflictPolicy.swift","Sources/PaneEngine/DragSession.swift","Sources/PaneEngine/GapHandles.swift","Sources/PaneEngine/LayoutFile.swift","Sources/PaneEngine/LayoutRestore.swift","Sources/PaneEngine/LifecycleSync.swift","Sources/PaneEngine/Notice.swift","Sources/PaneEngine/PaneURL.swift","Sources/PaneEngine/PermissionReducer.swift","Sources/PaneEngine/Planner.swift","Sources/PaneEngine/Recovery.swift","Sources/PaneEngine/WindowSnapshot.swift","Sources/PaneEngine/WindowSystem.swift","Sources/PaneEngine/WindowTracker.swift","Sources/PaneFixtureApp/main.swift","Sources/PaneMac/AX/AXAppThread.swift","Sources/PaneMac/AX/AXSnapshotReader.swift","Sources/PaneMac/AX/MenuPress.swift","Sources/PaneMac/AXWindowSystem.swift","Sources/PaneMac/AppDelegate.swift","Sources/PaneMac/ArrangeController.swift","Sources/PaneMac/CGWindowList.swift","Sources/PaneMac/ConflictController.swift","Sources/PaneMac/Displays.swift","Sources/PaneMac/GapPreference.swift","Sources/PaneMac/Input/DragFramePoller.swift","Sources/PaneMac/Input/GreenButton.swift","Sources/PaneMac/Input/Hotkeys.swift","Sources/PaneMac/Input/InputTap.swift","Sources/PaneMac/LayoutStore.swift","Sources/PaneMac/Overlay/GapHandlePanels.swift","Sources/PaneMac/Overlay/NoticeQueue.swift","Sources/PaneMac/Overlay/PreviewPanel.swift","Sources/PaneMac/Overlay/PreviewStyle.swift","Sources/PaneMac/Overlay/Toast.swift","Sources/PaneMac/PaneMacApp.swift","Sources/PaneMac/Shell/CommandMenu.swift","Sources/PaneMac/Shell/ConflictCopy.swift","Sources/PaneMac/Shell/MenuCopy.swift","Sources/PaneMac/Shell/NoticeCopy.swift","Sources/PaneMac/Shell/StatusItemController.swift","Sources/PaneMac/WindowManagerSettings.swift","Sources/PaneModel/DesktopLayer.swift","Sources/PaneModel/IDs.swift","Sources/PaneModel/LayoutTree.swift","Sources/PaneModel/Neighbours.swift","Sources/PaneModel/Resolve.swift","Sources/PaneModel/Snap.swift","Sources/PaneModel/TreeEdits.swift","Sources/PaneModel/Undo.swift","Sources/PaneModel/World.swift","Sources/PanePrivate/SkyLightSpaces.swift","Sources/PaneTestSupport/FakeWindowSystem.swift","Tests/PaneEngineTests/ArrangerCommandTests.swift","Tests/PaneEngineTests/ArrangerDesktopTests.swift","Tests/PaneEngineTests/ArrangerDragTests.swift","Tests/PaneEngineTests/ArrangerExclusionTests.swift","Tests/PaneEngineTests/ArrangerFinderTests.swift","Tests/PaneEngineTests/ArrangerFocusTests.swift","Tests/PaneEngineTests/ArrangerGreenButtonTests.swift","Tests/PaneEngineTests/ArrangerLifecycleTests.swift","Tests/PaneEngineTests/ArrangerMultiDeskRestoreTests.swift","Tests/PaneEngineTests/ArrangerPauseTests.swift","Tests/PaneEngineTests/ArrangerReflowTests.swift","Tests/PaneEngineTests/ArrangerResizeTests.swift","Tests/PaneEngineTests/ArrangerRestoreTests.swift","Tests/PaneEngineTests/ArrangerSpacesTests.swift","Tests/PaneEngineTests/CommandTests.swift","Tests/PaneEngineTests/ConflictPolicyTests.swift","Tests/PaneEngineTests/DragSessionTests.swift","Tests/PaneEngineTests/GapHandleGeometryTests.swift","Tests/PaneEngineTests/LifecycleSyncTests.swift","Tests/PaneEngineTests/PaneURLTests.swift","Tests/PaneEngineTests/PermissionReducerTests.swift","Tests/PaneEngineTests/PlannerTests.swift","Tests/PaneEngineTests/RecoveryTests.swift","Tests/PaneEngineTests/TrackerDisplayTests.swift","Tests/PaneMacIntegrationTests/ArrangeIntegrationTests.swift","Tests/PaneMacIntegrationTests/ButtonFrameIntegrationTests.swift","Tests/PaneMacIntegrationTests/FocusParkIntegrationTests.swift","Tests/PaneMacIntegrationTests/InputTapIntegrationTests.swift","Tests/PaneMacIntegrationTests/MenuPressIntegrationTests.swift","Tests/PaneMacIntegrationTests/QuitRestoreIntegrationTests.swift","Tests/PaneMacIntegrationTests/RecoveryIntegrationTests.swift","Tests/PaneMacIntegrationTests/SpacesIntegrationTests.swift","Tests/PaneMacIntegrationTests/TitleBarDragIntegrationTests.swift","Tests/PaneMacTests/AppDelegateTests.swift","Tests/PaneMacTests/CapabilitiesTests.swift","Tests/PaneMacTests/CommandMenuTests.swift","Tests/PaneMacTests/ConflictControllerTests.swift","Tests/PaneMacTests/ConflictCopyTests.swift","Tests/PaneMacTests/GapPreferenceTests.swift","Tests/PaneMacTests/GreenButtonHitTests.swift","Tests/PaneMacTests/HotkeyTableTests.swift","Tests/PaneMacTests/LayoutStoreTests.swift","Tests/PaneMacTests/MenuCopyTests.swift","Tests/PaneMacTests/MenuPressTests.swift","Tests/PaneMacTests/NoScreenCaptureTests.swift","Tests/PaneMacTests/NoticeCopyTests.swift","Tests/PaneMacTests/NoticeQueueTests.swift","Tests/PaneMacTests/PreviewStyleTests.swift","Tests/PaneMacTests/WakeTimerTests.swift","Tests/PaneMacTests/WindowManagerSettingsTests.swift","Tests/PaneModelTests/DesktopLayerTests.swift","Tests/PaneModelTests/DesktopLeafTests.swift","Tests/PaneModelTests/LayoutEditTests.swift","Tests/PaneModelTests/LifecycleTests.swift","Tests/PaneModelTests/NeighbourTests.swift","Tests/PaneModelTests/PersistenceTests.swift","Tests/PaneModelTests/ResolveFuzzTests.swift","Tests/PaneModelTests/ResolveTests.swift","Tests/PaneModelTests/ScenarioTests.swift","Tests/PaneModelTests/SkeletonTests.swift","Tests/PaneModelTests/SnapTests.swift","Tests/PaneModelTests/TabsTests.swift","Tests/PaneModelTests/TreeEditTests.swift","Tests/PaneModelTests/UndoTests.swift","Tests/PaneModelTests/WorldRekeyTests.swift","scripts/release.sh","xcode/Pane-Info.plist","xcode/project.yml"]
-covered_digest: "v3:sha256:387845a1f8f16388bd464a6a7770cdd2d6a0924484d96cd6aa06c9ee332917e0"
+covered_digest: "v3:sha256:c17916974d87bb8ff7dccf5e87c8c717fefea63fe97a3d650ddd76b324807cb3"
 behavior_unverified: 1
 overrides_applied: 0
-gaps:
-  - truth: "SC1 / TILE-01: Dragging a window by its title bar to a screen edge or another window's edge shows a drop preview and docks it there on release"
-    status: partial
-    reason: "Observed live on the 0.3.0 build in the Tart VM (deferred-items 03-17): Safari windows dragged by their unified-toolbar title area never dock and stay floating, with no preview. TextEdit docks correctly. Review WR-03 gives a probable cause (drag classification needs leftMouseDragged travel and AX/CG size agreement) but it was skipped pending a live log, so the code is unchanged at HEAD 81c5fd3. Safari is a mainstream app, so drag-to-dock, the Core Value, does not work for it. Dock from the keyboard (Ctrl-Opt-Cmd-D) and the green button are a workaround, not a fix."
-    artifacts:
-      - path: "Sources/PaneEngine/Arranger.swift"
-        issue: "Travel is counted only from session.pointer (leftMouseDragged/flagsChanged), and .up does not update the pointer (around :826-844)"
-      - path: "Sources/PaneEngine/DragSession.swift"
-        issue: "observe compares CG-bounds samples with an AX startFrame size within 1 pt, so differing chrome sizes classify a move as .resize (around :124-139)"
-      - path: "Sources/PaneMac/ArrangeController.swift"
-        issue: "startFrame comes from AX, not from DragFramePoller.bounds(of:) (around :283-290)"
-    missing:
-      - "One live Safari drag log at release (session.kind, travelled, first sample against startFrame) to confirm which condition fails"
-      - "A fix for the confirmed cause, e.g. take startFrame from CG bounds at mouse-down, count travel from window origin displacement, and set session.pointer on .up"
-      - "A fake regression test where CG bounds differ from the AX frame and/or no leftMouseDragged arrives, and the window still docks"
-      - "A live re-check: Safari docks by drag in the VM"
+re_verification:
+  previous_status: gaps_found
+  previous_score: 5/7
+  gaps_closed:
+    - "SC1 / TILE-01 (Safari drag-dock): not reproducible on a Release build of bb67b5d (HEAD 936da6c only lowers the drag log to debug). Live drag log in the VM (debug session safari-toolbar-drag-no-dock): Safari toolbar drags classify as move with dragged events > 0, AX and CG start frames agree exactly, and they end in decision dock(...) with the preview shown (16:09:47, 16:10:24). WR-03 hypotheses (no leftMouseDragged, AX/CG size mismatch) and a third (no session starts) are all eliminated. Why the 0.3.0 build failed is unknown; no code fix was needed."
+  gaps_remaining: []
+  regressions: []
 behavior_unverified_items:
   - truth: "SC5: the Developer ID build's Accessibility grant survives updates"
     test: "Install build N in /Applications and grant Accessibility. Quit, replace it with build N+1 (same bundle ID and Team ID, bumped CURRENT_PROJECT_VERSION), relaunch."
     expected: "Pane is still trusted (menu header shows window counts, not the Set Up prompt), and no new grant is needed"
-    why_human: "The designated requirement is Team-ID based (verified: identifier com.eightabyte.pane plus leaf OU S2K7P43927), which should make TCC keep the grant, but no update over an existing install has been exercised"
+    why_human: "Half done: on 2026-10-26 the VM's /Applications/Pane.app was replaced by a new Developer ID build (new binary, same designated requirement: identifier com.eightabyte.pane plus leaf OU S2K7P43927, same version 0.3.0) and the relaunch went notTrusted -> probing -> ready in 0.11 s with no prompt. Still untried: an install with a bumped version, and the DMG drag-install path with quarantine"
 human_verification:
-  - test: "VM: Safari drag-dock diagnosis (the open gap). Stream Pane's log and drag a Safari window by its toolbar to the left edge and hold it."
-    expected: "Preview after about 150 ms, then the window docks. If it does not, capture the session kind, travel, and first sample against the start frame for WR-03"
-    why_human: "Needs a real Safari window and the WindowServer drag path"
   - test: "VM: grant Accessibility in System Settings directly (without the Set Up button) while Pane runs"
     expected: "Tracking starts without a relaunch (WR-02 fix)"
     why_human: "Real TCC transition; the fix has only a reducer test"
@@ -68,9 +56,12 @@ human_verification:
   - test: "VM: with Screen Recording never granted, do a full dock/float session and check System Settings, Screen Recording"
     expected: "No Screen Recording prompt ever appears and Pane is not listed; tiling works (TILE-10)"
     why_human: "TCC prompt behaviour"
-  - test: "VM: update over an install (see behavior_unverified_items)"
+  - test: "VM: update over an install with a bumped version (see behavior_unverified_items; a same-version binary swap already kept the grant)"
     expected: "Accessibility grant kept"
     why_human: "TCC designated-requirement matching across builds"
+  - test: "VM: with TextEdit docked, open a new Safari window (and separately, drag a floating Safari window near TextEdit's tile without releasing on a drop zone)"
+    expected: "Confirm the intended behaviour: a new window floats on the Desktop tile and never auto-splits (TILE-07). The user reported 'Once TextEdit is docked Safari automatically docks to another position and doesn't remain floating; dragging it to the edge of TextEdit just changes its dock position'. The drag log shows only user drags docking Safari, so this may be the Desktop tile sizing itself around the floating window, or Safari window 114 being replaced by 115 at the identical docked frame 8,33 1008x331 (16:09:54 -> 16:09:58; a re-key keeping the slot, or a new window put into a tile). Unknown which"
+    why_human: "Needs a real Safari window and the user's eye on whether it is docked or floating (menu Float/Dock state, layout.json)"
   - test: "VM (Spaces) or host: dock windows on Space 1, switch to Space 2 and dock others, switch back"
     expected: "Each Space keeps its own layout; switching never moves the other Space's windows"
     why_human: "Real SkyLight Space lookup"
@@ -89,21 +80,21 @@ human_verification:
 
 **Phase Goal:** As a Mac user, I want to drag windows into nested tiles that reflow as windows open and close, so that my windows never overlap.
 **Mode:** mvp (user story validated by `user-story.validate`: valid)
-**Verified:** 2026-10-26T15:30:00Z
-**Status:** gaps_found
-**Re-verification:** No, initial verification
+**Verified:** 2026-10-26T16:15:00Z (initial 15:30:00Z)
+**Status:** human_needed
+**Re-verification:** Yes. The one gap (Safari drag-dock) was re-checked live in the VM and does not reproduce; see Gaps Summary
 
 ## User Flow Coverage
 
 | Step | Expected | Evidence in codebase | Status |
 | ---- | -------- | -------------------- | ------ |
-| Drag a window by its title bar | A drag session starts, frames are polled, a 150 ms dwell shows the WYSIWYG preview | `InputTap` -> `ArrangeController` -> `Arranger` drag path -> `DropZones.target` (Arranger.swift:971) -> `.preview` effect -> `PreviewPanel`; `ArrangerDragTests` (17 tests) pass; TextEdit docked live in the VM | VERIFIED for TextEdit, FAILED for Safari |
+| Drag a window by its title bar | A drag session starts, frames are polled, a 150 ms dwell shows the WYSIWYG preview | `InputTap` -> `ArrangeController` -> `Arranger` drag path -> `DropZones.target` (Arranger.swift:971) -> `.preview` effect -> `PreviewPanel`; `ArrangerDragTests` (17 tests) pass; TextEdit and Safari (by its toolbar) docked live in the VM, drag log captured | VERIFIED |
 | Release over an edge, nested to any depth | `applyDrop` + `resolve` docks it; a drop onto a docked window's edge nests | Arranger.swift:1047 `applyDrop`; `DropZoneTests`, `TreeEditTests`, `aFloatingWindowHeldInTheLeftEdgeBandDocksAtThePreviewedFrame` pass | VERIFIED |
 | Windows open | New windows float on the Desktop tile, never auto-split | `Node.desktop`, `Arranger.admit`; `DesktopLeafTests`, `ArrangerLifecycleTests` pass | VERIFIED |
 | Windows close, minimise, go fullscreen | Neighbours reflow; minimised and fullscreen windows return to their tile | `aMinimisedDockedWindowLendsItsTileAndReturnsToIt`, `aFullscreenDockedWindowKeepsItsLeafAndReturnsToItsTile`, `aFullscreenSpaceGetsNoDeskAndTheWindowReturnsToItsTile` pass | VERIFIED (fake); live fullscreen not run |
-| Outcome: windows never overlap | Floating windows live inside the Desktop tile; drops that leave no room are refused; windows that lose room float | `resolve(..., desktopMinimum:)`, `aDropThatLeavesAWindowWithoutRoomShowsBlockedAndIsRefused`, lost-room floating (03-06), park corner avoids other displays (CR-02 fix, `hidingNeverParksAWindowOntoTheDisplayBeside`) | VERIFIED (Safari stays floating but clamped, so it does not overlap) |
+| Outcome: windows never overlap | Floating windows live inside the Desktop tile; drops that leave no room are refused; windows that lose room float | `resolve(..., desktopMinimum:)`, `aDropThatLeavesAWindowWithoutRoomShowsBlockedAndIsRefused`, lost-room floating (03-06), park corner avoids other displays (CR-02 fix, `hidingNeverParksAWindowOntoTheDisplayBeside`) | VERIFIED |
 
-The outcome clause holds. The flow fails at step 1 for Safari, so the "drag windows" part of the story is only partly delivered.
+The outcome clause holds, and every step of the flow is now delivered, including step 1 for Safari.
 
 ## Goal Achievement
 
@@ -111,7 +102,7 @@ The outcome clause holds. The flow fails at step 1 for Safari, so the "drag wind
 
 | # | Truth | Status | Evidence |
 | - | ----- | ------ | -------- |
-| 1 | Drag by title bar to an edge shows a preview and docks it on release, nesting at any depth; bypass modifier moves freely; new windows float on the Desktop; green button toggles docked/floating | FAILED (partial) | Everything except Safari is implemented and tested: drag tests, `shiftUndocksADockedWindowAtItsReleaseFrame`, `onAFloatingWindowItDocksLikeDock`, `onADockedWindowItFloatsLikeFloat`, plus the TextEdit live check in the VM. **Safari windows do not dock by drag** (observed live, WR-03 not fixed). |
+| 1 | Drag by title bar to an edge shows a preview and docks it on release, nesting at any depth; bypass modifier moves freely; new windows float on the Desktop; green button toggles docked/floating | VERIFIED | Drag tests, `shiftUndocksADockedWindowAtItsReleaseFrame`, `onAFloatingWindowItDocksLikeDock`, `onADockedWindowItFloatsLikeFloat`. Live in the VM (Release build of bb67b5d, drag log at debug level since 936da6c): Safari dragged by its toolbar classified `move` (23 and 421 dragged events, AX and CG start frames identical) and docked with the preview shown (`decision dock(...)` at 16:09:47 and 16:10:24); TextEdit docked on a screen edge and on a docked window's edge (nested). Presses on Safari's bottom-right corner classified `resize`, which is correct. The earlier "Safari never docks" report from the 0.3.0 build does not reproduce; its cause is unknown. |
 | 2 | Close reflows neighbours; gap drag resizes both; gap size settable; window leaving native fullscreen returns to its tile | VERIFIED | `ArrangerReflowTests`, `aGapDragResizesBothSidesLiveAndCommitsOnMouseUp`, `GapPreferenceTests` plus Gaps submenu (0/4/8/12/16/24), the two fullscreen tests above. Live fullscreen (`PANE_LIVE_FULLSCREEN`) is opt-in and not run, so it is in the human list. |
 | 3 | Menu and hotkeys through one dispatcher: dock, float, focus neighbour, undo, pause/resume, Restore all windows (also `pane://restore`) | VERIFIED | `PaneMacApp.swift` builds one `dispatch` closure used by `Hotkeys.register` and `StatusItemController`/`CommandMenu`; URLs go to `arrangeController.dispatch(command, from: .url)`. `PaneURL.commands` maps restore, toggle-desktop and split-finder. `CommandMenuTests`, `HotkeyTableTests`, `PaneURLTests`, `AppDelegateTests` pass. |
 | 4 | Quit returns moved windows on-screen; crash/force-quit rescue on next launch; detects edge tiling, Stage Manager, click wallpaper, explains, offers Turn Off, restores originals; quit+relaunch restores layouts | VERIFIED | `Recovery.terminationPlan`, `AppDelegate.applicationShouldTerminate` (terminateLater plus SIGTERM), `RecoveryTests`, `ArrangerRestoreTests` (including WR-04/05/06 regressions), `ConflictPolicy` key allow-list, `ConflictControllerTests`, `LayoutStoreTests`, `ArrangerMultiDeskRestoreTests` (user-accepted fake). Live: the conflict alert's Turn Off set the edge-tiling defaults in the VM. Live quit, crash and Restore are in the human list. |
@@ -119,7 +110,7 @@ The outcome clause holds. The flow fails at step 1 for Safari, so the "drag wind
 | 6 | Swap tiles, balance, rotate, flip, move focused window into neighbour, resize tile from keyboard, snap floating windows to halves/thirds/quarters/max/centre by hotkey | VERIFIED | `Command` cases plus 33-entry `Hotkeys.entries` table; `LayoutEditTests`, `NeighbourTests`, `SnapTests`, `ArrangerCommandTests`, `ArrangerFocusTests`, `commandOverAnotherDockedTileSwapsTheTwoWindows` pass. |
 | 7 | Hide/show the Desktop, arrange all / float all, split a tile with a new Finder window, mark frontmost "Don't Arrange" from the menu; Opt-click green gives native zoom; minimised docked window returns to its tile | VERIFIED | `StatusItemController` adds arrangeAll, floatAll, toggleDesktop, the Split submenu with finderSplit, and toggleExcludeFrontmost; `ArrangerDesktopTests`, `ArrangerFinderTests`, `ArrangerExclusionTests`, `afterAnOptionZoom...` (3 tests), `aMinimisedDockedWindowLendsItsTileAndReturnsToIt` pass. |
 
-**Score:** 5/7 truths verified (1 present but behaviour-unverified, 1 failed)
+**Score:** 6/7 truths verified (1 present but behaviour-unverified)
 
 ### Required Artifacts
 
@@ -140,7 +131,7 @@ The outcome clause holds. The flow fails at step 1 for Safari, so the "drag wind
 | Artifact | Data | Source | Real data | Status |
 | -------- | ---- | ------ | --------- | ------ |
 | Status menu header and items | inventory, availability | `ArrangeController.onInventory` -> `StatusItemController.update` | AX inventory | FLOWING |
-| Drop preview | `PreviewState` | Arranger dry run of `applyDrop` + `resolve` | live drag frames from `DragFramePoller` | FLOWING (not for Safari: no `.move` classification) |
+| Drop preview | `PreviewState` | Arranger dry run of `applyDrop` + `resolve` | live drag frames from `DragFramePoller` | FLOWING (TextEdit and Safari, live) |
 | layout.json | World, home frames, session | `Arranger.snapshot` -> `LayoutStore.save` | Arranger state | FLOWING |
 
 ### Behavioral Spot-Checks
@@ -161,7 +152,7 @@ No `scripts/*/tests/probe-*.sh` exist and no plan declares a probe. Step 7c not 
 
 | Requirement | Source Plan | Status | Evidence |
 | ----------- | ----------- | ------ | -------- |
-| TILE-01 | 03-11 | BLOCKED (partial) | Works for TextEdit (live); Safari never docks by drag (gap) |
+| TILE-01 | 03-11 | SATISFIED | Drag tests; TextEdit and Safari dock by drag live in the VM (drag log) |
 | TILE-02 | 03-11 | SATISFIED | Shift bypass tests |
 | TILE-03 | 03-04, 03-06 | SATISFIED | reflow tests |
 | TILE-04 | 03-10 | SATISFIED | `GapPreference`, Gaps submenu |
@@ -207,10 +198,10 @@ No orphaned requirements: every Phase 3 ID in REQUIREMENTS.md appears in at leas
 
 ### Human Verification Required
 
-These are listed in the frontmatter `human_verification` list (18 items). They run after the gap fix. **Rebuild from HEAD first:** the 0.3.0 DMG predates the review fixes. A Developer ID `release.sh --build-only` app copied by scp has no quarantine and keeps a stable designated requirement.
+These are listed in the frontmatter `human_verification` list (18 open items; item 1 below is done). **Rebuild from HEAD first:** the 0.3.0 DMG predates the review fixes. A Developer ID `release.sh --build-only` app copied by scp has no quarantine and keeps a stable designated requirement. The VM already runs such a build (bb67b5d); to see the drag log, stream with `--level debug` and the predicate `subsystem == "com.eightabyte.pane" AND category == "drag"`.
 
 **VM (`pane-test`, macOS 15.7.7, single display):**
-1. Safari drag-dock with Pane's log streaming (gap diagnosis, WR-03)
+1. DONE 2026-10-26: Safari drag-dock with the drag log streaming. Safari docks by its toolbar; the gap does not reproduce (debug session `safari-toolbar-drag-no-dock`)
 2. Accessibility granted in System Settings while Pane runs, without the Set Up button: tracking starts with no relaunch (WR-02)
 3. TextEdit drags: edge preview, Shift free move, Cmd-release swap, nesting on a docked window's edge
 4. Close reflow, gap-handle drag, Gaps submenu change kept after relaunch
@@ -223,24 +214,29 @@ These are listed in the frontmatter `human_verification` list (18 items). They r
 11. Dock 3, quit, relaunch with apps running: same tiles (SAFE-06)
 12. Stage Manager pause, Turn Off; click-wallpaper Turn Off; Restore macOS Window Settings (SAFE-04)
 13. Screen Recording never granted: no prompt, not listed, tiling works (TILE-10)
-14. Install build N+1 over build N: Accessibility grant kept (SC5)
+14. Install build N+1 over build N: Accessibility grant kept (SC5). HALF DONE: a same-version binary swap of a new Developer ID build kept the grant (notTrusted -> probing -> ready, no prompt); a bumped version is still to try
 15. Spaces: separate layouts on Space 1 and Space 2 (VM if Spaces work there, else host)
-
 **Host, second display (when the user is home):**
 16. Hide Desktop on the left display: no parked window appears on the right display (CR-02)
 17. Two displays and two Spaces: quit and relaunch restores each layout
 18. Rerun the live `aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop` under the live-test rules
 
+**Added after the Safari re-check (VM):**
+
+19. With TextEdit docked, open a new Safari window and watch whether it floats on the Desktop tile or lands in a tile. The user saw Safari "automatically dock to another position" once TextEdit was docked. Confirm whether that is intended (new windows should float, TILE-07) or a bug
+
 ### Gaps Summary
 
-One gap blocks the goal. **Drag-to-dock does not work for Safari** (SC1/TILE-01, partial). Dragging is the phase's headline interaction and the project's Core Value. It is observed failing live for a mainstream app, and the probable fix (WR-03) was deliberately skipped until a live log confirms the cause. Close it by:
+No gaps remain. The one gap from the initial verification, **Safari drag-to-dock** (SC1/TILE-01), was re-checked live and **does not reproduce** on a Release build of bb67b5d in the VM:
 
-1. capturing one Safari drag log in the VM;
-2. fixing the confirmed condition (CG-vs-AX start frame size, or travel counted only from `leftMouseDragged`);
-3. adding a fake regression test;
-4. re-checking live.
+- Drag logging was added at press and release (commit bb67b5d, lowered to debug level in 936da6c).
+- Safari toolbar drags start a session and get `leftMouseDragged` events (23 to 421 per drag). Their AX and CG start frames are identical, they classify as `move`, and they end in `decision dock(...)` with the preview on screen.
+- The WR-03 hypotheses are eliminated: travel is not missing, and AX and CG sizes do not differ. The third possibility, no session starting, is eliminated too.
+- The only Safari `resize` classifications were presses on its bottom-right corner, which are real resizes. The one `miss` was a docked Safari released over its own tile, which snaps back by design.
 
-No later milestone phase covers this, so it is not deferred.
+Why the 0.3.0 build looked broken is **unknown**. That run also hit WR-02 (tracking did not start until a relaunch), so the most likely explanation is a drag before the tap was running, or drops that fell outside every drop zone. A side effect of the review fixes is possible but unproven. WR-03's suggested hardening (CG start frame, origin-displacement travel, pointer on `.up`) was not applied because no failing condition was observed.
+
+The press resolution always went through the CG window-list fallback, because the tap's window-under-pointer field read 0 for every press in the VM. It worked every time, but the fast path is never used there.
 
 Everything else is implemented, wired and covered by passing headless tests. Hands-on checks remain for real-OS behaviour: quit, crash, TCC, conflicts, fullscreen, URLs, and two displays.
 
@@ -252,5 +248,5 @@ Non-blocking warnings:
 
 ---
 
-_Verified: 2026-10-26T15:30:00Z_
+_Verified: 2026-10-26T15:30:00Z; re-verified 2026-10-26T16:15:00Z (Safari gap, live VM drag log)_
 _Verifier: Claude (gsd-verifier)_
