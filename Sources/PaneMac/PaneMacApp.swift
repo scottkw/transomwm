@@ -66,6 +66,8 @@ public enum PaneMacApp {
         let conflictController = ConflictController(store: CFPreferencesStore(domain: ConflictPolicy.domain))
         conflictController.setStageManagerPaused = { on in Task { await arrangeController.setPaused(.stageManager, on) } }
         conflictController.post = { arrangeController.post($0) }
+        conflictController.isDragging = { arrangeController.arranger.isDragging }
+        conflictController.presentAlert = { [unowned conflictController] in conflictController.showModelessAlert($0) }
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
             exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController, showTrackedWindows: { trackedController.show() },

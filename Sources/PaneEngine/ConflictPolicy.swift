@@ -56,9 +56,13 @@ public enum ConflictPolicy {
         return writes
     }
 
+    /// One alert per on-episode (D-19): a feature on now that was off at the last poll (or this is the first), unless
+    /// the user said Not Now or Pane itself turned it back on. In the fixed order.
     public static func alertsDue(active: Set<Conflict>, previous: Set<Conflict>, notNow: Set<Conflict>, restoredByPane: Set<Conflict>)
         -> [Conflict]
-    { [] }
+    {
+        Conflict.allCases.filter { active.contains($0) && !previous.contains($0) && !notNow.contains($0) && !restoredByPane.contains($0) }
+    }
 
     /// Turn Off: false to each of the feature's keys.
     public static func turnOffWrites(for conflict: Conflict) -> [String: Bool] {
