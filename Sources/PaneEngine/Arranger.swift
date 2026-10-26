@@ -139,6 +139,7 @@ public struct Arranger: Sendable {
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
                 case (.finderSplit, _): return try finderSplit(focused, now: now)
                 case (.togglePause, _): return togglePause()
+                case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
                 case (.dock, nil), (.float, nil), (.focus, nil): return [.beep]
                 }
             } catch {
@@ -181,6 +182,7 @@ public struct Arranger: Sendable {
         // A display change arrives as a new inventory: windows whose display or Space changed are re-homed first.
         for info in inventory.windows {
             do throws(LayoutError) {
+                try release(info)
                 try rehome(info)
                 try admit(info)
             } catch { faults.append(.fault("could not add \(info.window): \(error)")) }
@@ -232,6 +234,8 @@ public struct Arranger: Sendable {
     /// makes a refused hotkey beep. Window-scoped commands need a focused, trackable, dockable window of an app that
     /// is not excluded; nothing in the Arrange section acts without Accessibility access.
     public func availability(_ command: Command, context: CommandContext) -> Bool {
+        // Exclusions stay enabled while paused or without access (UI-SPEC); the shell checks the frontmost app.
+        if command == .toggleExcludeFrontmost { return true }
         guard context.ready else { return false }
         // Paused, only Resume acts; Stage Manager's pause ends through its conflict item, not Resume.
         if command == .togglePause { return pauseReasons != [.stageManager] }
@@ -251,7 +255,7 @@ public struct Arranger: Sendable {
             return trackable && focused.flatMap(deskKey(of:)) != nil
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
-        case .togglePause:
+        case .togglePause, .toggleExcludeFrontmost:
             return true  // answered above
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
@@ -313,7 +317,10 @@ public struct Arranger: Sendable {
                 break
             }
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
-            if case .windowChanged(let info) = event { try rehome(info) }
+            if case .windowChanged(let info) = event {
+                try release(info)
+                try rehome(info)
+            }
             // A window that just became dockable, present or known floats on its display's Desktop (D-24).
             if let subject, let info = windows[subject] { try admit(info) }
         } catch {
@@ -352,6 +359,7 @@ public struct Arranger: Sendable {
         if floating, desk.tree.isDesktopHidden == true { return [] }
         if floating { try world.recordFloatingFrame(frame, for: window) }
         guard pauseReasons.isEmpty else { return [] }  // paused: the fact is recorded, nothing is answered (D-23)
+        guard windows[window.identity]?.isExcluded != true else { return [] }  // never clamped or corrected (D-29)
         if let applied = lastApplied[window.identity], Self.near(applied, frame, within: 2) { return [] }
         if floating {
             if let area = display(for: key)?.visibleFrame, let desk = world[key],
@@ -414,6 +422,17 @@ public struct Arranger: Sendable {
         // D-31: a floating window can't exist while the Desktop is hidden, so a new one shows it again (no undo step).
         if world[key]?.tree.isDesktopHidden == true { try world.reflow(key, showingDesktop()) }
         try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
+    }
+
+    /// A docked window whose app was just excluded floats on its desk's Desktop at its current frame (D-29, TILE-18).
+    /// An OS fact: it goes through `World.reflow`, with no undo step, and its neighbours take its room at the re-plan.
+    private mutating func release(_ info: WindowInfo) throws(LayoutError) {
+        guard info.isExcluded, let key = deskKey(of: info.window), let state = world[key]?.tree.state(of: info.window) else { return }
+        try world.reflow(key) { desk, _ throws(LayoutError) in
+            try desk.tree.remove(info.window)
+            try desk.desktop.add(info.window, frame: info.frame)
+            if state != .present { try desk.desktop.setState(state, for: info.window) }
+        }
     }
 
     /// The desk a window belongs on (D-25): its display's, on the shown Space unless its known Spaces exclude that
@@ -648,9 +667,10 @@ public struct Arranger: Sendable {
                 continue
             }
             guard let desk = world[key] else { continue }
-            var desired = plan.frames
+            // Pane never moves an excluded app's window: no clamp, no park (D-29).
+            var desired = plan.frames.filter { windows[$0.key.identity]?.isExcluded != true }
             let desktopHidden = desk.tree.isDesktopHidden == true
-            for window in plan.parks {
+            for window in plan.parks where windows[window.identity]?.isExcluded != true {
                 parkedNow.insert(window.identity)
                 guard parkRequested.insert(window.identity).inserted else { continue }
                 if homeFrames[window.identity] == nil, windows[window.identity]?.isExcluded != true {
@@ -661,7 +681,10 @@ public struct Arranger: Sendable {
             // Home frames are only for parked windows; on a shown Desktop they are spent.
             if !desktopHidden { for floating in desk.desktop.windows { homeFrames[floating.window.identity] = nil } }
             // A floating window not where the model has it (after Float, Undo or Show Desktop) is moved there.
-            for floating in desk.desktop.windows where !desktopHidden && floating.state == .present && desired[floating.window] == nil {
+            for floating in desk.desktop.windows
+            where !desktopHidden && floating.state == .present && desired[floating.window] == nil
+                && windows[floating.window.identity]?.isExcluded != true
+            {
                 if let actual = windows[floating.window.identity]?.frame, !Self.near(actual, floating.frame) {
                     desired[floating.window] = floating.frame
                 }
@@ -719,8 +742,10 @@ public struct Arranger: Sendable {
         return (plan, lost)
     }
 
+    /// Excluded windows have none: they never dock, and the Desktop tile is not sized for them.
     private var minimums: [WindowRef: Size] {
-        Dictionary(windows.values.compactMap { info in info.learnedMinimum.map { (info.window, $0) } }, uniquingKeysWith: { $1 })
+        Dictionary(
+            windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }, uniquingKeysWith: { $1 })
     }
 
     private func display(for key: DeskKey) -> DisplayInfo? {

@@ -12,6 +12,9 @@ public enum Command: Hashable, Sendable {
     case finderSplit
     /// Pause Arranging when nothing pauses it, otherwise Resume Arranging (TILE-08, D-23).
     case togglePause
+    /// Don't Arrange the frontmost app (TILE-18, D-29). The shell handles it with its exclusion list; the window
+    /// system's `windowChanged` events then tell the Arranger.
+    case toggleExcludeFrontmost
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and

@@ -149,7 +149,8 @@ private func parks(_ effects: [ArrangerEffect]) -> [WindowCommand] {
         await harness.send(.command(.toggleDesktop, focused: a))
 
         #expect(await harness.fake.parked == [f.identity, g.identity])
-        #expect(await harness.fake.dropped == [.park(x, displayUUID: "main")])
+        // D-29: the Arranger no longer even sends the park for the window system's filter to drop.
+        #expect(await harness.fake.dropped.isEmpty)
         #expect(await harness.frame(x) == frame)
         #expect(harness.arranger.homeFrames[x.identity] == nil)
     }

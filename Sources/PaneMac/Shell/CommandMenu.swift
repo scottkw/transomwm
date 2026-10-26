@@ -10,7 +10,7 @@ import PaneEngine
     /// Every command with a menu item, in no particular order: the status menu places them.
     static let commands: [Command] = [
         .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
-        .togglePause,
+        .togglePause, .toggleExcludeFrontmost,
     ]
 
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")

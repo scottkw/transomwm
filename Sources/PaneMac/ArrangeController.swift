@@ -35,9 +35,13 @@ import os
     private let saveTimer = WakeTimer()
     private var fedCompleteInventory = false
 
-    public init(system: AXWindowSystem, store: LayoutStore? = nil, gap: Double = 8) {
+    /// The exclusion list Don't Arrange toggles; nil in tests that never dispatch it.
+    private let exclusions: ExclusionStore?
+
+    public init(system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8) {
         self.system = system
         self.store = store
+        self.exclusions = exclusions
         arranger = Arranger(gap: gap)
     }
 
@@ -96,6 +100,12 @@ import os
     /// Every route (hotkey, menu item) calls this. A command the availability rule refuses beeps (UI-SPEC: no
     /// hotkey fails silently).
     public func dispatch(_ command: Command) async {
+        if command == .toggleExcludeFrontmost {
+            // The store's onChange hands the list to the window system, whose windowChanged events float the windows.
+            if let exclusions, Self.toggleExclusion(of: NSWorkspace.shared.frontmostApplication, in: exclusions) { return }
+            NSSound.beep()
+            return
+        }
         let context = commandContext()
         guard arranger.availability(command, context: context) else {
             NSSound.beep()
@@ -106,6 +116,20 @@ import os
 
     public func dispatch(_ command: Command, focused: PaneModel.WindowRef?) async {
         await run(arranger.handle(.command(command, focused: focused), now: .now))
+    }
+
+    /// The bundle ID Don't Arrange would toggle for `app`: a regular app other than Pane, with a valid bundle ID.
+    static func excludableBundleID(of app: NSRunningApplication?) -> String? {
+        guard let app, let id = app.bundleIdentifier, app.processIdentifier != getpid(), app.activationPolicy == .regular,
+            ExclusionStore.isValid(id)
+        else { return nil }
+        return id
+    }
+
+    /// Toggles `app`'s exclusion; false, with nothing changed, when it does not qualify.
+    static func toggleExclusion(of app: NSRunningApplication?, in store: ExclusionStore) -> Bool {
+        guard let id = excludableBundleID(of: app) else { return false }
+        return (try? store.toggle(id)) != nil  // toggle only throws for an invalid ID, which was ruled out above
     }
 
     private func run(_ effects: [ArrangerEffect]) async {

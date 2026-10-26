@@ -38,6 +38,7 @@ nonisolated public enum MenuCopy {
         case .focus(.bottom): "Down"
         case .finderSplit: "Split with New Finder Window"
         case .togglePause: pauseToggle(paused: false)
+        case .toggleExcludeFrontmost: dontArrangeFallback
         }
     }
 

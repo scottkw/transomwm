@@ -164,19 +164,17 @@ import os
         }
     }
 
-    /// Items 4 and 5: the frontmost app's Don't Arrange toggle and the Never Arrange submenu (D-12).
+    /// Items 24 and 25: the frontmost app's Don't Arrange toggle (⌃⌥⌘E, D-29) and the Never Arrange submenu (D-12).
     private func addExclusionItems(to menu: NSMenu) {
-        let toggle: NSMenuItem
-        if let app = frontmost, let id = app.bundleIdentifier, app.processIdentifier != getpid(),
-            app.activationPolicy == .regular, ExclusionStore.isValid(id)
-        {
-            let name = MenuCopy.truncatedAppName(app.localizedName ?? id)
-            toggle = NSMenuItem(title: MenuCopy.dontArrange(appName: name), action: #selector(toggleFrontmost), keyEquivalent: "")
-            toggle.target = self
-            toggle.representedObject = id
+        let toggle = commands.item(for: .toggleExcludeFrontmost)
+        if let app = frontmost, let id = ArrangeController.excludableBundleID(of: app) {
+            toggle.title = MenuCopy.dontArrange(appName: MenuCopy.truncatedAppName(app.localizedName ?? id))
             toggle.state = exclusions.contains(id) ? .on : .off
+            toggle.isEnabled = true
         } else {
-            toggle = Self.info(MenuCopy.dontArrangeFallback)
+            toggle.title = MenuCopy.dontArrangeFallback
+            toggle.state = .off
+            toggle.isEnabled = false
         }
         menu.addItem(toggle)
 
@@ -193,15 +191,6 @@ import os
         let item = NSMenuItem(title: "Never Arrange", action: nil, keyEquivalent: "")
         item.submenu = submenu
         menu.addItem(item)
-    }
-
-    @objc private func toggleFrontmost(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        do {
-            try exclusions.toggle(id)
-        } catch {
-            logger.error("could not toggle exclusion for \(id, privacy: .public)")
-        }
     }
 
     @objc private func removeExclusion(_ sender: NSMenuItem) {
