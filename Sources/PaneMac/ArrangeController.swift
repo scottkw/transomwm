@@ -337,6 +337,8 @@ import os
                 previews?.show(state, on: displayUUID)
             case .flashBlocked(let rect, let displayUUID):
                 previews?.flashBlocked(rect, on: displayUUID)
+            case .gapHandles:
+                break
             }
         }
     }

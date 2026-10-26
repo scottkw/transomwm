@@ -38,7 +38,9 @@ private func plan(_ arranger: Arranger, mins: [WindowRef: Size] = [:]) throws ->
 }
 
 /// An Arranger whose main desk holds `build`'s layout, every docked window already at its tile and f floating.
-private func arranger(minimums: [WindowRef: Size] = [:], _ build: (inout Desk, inout IDSource) throws(LayoutError) -> Void) throws -> Arranger {
+private func arranger(
+    minimums: [WindowRef: Size] = [:], absent: [WindowRef] = [], _ build: (inout Desk, inout IDSource) throws(LayoutError) -> Void
+) throws -> Arranger {
     var world = World()
     var history = UndoHistory()
     try world.addDesk(key)
@@ -47,7 +49,7 @@ private func arranger(minimums: [WindowRef: Size] = [:], _ build: (inout Desk, i
     _ = arranger.handle(.restore(world, homeFrames: [:]), now: .now)
     let somewhere = Rect(x: 200, y: 200, width: 400, height: 300)
     let infos = [a, b, c].filter { world[key]?.tree.state(of: $0) != nil }.map {
-        WindowInfo(window: $0, frame: somewhere, state: .present, displayUUID: "main", learnedMinimum: minimums[$0])
+        WindowInfo(window: $0, frame: somewhere, state: absent.contains($0) ? .absent : .present, displayUUID: "main", learnedMinimum: minimums[$0])
     } + [WindowInfo(window: f, frame: floatingFrame, state: .present, displayUUID: "main")]
     _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: infos, initialRefreshComplete: true)), now: .now)
     // Each docked window's write comes back exactly.
@@ -165,5 +167,88 @@ private func near(_ x: Double, _ y: Double) -> Bool { abs(x - y) <= 1 }
         let up = arranger.handle(pointer(.up, title.x, title.y), now: .now)
         #expect(arranger.history.depth(for: key) == 0)
         #expect(setFrames(up)[a] == ta, "not put back after the zoom: \(up)")
+    }
+}
+
+private func gapHandles(_ effects: [ArrangerEffect]) -> [[GapHandle]] {
+    effects.compactMap { if case .gapHandles(let handles, "main") = $0 { handles } else { nil } }
+}
+
+/// The handle between children `first` and `second` of the root split.
+private func handle(_ arranger: Arranger, _ first: Int, _ second: Int) throws -> GapHandle {
+    let desk = try #require(arranger.world[key])
+    let found = GapHandles.handles(tree: desk.tree, resolution: try plan(arranger).resolution, gap: gap)
+    return try #require(found.first { $0.split == desk.tree.root && $0.first == first && $0.second == second })
+}
+
+/// TILE-05, D-07, Pitfall 9, UI-SPEC Surface 3: dragging a gap resizes both sides live and commits once on mouse-up.
+extension ArrangerResizeTests {
+    @Test func theHandlesFollowEveryPlanAndGoUnderFourPoints() throws {
+        var arranger = try arranger(row)
+        let wider = arranger.handle(.gap(12), now: .now)
+        let desk = try #require(arranger.world[key])
+        let expected = GapHandles.handles(
+            tree: desk.tree, resolution: try Planner.plan(desk: desk, area: visible, gap: 12, mins: [:]).resolution, gap: 12)
+        #expect(expected.count == 2)
+        #expect(gapHandles(wider) == [expected])
+        #expect(gapHandles(arranger.handle(.gap(2), now: .now)) == [[]])
+        #expect(gapHandles(arranger.handle(.gap(4), now: .now)).first?.count == 2)
+    }
+
+    @Test func aGapDragResizesBothSidesLiveAndCommitsOnMouseUp() throws {
+        var arranger = try arranger(row)
+        let before = try plan(arranger)
+        let ta = try #require(before.frames[a]), tb = try #require(before.frames[b])
+        let h = try handle(arranger, 0, 1)
+        let live = arranger.handle(.gapDrag(h, delta: 50, ended: false), now: .now)
+        let frames = setFrames(live)
+        #expect(frames[a].map { near($0.width, ta.width + 50) } == true, "a did not follow: \(live)")
+        #expect(frames[b].map { near($0.minX, tb.minX + 50) && $0.maxX == tb.maxX } == true, "b did not follow: \(live)")
+        #expect(gapHandles(live).first?.first { $0.split == h.split && $0.first == 0 }.map { near($0.rect.minX, h.rect.minX + 50) } == true)
+        #expect(arranger.history.depth(for: key) == 0)
+        #expect(try plan(arranger) == before, "the World changed before mouse-up")
+
+        _ = arranger.handle(.gapDrag(h, delta: 50, ended: true), now: .now)
+        #expect(arranger.history.depth(for: key) == 1)
+        let na = try #require(try plan(arranger).frames[a])
+        #expect(near(na.width, ta.width + 50))
+    }
+
+    @Test func aGapNextToAMinimisedSiblingMovesWeightOnlyBetweenTheVisibleOnes() throws {
+        var arranger = try arranger(absent: [b], row)
+        let desk = try #require(arranger.world[key])
+        guard case .split(_, _, let weights)? = desk.tree.node(try #require(desk.tree.root)) else {
+            Issue.record("no root split")
+            return
+        }
+        let h = try handle(arranger, 0, 2)
+        _ = arranger.handle(.gapDrag(h, delta: 40, ended: true), now: .now)
+        let after = try #require(arranger.world[key])
+        guard case .split(_, _, let changed)? = after.tree.node(try #require(after.tree.root)) else {
+            Issue.record("no root split")
+            return
+        }
+        #expect(changed[1] == weights[1], "the minimised window's share moved")
+        #expect(changed[0] > weights[0] && changed[2] < weights[2])
+    }
+
+    @Test func handlesHideWhilePausedDuringAWindowDragAndOnASpaceChange() throws {
+        var paused = try arranger(row)
+        #expect(gapHandles(paused.handle(.setPaused(.user, true), now: .now)) == [[]])
+        let h = try handle(paused, 0, 1)
+        #expect(setFrames(paused.handle(.gapDrag(h, delta: 50, ended: true), now: .now)).isEmpty)
+        #expect(paused.history.depth(for: key) == 0)
+        #expect(gapHandles(paused.handle(.setPaused(.user, false), now: .now)).first?.count == 2, "not back after Resume")
+
+        var dragging = try arranger(row)
+        let grab = Point(x: floatingFrame.midX, y: floatingFrame.minY + 10)
+        var effects = dragging.handle(pointer(.down, grab.x, grab.y, press: f), now: .now)
+        effects += dragging.handle(pointer(.dragged, grab.x - 10, grab.y), now: .now)
+        effects += dragging.handle(.dragFrame(f.identity, Rect(x: floatingFrame.x - 10, y: floatingFrame.y, width: floatingFrame.width, height: floatingFrame.height)), now: .now)
+        #expect(dragging.isDragging)
+        #expect(gapHandles(effects) == [[]])
+
+        var moving = try arranger(row)
+        #expect(gapHandles(moving.handle(.event(.spaceChanged(displayUUID: "main", spaceID: 7)), now: .now)).first == [])
     }
 }

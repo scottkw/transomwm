@@ -20,6 +20,8 @@ public enum ArrangerInput: Sendable {
     case dragFrame(WindowIdentity, Rect)
     /// A press on this window's green button, which the tap swallowed (TILE-06).
     case greenButton(WindowRef)
+    /// A gap handle dragged `delta` points along its axis from where the drag began; `ended` on mouse-up (TILE-05).
+    case gapDrag(GapHandle, delta: Double, ended: Bool)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -67,6 +69,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case pollDragFrame(WindowRef?)
     /// Flash the blocked preview at this frame for 600 ms (a refused keyboard Dock, UI-SPEC keyboard parity).
     case flashBlocked(Rect, displayUUID: String)
+    /// The gap handles to show on that display; empty hides them (UI-SPEC Surface 3).
+    case gapHandles([GapHandle], displayUUID: String)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -229,6 +233,8 @@ public struct Arranger: Sendable {
                 deskKey(of: info.window) != nil
             else { return [] }
             return process(.command(isFloating(info.window) ? .dock : .float, focused: info.window), now: now)
+        case .gapDrag:
+            return []
         }
     }
 
