@@ -125,4 +125,63 @@ private func dockedX(history: inout UndoHistory) throws -> World {
         #expect(world == worldBefore)
         #expect(history == historyBefore)
     }
+
+    // MARK: Task 2 — non-undo paths for floating frames and reflow
+
+    @Test func recordFloatingFrameMovesTheWindowWithNoUndoStep() throws {
+        var history = UndoHistory()
+        var world = try dockedX(history: &history)
+        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(y, frame: frame) }
+        let depth = history.depth(for: k1)
+        let moved = Rect(x: 500, y: 40, width: 300, height: 200)
+
+        try world.recordFloatingFrame(moved, for: y)
+        #expect(world[k1]?.desktop.frame(of: y) == moved)
+        #expect(history.depth(for: k1) == depth)
+    }
+
+    @Test func recordFloatingFrameRejectsBadFramesAndWindowsThatDoNotFloat() throws {
+        var history = UndoHistory()
+        var world = try dockedX(history: &history)
+        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(y, frame: frame) }
+        let before = world
+
+        #expect(throws: LayoutError.self) { try world.recordFloatingFrame(Rect(x: .nan, y: 0, width: 10, height: 10), for: y) }
+        #expect(throws: LayoutError.windowNotFound(x)) { try world.recordFloatingFrame(frame, for: x) }
+        #expect(throws: LayoutError.windowNotFound(t)) { try world.recordFloatingFrame(frame, for: t) }
+        #expect(world == before)
+    }
+
+    @Test func reflowChangesADeskWithNoUndoStep() throws {
+        var history = UndoHistory()
+        var world = try dockedX(history: &history)
+        let depth = history.depth(for: k1)
+
+        try world.reflow(k1) { desk, _ throws(LayoutError) in
+            try desk.tree.remove(x)
+            try desk.desktop.add(x, frame: frame)
+        }
+        #expect(world[k1]?.tree.windows == [])
+        #expect(world[k1]?.desktop.frame(of: x) == frame)
+        #expect(history.depth(for: k1) == depth)
+    }
+
+    @Test func reflowThatBreaksTheWorldOrThrowsChangesNothing() throws {
+        var history = UndoHistory()
+        var world = try dockedX(history: &history)
+        try world.addDesk(k2)
+        let before = world
+
+        // x docked on k1 and floating on k2 would be held twice.
+        #expect(throws: LayoutError.duplicateWindow(x)) {
+            try world.reflow(k2) { desk, _ throws(LayoutError) in try desk.desktop.add(x, frame: frame) }
+        }
+        #expect(throws: LayoutError.windowNotFound(t)) {
+            try world.reflow(k1) { desk, _ throws(LayoutError) in try desk.tree.remove(t) }
+        }
+        #expect(throws: LayoutError.deskNotFound(DeskKey(displayUUID: "D3", spaceID: nil))) {
+            try world.reflow(DeskKey(displayUUID: "D3", spaceID: nil)) { _, _ in }
+        }
+        #expect(world == before)
+    }
 }

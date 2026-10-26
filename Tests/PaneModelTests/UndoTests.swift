@@ -340,4 +340,33 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
         #expect(try world.undo(k1, history: &history) != nil)
         #expect(world[k1] == Desk())
     }
+
+    // MARK: 03-03 — undo keeps floating windows where the user put them (Pitfall 10)
+
+    @Test func undoOfAnUnrelatedEditKeepsTheCurrentFrameOfAWindowThatFloatsInBoth() throws {
+        var world = try worldWithDesks(k1)
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(w, frame: frame) }
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(a, &desk, &ids) }
+        let moved = Rect(x: 600, y: 50, width: 400, height: 300)
+        try world.recordFloatingFrame(moved, for: w)
+
+        #expect(try world.undo(k1, history: &history) == [])
+        #expect(world[k1]?.tree.windows == [])
+        #expect(world[k1]?.desktop.frame(of: w) == moved)
+    }
+
+    @Test func undoThatFloatsADockedWindowAgainRestoresItsSnapshotFrame() throws {
+        var world = try worldWithDesks(k1)
+        var history = UndoHistory()
+        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(w, frame: frame) }
+        try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+            try desk.desktop.remove(w)
+            try dock(w, &desk, &ids)
+        }
+
+        #expect(try world.undo(k1, history: &history) == [])
+        #expect(world[k1]?.desktop.frame(of: w) == frame)
+        #expect(world[k1]?.tree.windows == [])
+    }
 }
