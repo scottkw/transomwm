@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: executing
-stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-10-26T03:17:08.907Z"
+stopped_at: Completed 03-07-PLAN.md
+last_updated: "2026-10-26T03:33:50.287Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 8b09dd8bcc340d72a08064dd25cd4281a072d27c
+state_head: 77c5d029299b12a89df3e3cff1e581a92dd2d60d
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 40
-  completed_plans: 29
+  completed_plans: 30
   percent: 11
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 7 of 17
+Plan: 8 of 17
 Status: Ready to execute
 Last activity: 2026-10-25 — Phase 3 execution started
 
@@ -85,6 +85,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 03 P04 | 27min | 3 tasks | 16 files |
 | Phase 3 P05 | 8 min | 2 tasks | 12 files |
 | Phase 3 P06 | 20 min | 2 tasks | 13 files |
+| Phase 3 P07 | 11 min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -188,6 +189,9 @@ Recent decisions affecting current work:
 - [Phase 3]: Echo rule: a move or resize within 2 pt of the last frameApplied is never answered; a floating window's echo frame is still recorded
 - [Phase 3]: Docked windows moved by their app return to their tile at most once per second via ArrangerEffect.wake and ArrangerInput.tick
 - [Phase 3]: NoticeQueue is generic over QueueableNotice (isCrashNotice, merged(with:)), used as NoticeQueue<Notice>
+- [Phase 3]: 03-07: Every input that changes the World emits .save(.debounced) (World diff in Arranger.handle); layout.json is written 0.5 s after the latest
+- [Phase 3]: 03-07: A pending restore ignores events and incomplete inventories and is what snapshot returns; the first complete inventory re-attaches by identity (non-synthetic only) and writes only tiles more than 0.5 pt off
+- [Phase 3]: 03-07: layout.json is rejected whole and set aside on any doubt; a newer schema is kept and disables saving; titles are never written; file is 0600
 
 ### Pending Todos
 
@@ -215,8 +219,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-26T03:17:08.676Z
-Stopped at: Completed 03-06-PLAN.md
+Last session: 2026-10-26T03:33:50.063Z
+Stopped at: Completed 03-07-PLAN.md
 Resume file: None
 
 ## Deferred Verification
