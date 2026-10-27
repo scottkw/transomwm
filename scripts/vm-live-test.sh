@@ -18,6 +18,7 @@ host="${PANE_VM_USER:-admin}@$(tart ip "$vm")"
 ssh_opts=(-i "$key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
 # One VM user at a time, shared with the UAT re-check plans.
+mkdir -p .build
 mkdir .build/pane-vm.lock 2>/dev/null || { echo "vm-live-test: VM busy (.build/pane-vm.lock exists)" >&2; exit 1; }
 trap 'rmdir .build/pane-vm.lock' EXIT
 
