@@ -3,13 +3,12 @@ status: partial
 phase: 02-window-control
 source: [02-VERIFICATION.md]
 started: 2026-10-25T21:20:07Z
-updated: 2026-10-27T19:35:00-05:00
+updated: 2026-10-27T22:20:33.174Z
 ---
 
 ## Current Test
-<!-- OVERWRITE each test - shows where we are -->
 
-[testing paused - 5 blocked: 2, 3, 17 on G-02-1; 11 on G-02-10; 9 on the second display. Gaps G-02-1, G-02-10, G-02-12 to diagnose]
+[testing complete]
 
 ## Tests
 
@@ -61,15 +60,13 @@ reason: "The Tart VM has one virtual display; needs the host with the DELL (defe
 
 ### 10. Real native tabs: Finder, Terminal and Safari windows with three tabs each (Cmd-T); click between tabs. Then, quickly, Cmd-T followed at once by Ctrl-Shift-Tab; and Cmd-T followed by a click on an older tab. Also Cmd-W on the shown tab
 expected: One row per app window; the tab count and shown title follow every action; tab clicks change Title but never add or remove rows; the quick Cmd-T sequences never add a second row or crash Pane (REVIEW-FIX CR-01, WR-01); note which apps report AXTabGroup (Safari may not)
-result: issue
-reported: "Claude-driven in the VM: after opening Terminal, Safari and Finder windows and pressing Cmd-T twice in each, then on Terminal Cmd-T + Ctrl-Shift-Tab twice and Cmd-W, Transom reports Tracking 15 windows in 4 apps while 13 exist (AX and CGWindowList agree). Finder shows two rows for one tab group: stale #20 (2 tabs) plus #213 (4 tabs) while the shown tab is #214; Terminal shows #203, a stale #206 (no tab group) and #208 (4 tabs) while the group's shown tab is #219. The extra rows never cleared (checked again after a minute). Safari reports no AXTabGroup (tabs column empty), as the test anticipated. Transom did not crash"
-severity: major
+result: pass
+note: "First run 2026-10-27: issue G-02-10 (stale extra rows). Re-run in the VM after 02-19 (859c77c, 7f764ad) on a fresh Transom Debug: Terminal Cmd-N then Cmd-T (the 28 pt taller tab), Finder group #339 resized to 280 pt then Cmd-T, then on Terminal Cmd-T + Ctrl-Shift-Tab twice and Cmd-W. Tracked Windows: Finder 5 rows for 5 real windows (group #339 shown tab #400, 4 tabs), Terminal 4 rows for 4 real windows (#395 group shown tab #405, 3 tabs); counts match AX. Safari still reports no AXTabGroup. No crash"
 
 ### 11. Real Space switches with tab groups, with and without `--disable-private=Spaces`: a Terminal tab group on Space 1 and a same-frame Terminal window (and, separately, a same-frame tab group) on Space 2; switch back and forth; press Cmd-T in the Space 1 window while the twin sits on Space 2, then switch again; also the whole-group close plus immediate switch in behavior_unverified_items. Check `log show --predicate 'subsystem == \"com.eightabyte.pane\" AND category == \"private\"' --last 5m`
 expected: With Space data: one row per real window throughout, and Space switches and Cmd-T never add, remove or duplicate rows. Without Space data: the same, except two same-frame tab groups may share one row (accepted single-Space limit), and no row is ever lost. Log shows 'Spaces: available' or 'Spaces: off'
-result: blocked
-blocked_by: other
-reason: "Builds on native tab tracking, which fails in test 10 (G-02-10); re-run after that fix"
+result: pass
+note: "VM after 02-19: Terminal #444 on Space 3 set to the same frame as the Space 1 group (#405 at 423,265 585x399); Cmd-T in the Space 1 group, then Space switches 1-3-1-3-1. With Space data: Terminal 6 rows for 6 real windows (group 4 tabs, twin #444 its own row). Relaunched with --disable-private=Spaces (log Spaces: off) and repeated: 6 rows for 6 windows, group 5 tabs, twin kept, no row lost. Not run: a same-frame tab group (not a single window) as the twin, and the whole-group close plus immediate switch"
 
 ### 12. Frame writes and minimum-size hints on real apps via Nudge. First delete `~/Library/Application Support/Pane/min-size-hints.json`, which may hold snap hints learned under the old rule. Then try a Chrome or Electron window (AXEnhancedUserInterface toggled and restored), Terminal or iTerm2, and an app with a real minimum (Notes, Music); open a second window of that app; quit and relaunch Pane
 expected: Enhanced UI restored; no terminal cell snap learned; Min Size shows the real minimum about a second after the refused write; the second window starts from it; after relaunch the hint is back; the hints file holds only bundle IDs and sizes. Also watch for the late-applier warning: a busy Chrome/Electron window must not learn its pre-write size as a minimum
@@ -109,17 +106,19 @@ note: "Developer confirmed clean-room status on 2026-10-27"
 ## Summary
 
 total: 18
-passed: 15
-issues: 1
+passed: 17
+issues: 0
 pending: 0
 skipped: 0
-blocked: 2
+blocked: 1
 
 ## Gaps
 
 - gap_id: G-02-1
   truth: "With no Accessibility grant, launch opens a readable Set Up window with a default Open System Settings button"
-  status: failed
+  status: resolved
+  resolved_by: "02-18-PLAN.md"
+  resolved_at: "2026-10-27"
   reason: "User reported: No setup window... (CGWindowList: the window exists at 1x28 pt, centred, content never sized it)"
   severity: major
   test: 1
@@ -134,7 +133,9 @@ blocked: 2
 
 - gap_id: G-02-10
   truth: "A native tab group is one tracked window: new tabs, tab switches and Cmd-W change its title and tab count but never add or leave extra rows"
-  status: failed
+  status: resolved
+  resolved_by: "02-19-PLAN.md"
+  resolved_at: "2026-10-27"
   reason: "Claude-driven VM run: Tracking 15 windows while 13 exist; Finder keeps stale #20 beside the 4-tab group (#213 shown as its id, real shown tab #214); Terminal keeps stale #206 beside the 4-tab group (#208 shown, real #219); never cleared"
   severity: major
   test: 10
