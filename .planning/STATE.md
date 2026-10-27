@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
-status: verifying
-stopped_at: Phase 3 complete, ready to verify Phase 2
-last_updated: "2026-10-27T18:20:10.029Z"
+status: executing
+stopped_at: Completed 02-18-PLAN.md
+last_updated: "2026-10-27T20:59:03.225Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 3 complete, transitioned to Phase 2
-state_head: 5c2ca0cfcbfe1957fb916603ca40ea214bc97303
+state_head: 03787554a7bf3a18f98a58a8d74e8623bbb5eb77
 progress:
   total_phases: 9
   completed_phases: 2
-  total_plans: 49
-  completed_plans: 49
+  total_plans: 51
+  completed_plans: 50
   percent: 22
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 2 — Window Control
-Plan: 17
-Status: Phase complete — ready for verification
+Plan: 19 of 19
+Status: Ready to execute
 Last activity: 2026-10-27 — Phase 3 complete, transitioned to Phase 2
 
 Progress: [██░░░░░░░░] 22%
@@ -99,6 +99,7 @@ Progress: [██░░░░░░░░] 22%
 | Phase 03 P17 | 13h wall (checkpoint wait) | 3 tasks | 3 files |
 | Phase 03 P25 | 30min | 3 tasks | 7 files |
 | Phase 03 P26 | 5 min | 2 tasks | 7 files |
+| Phase 02 P18 | 6min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -240,6 +241,7 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-25: per-window wantedFrames (user actions only, kept while docked) plan floaters; floaterFloors cut boundary drags only; Float/green button use Planner.floatFrame (pre-dock frame or 90% centred)
 - [Phase 03]: 03-26: wanted frames are an optional layout.json key; schemaVersion stays 1, older files load with none
 - [Phase 03]: 03-26: at re-attach a floater moved >2 pt while Pane was off keeps its real frame; a stranded saved wanted frame is dropped
+- [Phase 02]: 02-18: the setup window uses sizingOptions [.preferredContentSize] and one setContentSize(fittingSize) before centring; preferredContentSize alone sizes the window only after a run-loop turn on macOS 27, too late for the centring code
 
 ### Quick Tasks Completed
 
@@ -276,8 +278,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T15:21:34.674Z
-Stopped at: Phase 3 complete, ready to verify Phase 2
+Last session: 2026-10-27T20:58:53.872Z
+Stopped at: Completed 02-18-PLAN.md
 Resume file: None
 
 ## Deferred Verification

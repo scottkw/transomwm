@@ -68,7 +68,7 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: 17/19 plans executed
+**Plans**: 18/19 plans executed
 
 Plans:
 **Wave 1**
@@ -107,7 +107,7 @@ Plans:
 - [x] 02-17-PLAN.md — Space-switch race without Space data: after `NSWorkspace.activeSpaceDidChangeNotification`, refuse the orphan handoff and new hidden-tab folds for one update; with Space data, no change (WIN-06, WIN-09)
 
 **Gap closure 2** *(from 02-UAT, independent: no shared files)*
-- [ ] 02-18-PLAN.md — G-02-1: Set Up Transom window sized by preferredContentSize plus a one-time content size before centring; headless regression test (WIN-01)
+- [x] 02-18-PLAN.md — G-02-1: Set Up Transom window sized by preferredContentSize plus a one-time content size before centring; headless regression test (WIN-01)
 - [ ] 02-19-PLAN.md — G-02-10: tab groups follow the newly shown tab by timing, not stale hidden-tab bounds; fake models stale hidden-tab frames; E1/E4/Cmd-W scenarios (WIN-06, WIN-09)
 
 **Research**: Moderate. Patterns are documented (AeroSpace), but the window classifier corpus, native-tab heuristics and two-source close-confirmation rules need careful design
@@ -318,7 +318,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
-| 2. Window Control | 17/17 | In Progress | - |
+| 2. Window Control | 18/19 | In Progress | - |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
