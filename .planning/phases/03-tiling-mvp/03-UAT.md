@@ -9,7 +9,7 @@ updated: 2026-10-26T14:34:30-05:00
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing paused - 3 items blocked on the host's second display]
+[testing paused - 2 items blocked on the host's second display; gap fixes 03-18..03-22 executed, re-test pending]
 
 ## Tests
 
@@ -111,18 +111,19 @@ reason: "Needs the host Mac with the DELL second display; user is away from home
 
 ### 18. Second display: live too-big test
 expected: Live ArrangeIntegrationTests aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop passes, or its failure is shown to be the test sizing from the main display only
-result: blocked
-blocked_by: physical-device
-reason: "Live test on the host with the DELL attached; user is away from home"
+result: issue
+reported: "Claude-driven in the Tart VM (single display, via scripts/vm-live-test.sh): the test failed the same way before and after the gap fixes, so it is not display-related"
+severity: minor
+note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the Desktop tile's exact middle (fx = 0.5), a tie that a 1 pt area change resolved as a column split, so nothing lost room. Fixed in the test (centre in the right edge band); the suite then passed 3 runs in a row in the VM. The "main-display sizing" explanation is dropped
 
 ## Summary
 
 total: 18
 passed: 11
-issues: 4
+issues: 5
 pending: 0
 skipped: 0
-blocked: 3
+blocked: 2
 
 ## Gaps
 
@@ -202,6 +203,20 @@ blocked: 3
     - "topmostWindow(at:) picks the topmost layer-0 window, as pressWindow does, ideally as a pure function over [CGWindowEntry] with a unit test (Dock layer-20 full-screen entry first)"
     - "Re-test with real hand clicks"
   debug_session: ".planning/debug/g-03-4-green-button.md"
+
+- gap_id: G-03-7
+  truth: "Live test aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop passes (D-26 live)"
+  status: resolved
+  reason: "Fails in the single-display VM before and after the gap fixes"
+  severity: minor
+  test: 18
+  root_cause: "Test bug: window 1's dock point was the Desktop tile's exact middle (fx = 0.5), a tie between the side bands and the top/bottom bands; the test's visible frame (688) went stale vs Pane's area (689), so Dock chose .top, the column layout fit and no window lost room. Pane's D-26 path works (passes once the point is in the right edge band)."
+  artifacts:
+    - path: "Tests/PaneMacIntegrationTests/ArrangeIntegrationTests.swift"
+      issue: "start1 at desktop.minX with the full Desktop width put the dock point on the tie"
+  missing: []
+  resolved_by: "test fix in the commit that adds this entry"
+  debug_session: ".planning/debug/g-03-7-live-too-big-test.md"
 
 ## Observed, not yet a gap
 

@@ -176,7 +176,8 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         let tracked0 = arrange.arranger.windows[refs[0].identity]?.frame
         try #require(learned, "window 0's minimum was never learned (tracked \(String(describing: tracked0)), minimum \(min0))")
 
-        // Window 1's centre at mid-height inside the Desktop tile, so Dock puts it beside that tile, in the same row.
+        // Window 1's centre in the Desktop tile's right edge band, so Dock puts it beside that tile, in the same row.
+        // Not the tile's middle: there fx = 0.5 ties with the top/bottom bands and a 1 pt area change picks a column.
         let key = try #require(arrange.arranger.deskKey(of: refs[0]))
         let desk = try #require(arrange.arranger.world[key])
         let mins = Dictionary(uniqueKeysWithValues: arrange.arranger.windows.values.compactMap { info in
@@ -189,7 +190,7 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         }
         try #require(clamped, "Pane never clamped window 1 into the Desktop tile \(desktop)")
         let size1 = try #require(arrange.arranger.windows[refs[1].identity]).frame.size
-        let start1 = Rect(x: desktop.minX, y: top, width: size1.width, height: size1.height)
+        let start1 = Rect(x: (desktop.minX + desktop.width * 0.8 - size1.width / 2).rounded(), y: top, width: size1.width, height: size1.height)
         _ = try await fixture.send("move 1 \(Int(start1.x)) \(Int(start1.y))")
         try #require(await seen(arrange, refs[1], start1), "the Arranger never saw window 1 at \(start1)")
         await arrange.dispatch(.dock, focused: refs[1])
