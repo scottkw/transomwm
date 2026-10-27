@@ -9,7 +9,7 @@ updated: 2026-10-27T13:55:00-05:00
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing paused - 03-23 review fixes VM-checked on 0.3.8: 4 pass, locked start fails (G-03-10); pending: G-03-10 fix, green button and gap drag by hand, tests 16-17 display half on the host's second display]
+[testing paused - 0.3.10 in the VM: G-03-10 resolved, G-03-4 and G-03-11 pass scripted; pending: user hand check of green button and gap drag, tests 16-17 display half on the host's second display]
 
 ## Tests
 
@@ -140,6 +140,12 @@ note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the De
   - Green button plain click on docked Notes (Space 41): only the macOS Move & Resize hover popup appears; Notes neither floats nor docks, twice: fail (G-03-4 reopened)
   - Option-click: zooms, D-33 returns it to its tile: pass. Menu over the green button gets the click: pass
   - Gap drag between docked Finder 2399 (top) and the Desktop tile (Space 1): smoother, no snap-back while holding: pass (G-03-3); floaters shrunk by the smaller Desktop tile stay small when it grows back, several end partly below the screen: fail (G-03-11)
+
+## VM re-check after 03-25/03-26 (Pane 0.3.10 / 1008, HEAD 5e6bd67, Tart VM, Claude-driven, 2026-10-27)
+
+- G-03-11: Space 1, Finder 2399 docked on top, 9 floaters set by AX to normal frames; gap handle dragged down 190 then back up (pathdrag, 600 ms hold): the drag stopped with the Desktop at 253 pt (Terminal's real height), every floater stayed inside the Desktop; after the drag back up all 9 floaters returned to their exact start frames: pass (scripted)
+- G-03-4: Space 41, Notes the desk's only docked window; hover 1.5 s then click its green button: floats to 191,71 642x598 (no pre-dock frame known, centred fallback); click again: docks into the bottom tile 12,375 1000x326 (D-12 drop at its centre); click again: floats back to 191,71 642x598 (wanted frame): pass (scripted). Note: once floating, Reminders can cover Notes, so a click lands on Reminders until Notes is raised
+- Pending: user hand check of both on 0.3.10
 
 ## Summary
 
