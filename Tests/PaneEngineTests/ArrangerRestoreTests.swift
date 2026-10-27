@@ -54,6 +54,39 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(Set(synthetic.unplaced.map(\.window)) == [a, d])
     }
 
+    /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
+    @Test func reattachKeepsAnUntrackedWindowTheCGListStillHasUnderItsIDAndPid() async throws {
+        // Saved: [a | b | Desktop], c floating. Only a is tracked.
+        let harness = await twoDocked(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Rect(x: 1000, y: 600, width: 150, height: 120)])
+        let saved = harness.arranger.world
+        let frame = Rect(x: 10, y: 40, width: 200, height: 200)
+        let live = [tracked(a, frame: frame)]
+        func entry(_ id: UInt32, pid: Int32 = pid, layer: Int = 0) -> CGWindowEntry {
+            CGWindowEntry(windowID: id, pid: pid, bounds: frame, layer: layer, onScreen: false, alpha: 1)
+        }
+
+        let docked = try LayoutRestore.reattach(saved, tracked: live, live: [entry(2), entry(3, pid: 901)])
+        #expect(docked.world[key].map { Set($0.tree.windows) } == [a, b])
+        #expect(docked.removed == [c], "the same ID under another pid is another window")
+        #expect(docked.unplaced.isEmpty)
+
+        let floating = try LayoutRestore.reattach(saved, tracked: live, live: [entry(3)])
+        #expect(floating.world[key]?.desktop.contains(c) == true)
+        #expect(floating.removed == [b])
+
+        let layered = try LayoutRestore.reattach(saved, tracked: live, live: [entry(2, layer: 20), entry(3, layer: 20)])
+        #expect(Set(layered.removed) == [b, c])
+
+        let empty = try LayoutRestore.reattach(saved, tracked: live, live: [])
+        let today = try LayoutRestore.reattach(saved, tracked: live)
+        #expect(empty.world == today.world && empty.removed == today.removed && empty.unplaced == today.unplaced)
+        #expect(Set(today.removed) == [b, c])
+
+        let synthetic = WindowIdentity(windowID: WindowIdentity.syntheticIDBase | 2, pid: pid, bundleID: bundleID)
+        #expect(!LayoutRestore.isAlive(synthetic, in: [entry(synthetic.windowID)]), "a synthetic ID is session-only")
+        #expect(LayoutRestore.isAlive(b.identity, in: [entry(2)]))
+    }
+
     @Test func aRestoreWaitsForTheFirstCompleteInventoryAndThenMovesNothing() async throws {
         let source = await twoDocked()
         let saved = source.arranger.snapshot.world

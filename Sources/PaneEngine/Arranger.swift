@@ -195,13 +195,15 @@ public struct Arranger: Sendable {
             // The saved layout waits for every app's first answer, so no saved window is dropped as untracked.
             guard inventory.initialRefreshComplete else { return [] }
             pendingRestore = nil
-            // Home frames are kept only for windows tracked under a real ID (synthetic IDs are session-only, 02-11).
+            // Home frames are kept only for windows tracked under a real ID (synthetic IDs are session-only, 02-11), or
+            // kept dormant because the CG list still has them (G-03-8).
             let real = Set(inventory.windows.filter { $0.idSource != .synthetic }.map(\.window.identity))
-            homeFrames = restore.homeFrames.filter { real.contains($0.key) }
+            let live = inventory.liveWindows ?? []
+            homeFrames = restore.homeFrames.filter { real.contains($0.key) || LayoutRestore.isAlive($0.key, in: live) }
             // After a crash, stranded windows come on screen first, before any layout work (D-17).
             let rescued = launch == .normal ? [] : rescueStranded(desks: restore.world)
             inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
-            let restored = reattach(restore, tracked: inventory.windows)
+            let restored = reattach(restore, tracked: inventory.windows, live: live)
             var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects
             if launch != .normal {
                 do throws(LayoutError) {
@@ -327,11 +329,11 @@ public struct Arranger: Sendable {
     /// or frame cannot be applied keeps its saved one. If the saved layout cannot be re-attached at all, the World starts
     /// empty and the saved layout stays what is saved. `unplaced` counts the tracked windows the saved layout did not hold.
     private mutating func reattach(
-        _ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo]
+        _ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]
     ) -> (effects: [ArrangerEffect], unplaced: Int) {
         history = UndoHistory()
         do throws(LayoutError) {
-            let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked)
+            let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live)
             var candidate = reattached.world
             var seeded: [WindowIdentity: Rect] = [:]
             var faults: [ArrangerEffect] = []
@@ -468,9 +470,15 @@ public struct Arranger: Sendable {
     private mutating func handle(_ event: WindowEvent, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         var subject: WindowIdentity?
         var hidden: [ArrangerEffect] = []
+        var faults: [ArrangerEffect] = []
         do throws(LayoutError) {
             switch event {
             case .windowCreated(let info), .windowChanged(let info):
+                if case .windowCreated = event, windows[info.window.identity] == nil, deskKey(of: info.window) != nil {
+                    do throws(LayoutError) { try wakeDormant(info) } catch {
+                        faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))
+                    }
+                }
                 windows[info.window.identity] = info
                 subject = info.window.identity
             case .windowRekeyed(let from, let to):
@@ -525,10 +533,24 @@ public struct Arranger: Sendable {
         }
         guard case .windowCreated(let info) = event else { return hidden + replan() }
         do throws(LayoutError) {
-            return try takeFinderWindow(info, now: now) + replan()
+            return try faults + takeFinderWindow(info, now: now) + replan()
         } catch {
-            return [.fault("could not dock the new Finder window: \(error)")] + replan()
+            return faults + [.fault("could not dock the new Finder window: \(error)")] + replan()
         }
+    }
+
+    /// Re-attaches a saved window the restore kept dormant (its Space was not shown, G-03-8) as the restore does for a
+    /// tracked one: its real state, then its real frame counted as already requested if docked, or recorded if
+    /// floating, then re-homed. The `admit` and re-plan that follow do the rest, so only a changed tile is written.
+    private mutating func wakeDormant(_ info: WindowInfo) throws(LayoutError) {
+        guard let key = deskKey(of: info.window), let desk = world[key] else { return }
+        if desk.state(of: info.window) != info.state { try world.apply(info.state, for: info.window, on: key, history: &history) }
+        if !desk.desktop.contains(info.window) {
+            lastRequested[info.window.identity] = info.frame
+        } else if info.state == .present {
+            try world.recordFloatingFrame(info.frame, for: info.window)
+        }
+        try rehome(info)
     }
 
     private mutating func forget(_ window: WindowRef) {
@@ -1355,10 +1377,11 @@ public struct Arranger: Sendable {
             }
             guard let desk = world[key] else { continue }
             if drag?.kind != .move { handles[display.uuid] = GapHandles.handles(tree: desk.tree, resolution: plan.resolution, gap: gap) }
-            // Pane never moves an excluded app's window: no clamp, no park (D-29).
-            var desired = plan.frames.filter { windows[$0.key.identity]?.isExcluded != true }
+            // Pane never moves an excluded app's window: no clamp, no park (D-29). An untracked (dormant, G-03-8) window
+            // gets nothing either: the window system would drop the command, and its windowCreated replans it.
+            var desired = plan.frames.filter { windows[$0.key.identity]?.isExcluded == false }
             let desktopHidden = desk.tree.isDesktopHidden == true
-            for window in plan.parks where windows[window.identity]?.isExcluded != true {
+            for window in plan.parks where windows[window.identity]?.isExcluded == false {
                 parkedNow.insert(window.identity)
                 guard parkRequested.insert(window.identity).inserted else { continue }
                 if homeFrames[window.identity] == nil, windows[window.identity]?.isExcluded != true {

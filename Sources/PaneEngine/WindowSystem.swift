@@ -107,16 +107,20 @@ public struct WindowInventory: Equatable, Sendable {
     public var sessionPaused: Bool
     /// True once every app has answered or failed the first sweep.
     public var initialRefreshComplete: Bool
+    /// The layer-0 entries of the latest CG optionAll list for tracked apps, so windows on Spaces AX does not list are
+    /// included (G-03-8). Nil means unknown, and nothing may be decided from it.
+    public var liveWindows: [CGWindowEntry]?
 
     public init(
         displays: [DisplayInfo], windows: [WindowInfo], degradedPIDs: Set<Int32> = [],
-        sessionPaused: Bool = false, initialRefreshComplete: Bool = false
+        sessionPaused: Bool = false, initialRefreshComplete: Bool = false, liveWindows: [CGWindowEntry]? = nil
     ) {
         self.displays = displays
         self.windows = windows
         self.degradedPIDs = degradedPIDs
         self.sessionPaused = sessionPaused
         self.initialRefreshComplete = initialRefreshComplete
+        self.liveWindows = liveWindows
     }
 }
 
