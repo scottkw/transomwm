@@ -560,7 +560,8 @@ public struct Arranger: Sendable {
         if desk.state(of: info.window) != info.state { try world.apply(info.state, for: info.window, on: key, history: &history) }
         if !desk.desktop.contains(info.window) {
             lastRequested[info.window.identity] = info.frame
-        } else if info.state == .present {
+        } else if info.state == .present, desk.tree.isDesktopHidden != true, !Recovery.isStranded(info.frame, displays: displays) {
+            // A parked or stranded frame never replaces the desk's: the re-plan moves the window back there (CR-02).
             try world.recordFloatingFrame(info.frame, for: info.window)
         }
         try rehome(info)

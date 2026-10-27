@@ -374,6 +374,41 @@ extension Harness {
         #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(11)) == true)
     }
 
+    /// CR-02, D-17: after a crash, a floating window parked on a hidden Space's desk (its Desktop hidden) comes back on
+    /// screen at its home frame once that Space is shown, although it was dormant at the recovery restore.
+    @Test func aParkedDormantFloaterComesBackOnScreenAfterACrash() async throws {
+        var first = Harness()
+        await first.fake.setDisplays([displayA])
+        await first.fake.setSpacesAvailable(true)
+        await first.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await first.fake.open(.standard(id: 1, pid: pid, frame: startFrame(0, on: visibleA), space: 1))
+        await first.fake.open(.standard(id: 4, pid: pid, frame: startFrame(0, on: visibleA), space: 2))
+        await first.fake.open(.standard(id: 3, pid: pid, frame: startFrame(1, on: visibleA), space: 2))
+        await first.fake.showSpace(1, onDisplay: "A", notifies: false)
+        await first.fake.refreshAll()
+        _ = await first.inbox.take()
+        await first.send(.inventory(await first.fake.inventory()))
+        await first.send(.command(.dock, focused: ref(1)))
+        _ = await first.switchDisplay("A", to: 2)
+        await first.send(.command(.dock, focused: ref(4)))
+        let home = try #require(await first.frame(ref(3)))
+        await first.send(.command(.toggleDesktop, focused: ref(4)))
+        try #require(await first.fake.parked.contains(ref(3).identity))
+        _ = await first.switchDisplay("A", to: 1)
+        let saved = first.arranger.world
+        try #require(saved[deskA2]?.tree.isDesktopHidden == true && saved[deskA2]?.desktop.contains(ref(3)) == true)
+
+        var harness = await relaunched(with: Array(await first.fake.windows.values), displays: [displayA], showing: ["A": 1])
+        await harness.send(.launch(.recovery))
+        await harness.send(.restore(saved, homeFrames: first.arranger.snapshot.homeFrames))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        try #require(harness.arranger.world[deskA2]?.desktop.contains(ref(3)) == true, "window 3 is not dormant on its desk")
+        _ = await harness.switchDisplay("A", to: 2)
+        let frame = try #require(await harness.frame(ref(3)))
+        #expect(!Recovery.isStranded(frame, displays: [displayA]), "window 3 stayed parked at \(frame)")
+        #expect(frame == home)
+    }
+
     @Test func liveWindowsChangedAloneDoesNothing() async throws {
         var (harness, _) = try await dormantRelaunch()
         let world = harness.arranger.world
