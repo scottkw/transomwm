@@ -457,6 +457,28 @@ extension Harness {
         #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
     }
 
+    /// WR-01: the shell reads the inventory after each event, so it can track a dormant window before that window's
+    /// buffered windowCreated is handled. It re-attaches the window with its real state, as the windowCreated would.
+    @Test func anInventoryThatTracksADormantWindowFirstAppliesItsRealState() async throws {
+        let first = try await firstSession(space2: [3])
+        var carried = Array(await first.harness.fake.windows.values)
+        for i in carried.indices where carried[i].id == 3 { carried[i].snapshot.minimized = true }
+        var harness = await relaunched(with: carried, displays: [displayA], showing: ["A": 1])
+        await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        try #require(harness.arranger.world[deskA2]?.state(of: ref(3)) == .present)
+
+        await harness.fake.showSpace(2, onDisplay: "A")
+        await harness.fake.refresh(pid: pid)
+        await harness.fake.advance(by: .milliseconds(300))
+        await harness.fake.refresh(pid: pid)
+        // The inventory first, then (in `send`'s settle) the buffered windowCreated.
+        await harness.send(.inventory(await harness.fake.inventory()))
+        let tracked = try #require(harness.arranger.windows[ref(3).identity])
+        #expect(tracked.state != .present)
+        #expect(harness.arranger.world[deskA2]?.state(of: ref(3)) == tracked.state)
+    }
+
     @Test func liveWindowsChangedAloneDoesNothing() async throws {
         var (harness, _) = try await dormantRelaunch()
         let world = harness.arranger.world

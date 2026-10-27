@@ -190,11 +190,19 @@ public struct Arranger: Sendable {
                 return display
             }
             sessionPaused = inventory.sessionPaused
+            let dormant = Set(dormantWindows.map(\.identity))
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
             guard let restore = pendingRestore else {
+                // A dormant window this inventory tracks before its windowCreated is handled wakes here (WR-01).
+                var faults: [ArrangerEffect] = []
+                for info in inventory.windows where dormant.contains(info.window.identity) {
+                    do throws(LayoutError) { try wakeDormant(info) } catch {
+                        faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))
+                    }
+                }
                 // A dormant window whose ID left the CG list closed (G-03-8); a paused, unknown or empty list decides nothing.
-                guard !inventory.sessionPaused, let live = inventory.liveWindows, !live.isEmpty else { return place(inventory) }
-                return closeDormant { !LayoutRestore.isAlive($0.identity, in: live) } + place(inventory)
+                guard !inventory.sessionPaused, let live = inventory.liveWindows, !live.isEmpty else { return faults + place(inventory) }
+                return faults + closeDormant { !LayoutRestore.isAlive($0.identity, in: live) } + place(inventory)
             }
             // The saved layout waits for every app's first answer, so no saved window is dropped as untracked, and for an
             // unlocked session with a non-empty CG list: a blank one can't tell a closed window from one on a hidden Space
