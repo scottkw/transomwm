@@ -60,6 +60,11 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   zoom on a floating window, because D-33 clamps it to the whole Desktop tile. Seen in the VM: a press preset to the
   real window ID behaves the same, so it is not the tap's window lookup. TILE-06 expects "floating docks". Options:
   fall back to a non-centre edge target when the centre hits the Desktop tile, or accept and announce.
+  **Resolved by quick 261027-gqo (2026-10-27):** Dock never returns the centre zone for a tile. `Planner.dockTarget`
+  has fallen back to the nearest edge band since 03-04. At the exact centre that fallback used to pick the right edge;
+  per the user decision it now picks the left edge. The new regression test is
+  `ArrangerGreenButtonTests.aPlainClickOnAFloaterZoomedToTheWholeDesktopTileDocksIt`. Drag-drop onto a centre is
+  unchanged. The VM beep with 460 pt minimums is the D-26 no-room refusal, which the 03-19 item tracks.
 - **(03-18) Space 2's docked windows are dropped on every Pane relaunch.** Clean repro, twice in the VM: layout.json
   had a second desk (spaceID 41) with Notes#150 and reminders#693 docked, both apps running; after quit and relaunch
   on Space 1 the desk key stays but its docked list is empty. Matches the 03-UAT.md note on test 17.
