@@ -248,6 +248,7 @@ Recent decisions affecting current work:
 | 261027-gqo | green click on a full-Desktop floater docks left | 2026-10-27 | 18d2d04 | [261027-gqo-green-click-on-a-floater-filling-the-des](./quick/261027-gqo-green-click-on-a-floater-filling-the-des/) |
 | 2 | Log refusal announcements so the no-room dock refusal is not silent (03-19) | 2026-10-27 | 307834b | — |
 | 3 | Log every notice before queuing its toast (03-22) | 2026-10-27 | 7e2b0a9 | — |
+| 261027-ijh | Rename Pane to Transom (code 221fd39, docs 0d33bba) | 2026-10-27 | 0d33bba | [261027-ijh-rename-the-app-from-pane-to-transom-acro](./quick/261027-ijh-rename-the-app-from-pane-to-transom-acro/) |
 
 ### Pending Todos
 
@@ -259,8 +260,8 @@ Recent decisions affecting current work:
 - Phase 5: gesture input path (MultitouchSupport vs event-tap magnify events) is unverified; spike before building
 - Phase 6: SkyLight signatures and Space-UUID stability across reboots/updates are unverified
 - ⌥-hotkey restriction on macOS 15.0-15.1: sources conflict; ship a ⌃⌥ fallback regardless (affects Phase 3/4 hotkey defaults)
-- Phase 3: confirm notarisation works with dlopen of private frameworks in the minimal pipeline
-- Name "Pane": check for existing macOS apps before public release (Phase 9)
+- Phase 3: notarisation with dlopen of private frameworks — MET 2026-10-27 (build/Pane-0.3.0.dmg accepted and stapled; rebuild as Transom before release)
+- Name: resolved 2026-10-27, renamed to Transom (quick 261027-ijh); transomwm.app registered
 - Phase 2 obligation (from Phase 1 review fix c403f45): `World.undo` returns `[WindowRef]?`; the engine must re-query the OS for every returned window and report its real state through `World.apply` — MET by 02-04 (`LifecycleSync.undo` → `requery` → `applyRequeried`)
 - Phase 2 obligation: OS lifecycle events (open/close/minimise/fullscreen) go through `World.apply`, never `World.edit`, so they stay off the undo stack; `.closed` needs no valid desk key — MET by 02-04 (`LifecycleSync.handle`)
 - Phase 1 work is on branch `gsd/phase-01-layout-model` (main is protected); merging to main is the developer's call
@@ -287,6 +288,11 @@ Resume file: None
 
 Phase 2 automated verification: human_needed (144/150, no gaps, 02-VERIFICATION.md). 18 hands-on items in 02-UAT.md. Lead chose on 2026-10-25 to defer UAT and continue with Phase 3.
 
-## Pending: Rename to Transom
+## Rename to Transom (done 2026-10-27)
 
-Decided 2026-10-25: rename the app from "Pane" to "Transom". "Pane" is already used by several macOS window managers. This is a full rename covering the app name, bundle IDs, the `pane://` scheme, menu copy, the data folder, the SwiftPM modules, types, tests, the local directory and the GitHub repo. Schedule: immediately after Phase 3 completes. Hold the public 0.3.0 pre-release (03-17) until the rename is done.
+Decided 2026-10-25, done 2026-10-27 by quick 261027-ijh: app Transom (`com.eightabyte.transom`, `.transom.debug`, `transom://`), Transom* modules, TRANSOM_* env vars, Application Support/Transom (no migration), GitHub repo scottkw/transomwm. Kept on purpose: keychain profile `pane-notary`, Tart VM `pane-test` and key `pane_vm_ed25519`. Past phase artifacts keep the old names as history.
+
+Still to do:
+- Move ~/dev/panewm to ~/dev/transomwm and copy the Claude project memories.
+- Install a Transom build in the VM (it still has /Applications/Pane.app); the new bundle ID needs a fresh Accessibility grant in the VM and on the host.
+- Rebuild and notarise the DMG as build/Transom-0.3.0.dmg before any tester or public 0.3.0 release.
