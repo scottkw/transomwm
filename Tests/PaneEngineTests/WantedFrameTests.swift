@@ -70,6 +70,26 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
         }
     }
 
+    /// G-03-11 B: the drag stops at the floaters' real size, so none hangs below the Desktop or over the docked tile.
+    @Test func aFloaterWhoseMinimumIsAboveTheShrunkenDesktopNeverEndsBelowIt() async throws {
+        var harness = await vmDesk()
+        let handle = try rootHandle(harness)
+        func check(_ step: String) async throws {
+            let top = try #require(await harness.frame(docked))
+            for window in floaters {
+                let frame = try #require(await harness.frame(window))
+                #expect(frame.maxY <= desktopBottom + 0.5, "floater \(window.windowID) below the Desktop at \(step): \(frame)")
+                #expect(!frame.overlaps(top), "floater \(window.windowID) overlaps the docked tile at \(step): \(frame)")
+            }
+        }
+        for delta in [50.0, 100, 150, 190] {
+            await harness.send(.gapDrag(handle, delta: delta, ended: false))
+            try await check("+\(delta)")
+        }
+        await harness.send(.gapDrag(handle, delta: 190, ended: true))
+        try await check("release")
+    }
+
     /// Plan-check W1: an app that applies the clamp late reads back its old frame, then reports the clamped one.
     @Test func aClampTheAppAppliesLateIsStillPanesOwn() async throws {
         var harness = await vmDesk()
