@@ -292,6 +292,79 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(tracker.members(of: identity(10)) == [10, 40])
     }
 
+    private static let shorter = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height - 28)
+
+    /// Group 10 + 40 (40 shown, both at `frame`), then 40 resized `shorter` while hidden 10 keeps `frame`.
+    private func resizedGroup() -> (TabGroupTracker, TabResolution) {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)], tracked: [identity(10)])
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2)], cgWindows: [cg(10), cg(40, onScreen: true)], tracked: [identity(10)]
+        )
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2, Self.shorter)], cgWindows: [cg(10), cg(40, Self.shorter, onScreen: true)],
+            tracked: [identity(10)]
+        )
+        return (tracker, resolution)
+    }
+
+    /// (f) A group keeps its hidden member while it stays offscreen in the CG list and AX-valid, whatever its bounds.
+    @Test func aGroupKeepsAHiddenMemberWhoseBoundsNoLongerMatch() {
+        let (tracker, resolution) = resizedGroup()
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+        #expect(resolution.tabCount[identity(10)] == 2)
+    }
+
+    /// The resized group, then 50 new at a frame matching neither tab, with 40 hidden at `shorter` and 10 at `frame`.
+    private func resizedGroupGainsATab(tabCount: Int = 3, spaces: [UInt32: Set<UInt64>]? = nil, spaceChanged: Bool = false)
+        -> (TabGroupTracker, TabResolution)
+    {
+        var (tracker, _) = resizedGroup()
+        let other = Rect(x: 140, y: 120, width: 560, height: 360)
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(50, tabCount, other)],
+            cgWindows: [cg(10), cg(40, Self.shorter), cg(50, other, onScreen: true)], tracked: [identity(10)], spaces: spaces,
+            spaceChanged: spaceChanged
+        )
+        return (tracker, resolution)
+    }
+
+    /// (g) Timing join: the group's shown tab went hidden as a new tab with room under its AXTabs count appeared.
+    @Test func aNewTabJoinsTheGroupWhoseShownTabWentHidden() {
+        let (tracker, resolution) = resizedGroupGainsATab()
+        #expect(resolution.groupFor == [50: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40, 50])
+    }
+
+    /// (h) Without Space data, an update flagged `spaceChanged` makes no timing join.
+    @Test func aBlindSpaceSwitchMakesNoTimingJoin() {
+        let (_, resolution) = resizedGroupGainsATab(spaceChanged: true)
+        #expect(resolution.groupFor[50] != identity(10))
+    }
+
+    /// (i) No timing join without room under the new tab's AXTabs count.
+    @Test func noTimingJoinWithoutRoomUnderTheTabCount() {
+        let (_, resolution) = resizedGroupGainsATab(tabCount: 2)
+        #expect(resolution.groupFor[50] != identity(10))
+    }
+
+    /// (j) A member listed as a single window (AXTabs 1, here minimized: offscreen) is never kept, stale bounds or not.
+    @Test func aMemberListedAsASingleWindowIsNeverKept() {
+        var tracker = TabGroupTracker()
+        let away = Rect(x: 800, y: 300, width: 400, height: 300)
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)], tracked: [identity(10)])
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 3)], cgWindows: [cg(10), cg(40, onScreen: true), cg(41)], tracked: [identity(10)]
+        )
+        #expect(tracker.members(of: identity(10)) == [10, 40, 41])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2, Self.shorter), visible(41, 1, away)],
+            cgWindows: [cg(10), cg(40, Self.shorter, onScreen: true), cg(41, away)], tracked: [identity(10)]
+        )
+        #expect(!tracker.members(of: identity(10)).contains(41))
+        #expect(resolution.groupFor[41] == nil)
+    }
+
     /// S4 unchanged: a shown tab already in the previous CG list keeps today's ranking (untracked before standalone).
     @Test func aShownTabSeenBeforeKeepsTheUsualRanking() {
         var tracker = TabGroupTracker()

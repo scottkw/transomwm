@@ -196,6 +196,66 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events).isEmpty)
     }
 
+    /// Standalone 10 with tab 40 shown; then 40 goes 28 pt shorter by `resize` while hidden 10 keeps `frame`;
+    /// then Cmd-T opens 50 at the hidden sibling's frame (G-02-10 E4, Finder).
+    private func resizedGroupGainsATab(_ fake: FakeWindowSystem, resize: (FakeWindowSystem, Rect) async -> Void) async -> [[UInt32]] {
+        await fake.open(.standard(id: 10, pid: pid, frame: frame, space: 1))
+        await fake.showSpace(1)
+        await refresh(fake)
+        await fake.newTab(40, in: 10)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        var rows = await summary(fake)
+        #expect(rows == [[10, 40, 2]])
+
+        let shorter = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height - 28)
+        await resize(fake, shorter)
+        await refresh(fake, advancing: true)
+        rows = await summary(fake)
+        #expect(rows == [[10, 40, 2]])
+        #expect(await fake.windows[10]?.frame == frame)
+
+        await fake.newTab(50, in: 40, frame: frame)
+        for _ in 0..<3 { await refresh(fake, advancing: true) }
+        return await summary(fake)
+    }
+
+    /// G-02-10 E4 (Finder): the shown tab of a two-tab group is resized, its hidden sibling keeps the old frame, and
+    /// Cmd-T opens at the sibling's frame. One group, under its first identity.
+    @Test(arguments: modes)
+    func aCmdTAfterTheShownTabWasResizedStaysOneGroup(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        let rows = await resizedGroupGainsATab(fake) { await $0.userMove(40, to: $1) }
+        #expect(rows == [[10, 50, 3]])
+        let events = await drain(fake.events)
+        #expect(created(events).map(\.window) == [ref(10)])
+        #expect(destroyed(events).isEmpty)
+    }
+
+    /// Cmd-W on the shown tab of that resized group shows the next tab under the same identity (WIN-06, WIN-09).
+    @Test(arguments: modes)
+    func cmdWInAResizedGroupFollowsTheNextTab(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        var rows = await resizedGroupGainsATab(fake) { await $0.userMove(40, to: $1) }
+        #expect(rows == [[10, 50, 3]])
+        await fake.close(50)
+        await fake.selectTab(40)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        rows = await summary(fake)
+        #expect(rows == [[10, 40, 2]])
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+    }
+
+    /// A Transom frame write moves only the group's shown tab, as the live AX write does; a later Cmd-T stays one group.
+    @Test(arguments: modes)
+    func aFrameWriteToATabGroupThenCmdTStaysOneGroup(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        let rows = await resizedGroupGainsATab(fake) { await $0.perform([.setFrame(ref(10), $1)]) }
+        #expect(rows == [[10, 50, 3]])
+        let events = await drain(fake.events)
+        #expect(created(events).map(\.window) == [ref(10)])
+        #expect(destroyed(events).isEmpty)
+    }
+
     /// Review D1 (iteration 4): A (10) gains tab 40; then Cmd-T (50) and a click back on tab 10 land in one refresh,
     /// so the leader is listed with a new AXTabs count while the old shown tab sits offscreen.
     @Test(arguments: modes)

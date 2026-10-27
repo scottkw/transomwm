@@ -110,6 +110,16 @@ private func nextEvent(_ stream: AsyncStream<WindowEvent>) async -> WindowEvent?
         #expect(await cgBounds(fake, 40) == taller)
     }
 
+    @Test func aFrameWriteToATabGroupMovesOnlyItsShownTab() async {
+        let fake = await fakeWithOneWindow()
+        await fake.newTab(40, in: 42)
+        await fake.refreshAll()
+        let smaller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height - 28)
+        await fake.perform([.setFrame(ref(42), smaller)])
+        #expect(await cgBounds(fake, 40) == smaller)
+        #expect(await cgBounds(fake, 42) == frame)
+    }
+
     @Test func aTabShownFirstInANewGroupKeepsItsFrame() async {
         let fake = await fakeWithOneWindow()
         let other = Rect(x: 300, y: 300, width: 500, height: 300)

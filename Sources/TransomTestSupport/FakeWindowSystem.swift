@@ -354,7 +354,8 @@ public actor FakeWindowSystem: WindowSystem {
     }
 
     /// Like `FrameWriter`: the write clamps to the window's hidden minimum and is read back into the tracker.
-    /// Goes to a tab group's visible member, and the group's other tabs follow it, as AppKit's do.
+    /// Goes to a tab group's visible member only: its hidden tabs keep their frames, as the live AX write left them
+    /// (G-02-10 E4), until a tab switch shows one at the group frame.
     private func write(_ rect: Rect, to ref: WindowRef) {
         guard let info = tracker.info(for: ref.identity), let target = windows[info.visibleMemberID ?? ref.windowID] else { return }
         guard target.axValid else {
@@ -363,11 +364,7 @@ public actor FakeWindowSystem: WindowSystem {
         }
         let minimum = target.hiddenMinimum ?? Size(width: 0, height: 0)
         let actual = Rect(x: rect.x, y: rect.y, width: max(rect.width, minimum.width), height: max(rect.height, minimum.height))
-        for (id, window) in windows where id == target.id
-            || (target.tabGroupID != nil && window.tabGroupID == target.tabGroupID)
-        {
-            windows[id]?.frame = actual
-        }
+        windows[target.id]?.frame = actual
         yield(tracker.applyFrameResult(FrameWriteResult(window: ref, requested: rect, actual: actual, failure: nil), at: clock))
     }
 
