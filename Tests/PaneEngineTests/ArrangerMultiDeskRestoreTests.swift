@@ -525,6 +525,20 @@ extension Harness {
         #expect(harness.arranger.world[deskA2]?.desktop.contains(excludedWindow) == true)
     }
 
+    /// WR-03, G-03-9: a dormant window whose CG entry is left on no Space (a closed window's lingering entry) is pruned.
+    @Test func aDormantWindowWhoseCGEntryIsOnNoSpaceIsPruned() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        var inventory = await harness.fake.inventory()
+        inventory.liveWindows = inventory.liveWindows?.map { entry in
+            var entry = entry
+            if entry.windowID == 3 { entry.spaces = [] }
+            return entry
+        }
+        await harness.send(.inventory(inventory))
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
+        #expect(!harness.arranger.hasDormantWindows)
+    }
+
     @Test func liveWindowsChangedAloneDoesNothing() async throws {
         var (harness, _) = try await dormantRelaunch()
         let world = harness.arranger.world

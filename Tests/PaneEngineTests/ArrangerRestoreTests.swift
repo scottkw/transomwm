@@ -87,6 +87,17 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(LayoutRestore.isAlive(b.identity, in: [entry(2)]))
     }
 
+    /// WR-03, G-03-9: a CG entry whose Spaces are known and empty is no live window (Safari keeps a closed window's
+    /// entry, offscreen and on no Space); unknown Spaces keep the G-03-8 rule.
+    @Test func aCGEntryOnNoKnownSpaceIsNotAlive() {
+        func entry(_ spaces: Set<UInt64>?) -> CGWindowEntry {
+            CGWindowEntry(windowID: 2, pid: pid, bounds: Rect(x: 10, y: 40, width: 200, height: 200), layer: 0, onScreen: false, alpha: 1, spaces: spaces)
+        }
+        #expect(!LayoutRestore.isAlive(b.identity, in: [entry([])]))
+        #expect(LayoutRestore.isAlive(b.identity, in: [entry(nil)]))
+        #expect(LayoutRestore.isAlive(b.identity, in: [entry([2])]))
+    }
+
     @Test func aRestoreWaitsForTheFirstCompleteInventoryAndThenMovesNothing() async throws {
         let source = await twoDocked()
         let saved = source.arranger.snapshot.world

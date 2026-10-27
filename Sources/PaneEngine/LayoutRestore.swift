@@ -31,9 +31,12 @@ public enum LayoutRestore {
         return (world, removed, unplaced)
     }
 
-    /// Whether a CG window at layer 0 has this identity's real window ID and pid: the window is still open, even on a
-    /// Space AX does not list. Never true for a synthetic ID.
+    /// Whether a CG window at layer 0 has this identity's real window ID and pid, on a Space when its Spaces are known:
+    /// the window is still open, even on a Space AX does not list. An entry on no Space is a closed window's lingering
+    /// one (Safari, G-03-9). Never true for a synthetic ID.
     public static func isAlive(_ identity: WindowIdentity, in live: [CGWindowEntry]) -> Bool {
-        !identity.isSyntheticWindowID && live.contains { $0.layer == 0 && $0.windowID == identity.windowID && $0.pid == identity.pid }
+        !identity.isSyntheticWindowID && live.contains {
+            $0.layer == 0 && $0.windowID == identity.windowID && $0.pid == identity.pid && $0.spaces?.isEmpty != true
+        }
     }
 }
