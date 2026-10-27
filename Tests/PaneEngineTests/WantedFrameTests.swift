@@ -92,6 +92,7 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
         await harness.settle()
         await harness.send(.gapDrag(handle, delta: 100, ended: true))
         try await drag(&harness, [-100])
+        #expect(harness.arranger.wantedFrames[textEdit.identity] == old)
         let frame = await harness.frame(textEdit)
         #expect(frame == old)
     }
@@ -108,5 +109,6 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
         let resume = await harness.send(.command(.togglePause, focused: nil))
         #expect(setFrames(resume)[w2] == nil)
         #expect(await harness.frame(w2) == moved)
+        #expect(harness.arranger.wantedFrames[w2.identity] == moved)
     }
 }

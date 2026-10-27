@@ -39,7 +39,9 @@ extension Arranger {
             let area = display(for: key)?.visibleFrame,
             let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).desktopRect
         else { return [.beep] }
-        try world.recordFloatingFrame(Snap.frame(target, window: frame, desktop: desktop, gap: gap), for: window)
+        let snapped = Snap.frame(target, window: frame, desktop: desktop, gap: gap)
+        try world.recordFloatingFrame(snapped, for: window)
+        wantedFrames[window.identity] = snapped
         return replan()
     }
 
@@ -138,6 +140,7 @@ extension Arranger {
                 if state != .present { try desk.desktop.setState(state, for: window) }
             }
         }
+        for (window, _, _) in docked { wantedFrames[window.identity] = world[key]?.desktop.frame(of: window) }
         return replan() + [.notice(.floatedAll(count: docked.count))]
     }
 

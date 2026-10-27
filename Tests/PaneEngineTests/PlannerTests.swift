@@ -59,6 +59,33 @@ private func desk(floating: [(WindowRef, Rect)] = []) throws -> Desk {
         #expect(plan.frames[h] == nil)
     }
 
+    /// G-03-11: a floater is planned at its wanted frame, clamped only when that frame overlaps a docked tile.
+    @Test func aShrunkFloaterWhoseWantedFrameIsClearOfTilesIsPlannedAtTheWantedFrame() throws {
+        let f = ref(7)
+        let wanted = Rect(x: 800, y: 100, width: 400, height: 500)
+        let plan = try Planner.plan(
+            desk: try desk(floating: [(f, Rect(x: 800, y: 300, width: 400, height: 250))]), area: area, gap: 8, mins: [:],
+            wanted: [f.identity: wanted])
+        #expect(plan.frames[f] == wanted)
+    }
+
+    @Test func aFloaterWhoseWantedFrameOverlapsATileIsPlannedAtItsClamp() throws {
+        let f = ref(7)
+        let wanted = Rect(x: 600, y: 100, width: 300, height: 200)
+        let plan = try Planner.plan(
+            desk: try desk(floating: [(f, Rect(x: 800, y: 300, width: 300, height: 200))]), area: area, gap: 8, mins: [:],
+            wanted: [f.identity: wanted])
+        let desktop = try #require(plan.desktopRect)
+        #expect(plan.frames[f] == Planner.clamp(wanted, into: desktop))
+    }
+
+    @Test func aFloaterAtItsWantedFrameClearOfTilesIsLeftAlone() throws {
+        let f = ref(7)
+        let frame = Rect(x: 800, y: 100, width: 300, height: 200)
+        let plan = try Planner.plan(desk: try desk(floating: [(f, frame)]), area: area, gap: 8, mins: [:], wanted: [f.identity: frame])
+        #expect(plan.frames[f] == nil)
+    }
+
     @Test func theDesktopMinimumIsThePerAxisMaximumOfThePresentFloatingWindows() throws {
         let wide = ref(5), tall = ref(6)
         let desk = try desk(floating: [(wide, Rect(x: 800, y: 100, width: 300, height: 200)), (tall, Rect(x: 900, y: 100, width: 300, height: 200))])

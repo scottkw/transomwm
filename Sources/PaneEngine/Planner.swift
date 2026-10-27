@@ -1,7 +1,8 @@
 import PaneModel
 
-/// Where every window of one desk should be. `frames` holds docked windows' tile rects and the clamped frames of
-/// floating windows that overlap a docked tile; floating windows clear of every tile are left where they are (D-24).
+/// Where every window of one desk should be. `frames` holds docked windows' tile rects and the floating windows that
+/// must move: each to its wanted frame, clamped into the Desktop only when that frame overlaps a docked tile. A
+/// floating window already there and clear of every tile is left where it is (D-24).
 /// While the Desktop tile is hidden, its present floating windows are in `parks` instead, with no frame.
 public struct FramePlan: Equatable, Sendable {
     public var frames: [WindowRef: Rect]
@@ -18,8 +19,11 @@ public enum Planner {
     /// (G-03-6): if that leaves docked windows unfit that would fit beside a 1x1 Desktop, the floaters with the
     /// largest minimum area are dropped from it one at a time until they do; then each dropped floater that still fits
     /// is added back, last dropped first (WR-02). A dropped floater is only clamped, and may still overlap a tile if
-    /// its app refuses to shrink (T-03-58).
-    public static func plan(desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size]) throws(LayoutError) -> FramePlan {
+    /// its app refuses to shrink (T-03-58). A floater's wanted frame is `wanted[identity]`, else its recorded frame
+    /// (G-03-11), so with no wanted frames only floaters that overlap a tile are planned.
+    public static func plan(
+        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:]
+    ) throws(LayoutError) -> FramePlan {
         let floating = desk.desktop.windows.filter { $0.state == .present }
         var sizing = floating.compactMap { window in mins[window.window].map { (window: window.window, min: $0) } }
             .sorted { lhs, rhs in
@@ -52,11 +56,18 @@ public enum Planner {
         let parks = desk.tree.isDesktopHidden == true ? floating.map(\.window) : []
         if let desktop = resolution.desktopRect {
             let tiles = Array(resolution.windowRects.values)
-            for window in floating where tiles.contains(where: window.frame.overlaps) {
-                frames[window.window] = clamp(window.frame, into: desktop)
+            for window in floating {
+                let want = wanted[window.window.identity] ?? window.frame
+                let target = tiles.contains(where: want.overlaps) ? clamp(want, into: desktop) : want
+                if tiles.contains(where: window.frame.overlaps) || !near(target, window.frame, within: 0.5) { frames[window.window] = target }
             }
         }
         return FramePlan(frames: frames, parks: parks, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
+    }
+
+    static func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
+        abs(a.x - b.x) <= tolerance && abs(a.y - b.y) <= tolerance && abs(a.width - b.width) <= tolerance
+            && abs(a.height - b.height) <= tolerance
     }
 
     /// `frame` moved (and shrunk only if it must be) so it lies inside `desktop`.

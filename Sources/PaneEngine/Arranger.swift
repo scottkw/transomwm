@@ -102,6 +102,11 @@ public struct Arranger: Sendable {
     public private(set) var displays: [DisplayInfo] = []
     /// Where each parked window goes back to (plan 08); restored from layout.json.
     public private(set) var homeFrames: [WindowIdentity: Rect] = [:]
+    /// The frame each window goes back to when it floats (G-03-11). Only user actions and the frames a window takes
+    /// on its own write it; it is kept while the window is docked, so it is the pre-dock frame (G-03-4). Undo, echoes
+    /// of Pane's own writes, parks and rescues leave it alone. Dock's centre and the overlap tests read the recorded
+    /// frame, never this one. internal(set): the command handlers in Arranger+Commands.swift write it.
+    public internal(set) var wantedFrames: [WindowIdentity: Rect] = [:]
     public var gap: Double
     /// While any reason is set, facts still change the World but no window command is sent (TILE-08).
     public private(set) var pauseReasons: Set<PauseReason> = []
@@ -377,6 +382,11 @@ public struct Arranger: Sendable {
             }
             world = candidate
             lastRequested = seeded
+            for desk in world.desks.values {
+                for floating in desk.desktop.windows where wantedFrames[floating.window.identity] == nil {
+                    wantedFrames[floating.window.identity] = floating.frame
+                }
+            }
             return (faults, reattached.unplaced.count)
         } catch {
             unattached = restore
@@ -399,6 +409,8 @@ public struct Arranger: Sendable {
             windows[id]?.frame = frame
             windows[id]?.displayUUID = display.uuid
             lastRequested[id] = nil  // a docked one goes back to its tile at the next plan
+            // A stranded wanted frame would pull the window back off screen at the next plan (T-03-72).
+            if let wanted = wantedFrames[id], Recovery.isStranded(wanted, displays: displays) { wantedFrames[id] = frame }
             parkRequested.remove(id)
             moves.append(.setFrame(info.window, frame))
         }
@@ -514,6 +526,7 @@ public struct Arranger: Sendable {
                 refusalRetried[to.window.identity] = refusalRetried.removeValue(forKey: from.identity)
                 if parkRequested.remove(from.identity) != nil { parkRequested.insert(to.window.identity) }
                 if let home = homeFrames.removeValue(forKey: from.identity) { homeFrames[to.window.identity] = home }
+                if let wanted = wantedFrames.removeValue(forKey: from.identity) { wantedFrames[to.window.identity] = wanted }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
@@ -578,6 +591,7 @@ public struct Arranger: Sendable {
         } else if info.state == .present, desk.tree.isDesktopHidden != true, !Recovery.isStranded(info.frame, displays: displays) {
             // A parked or stranded frame never replaces the desk's: the re-plan moves the window back there (CR-02).
             try world.recordFloatingFrame(info.frame, for: info.window)
+            wantedFrames[info.window.identity] = info.frame
         }
         try release(info)  // its app was excluded while it was dormant (WR-02, D-29)
         try rehome(info)
@@ -616,14 +630,16 @@ public struct Arranger: Sendable {
         refusalRetried[window.identity] = nil
         parkRequested.remove(window.identity)
         homeFrames[window.identity] = nil
+        wantedFrames[window.identity] = nil
         focusOrder.removeAll { $0 == window.identity }
     }
 
     // MARK: Moves
 
-    /// A window moved or resized. Within 2 pt of Pane's last read-back it is Pane's own write coming back: a floating
-    /// window's frame is still recorded as a fact, and nothing is answered. Otherwise a floating window's frame is
-    /// recorded (TILE-07, no undo step), clamped into the Desktop only if it now overlaps a docked tile, and a docked
+    /// A window moved or resized. Within 2 pt of Pane's last read-back (or, for a floating window, of its last request:
+    /// an app that applies it late) it is Pane's own write coming back: a floating window's frame is still recorded as
+    /// a fact, and nothing is answered. Otherwise a floating window's frame is recorded (TILE-07, no undo step) and
+    /// becomes its wanted frame, even while paused, clamped into the Desktop only if it now overlaps a docked tile, and a docked
     /// window goes back to its tile, at most once per second (T-03-13). There is no pointer state yet, so every move
     /// counts as finished; plan 10 adds drag sessions so a user dragging a docked window is never fought.
     private mutating func moved(_ window: WindowRef, to frame: Rect, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
@@ -637,14 +653,18 @@ public struct Arranger: Sendable {
         // A parked window keeps its Desktop frame: the move is the park, and showing the Desktop brings it back there.
         if floating, desk.tree.isDesktopHidden == true { return [] }
         if floating { try world.recordFloatingFrame(frame, for: window) }
+        let own = [lastApplied[window.identity], floating ? lastRequested[window.identity] : nil]
+            .contains { $0.map { Self.near($0, frame, within: 2) } ?? false }
+        if floating, !own { wantedFrames[window.identity] = frame }
         guard pauseReasons.isEmpty else { return [] }  // paused: the fact is recorded, nothing is answered (D-23)
         guard windows[window.identity]?.isExcluded != true else { return [] }  // never clamped or corrected (D-29)
-        if let applied = lastApplied[window.identity], Self.near(applied, frame, within: 2) { return [] }
+        if own { return [] }
         if floating {
             if let area = display(for: key)?.visibleFrame, let desk = world[key],
                 let clamped = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames[window]
             {
                 try world.recordFloatingFrame(clamped, for: window)
+                wantedFrames[window.identity] = clamped
             }
             return replan()
         }
@@ -717,6 +737,7 @@ public struct Arranger: Sendable {
         // D-31: a floating window can't exist while the Desktop is hidden, so a new one shows it again (no undo step).
         if world[key]?.tree.isDesktopHidden == true { try world.reflow(key, showingDesktop()) }
         try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
+        wantedFrames[info.window.identity] = info.frame
     }
 
     /// A docked window whose app was just excluded floats on its desk's Desktop at its current frame (D-29, TILE-18).
@@ -728,6 +749,7 @@ public struct Arranger: Sendable {
             try desk.desktop.add(info.window, frame: info.frame)
             if state != .present { try desk.desktop.setState(state, for: info.window) }
         }
+        wantedFrames[info.window.identity] = info.frame
     }
 
     /// The desk a window belongs on (D-25): its display's, on the shown Space unless its known Spaces exclude that
@@ -758,6 +780,8 @@ public struct Arranger: Sendable {
         if candidate[to]?.tree.isDesktopHidden == true { try candidate.reflow(to, showingDesktop()) }  // D-31
         try candidate.reflow(to) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
         world = candidate
+        // An OS fact, not a user action: a frame from the desk it left would pull it back there.
+        wantedFrames[info.window.identity] = info.frame
     }
 
     // MARK: Commands
@@ -807,11 +831,13 @@ public struct Arranger: Sendable {
             try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
             if state != .present { try desk.desktop.setState(state, for: window) }
         }
+        wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
         return replan()
     }
 
     /// Restores the previous layout of the focused window's desk (TILE-09). Windows the undo revived get their real
-    /// states first (`requery`, then `requeried`); otherwise the desk is re-planned at once.
+    /// states first (`requery`, then `requeried`); otherwise the desk is re-planned at once. Wanted frames are not part
+    /// of a desk snapshot: a window an undo floats again goes back to its kept wanted frame.
     private mutating func undo(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = targetKey(focused), let revived = try LifecycleSync.undo(key, world: &world, history: &history) else {
             return [.beep]
@@ -1224,6 +1250,7 @@ public struct Arranger: Sendable {
                 try desk.desktop.setFrame(clamped, for: window)
             }
         }
+        wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
         lastRequested[window.identity] = nil
         return replan()
     }
@@ -1244,6 +1271,7 @@ public struct Arranger: Sendable {
             try world.recordFloatingFrame(clamped, for: window)
         }
         try rehome(info)
+        if let key = deskKey(of: window) { wantedFrames[window.identity] = world[key]?.desktop.frame(of: window) }
         return replan()
     }
 
@@ -1527,7 +1555,7 @@ public struct Arranger: Sendable {
         _ key: DeskKey, area: Rect, mins: [WindowRef: Size]
     ) throws(LayoutError) -> (FramePlan, [WindowRef]) {
         guard let desk = world[key] else { throw .deskNotFound(key) }
-        var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
+        var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wantedFrames)
         var lost: [WindowRef] = []
         // Each pass takes at least one window out of the tree, so this ends.
         while !plan.unfit.isEmpty {
@@ -1547,7 +1575,8 @@ public struct Arranger: Sendable {
             }
             lost += unfit.map(\.0)
             guard let desk = world[key] else { throw .deskNotFound(key) }
-            plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
+            for (window, _) in unfit { wantedFrames[window.identity] = desk.desktop.frame(of: window) }
+            plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wantedFrames)
         }
         return (plan, lost)
     }
@@ -1568,7 +1597,6 @@ public struct Arranger: Sendable {
     }
 
     private static func near(_ a: Rect, _ b: Rect, within tolerance: Double = 0.5) -> Bool {
-        abs(a.x - b.x) <= tolerance && abs(a.y - b.y) <= tolerance && abs(a.width - b.width) <= tolerance
-            && abs(a.height - b.height) <= tolerance
+        Planner.near(a, b, within: tolerance)
     }
 }
