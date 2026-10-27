@@ -1189,7 +1189,7 @@ public struct Arranger: Sendable {
     private mutating func replan(with change: (inout Desk, inout IDSource) throws(LayoutError) -> Void, on key: DeskKey) throws(LayoutError) -> [ArrangerEffect] {
         let committed = world
         defer { world = committed }
-        try world.reflow(key, change)  // weights never make a window unfit, so replan floats nothing here
+        try world.reflow(key, change)  // weights never make a window unfit; a gap drag's lost-room floats came first
         return planShown()
     }
 
@@ -1300,17 +1300,32 @@ public struct Arranger: Sendable {
     /// desk (G-03-3 H2). A live move whose split is gone, or that fails, is dropped.
     mutating func replan() -> [ArrangerEffect] {
         guard let live = liveGap else { return planShown() }
+        // Lost-room floats are OS facts: made on the World itself before the transient live move, or every drag event
+        // would float the window again on a throwaway copy and repeat the notice (WR-01).
+        let floated = floatLostRoom()
         guard let key = shownDesk(holding: live.handle.split) else {
             liveGap = nil
-            return planShown()
+            return floated + planShown()
         }
         do throws(LayoutError) {
-            guard let change = try boundaryChange(key, [BoundaryMove(live.handle, live.delta)]) else { return planShown() }
-            return try replan(with: change, on: key)
+            guard let change = try boundaryChange(key, [BoundaryMove(live.handle, live.delta)]) else { return floated + planShown() }
+            return try floated + replan(with: change, on: key)
         } catch {
             liveGap = nil
-            return [.fault("could not drag the gap of \(live.handle.split): \(error)")] + planShown()
+            return floated + [.fault("could not drag the gap of \(live.handle.split): \(error)")] + planShown()
         }
+    }
+
+    /// Floats every docked window a shown desk has no room for, as `planShown` does, and returns its notice. A desk
+    /// that cannot be planned is skipped here: the `planShown` that follows reports it.
+    private mutating func floatLostRoom() -> [ArrangerEffect] {
+        guard !sessionPaused, pauseReasons.isEmpty else { return [] }
+        let mins = minimums
+        var lost: [WindowRef] = []
+        for display in displays where world[Self.key(display)] != nil {
+            lost += (try? planFloatingLostRoom(Self.key(display), area: display.visibleFrame, mins: mins).1) ?? []
+        }
+        return lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]
     }
 
     /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked

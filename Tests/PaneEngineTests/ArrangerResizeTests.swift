@@ -369,6 +369,21 @@ extension ArrangerResizeTests {
         #expect(resumed[a] == drag.before.frames[a] && resumed[b] == drag.before.frames[b], "the stale live move was applied: \(resumed)")
     }
 
+    /// WR-01: a window left without room mid-drag floats once, for real, with one notice; later drag events give none.
+    @Test func aWindowThatLosesItsRoomMidDragFloatsOnceWithOneNotice() throws {
+        var arranger = try arranger(row)
+        let drag = try liveDrag(&arranger)
+        let info = WindowInfo(
+            window: a, frame: try #require(drag.live[a]), state: .present, displayUUID: "main", learnedMinimum: Size(width: 1420, height: 100))
+        let lost = arranger.handle(.event(.windowChanged(info)), now: .now)
+        let notices: [Notice] = lost.compactMap { if case .notice(let notice) = $0 { notice } else { nil } }
+        #expect(notices == [.lostRoom([a])])
+        #expect(arranger.world[key]?.desktop.contains(a) == true, "the float was undone with the live move")
+        let later = arranger.handle(.gapDrag(drag.handle, delta: 60, ended: false), now: .now) + arranger.handle(.tick, now: .now + .seconds(2))
+            + arranger.handle(.gapDrag(drag.handle, delta: 60, ended: true), now: .now + .seconds(2))
+        #expect(!later.contains { if case .notice = $0 { true } else { false } }, "\(later)")
+    }
+
     @Test func aLiveMoveWhoseSplitIsGoneIsDropped() throws {
         var arranger = try arranger(corner)
         let h = try handle(arranger, 0, 1, parentOf: a)
