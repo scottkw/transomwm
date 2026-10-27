@@ -35,14 +35,20 @@ cp -R "$plat"/Library/Frameworks/{XCTest,XCUIAutomation,Testing}.framework "$pla
 rsync -a --delete -e "ssh ${ssh_opts[*]}" "$stage/" "$host:panetests/"
 
 # shellcheck disable=SC2029  # filter and extra env expand here on purpose
-ssh "${ssh_opts[@]}" "$host" "
+# -t: a Ctrl-C or a dropped session reaches the guest, where the trap still clears the fixtures and relaunches Pane.
+ssh -t "${ssh_opts[@]}" "$host" "
     cd ~/panetests && xattr -cr .
     was_running=\$(pgrep -x Pane >/dev/null && echo 1 || true)
-    [ -n \"\$was_running\" ] && osascript -e 'quit app \"Pane\"' && sleep 2
+    cleanup() { pkill -x PaneFixtureApp || true; if [ -n \"\$was_running\" ]; then open -a /Applications/Pane.app; fi; }
+    trap cleanup EXIT
+    trap 'exit 130' HUP INT TERM
+    if [ -n \"\$was_running\" ]; then
+        osascript -e 'quit app \"Pane\"'
+        for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Pane >/dev/null || break; sleep 0.5; done
+        if pgrep -x Pane >/dev/null; then echo 'vm-live-test: Pane is still running in the VM' >&2; exit 1; fi
+    fi
     rc=0
     env PANE_LIVE=1 $* ./swiftpm-testing-helper --test-bundle-path \"\$PWD/PaneMacIntegrationTests.xctest/Contents/MacOS/PaneMacIntegrationTests\" \
         --testing-library swift-testing --filter '$filter' || rc=\$?
-    pkill -x PaneFixtureApp || true
-    [ -n \"\$was_running\" ] && open -a /Applications/Pane.app
     exit \$rc
 "
