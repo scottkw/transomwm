@@ -15,21 +15,18 @@ updated: 2026-10-27T19:35:00-05:00
 
 ### 1. Accessibility grant flow: `tccutil reset Accessibility com.eightabyte.pane.debug`, then `scripts/run-debug.sh --no-build`; follow the setup window
 expected: S1 with a default 'Open System Settings'; the macOS prompt appears exactly once; after enabling 'Pane Debug' the window shows 'Pane is ready' with no click; the glyph changes from exclamationmark.triangle to rectangle.split.2x1
-result: issue
-reported: "No setup window..." (VM, Transom Debug 0.3.0 after the rename, launched with no grant: CGWindowList shows Transom Debug#69 at 511,355 sized 1x28 — a title bar with no content — plus the status item showing the warning glyph)
-severity: major
+result: pass
+note: "First run 2026-10-27: issue G-02-1 (window 1x28). Re-run after 02-18 (0378755) in the VM with a fresh Debug build and a reset grant: Set Up Transom opens 480x345 centred, readable, Open System Settings is the default button; it went straight to the Accessibility list (no separate macOS prompt seen); after the user switched Transom Debug on, the window changed to Transom is ready with no click and shrank to 480x253 keeping its top edge, and the glyph changed to the split rectangle. Seen: launched over SSH it opens behind the frontmost app (macOS does not activate an app another process launched); a normal user launch was not tried"
 
 ### 2. Stale grant form B: copy the app to the scratchpad, re-sign only the copy ad hoc, launch it and click Open System Settings; then Reset Permission
 expected: 'Already turned on?' appears after 15 s, not before; 'Resetting permission…' with every button disabled, then 'Turn Pane on again'. Form A (probe -25211) has not been reproduced locally; note if seen
-result: blocked
-blocked_by: other
-reason: "Needs a usable setup window; blocked by G-02-1 (window opens at 1x28)"
+result: pass
+note: "VM, after 02-18: an ad-hoc re-signed copy launched with the stale grant showed only Waiting for access about 10 s after Open System Settings, then the Already turned on? callout with Reset Permission by about 17 s; Reset Permission ended at Turn Transom on again. The Resetting permission state was too brief to capture in a screenshot; form A (-25211) not seen"
 
 ### 3. Close the setup window while not ready; reopen it from the menu; try Esc and Cmd-W
 expected: It never reopens by itself; 'Grant Accessibility Access…' / 'Fix Accessibility Access…' reopens it; Esc and Cmd-W close it except while resetting
-result: blocked
-blocked_by: other
-reason: "Needs a usable setup window; blocked by G-02-1 (window opens at 1x28)"
+result: pass
+note: "VM, after 02-18, not ready: Cmd-W closed the window and it did not reopen in 6 s; the menu showed Accessibility access needed and Grant Accessibility Access..., which reopened it (480x281); Esc closed it. Not checked: Esc and Cmd-W blocked while resetting (the reset is too quick to catch)"
 
 ### 4. TCC grant survives a rebuild: grant Pane Debug, rebuild with `scripts/build-debug.sh`, relaunch
 expected: No new prompt; tracking starts
@@ -101,9 +98,8 @@ note: "Claude-driven in the VM: Safari played Apple's bipbop HLS sample and ente
 
 ### 17. UI-REVIEW visual items: GroupBox callout inner padding (12 pt vs about 2x); Tracked Windows table background and alternating rows; long CFBundleName wraps at 480 pt in the setup window; the 'Looking for windows…' font; reset-failed state with duplicated 'Open System Settings' buttons and callouts B and E at once; menu header vs footer counts and missing loading state; table behaviour at 720 pt (horizontal scroll, pinned header, middle-truncated titles with tooltips)
 expected: Confirm or file each against 02-UI-REVIEW.md Top 3 fixes and needs_human_review items
-result: blocked
-blocked_by: other
-reason: "The setup-window items (GroupBox callout padding, long CFBundleName wrap at 480 pt, reset-failed duplicated buttons and callouts B and E) need a usable setup window; blocked by G-02-1. Checked in the VM by screenshot: the Tracked Windows table has alternating rows on a plain background and scrolls horizontally with a pinned header at 960 pt; the menu header (Tracking 16 windows in 5 apps) matches the footer (16 windows, 5 apps). Not seen: the transient Looking for windows state, title truncation tooltips at 720 pt"
+result: pass
+note: "VM by screenshot after 02-18: the Already turned on? callout has even padding (about 20 pt) and the window grows to fit it; Tracked Windows has alternating rows, horizontal scroll and a pinned header; the menu header count matches the footer. Not checked: a long CFBundleName wrap at 480 pt (Transom Debug is short), the reset-failed state (not reproduced), the transient Looking for windows state, truncation tooltips at 720 pt"
 
 ### 18. Prohibition review (judgment tier, non-authoritative LLM verdicts in the report): confirm no TrellisWM material and no code copied from AeroSpace, Amethyst, yabai or Loop (Loop is GPL-3.0; the SkyLight shim must be an independent reimplementation)
 expected: Developer confirms clean-room status
@@ -113,11 +109,11 @@ note: "Developer confirmed clean-room status on 2026-10-27"
 ## Summary
 
 total: 18
-passed: 11
-issues: 2
+passed: 15
+issues: 1
 pending: 0
 skipped: 0
-blocked: 5
+blocked: 2
 
 ## Gaps
 
