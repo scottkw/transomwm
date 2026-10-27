@@ -119,6 +119,8 @@ public struct Arranger: Sendable {
     private var lastCorrection: [WindowIdentity: ContinuousClock.Instant] = [:]
     private var pendingCorrections: Set<WindowIdentity> = []
     private static let correctionInterval: Duration = .seconds(1)
+    /// The tile each docked window refused and was sent once more (G-03-6); a new tile allows one new retry.
+    private var refusalRetried: [WindowIdentity: Rect] = [:]
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
     /// A saved layout that could not be re-attached: still what is saved, so this session cannot overwrite it (WR-04).
@@ -478,6 +480,7 @@ public struct Arranger: Sendable {
                 lastApplied[to.window.identity] = lastApplied.removeValue(forKey: from.identity)
                 lastCorrection[to.window.identity] = lastCorrection.removeValue(forKey: from.identity)
                 if pendingCorrections.remove(from.identity) != nil { pendingCorrections.insert(to.window.identity) }
+                refusalRetried[to.window.identity] = refusalRetried.removeValue(forKey: from.identity)
                 if parkRequested.remove(from.identity) != nil { parkRequested.insert(to.window.identity) }
                 if let home = homeFrames.removeValue(forKey: from.identity) { homeFrames[to.window.identity] = home }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
@@ -485,9 +488,9 @@ public struct Arranger: Sendable {
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
                 windows[window.identity]?.frame = frame
                 return try moved(window, to: frame, now: now)
-            case .frameApplied(let window, _, let actual):
+            case .frameApplied(let window, let requested, let actual):
                 lastApplied[window.identity] = actual
-                return []
+                return retryRefusal(window, requested: requested, actual: actual, now: now)
             case .windowStateChanged(let window, let state):
                 if state == .closed { forget(window) } else { windows[window.identity]?.state = state }
                 subject = window.identity
@@ -534,6 +537,7 @@ public struct Arranger: Sendable {
         lastApplied[window.identity] = nil
         lastCorrection[window.identity] = nil
         pendingCorrections.remove(window.identity)
+        refusalRetried[window.identity] = nil
         parkRequested.remove(window.identity)
         homeFrames[window.identity] = nil
         focusOrder.removeAll { $0 == window.identity }
@@ -575,6 +579,22 @@ public struct Arranger: Sendable {
             return nextWake.map { [.wake(at: $0)] } ?? []
         }
         return correct([window.identity], now: now)
+    }
+
+    /// A docked window that refused its current tile by more than the learner's margin gets that tile once more after
+    /// `correctionInterval`, through the correction path: a window already at its minimum is learned only from such a
+    /// repeat (G-03-6). Overflow within the margin is tolerated (MinimumSizeLearner).
+    private mutating func retryRefusal(_ window: WindowRef, requested: Rect, actual: Rect, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        let id = window.identity, margin = MinimumSizeLearner.refusalMargin
+        guard pauseReasons.isEmpty, !sessionPaused, drag?.window != window, windows[id]?.isExcluded == false,
+            let key = deskKey(of: window), display(for: key) != nil, world[key]?.tree.state(of: window) == .present,
+            let tile = lastRequested[id], Self.near(tile, requested), refusalRetried[id] != requested,
+            actual.width > requested.width + margin || actual.height > requested.height + margin
+        else { return [] }
+        refusalRetried[id] = requested
+        lastCorrection[id] = now
+        pendingCorrections.insert(id)
+        return nextWake.map { [.wake(at: $0)] } ?? []
     }
 
     /// Corrects the docked windows whose second has passed and that are still off their tile.
