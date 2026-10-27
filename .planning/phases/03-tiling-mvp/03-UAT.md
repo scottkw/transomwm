@@ -3,13 +3,13 @@ status: partial
 phase: 03-tiling-mvp
 source: 03-VERIFICATION.md human_verification (from 03-01..03-17 SUMMARYs)
 started: 2026-10-26T16:50:00-05:00
-updated: 2026-10-26T14:34:30-05:00
+updated: 2026-10-26T22:30:00-05:00
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing paused - 2 items blocked on the host's second display; gap fixes 03-18..03-22 executed, re-test pending]
+[testing paused - gap fixes 03-18..03-23 re-tested in the VM and passing; pending: green button and gap drag by hand, tests 16-17 display half on the host's second display]
 
 ## Tests
 

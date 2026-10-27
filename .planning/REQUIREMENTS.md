@@ -26,7 +26,7 @@
 - [x] **WIN-04**: Pane moves and resizes windows and learns an app's real minimum size when it refuses a size
 - [x] **WIN-05**: Dialogs, sheets, popovers and picture-in-picture windows are never docked (classifier tested against recorded AX dumps)
 - [x] **WIN-06**: Native tabs (Finder, Terminal, Safari, etc.) count as one window
-- [ ] **WIN-07**: A window that goes native fullscreen keeps its tile reserved and returns to it
+- [x] **WIN-07**: A window that goes native fullscreen keeps its tile reserved and returns to it
 - [x] **WIN-08**: User can list apps whose windows Pane never arranges
 - [x] **WIN-09**: A window is only treated as closed when two sources confirm it; lock screen, sleep and timeouts never close windows
 
@@ -169,7 +169,7 @@ Populated by the roadmapper on 2026-10-23.
 | WIN-04 | Phase 2 | Complete |
 | WIN-05 | Phase 2 | Complete |
 | WIN-06 | Phase 2 | Complete |
-| WIN-07 | Phase 3 | Pending |
+| WIN-07 | Phase 3 | Complete |
 | WIN-08 | Phase 2 | Complete |
 | WIN-09 | Phase 2 | Complete |
 | TILE-01 | Phase 3 | Complete |
