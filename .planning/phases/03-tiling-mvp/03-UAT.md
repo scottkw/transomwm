@@ -285,10 +285,25 @@ blocked: 2
   reason: "Claude-driven VM check on 0.3.8: Pane launched while locked logged 'session paused: locked or asleep' and kept layout.json; after unlock ('session resumed after a full refresh') the shown Space 1 desk lost all 3 docked tiles (Terminal 160, TextEdit 202, TextEdit 578 became floating, frames unmoved); hidden Space 41 (Notes docked, Reminders/Calculator floating) was kept"
   severity: major
   test: 17
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "A start while locked spends AXWindowSystem's only initial sweep while paused: every refresh returns at `guard !paused`, nothing is tracked, yet initialRefreshComplete becomes true. The post-unlock refreshAll is sweep(initial: false), so WindowTracker holds every window back for its 250 ms settle, and the pause ends with an empty tracker. ArrangeController feeds that inventory on .sessionPaused(false) (awaitsRestore); it passes the CR-03 guard (initialRefreshComplete, unpaused, CG list non-empty) with windows [], so reattach removes every saved window on the shown Space (hidden-Space ones are kept dormant by the isAlive filter) and the restore never retries. The settle refresh then admits them as new floaters at their unmoved frames. CR-03's test hand-blanks an inventory from a fake whose initial sweep ran unlocked."
+  artifacts:
+    - path: "Sources/PaneMac/AXWindowSystem.swift"
+      issue: "start() (131-132) sets initialRefreshComplete after a sweep that observed nothing while paused; sessionDidResume (564-569) runs a non-initial sweep and ends the pause before the withheld windows are tracked"
+    - path: "Sources/PaneEngine/WindowTracker.swift"
+      issue: "ingest (120-128) withholds first-seen windows of a non-initial sweep for settleDelay (correct on its own; it is why the tracker is empty)"
+    - path: "Sources/PaneEngine/Arranger.swift"
+      issue: "process(.inventory) restore guard (211) does not see that the tracker has not observed the session; reattach (225) then removes the untracked shown-Space windows once (pendingRestore cleared at 212)"
+    - path: "Tests/PaneEngineTests/ArrangerMultiDeskRestoreTests.swift"
+      issue: "aRestoreWaitsForAnUnlockedSessionAndANonEmptyCGList (~412) relaunches with an unlocked initial sweep and a hand-blanked inventory"
+    - path: "Sources/PaneTestSupport/FakeWindowSystem.swift"
+      issue: "inventory() hard-codes initialRefreshComplete: true (404); refreshAll marks the initial sweep done even while locked (391)"
+  missing:
+    - "Count the initial sweep only when it ran unpaused: keep initialRefreshComplete false (or make the next unpaused full sweep initial: true) until a sweep has actually observed the apps, so the post-resume refreshAll tracks every window before .sessionPaused(false)"
+    - "Mirror that in FakeWindowSystem (initialSweepDone and initialRefreshComplete only after an unlocked refreshAll)"
+    - "Headless regression: new fake locked during its first refreshAll, .restore, unlock + refreshAll, feed the inventory, assert world == saved (shown and hidden Space), then the settle refresh keeps the shown-Space windows docked (scratchpad g310/ZZG0310ProbeTests.swift is a ready base)"
+    - "Live risk: an app whose AX reads fail just after unlock stays untracked and is removed the same way; the restore should wait until windows are actually tracked, not only until unlock"
+    - "VM re-check of the locked start (needs the user to unlock)"
+  debug_session: ".planning/debug/g-03-10-locked-start.md"
 
 ## Observed, not yet a gap
 
