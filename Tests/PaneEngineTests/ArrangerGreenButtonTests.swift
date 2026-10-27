@@ -52,6 +52,37 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         #expect(clicked.arranger.history.depth(for: key) == 2)
     }
 
+    /// G-03-4: Float puts the window back at its pre-dock frame and Dock fills the tile, so each toggle moves it.
+    @Test func onTheDesksOnlyDockedWindowTheButtonFloatsItToItsPreDockFrameAndDocksItBack() async throws {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: w1))
+        let tile = try #require(await harness.frame(w1))
+        await harness.send(.greenButton(w1))
+        let floated = try #require(await harness.frame(w1))
+        #expect(floated == frame1)
+        #expect(!Planner.near(floated, tile, within: 2))
+        await harness.send(.greenButton(w1))
+        let docked = await harness.frame(w1)
+        #expect(docked == tile)
+    }
+
+    /// G-03-4: with no known pre-dock frame (a restored docked window), Float gives a centred frame 90% of the tile.
+    @Test func aFloatWithNoKnownPreDockFrameGetsASlightlySmallerCentredFrame() async throws {
+        var source = await Harness.started()
+        await source.send(.command(.dock, focused: w1))
+        let tile = try #require(await source.frame(w1))
+        var restored = Arranger()
+        _ = restored.handle(.restore(source.arranger.world, homeFrames: [:]), now: .now)
+        _ = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        let effects = restored.handle(.command(.float, focused: w1), now: .now)
+        let frame = try #require(setFrames(effects)[w1])
+        let desk = try #require(restored.world[key])
+        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
+        #expect(abs(frame.midX - desktop.midX) <= 0.5 && abs(frame.midY - desktop.midY) <= 0.5, "\(frame) not centred in \(desktop)")
+        #expect(abs(frame.width - 0.9 * tile.width) <= 0.5 && abs(frame.height - 0.9 * tile.height) <= 0.5, "\(frame) vs tile \(tile)")
+        #expect(!Planner.near(frame, tile, within: 2))
+    }
+
     @Test func excludedNeverDockOrPausedWindowsAreLeftAlone() async throws {
         var arranger = Arranger()
         let panel = info(3, frame: frame1, kind: .neverDock(.subrole))
