@@ -19,42 +19,53 @@ public struct TabResolution: Equatable, Sendable {
     }
 }
 
-/// Native AppKit tab groups (D-08, WIN-06). AX lists only the selected tab, which has an `AXTabGroup` child;
-/// the other tabs exist only in the CG list: same pid, layer 0, offscreen, bounds within `boundsTolerance`.
+/// Native AppKit tab groups (D-08, WIN-06). AX lists only the selected tab, which has an `AXTabGroup` child; the other
+/// tabs exist only in the CG list: same pid, layer 0, offscreen. On macOS 15.7.7 a hidden tab keeps the CG bounds it
+/// had when it was hidden, and AppKit gives it the group's frame only when it shows it again (G-02-10). So bounds
+/// within `boundsTolerance` of the shown tab (its slot) only find candidates and break ties, and timing links a newly
+/// shown tab to the tab shown just before it: listed at the app's last update, unlisted now, still offscreen in the CG
+/// list, AX-valid and not on a known other Space. A group keeps its own hidden members on that same evidence, whatever
+/// their bounds, and a new tab with room under its AXTabs count joins the group whose shown tab went hidden.
 ///
 /// Bounds alone cannot tell a hidden tab from a same-app twin with the same frame (a twin on another Space: AX lists
-/// only the current Space's windows). So a group takes at most `AXTabs - 1` hidden tabs, ranked: its own members,
-/// the window a brand-new tab was opened from (Cmd-T), candidates on the shown tab's Space, untracked windows, and a
+/// only the current Space's windows). So a group takes at most `AXTabs - 1` hidden tabs, ranked: its own members, the
+/// window a brand-new tab was opened from (Cmd-T), candidates on the shown tab's Space, untracked windows, and a
 /// tracked standalone window only to fill the count. With Space data (SkyLight, `spaces`) a candidate known to be on
 /// another Space is never taken; a hidden tab may report no Space, so while a window known to be on another Space
-/// shares the frame slot no candidate of unknown Space is taken either (own members and the Cmd-T window excepted).
-/// A shown tab that was not in the previous refresh's CG list is brand new (Cmd-T, New Tab): it takes the tracked
-/// standalone window listed last refresh and leads a new group with it, even while a CG list older than the AX read
-/// (a sweep's) still shows that window onscreen and lacks the tab. When no such window is in its slot, it takes one
-/// that went hidden this refresh by timing (listed at the last update, unlisted now, offscreen in the CG list,
-/// AX-valid, not on a known other Space), whatever its bounds: Terminal's first Cmd-T grows the new tab by the tab bar. A window listed in AXWindows without a tab
-/// bar of its own is never a hidden tab, and leaves any group it was in unless it is the group's leader, its shown
-/// tab, or all that is left of it. A tracked standalone window not listed at the last refresh is never taken either.
-/// A listed member with a tab bar rebinds its group unless the two are on known different Spaces (a changed AXTabs
-/// count is Cmd-T, a background tab or a closed tab); a refused member never takes its old group's tabs, and no group
-/// is ever founded under an identity a group already holds. A group whose shown tab and known members are all gone
-/// (out of the CG list or AX-invalid) passes its identity only to a former tab: a listed, unreported window that was
-/// offscreen in its slot at the last refresh. Nothing here destroys a window; CloseRule's two sources still decide that.
-/// Without Space data, the first full update after a Space switch (`spaceChanged`) makes no orphan handoff and no new
-/// fold (a tracked standalone window taken as a hidden tab, as in Merge All Windows): a window the switch shows may be
-/// another Space's twin that sat offscreen in the slot, and a window left on the other Space looks like a hidden tab.
-/// Each is decided at the next update, when that evidence is gone. A window folded earlier stays a member, and the
-/// Cmd-T opener and the room-rule join still apply: a Space switch cannot fake their evidence.
+/// shares the frame slot no candidate of unknown Space is taken either (own members and the Cmd-T window excepted). A
+/// shown tab that was not in the previous refresh's CG list is brand new (Cmd-T, New Tab): it takes the tracked
+/// standalone window listed last refresh and leads a new group with it, even while a CG list older than the AX read (a
+/// sweep's) still shows that window onscreen and lacks the tab. When no such window is in its slot, it takes one that
+/// went hidden this refresh by timing (listed at the last update, unlisted now, offscreen in the CG list, AX-valid, not
+/// on a known other Space), whatever its bounds: Terminal's first Cmd-T grows the new tab by the tab bar. A window
+/// listed in AXWindows without a tab bar of its own is never a hidden tab, and leaves any group it was in unless it is
+/// the group's leader, its shown tab, or all that is left of it. A tracked standalone window not listed at the last
+/// refresh is never taken either. A listed member with a tab bar rebinds its group unless the two are on known
+/// different Spaces (a changed AXTabs count is Cmd-T, a background tab or a closed tab); a refused member never takes
+/// its old group's tabs, and no group is ever founded under an identity a group already holds. A group whose shown tab
+/// and known members are all gone (out of the CG list or AX-invalid) passes its identity only to a former tab: a
+/// listed, unreported window that was offscreen in its slot at the last refresh. Nothing here destroys a window;
+/// CloseRule's two sources still decide that. Without Space data, the first full update after a Space switch
+/// (`spaceChanged`) makes no orphan handoff and no new fold (a tracked standalone window taken as a hidden tab, as in
+/// Merge All Windows): a window the switch shows may be another Space's twin that sat offscreen in the slot, and a
+/// window left on the other Space looks like a hidden tab. Each is decided at the next update, when that evidence is
+/// gone. A window folded earlier stays a member, and the slot's Cmd-T opener and the room-rule join still apply: a
+/// Space switch cannot fake their evidence. The timing links (opener, join) are refused: a window the switch hid looks
+/// like a tab shown just before.
 /// shortcut: without Space data (capability off or missing) Transom runs single-Space behaviour, and two same-frame tab
 /// groups of one app on two Spaces can be tracked as one window; with Space data, an unknown-Space hidden tab can stay
 /// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected). A Cmd-T in the same
-/// update as a Space switch without Space data is linked only if its opener is in the slot. A Space-switch
-/// notification that reaches main only after the update that already saw the new Space protects nothing; upgrade with
-/// the Phase 6 window-to-Space map.
+/// update as a Space switch without Space data is linked only if its opener is in the slot, and a tab switch or Cmd-T
+/// there with stale bounds can leave an extra row until the app relaunches (no merge, no destroy). Two windows of one
+/// app going hidden in one refresh are told apart by the slot, then by origin and width: a same-app window leaving the
+/// Space in the same refresh as a new tab, other than by a Space switch, can be taken as its opener or group (an
+/// identity misattributed, never a window lost). Merge All Windows across different frames is not covered by timing. A
+/// Space-switch notification that reaches main only after the update that already saw the new Space protects nothing;
+/// upgrade with the Phase 6 window-to-Space map.
 ///
 /// A group's identity is the `WindowIdentity` of its oldest already-tracked member, else of its first-seen visible
-/// member (the leader), for the group's whole life, even after the leader tab itself closes. Phases 3-4 must
-/// therefore address the window through `WindowInfo.visibleMemberID`, never through the identity's window ID.
+/// member (the leader), for the group's whole life, even after the leader tab itself closes. Phases 3-4 must therefore
+/// address the window through `WindowInfo.visibleMemberID`, never through the identity's window ID.
 public struct TabGroupTracker: Equatable, Sendable {
     public static let boundsTolerance: Double = 1.0
 
@@ -164,6 +175,15 @@ public struct TabGroupTracker: Equatable, Sendable {
                         && !Self.differ(shownSpace, list[i].spaces)
                 }
             }
+            // A new tab joins the group whose shown tab went hidden this refresh, whatever its bounds (Finder opens it at a
+            // hidden sibling's frame after a resize, G-02-10), so a group with stale bounds is never founded twice.
+            if index == nil, v.tabCount >= 2, opener == nil {
+                let joinable = list.indices.filter { i in
+                    i != refused && wentHidden(list[i].shown) && !Self.differ(space(list[i].shown), shownSpace)
+                        && !Self.differ(list[i].spaces, shownSpace) && list[i].members.count < v.tabCount
+                }
+                index = Self.nearest(joinable.map { (id: list[$0].leader.windowID, bounds: list[$0].frame) }, to: v.frame).map { joinable[$0] }
+            }
             // Orphan handoff: a group whose shown tab and every known member are gone passes to a listed window only
             // if it was an offscreen entry in the group's slot last refresh, so a former tab. A brand-new window never is.
             if index == nil, !blindSwitch, !trackedIDs.contains(v.id),
@@ -175,6 +195,12 @@ public struct TabGroupTracker: Equatable, Sendable {
                 }
             }
             let own = index.map { list[$0].members } ?? []
+            // A group keeps its own hidden tabs while they stay offscreen in the CG list and AX-valid, whatever their bounds.
+            let kept = own.filter {
+                $0 != v.id && !onScreen.contains($0) && !invalid.contains($0) && canBeHiddenTab($0) && !Self.differ(space($0), shownSpace)
+            }
+            let previousShown = index.map { list[$0].shown }
+            let slotIDs = Set(slot.map(\.windowID))
             // A hidden tab may report no Space, so it cannot be told from a hidden tab of a same-slot group on another Space.
             let ambiguous = slot.contains { Self.differ(space($0.windowID), shownSpace) }
             func confirmed(_ id: UInt32) -> Bool { !space(id).isDisjoint(with: shownSpace) }
@@ -186,13 +212,17 @@ public struct TabGroupTracker: Equatable, Sendable {
             }
             // Blind switch: no tracked standalone window becomes a new hidden tab (the opener and earlier folds excepted).
             // A refused member never takes its old group's tabs.
-            let found = candidates + [opener].compactMap { $0 }.filter { !candidates.contains($0) }
+            let found = candidates + ([opener].compactMap { $0 } + kept.sorted()).filter { !candidates.contains($0) }
             let pool = refused.map { r in found.filter { !list[r].members.contains($0) } } ?? found
             let foldable = blindSwitch
                 ? pool.filter { id in id == opener || !standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } }
                 : pool
             let eligible = foldable.filter { !ambiguous || own.contains($0) || $0 == opener || confirmed($0) }
-            let hidden = eligible.sorted { (tier($0), $0) < (tier($1), $1) }.prefix(max(v.tabCount - 1, 0))
+            // Within its own members the tab shown just before comes first, so the cap never drops it.
+            func order(_ id: UInt32) -> (Int, Int, UInt32) {
+                (tier(id), tier(id) > 0 ? 0 : id == previousShown ? 0 : slotIDs.contains(id) ? 1 : 2, id)
+            }
+            let hidden = eligible.sorted { order($0) < order($1) }.prefix(max(v.tabCount - 1, 0))
             let members = Set(hidden).union([v.id])
             if let index {
                 list[index].members = members
