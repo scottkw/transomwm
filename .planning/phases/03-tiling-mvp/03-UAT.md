@@ -1,5 +1,5 @@
 ---
-status: partial
+status: complete
 phase: 03-tiling-mvp
 source: 03-VERIFICATION.md human_verification (from 03-01..03-17 SUMMARYs)
 started: 2026-10-26T16:50:00-05:00
@@ -9,7 +9,7 @@ updated: 2026-10-27T13:55:00-05:00
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing paused - all VM gaps resolved on 0.3.10 (G-03-4, G-03-10, G-03-11 by hand); pending: tests 16-17 display half on the host's second display]
+[testing complete - tests 16 and the display half of 17 deferred by the user (2026-10-27) to the first Transom build on the host's second display]
 
 ## Tests
 
@@ -102,12 +102,14 @@ expected: Hiding the Desktop tile on one display never parks windows onto the ot
 result: blocked
 blocked_by: physical-device
 reason: "Needs the host Mac with the DELL second display; user is away from home"
+deferred: "User decision 2026-10-27: close Phase 3 without it; re-check on the first Transom build"
 
 ### 17. Second display: multi-desk relaunch
 expected: Windows docked on both displays (and two Spaces) come back to their own layouts after quitting and relaunching Pane
 result: blocked
 blocked_by: physical-device
 reason: "Needs the host Mac with the DELL second display; user is away from home"
+deferred: "User decision 2026-10-27: close Phase 3 without it; re-check on the first Transom build"
 
 ### 18. Second display: live too-big test
 expected: Live ArrangeIntegrationTests aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop passes, or its failure is shown to be the test sizing from the main display only
