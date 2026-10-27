@@ -442,3 +442,68 @@ extension ArrangerRestoreTests {
     }
 }
 
+
+/// SAFE-06, G-03-4, G-03-11: wanted frames are saved in layout.json, so a docked window's pre-dock frame survives a
+/// relaunch, without ever moving a window the user moved while Pane was not running.
+extension ArrangerRestoreTests {
+    /// a's frame before it is docked: the default Harness's window 1.
+    private static let preDock = Rect(x: 40, y: 80, width: 320, height: 232)
+
+    @Test func aDockedWindowsPreDockFrameSurvivesARelaunch() async throws {
+        var source = await Harness.started()
+        await source.send(.command(.dock, focused: a))
+        try #require(source.arranger.wantedFrames[a.identity] == Self.preDock)
+        let snapshot = source.arranger.snapshot
+        let file = LayoutFile(
+            world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames,
+            session: SessionRecord(cleanExit: false, launchedAt: Date()))
+        let decoded = try JSONDecoder().decode(LayoutFile.self, from: try JSONEncoder().encode(file))
+        #expect(decoded == file)
+
+        var restored = Arranger()
+        _ = restored.handle(.restore(decoded.world, homeFrames: decoded.homeFrameMap, wantedFrames: decoded.wantedFrameMap), now: .now)
+        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        #expect(setFrames(effects).isEmpty)
+
+        let float = setFrames(restored.handle(.command(.float, focused: a), now: .now))
+        #expect(float[a] == Self.preDock, "Float did not go back to the pre-dock frame: \(float)")
+        #expect(inside(try #require(float[a]), visibleFrame))
+    }
+
+    @Test func aFloaterMovedWhilePaneWasNotRunningKeepsWhereTheUserPutIt() async throws {
+        // Saved: [a | Desktop], b floating at its saved frame S (frame2), with a different wanted frame W.
+        var source = await Harness.started()
+        await source.send(.command(.dock, focused: a))
+        let snapshot = source.arranger.snapshot
+        let saved = try #require(snapshot.world[key]?.desktop.frame(of: b))
+        let wanted = Rect(x: 760, y: 300, width: 150, height: 120)
+        try #require(wanted != saved)
+        // While Pane is not running, the user moves b on screen, clear of a's tile.
+        let moved = Rect(x: 1000, y: 500, width: 150, height: 120)
+        await source.fake.userMove(2, to: moved)
+        await source.fake.refreshAll()
+
+        var restored = Arranger()
+        _ = restored.handle(.restore(snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: [b.identity: wanted]), now: .now)
+        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        #expect(restored.wantedFrames[b.identity] == moved)
+        #expect(setFrames(effects)[b] == nil, "b was moved: \(effects)")
+    }
+
+    @Test func aSavedWantedFrameThatIsStrandedIsNotUsed() async throws {
+        var source = await Harness.started()
+        await source.send(.command(.dock, focused: a))
+        let snapshot = source.arranger.snapshot
+        let stranded = Rect(x: 9000, y: 9000, width: 320, height: 232)
+
+        var restored = Arranger()
+        _ = restored.handle(.restore(snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: [a.identity: stranded]), now: .now)
+        _ = restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        #expect(restored.wantedFrames[a.identity] == nil)
+
+        let float = setFrames(restored.handle(.command(.float, focused: a), now: .now))
+        let frame = try #require(float[a])
+        #expect(inside(frame, visibleFrame), "\(frame) is not on screen")
+        #expect(frame != Self.preDock)
+    }
+}
