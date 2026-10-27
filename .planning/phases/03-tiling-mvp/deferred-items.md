@@ -81,6 +81,8 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
 - **(03-22) Notices are never logged.** `.notice(.lostRoom(...))` goes only to the toast, and the toast is not visible
   over VNC, so a VM run cannot show that the lost-room notice fired; it can only infer it from a docked window turning
   floating with no command. Options: log each notice at info level in ArrangeController when it is queued.
+  **Resolved (user, 2026-10-27):** `ArrangeController.post` logs each notice (`notice lostRoom(...)`) to the
+  `com.eightabyte.pane` `arrange` log before queuing it; the effect runner posts through it.
 - **(G-03-9, deferred to Phase 6 by the user, 2026-10-26) A closed Safari window stays tracked and in layout.json.**
   Safari keeps the closed window's CGWindowList (optionAll) entry for minutes: layer 0, offscreen, empty Space list.
   `CloseRule` only closes once the CG entry is gone, and 03-23's `LayoutRestore.isAlive` / `AXWindowSystem.liveWindows`

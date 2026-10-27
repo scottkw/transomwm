@@ -82,6 +82,7 @@ import os
 
     /// Queues a toast from outside the Arranger (ConflictController's N7 and N8).
     public func post(_ notice: Notice) {
+        logger.info("notice \(String(describing: notice), privacy: .public)")  // toasts don't show over VNC
         present(notices.post(notice, at: .now))
     }
 
@@ -406,7 +407,7 @@ import os
             case .info(let message):
                 logger.info("\(message, privacy: .public)")
             case .notice(let notice):
-                present(notices.post(notice, at: .now))
+                post(notice)
             case .save(.debounced):
                 saveTimer.set(.now + .milliseconds(500)) { [weak self] in self?.write() }
             case .save(.now):
