@@ -76,9 +76,8 @@ reason: "Builds on native tab tracking, which fails in test 10 (G-02-10); re-run
 
 ### 12. Frame writes and minimum-size hints on real apps via Nudge. First delete `~/Library/Application Support/Pane/min-size-hints.json`, which may hold snap hints learned under the old rule. Then try a Chrome or Electron window (AXEnhancedUserInterface toggled and restored), Terminal or iTerm2, and an app with a real minimum (Notes, Music); open a second window of that app; quit and relaunch Pane
 expected: Enhanced UI restored; no terminal cell snap learned; Min Size shows the real minimum about a second after the refused write; the second window starts from it; after relaunch the hint is back; the hints file holds only bundle IDs and sizes. Also watch for the late-applier warning: a busy Chrome/Electron window must not learn its pre-write size as a minimum
-result: issue
-reported: "Claude-driven in the VM: deleted the hints file (only the old Pane one existed), shrank Notes #234 with AX to find its real minimum (642x324), then Debug > Nudge Focused Window. Notes moved +32,+32 but kept 642x324 (the size write was refused), yet the Min Size column stayed blank and no Application Support/Transom/min-size-hints.json was written, so nothing was learned. Not run: Chrome/Electron (not installed in the VM), Terminal cell snap, second window and relaunch, which all depend on learning"
-severity: major
+result: pass
+note: "First run (2026-10-27) started Notes exactly at its minimum, which the learner deliberately ignores (WR-01 unmoved-refusal rule; debug g-02-12), so nothing was learned. Corrected step: start the window 2-32 pt above its minimum on each axis (Notes at 658x340), then one Nudge. Re-run in the VM: Notes read back 642x324, min-size-hints.json held com.apple.Notes 642x324 about 1.5 s later and Min Size showed 642 x 324; after quitting and relaunching Transom Debug the Notes row showed Min Size 642 x 324 again. Not run: Chrome/Electron (not installed), Terminal cell snap, second window. Side note: the Arranger moves a floating window back to its wanted frame on the next re-plan, undoing a Debug Nudge"
 
 ### 13. Exclusions in the real UI: Don't Arrange “TextEdit”, then Never Arrange submenu, then Nudge with TextEdit frontmost, then Nudge with System Settings frontmost
 expected: Checkmark; 'Excluded' badge; submenu lists and removes it; 'No apps excluded' when empty; 'Nudge Focused Window (app excluded)' and '(no window)' are shown disabled
@@ -114,8 +113,8 @@ note: "Developer confirmed clean-room status on 2026-10-27"
 ## Summary
 
 total: 18
-passed: 10
-issues: 3
+passed: 11
+issues: 2
 pending: 0
 skipped: 0
 blocked: 5
@@ -128,8 +127,14 @@ blocked: 5
   reason: "User reported: No setup window... (CGWindowList: the window exists at 1x28 pt, centred, content never sized it)"
   severity: major
   test: 1
-  artifacts: []
-  missing: []
+  root_cause: "SetupWindowController.makeWindow() sets hosting.sizingOptions = [.intrinsicContentSize], which never sizes an NSWindow; the window keeps the empty 1x28 frame from NSWindow(contentViewController:) and is centred at that size. Reproduced line-for-line in the VM; [.preferredContentSize] sizes it (480x353) and follows state changes"
+  artifacts:
+    - path: "Sources/TransomMac/Permission/SetupWindowController.swift"
+      issue: "line 44 sizingOptions = [.intrinsicContentSize]"
+  missing:
+    - "Use hosting.sizingOptions = [.preferredContentSize]"
+    - "Regression test: after makeWindow() and layoutIfNeeded() the content size equals hosting.view.fittingSize, is non-zero, and follows a state change"
+  debug_session: ".planning/debug/g-02-1-setup-window-1x28.md"
 
 - gap_id: G-02-10
   truth: "A native tab group is one tracked window: new tabs, tab switches and Cmd-W change its title and tab count but never add or leave extra rows"
@@ -137,8 +142,19 @@ blocked: 5
   reason: "Claude-driven VM run: Tracking 15 windows while 13 exist; Finder keeps stale #20 beside the 4-tab group (#213 shown as its id, real shown tab #214); Terminal keeps stale #206 beside the 4-tab group (#208 shown, real #219); never cleared"
   severity: major
   test: 10
-  artifacts: []
-  missing: []
+  root_cause: "TabGroupTracker.update links hidden tabs to a group only by exact CG bounds (slot/matches); on macOS 15.7.7 a hidden native tab keeps the frame it had when hidden, so after the group resizes (Terminal's tab bar adds 28 pt; a resized Finder tab) the opener/join/handoff/fold rules miss, the new tab starts its own group and nothing retires the old ID (CloseRule .noChange, leaders never folded). Reproduced live (E1 Terminal, E4 Finder); the fake gives every tab the group frame, so no test saw it"
+  artifacts:
+    - path: "Sources/TransomEngine/TabGroupTracker.swift"
+      issue: "bounds-only hidden-tab check feeds opener, join, handoff and fold; group leaders never treated as standalone"
+    - path: "Sources/TransomEngine/WindowTracker.swift"
+      issue: "fold and close decisions keep the leftover ID"
+    - path: "Sources/TransomTestSupport/FakeWindowSystem.swift"
+      issue: "tabGroup/newTab put every tab at the group's current frame"
+  missing:
+    - "Link a newly shown tab to the tab shown just before it by timing (listed last update, unlisted now, offscreen in CG, AX-valid, not on another known Space), letting a group leader qualify; keep bounds only as a tie-break and for other hidden members"
+    - "Fallback when two windows of one app hide in the same refresh: match origin and width"
+    - "Fake: new tab at its own frame, hidden tabs keep their last shown frame; scenario tests for E1 and E4"
+  debug_session: ".planning/debug/g-02-10-tab-group-stale-rows.md"
 
 - gap_id: G-02-12
   truth: "A refused frame write teaches Transom the window's real minimum: Min Size shows it about a second later and min-size-hints.json stores it per bundle"
@@ -146,5 +162,9 @@ blocked: 5
   reason: "Claude-driven VM run: Nudge on Notes at its 642x324 minimum moved it but the size was refused; Min Size stayed blank and no hints file was written"
   severity: major
   test: 12
+  note: "Closed without a code change: wrong test setup, test 12 passes with the corrected step"
+  root_cause: "Not a defect: the test started Notes exactly at its minimum; MinimumSizeLearner deliberately ignores an unmoved refusal (WR-01, CR-02). Learning, Min Size and the hints file work when the window starts 2-32 pt above its minimum (verified live, survives relaunch)"
   artifacts: []
-  missing: []
+  missing:
+    - "None in code; test 12's step was corrected in this file"
+  debug_session: ".planning/debug/g-02-12-minimum-not-learned.md"
