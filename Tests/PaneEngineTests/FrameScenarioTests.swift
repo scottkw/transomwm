@@ -154,6 +154,42 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         #expect(learned(tracker) == nil)
     }
 
+    /// Late applier (lead decision 2026-10-25, G-03-6): it catches up before the retry, so nothing is learned and the
+    /// later unmoved write after the user widened it again starts a new record.
+    @Test func aLateApplierThatCatchesUpBeforeTheRetryLearnsNothing() {
+        var tracker = tracker(at: r(800, 600))
+        write(&tracker, r(300, 600), readsBack: r(800, 600), at: t0)
+        refresh(&tracker, at: r(300, 600), time: t0 + .milliseconds(500))
+        write(&tracker, r(300, 600), readsBack: r(300, 600), at: t0 + confirmDelay)
+        refresh(&tracker, at: r(800, 600), time: t0 + .milliseconds(1500))
+        write(&tracker, r(300, 600), readsBack: r(800, 600), at: t0 + confirmDelay * 2)
+        #expect(!tracker.awaitsMinimumConfirmation(pid: pid), "no record was left")
+        refresh(&tracker, at: r(800, 600), time: t0 + confirmDelay * 3)
+        #expect(learned(tracker) == nil)
+    }
+
+    /// A refresh that sees the app caught up drops the record even when no honoured write follows.
+    @Test func aRefreshOffTheClampDropsTheUnmovedRecord() {
+        var tracker = tracker(at: r(800, 600))
+        write(&tracker, r(300, 600), readsBack: r(800, 600), at: t0)
+        refresh(&tracker, at: r(300, 600), time: t0 + .milliseconds(500))
+        refresh(&tracker, at: r(800, 600), time: t0 + .milliseconds(600))
+        write(&tracker, r(300, 600), readsBack: r(800, 600), at: t0 + .milliseconds(1500))
+        #expect(!tracker.awaitsMinimumConfirmation(pid: pid))
+        refresh(&tracker, at: r(800, 600), time: t0 + .milliseconds(2500))
+        #expect(learned(tracker) == nil)
+    }
+
+    @Test func aLateApplierThatCatchesUpBetweenTheRetryAndItsConfirmLearnsNothing() {
+        var tracker = tracker(at: r(800, 600))
+        write(&tracker, r(300, 600), readsBack: r(800, 600), at: t0)
+        write(&tracker, r(300, 600), readsBack: r(800, 600), at: t0 + confirmDelay)
+        #expect(tracker.awaitsMinimumConfirmation(pid: pid))
+        refresh(&tracker, at: r(300, 600), time: t0 + confirmDelay * 2)
+        #expect(learned(tracker) == nil)
+        #expect(!tracker.awaitsMinimumConfirmation(pid: pid), "the candidate is dropped")
+    }
+
     /// probe3c "snap": a 16-pt row snap rounds 510 up to 518, which is under the 32-pt margin.
     @Test func aGridSnapIsNeverLearnedButARealRefusalStillIs() {
         var tracker = tracker(at: r(800, 822))

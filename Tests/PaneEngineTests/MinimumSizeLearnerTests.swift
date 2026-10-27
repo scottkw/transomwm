@@ -120,6 +120,56 @@ private func refuseAndConfirm(_ learner: inout MinimumSizeLearner, requested: Re
         #expect(!learner.awaitsConfirmation(window))
     }
 
+    /// G-03-6: an unmoved refusal is only recorded; the same clamp unmoved again a second later is a candidate.
+    @Test func anUnmovedClampRepeatedASecondLaterBecomesACandidate() {
+        var learner = MinimumSizeLearner()
+        learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: t0)
+        #expect(!learner.awaitsConfirmation(window))
+        learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(801, 150), before: size(801, 150), at: later)
+        #expect(learner.confirm(window: window, observed: size(801, 150), at: later + .seconds(1)) == size(801, 0))
+    }
+
+    @Test func aGrowOrADifferentClampBetweenUnmovedWritesStartsANewRecord() {
+        var learner = MinimumSizeLearner()
+        learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: t0)
+        learner.recordWrite(window: window, requested: rect(900, 150), actual: rect(900, 150), before: size(800, 150), at: t0 + .milliseconds(500))
+        learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: later)
+        #expect(!learner.awaitsConfirmation(window), "the grow write cleared the record")
+        #expect(learner.confirm(window: window, observed: size(800, 150), at: later + .seconds(1)) == nil)
+        var other = MinimumSizeLearner()
+        other.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: t0)
+        other.recordWrite(window: window, requested: rect(300, 150), actual: rect(700, 150), before: size(700, 150), at: t0 + .milliseconds(500))
+        other.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: later)
+        #expect(!other.awaitsConfirmation(window), "a different clamp started a new record")
+        #expect(other.confirm(window: window, observed: size(800, 150), at: later + .seconds(1)) == nil)
+    }
+
+    /// The under-32 pt decision (G-03-6): Reminders' 692 pt height in a 664 pt tile is tolerated, never learned.
+    @Test func anUnmovedOverflowWithinTheMarginIsNeverLearned() {
+        var learner = MinimumSizeLearner()
+        for k in 0..<4 {
+            let at = t0 + .seconds(k)
+            learner.recordWrite(window: window, requested: rect(768, 664), actual: rect(768, 692), before: size(768, 692), at: at)
+            #expect(!learner.awaitsConfirmation(window))
+            #expect(learner.confirm(window: window, observed: size(768, 692), at: at + .seconds(1)) == nil)
+        }
+        #expect(learner.minimum(for: window) == nil)
+    }
+
+    @Test func rekeyMovesAnUnmovedRecordAndForgetDropsIt() {
+        let to = WindowIdentity(windowID: 8, pid: 100, bundleID: "com.example.app")
+        var learner = MinimumSizeLearner()
+        learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: t0)
+        learner.rekey(from: window, to: to)
+        learner.recordWrite(window: to, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: later)
+        #expect(learner.awaitsConfirmation(to))
+        var forgot = MinimumSizeLearner()
+        forgot.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: t0)
+        forgot.forget(window)
+        forgot.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: later)
+        #expect(!forgot.awaitsConfirmation(window))
+    }
+
     @Test func anAxisSmallerThanRequestedIsIgnored() {
         var learner = MinimumSizeLearner()
         // A terminal snapping to whole cells rounds down.
