@@ -21,7 +21,10 @@ import os
     private var tracker = WindowTracker()
     private var threads: [Int32: AXAppThread] = [:]
     private var started = false
+    /// An unpaused sweep observed every app (G-03-10): a sweep while paused reads nothing and does not count.
     private var initialRefreshComplete = false
+    /// Bumped on each pause, so a sweep can tell a pause began during it, even one that already ended.
+    private var pauseCount = 0
     private var displays: [DisplayInfo] = []
     private var screenObserver: (any NSObjectProtocol)?
     /// `NSWorkspace.activeSpaceDidChangeNotification`: marks every app's next full update `spaceChanged` (02-17).
@@ -128,13 +131,12 @@ import os
         )
         self.gate = gate
         gate.evaluate()
-        await sweep(initial: true)
-        initialRefreshComplete = true
+        await sweep()
         // Hints queued during the initial sweep are handled now; each only schedules a refresh (T-02-18).
         Task { [weak self, hints] in
             for await hint in hints { self?.handle(hint) }
         }
-        // Started while locked: the post-resume refresh starts the sweep.
+        // Started while locked: the post-resume refresh is the initial sweep and starts the sweep loop.
         if !paused { scheduler.startSweep() }
     }
 
@@ -142,7 +144,7 @@ import os
     public func refreshAll() async {
         displays = Displays.current()
         registry?.recheck()
-        await sweep(initial: false)
+        await sweep()
     }
 
     public func inventory() async -> WindowInventory {
@@ -287,8 +289,10 @@ import os
     }
 
     /// Refreshes every responsive app concurrently. A degraded app is never awaited here: its probe loop
-    /// runs on its own (T-02-20).
-    private func sweep(initial: Bool) async {
+    /// runs on its own (T-02-20). Initial until one runs with no pause from start to end (G-03-10).
+    private func sweep() async {
+        let initial = !initialRefreshComplete
+        let pausesBefore = pauseCount
         // One CG list per refresh: the window layer fact for the classifier (and the close rule's second source).
         // nil when it failed: each refresh then reads its own. The reads begin here, so the Space-switch generation too.
         let readGeneration = spaceSwitches.generation
@@ -313,6 +317,7 @@ import os
                 group.addTask { await self.refresh(pid: pid, initial: initial, cgWindows: cgWindows, readGeneration: readGeneration) }
             }
         }
+        if initial, !paused, pauseCount == pausesBefore { initialRefreshComplete = true }
     }
 
     /// One app's refresh, from the sweep, a hint, a launch or a settle follow-up. Dropped while the app is
@@ -543,6 +548,7 @@ import os
 
     /// Locked or asleep: report it once, drop scheduled refreshes and stop the sweep (T-02-26).
     private func sessionDidPause() {
+        pauseCount += 1
         resumeTask?.cancel()
         resumeTask = nil
         scheduler?.stop()

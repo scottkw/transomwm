@@ -96,7 +96,8 @@ public actor FakeWindowSystem: WindowSystem {
     /// Hung and slow apps go through the production responsiveness rule (D-14, D-16).
     private var responsiveness = ResponsivenessTracker()
     private var displays: [DisplayInfo] = []
-    /// Like `AXWindowSystem.start()`, the first `refreshAll()` is the initial sweep; later new windows settle first.
+    /// Like AXWindowSystem's, the first `refreshAll()` with the session active is the initial sweep; later new windows
+    /// settle first. One run while locked observes nothing and does not count (G-03-10).
     private var initialSweepDone = false
     /// The latest frame per window of a hung or degraded app, applied after its next successful refresh (D-16).
     private var heldFrames: [WindowIdentity: (ref: WindowRef, rect: Rect)] = [:]
@@ -388,7 +389,7 @@ public actor FakeWindowSystem: WindowSystem {
     public func refreshAll() {
         for pid in apps.keys.sorted() { refresh(pid: pid) }
         yield(tracker.recheckTerminated(context: context()))
-        initialSweepDone = true
+        if !(locked && lockGate) { initialSweepDone = true }
     }
 
     /// `liveWindows` are the layer-0 CG windows of the apps the fake tracks (added, not terminated), as AXWindowSystem
@@ -401,7 +402,7 @@ public actor FakeWindowSystem: WindowSystem {
             .sorted { $0.id < $1.id }
             .map { CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1, spaces: spaces?[$0.id]) }
         return WindowInventory(displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded, sessionPaused: locked && lockGate,
-                               initialRefreshComplete: true, liveWindows: live)
+                               initialRefreshComplete: initialSweepDone, liveWindows: live)
     }
 
     /// Applies `.setFrame` to tracked windows with valid rects; a hung or degraded app's latest frame per window
