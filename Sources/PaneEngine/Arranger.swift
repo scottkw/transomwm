@@ -578,6 +578,7 @@ public struct Arranger: Sendable {
             // A parked or stranded frame never replaces the desk's: the re-plan moves the window back there (CR-02).
             try world.recordFloatingFrame(info.frame, for: info.window)
         }
+        try release(info)  // its app was excluded while it was dormant (WR-02, D-29)
         try rehome(info)
     }
 

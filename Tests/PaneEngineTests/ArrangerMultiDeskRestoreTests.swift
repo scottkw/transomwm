@@ -479,6 +479,52 @@ extension Harness {
         #expect(harness.arranger.world[deskA2]?.state(of: ref(3)) == tracked.state)
     }
 
+    /// WR-02, D-29: a dormant window whose app was excluded while it was dormant floats when it wakes, so it never keeps
+    /// a docked tile that nothing writes and its neighbours can't take.
+    @Test func aDormantWindowOfAnAppExcludedMeanwhileFloatsWhenItWakes() async throws {
+        let other: Int32 = 901, otherBundle = "com.example.other"
+        let apps = [FakeApp(pid: pid, bundleID: bundleID), FakeApp(pid: other, bundleID: otherBundle)]
+        let excludedWindow = WindowRef(identity: WindowIdentity(windowID: 3, pid: other, bundleID: otherBundle))
+        /// Every app refreshed, as the sweep does: `switchDisplay` refreshes only `pid`.
+        func show(_ space: UInt64, on harness: inout Harness) async {
+            await harness.fake.showSpace(space, onDisplay: "A")
+            await harness.fake.refreshAll()
+            await harness.settle()
+            await harness.fake.advance(by: .milliseconds(300))
+            await harness.fake.refreshAll()
+            await harness.settle()
+        }
+        var first = Harness()
+        await first.fake.setDisplays([displayA])
+        await first.fake.setSpacesAvailable(true)
+        for app in apps { await first.fake.addApp(app) }
+        await first.fake.open(.standard(id: 1, pid: pid, frame: startFrame(0, on: visibleA), space: 1))
+        await first.fake.open(.standard(id: 4, pid: pid, frame: startFrame(0, on: visibleA), space: 2))
+        await first.fake.open(.standard(id: 3, pid: other, frame: startFrame(1, on: visibleA), space: 2))
+        await first.fake.showSpace(1, onDisplay: "A", notifies: false)
+        await first.fake.refreshAll()
+        _ = await first.inbox.take()
+        await first.send(.inventory(await first.fake.inventory()))
+        await first.send(.command(.dock, focused: ref(1)))
+        await show(2, on: &first)
+        await first.send(.command(.dock, focused: ref(4)))
+        await first.send(.command(.dock, focused: excludedWindow))
+        await show(1, on: &first)
+        let saved = first.arranger.world
+        try #require(saved[deskA2]?.tree.windows == [ref(4), excludedWindow])
+
+        var harness = await relaunched(with: Array(await first.fake.windows.values), displays: [displayA], showing: ["A": 1], apps: apps)
+        await harness.send(.restore(saved, homeFrames: first.arranger.snapshot.homeFrames))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        try #require(harness.arranger.world[deskA2]?.tree.windows == [ref(4), excludedWindow])
+        await harness.fake.setExcluded([otherBundle])
+        await harness.settle()
+        await show(2, on: &harness)
+        try #require(harness.arranger.windows[excludedWindow.identity]?.isExcluded == true)
+        #expect(harness.arranger.world[deskA2]?.tree.windows == [ref(4)])
+        #expect(harness.arranger.world[deskA2]?.desktop.contains(excludedWindow) == true)
+    }
+
     @Test func liveWindowsChangedAloneDoesNothing() async throws {
         var (harness, _) = try await dormantRelaunch()
         let world = harness.arranger.world
