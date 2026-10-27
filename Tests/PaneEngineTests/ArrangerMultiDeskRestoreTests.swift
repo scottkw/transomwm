@@ -412,6 +412,8 @@ extension Harness {
 
     /// CR-03, T-03-63: a restore inventory from a locked session, or with a blank CG list, can't tell a closed saved
     /// window from one on a hidden Space. The restore waits and removes nothing; the next usable inventory runs it.
+    /// The locked case is a pause that began after an unpaused initial sweep, before the first inventory was fed; a
+    /// start while locked is aStartWhileLockedKeepsEveryDeskOnceUnlocked (G-03-10).
     @Test(arguments: [true, false])
     func aRestoreWaitsForAnUnlockedSessionAndANonEmptyCGList(locked: Bool) async throws {
         let first = try await firstSession(space2: [3])
@@ -419,7 +421,7 @@ extension Harness {
         await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
         var blind = await harness.fake.inventory()
         if locked {
-            // Started while locked: the sweep refreshed nothing (AXWindowSystem).
+            // Locked after the initial sweep, before the first inventory: paused, nothing tracked, no CG list.
             blind.sessionPaused = true
             blind.windows = []
             blind.liveWindows = nil

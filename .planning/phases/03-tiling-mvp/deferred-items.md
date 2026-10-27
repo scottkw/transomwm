@@ -82,3 +82,15 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   Fix direction: when Space data is known, a layer-0 entry with an empty Space list counts as absent (CloseRule AX-invalid
   row; isAlive). First measure in the VM what minimised windows, Cmd-H-hidden apps and hidden tabs report for Spaces.
   Failing headless tests drafted in .planning/debug/g-03-9-closed-safari-lingers.md.
+
+## Found in 03-24
+
+- **(G-03-10 live risk, a non-goal of 03-24) An app whose AX reads fail at the first unpaused sweep loses its saved
+  shown-Space windows at restore.** The restore waits for an unpaused sweep, not for each app's first successful read.
+  So an app that answers -25204 or times out just after unlock (or at an ordinary launch) is untracked when `reattach`
+  runs. Its windows on the shown Space are removed, because the `live` filter keeps only hidden-Space entries dormant.
+  They come back as new floaters on its next refresh. This is unchanged by 03-24 and is the same at any launch. Also
+  accepted (plan-check W2): a hint refresh already in flight for a pid when the first unpaused sweep reaches it folds
+  that pid's initial refresh into a non-initial follow-up (AXWindowSystem `refresh`, the `inFlight` guard), so that
+  app's new windows can still be settling at `.sessionPaused(false)`. Options: keep a shown-Space saved window dormant
+  while its app's first read failed, or hold the restore until every app's first read succeeded or it was degraded.
