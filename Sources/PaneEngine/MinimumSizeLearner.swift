@@ -16,13 +16,16 @@ import PaneModel
 /// toward the request. Overflow within refusalMargin is tolerated: such a read-back is never learned, and the
 /// Arranger never re-sends the tile for it, so a docked window may overlap its tile edge by up to the margin minus
 /// the gap. An axis read back smaller than requested teaches nothing. Learned values only grow; an unlearned axis
-/// reads 0.
+/// reads 0. An axis learned from an unmoved refusal holds for that window this session only: a fixed-size window
+/// (Welcome, About) refuses unmoved too, so it never reaches `persistableMinimum`, the per-bundle hint (CR-02).
 public struct MinimumSizeLearner: Equatable, Sendable {
     public static let tolerance: Double = 2
     public static let refusalMargin: Double = 32
     public static let confirmDelay: Duration = .seconds(1)
 
     private var minimums: [WindowIdentity: Size] = [:]
+    /// The part of `minimums` that was seeded or learned from a refusal that moved the window: safe to share per bundle.
+    private var persistable: [WindowIdentity: Size] = [:]
     /// The latest write's refused read-back per axis, waiting for a refresh to confirm it.
     private var candidates: [WindowIdentity: Candidate] = [:]
 
@@ -43,6 +46,9 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         var width: Double?
         var height: Double?
         var writtenAt: ContinuousClock.Instant
+        /// Per axis, the value came from an unmoved refusal (session-only, CR-02).
+        var widthUnmoved = false
+        var heightUnmoved = false
     }
 
     public init() {}
@@ -56,24 +62,30 @@ public struct MinimumSizeLearner: Equatable, Sendable {
             unmoved[window] = nil
             return
         }
-        func refused(_ requested: Double, _ actual: Double, _ before: Double, _ previous: Double?, _ clamp: Clamp?) -> (Double?, Clamp?) {
-            guard actual > requested + Self.refusalMargin else { return (nil, nil) }
-            if actual < before - Self.tolerance { return (actual, nil) }
+        func refused(
+            _ requested: Double, _ actual: Double, _ before: Double, _ previous: Double?, _ previousUnmoved: Bool, _ clamp: Clamp?
+        ) -> (Double?, unmoved: Bool, Clamp?) {
+            guard actual > requested + Self.refusalMargin else { return (nil, false, nil) }
+            if actual < before - Self.tolerance { return (actual, false, nil) }
             // Not moved: the same clamp seen again keeps the earlier write's candidate,
-            if let previous, abs(actual - previous) <= Self.tolerance { return (previous, clamp) }
+            if let previous, abs(actual - previous) <= Self.tolerance { return (previous, previousUnmoved, clamp) }
             // or, once a late applier has had confirmDelay since the clamp was first recorded, becomes one.
-            guard let clamp, abs(actual - clamp.value) <= Self.tolerance else { return (nil, Clamp(value: actual, since: at)) }
-            return at >= clamp.since + Self.confirmDelay ? (actual, nil) : (nil, clamp)
+            guard let clamp, abs(actual - clamp.value) <= Self.tolerance else { return (nil, false, Clamp(value: actual, since: at)) }
+            return at >= clamp.since + Self.confirmDelay ? (actual, true, nil) : (nil, false, clamp)
         }
         let previous = candidates[window], record = unmoved[window]
-        let (width, widthClamp) = refused(requested.width, actual.width, before.width, previous?.width, record?.width)
-        let (height, heightClamp) = refused(requested.height, actual.height, before.height, previous?.height, record?.height)
-        candidates[window] = width == nil && height == nil ? nil : Candidate(width: width, height: height, writtenAt: at)
+        let (width, widthUnmoved, widthClamp) = refused(
+            requested.width, actual.width, before.width, previous?.width, previous?.widthUnmoved ?? false, record?.width)
+        let (height, heightUnmoved, heightClamp) = refused(
+            requested.height, actual.height, before.height, previous?.height, previous?.heightUnmoved ?? false, record?.height)
+        candidates[window] = width == nil && height == nil
+            ? nil
+            : Candidate(width: width, height: height, writtenAt: at, widthUnmoved: widthUnmoved, heightUnmoved: heightUnmoved)
         unmoved[window] = widthClamp == nil && heightClamp == nil ? nil : Unmoved(width: widthClamp, height: heightClamp)
     }
 
     /// A refresh saw the window at `observed`. Before `confirmDelay` has passed since the write, nothing happens;
-    /// from then on the candidate is decided and removed. The new minimum when it grew, else nil.
+    /// from then on the candidate is decided and removed. The new minimum when it or `persistableMinimum` grew, else nil.
     public mutating func confirm(window: WindowIdentity, observed: Size, at: ContinuousClock.Instant) -> Size? {
         // Off a recorded unmoved clamp: the app was only late, so that record goes.
         if var record = unmoved[window] {
@@ -84,14 +96,19 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         guard let candidate = candidates[window], at >= candidate.writtenAt + Self.confirmDelay else { return nil }
         candidates[window] = nil
         guard Self.isValid(observed) else { return nil }
-        let old = minimums[window] ?? Size(width: 0, height: 0)
+        let zero = Size(width: 0, height: 0)
+        let old = minimums[window] ?? zero, oldShared = persistable[window] ?? zero
         func learned(_ refused: Double?, _ observed: Double, _ old: Double) -> Double {
             guard let refused, abs(observed - refused) <= Self.tolerance else { return old }
             return max(old, refused)
         }
         let new = Size(width: learned(candidate.width, observed.width, old.width), height: learned(candidate.height, observed.height, old.height))
-        guard new != old else { return nil }
+        let shared = Size(
+            width: learned(candidate.widthUnmoved ? nil : candidate.width, observed.width, oldShared.width),
+            height: learned(candidate.heightUnmoved ? nil : candidate.height, observed.height, oldShared.height))
+        guard new != old || shared != oldShared else { return nil }
         minimums[window] = new
+        if shared != oldShared { persistable[window] = shared }
         return new
     }
 
@@ -115,25 +132,36 @@ public struct MinimumSizeLearner: Equatable, Sendable {
         guard Self.isValid(minimum) else { return }
         let old = minimums[window] ?? Size(width: 0, height: 0)
         minimums[window] = Size(width: max(old.width, minimum.width), height: max(old.height, minimum.height))
+        let shared = persistable[window] ?? Size(width: 0, height: 0)
+        persistable[window] = Size(width: max(shared.width, minimum.width), height: max(shared.height, minimum.height))
     }
 
     public func minimum(for window: WindowIdentity) -> Size? {
         minimums[window]
     }
 
+    /// The seeded part of `minimum(for:)` and what refusals that moved the window taught: the per-bundle hint (D-13).
+    public func persistableMinimum(for window: WindowIdentity) -> Size? {
+        persistable[window]
+    }
+
     /// The window's ID was corrected (WindowTracker.rekey): its minimum, candidate and unmoved record move to `to`.
     /// When `to` already has a minimum (a duplicate merged), it keeps the larger value per axis.
     public mutating func rekey(from: WindowIdentity, to: WindowIdentity) {
-        if let moved = minimums.removeValue(forKey: from) {
-            let kept = minimums[to] ?? moved
-            minimums[to] = Size(width: max(kept.width, moved.width), height: max(kept.height, moved.height))
+        func merge(_ sizes: inout [WindowIdentity: Size]) {
+            guard let moved = sizes.removeValue(forKey: from) else { return }
+            let kept = sizes[to] ?? moved
+            sizes[to] = Size(width: max(kept.width, moved.width), height: max(kept.height, moved.height))
         }
+        merge(&minimums)
+        merge(&persistable)
         if let candidate = candidates.removeValue(forKey: from), candidates[to] == nil { candidates[to] = candidate }
         if let record = unmoved.removeValue(forKey: from), unmoved[to] == nil { unmoved[to] = record }
     }
 
     public mutating func forget(_ window: WindowIdentity) {
         minimums[window] = nil
+        persistable[window] = nil
         candidates[window] = nil
         unmoved[window] = nil
     }

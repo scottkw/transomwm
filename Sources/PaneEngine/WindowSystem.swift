@@ -67,6 +67,8 @@ public struct WindowInfo: Equatable, Sendable {
     public var tabCount: Int
     public var isExcluded: Bool
     public var learnedMinimum: Size?
+    /// The part of `learnedMinimum` safe to share with the bundle and save (`MinimumSizeLearner.persistableMinimum`).
+    public var persistableMinimum: Size?
     /// The Spaces the window is on (SkyLight, D-25). Nil means no Space data; empty means the lookup reported none,
     /// as for a hidden native tab (02-14).
     public var spaces: Set<UInt64>?
@@ -77,7 +79,7 @@ public struct WindowInfo: Equatable, Sendable {
         window: WindowRef, frame: Rect, state: WindowState, displayUUID: String?,
         kind: WindowKind = .dockable, idSource: WindowIDSource = .axPrivate, visibleMemberID: UInt32? = nil,
         tabCount: Int = 1, isExcluded: Bool = false, learnedMinimum: Size? = nil, spaces: Set<UInt64>? = nil,
-        greenButton: Rect? = nil
+        greenButton: Rect? = nil, persistableMinimum: Size? = nil
     ) {
         self.window = window
         self.frame = frame
@@ -89,6 +91,7 @@ public struct WindowInfo: Equatable, Sendable {
         self.tabCount = tabCount
         self.isExcluded = isExcluded
         self.learnedMinimum = learnedMinimum
+        self.persistableMinimum = persistableMinimum
         self.spaces = spaces
         self.greenButton = greenButton
     }

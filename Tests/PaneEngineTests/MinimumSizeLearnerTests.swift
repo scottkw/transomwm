@@ -129,6 +129,20 @@ private func refuseAndConfirm(_ learner: inout MinimumSizeLearner, requested: Re
         #expect(learner.confirm(window: window, observed: size(801, 150), at: later + .seconds(1)) == size(801, 0))
     }
 
+    /// CR-02: an unmoved refusal may be a fixed-size window's size, so its minimum is never persistable; a moved one is.
+    @Test func onlyARefusalThatMovedTheWindowIsPersistable() {
+        var learner = MinimumSizeLearner()
+        learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: t0)
+        learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: later)
+        #expect(learner.confirm(window: window, observed: size(800, 150), at: later + .seconds(1)) == size(800, 0))
+        #expect(learner.persistableMinimum(for: window) == nil)
+        learner.recordWrite(window: window, requested: rect(300, 100), actual: rect(800, 400), before: size(800, 600), at: t0 + .seconds(5))
+        #expect(learner.confirm(window: window, observed: size(800, 400), at: t0 + .seconds(6)) == size(800, 400))
+        #expect(learner.persistableMinimum(for: window) == size(0, 400), "the unmoved width stays session-only")
+        learner.seed(window, minimum: size(500, 100))
+        #expect(learner.persistableMinimum(for: window) == size(500, 400), "a seed came from the store")
+    }
+
     @Test func aGrowOrADifferentClampBetweenUnmovedWritesStartsANewRecord() {
         var learner = MinimumSizeLearner()
         learner.recordWrite(window: window, requested: rect(300, 150), actual: rect(800, 150), before: size(800, 150), at: t0)

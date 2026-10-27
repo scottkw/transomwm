@@ -181,6 +181,25 @@ import Testing
         #expect(Self.minimum(tracker, 8) == Size(width: 350, height: 0))
     }
 
+    /// CR-02 (Reminders' fixed-size Welcome window, G-03-6): a minimum learned from unmoved refusals holds for that
+    /// window, but is neither shared with the next window of the bundle nor reported for saving.
+    @Test func aMinimumLearnedFromUnmovedRefusalsStaysWithItsWindow() throws {
+        var tracker = WindowTracker()
+        let fixed = Rect(x: 40, y: 80, width: 768, height: 300)
+        Self.observe(&tracker, frame: fixed)
+        let requested = Rect(x: 40, y: 80, width: 500, height: 300)
+        for k in 0..<2 {
+            let at = Self.t0 + MinimumSizeLearner.confirmDelay * k
+            _ = tracker.applyFrameResult(FrameWriteResult(window: Self.ref, requested: requested, actual: fixed, failure: nil), at: at)
+        }
+        Self.observe(&tracker, frame: fixed, at: Self.t0 + MinimumSizeLearner.confirmDelay * 2)
+        let info = try #require(tracker.info(for: Self.ref.identity))
+        #expect(info.learnedMinimum == Size(width: 768, height: 0))
+        #expect(info.persistableMinimum == nil)
+        Self.observe(&tracker, [7: fixed, 8: Self.start], at: Self.t0 + .seconds(3))
+        #expect(Self.minimum(tracker, 8) == nil)
+    }
+
     @Test func aLearnedMinimumRaisesAStoredHintPerAxisAndOnlyForItsBundle() {
         var tracker = WindowTracker()
         tracker.setBundleHints(["com.example.app": Size(width: 300, height: 200)])

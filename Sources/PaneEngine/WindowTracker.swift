@@ -160,15 +160,20 @@ public struct WindowTracker: Sendable {
             if old == nil, let hint = bundleHints[identity.bundleID] {
                 learner.seed(identity, minimum: hint)
                 info.learnedMinimum = learner.minimum(for: identity)
+                info.persistableMinimum = learner.persistableMinimum(for: identity)
             }
             // A refused write is learned once a refresh a second later still sees the window at its read-back size.
             if state == .present, let observed = snapshot.frame?.size,
                let minimum = learner.confirm(window: identity, observed: observed, at: context.now)
             {
                 info.learnedMinimum = minimum
-                // Later windows of this bundle start from it in this session too (REVIEW IN-04).
-                let hint = bundleHints[identity.bundleID] ?? minimum
-                bundleHints[identity.bundleID] = Size(width: max(hint.width, minimum.width), height: max(hint.height, minimum.height))
+                info.persistableMinimum = learner.persistableMinimum(for: identity)
+                // Later windows of this bundle start from it in this session too (REVIEW IN-04), but never from an
+                // unmoved refusal's minimum: that may be one fixed-size window's size (CR-02).
+                if let shared = info.persistableMinimum {
+                    let hint = bundleHints[identity.bundleID] ?? shared
+                    bundleHints[identity.bundleID] = Size(width: max(hint.width, shared.width), height: max(hint.height, shared.height))
+                }
             }
             windows[identity] = info
 
@@ -184,7 +189,8 @@ public struct WindowTracker: Sendable {
             if old.frame.origin != frame.origin { events.append(.windowMoved(ref, frame)) }
             if old.frame.size != frame.size { events.append(.windowResized(ref, frame)) }
             if old.window.titleHint != ref.titleHint || old.kind != kind || old.tabCount != info.tabCount
-                || old.displayUUID != info.displayUUID || old.learnedMinimum != info.learnedMinimum || old.spaces != info.spaces
+                || old.displayUUID != info.displayUUID || old.learnedMinimum != info.learnedMinimum
+                || old.persistableMinimum != info.persistableMinimum || old.spaces != info.spaces
                 || Self.buttonMoved(old.greenButton, info.greenButton)
             {
                 changed.append(identity)
@@ -251,6 +257,7 @@ public struct WindowTracker: Sendable {
         (lastReliable[from], rechecks[from], foldPending[from], pending[from]) = (nil, nil, nil, nil)
         learner.rekey(from: from, to: to)
         info.learnedMinimum = learner.minimum(for: to)
+        info.persistableMinimum = learner.persistableMinimum(for: to)
         closedIDs.remove(to)
         windows[to] = info
         return [.windowRekeyed(from: old, to: info)]

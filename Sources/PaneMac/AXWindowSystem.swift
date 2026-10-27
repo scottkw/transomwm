@@ -162,7 +162,7 @@ import os
         tracker.setBundleHints(hints)
     }
 
-    /// Called with a window's bundle ID and its new learned minimum whenever it grows.
+    /// Called with a window's bundle ID and its new persistable minimum whenever it grows (`WindowInfo.persistableMinimum`).
     public var onLearnedMinimum: ((String, Size) -> Void)?
     /// The learned minimum last reported (or seeded) per window, so each growth reaches `onLearnedMinimum` once.
     private var reportedMinimums: [WindowIdentity: Size] = [:]
@@ -432,9 +432,10 @@ import os
             switch event {
             case .windowFocused(let ref): focusedIdentities[ref.pid] = ref.identity
             // A seeded minimum came from the store, so it is never reported back.
-            case .windowCreated(let info): reportedMinimums[info.window.identity] = info.learnedMinimum
+            case .windowCreated(let info): reportedMinimums[info.window.identity] = info.persistableMinimum
             case .windowChanged(let info):
-                if let minimum = info.learnedMinimum, minimum != reportedMinimums[info.window.identity] {
+                // Only the persistable part is saved per bundle: an unmoved refusal's minimum is session-only (CR-02).
+                if let minimum = info.persistableMinimum, minimum != reportedMinimums[info.window.identity] {
                     reportedMinimums[info.window.identity] = minimum
                     onLearnedMinimum?(info.window.bundleID, minimum)
                 }
@@ -446,7 +447,7 @@ import os
                 if mainWindowIDs[pid] == from.windowID { mainWindowIDs[pid] = info.visibleMemberID ?? info.window.windowID }
                 pendingFocus.rekey(pid: pid, from: from.windowID, to: info.visibleMemberID ?? info.window.windowID)
                 reportedMinimums[from.identity] = nil
-                reportedMinimums[info.window.identity] = info.learnedMinimum
+                reportedMinimums[info.window.identity] = info.persistableMinimum
             default: break
             }
             continuation.yield(event)
