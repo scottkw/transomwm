@@ -145,7 +145,7 @@ note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the De
 
 total: 18
 passed: 11
-issues: 7
+issues: 6
 pending: 0
 skipped: 0
 blocked: 2
@@ -292,7 +292,7 @@ blocked: 2
 
 - gap_id: G-03-10
   truth: "Starting Pane while the screen is locked keeps every saved desk once the screen is unlocked (SAFE-06, CR-03)"
-  status: failed
+  status: resolved
   reason: "Claude-driven VM check on 0.3.8: Pane launched while locked logged 'session paused: locked or asleep' and kept layout.json; after unlock ('session resumed after a full refresh') the shown Space 1 desk lost all 3 docked tiles (Terminal 160, TextEdit 202, TextEdit 578 became floating, frames unmoved); hidden Space 41 (Notes docked, Reminders/Calculator floating) was kept"
   severity: major
   test: 17
@@ -315,6 +315,7 @@ blocked: 2
     - "Live risk: an app whose AX reads fail just after unlock stays untracked and is removed the same way; the restore should wait until windows are actually tracked, not only until unlock"
     - "VM re-check of the locked start (needs the user to unlock)"
   debug_session: ".planning/debug/g-03-10-locked-start.md"
+  resolved_by: "03-24; VM re-check on 0.3.9/1007 (HEAD 45117d4) 2026-10-27: locked start, user unlock, layout identical on Space 1 (Finder 2399 docked) and Space 41 (Notes 150 docked)"
 
 - gap_id: G-03-11
   truth: "Floating windows keep the size the user gave them: a Desktop tile that shrinks and grows back returns them to that size, and none ends off screen (core value: stay correctly arranged)"
