@@ -144,6 +144,15 @@ private func desk(floating: [(WindowRef, Rect)] = []) throws -> Desk {
         let below = Point(x: desktop.midX, y: desktop.midY + 10)
         #expect(Planner.dockTarget(at: below, desk: desk, area: area, resolution: plan.resolution) == .tile(.desktop, .edge(.bottom)))
     }
+
+    /// Quick 261027-gqo (user decision 2026-10-27): at the exact centre, Dock's edge fallback ties to the left edge.
+    @Test func dockTargetAtTheDesktopsExactCentreGoesLeft() throws {
+        let desk = try desk()
+        let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: [:])
+        let desktop = try #require(plan.desktopRect)
+        let centre = Point(x: desktop.midX, y: desktop.midY)
+        #expect(Planner.dockTarget(at: centre, desk: desk, area: area, resolution: plan.resolution) == .tile(.desktop, .edge(.left)))
+    }
 }
 
 /// G-03-6: on a 1024 pt display, H[Desktop, Notes] with Notes' 642 pt minimum, plus the given floaters.
