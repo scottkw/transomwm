@@ -132,6 +132,22 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
         #expect(harness.arranger.wantedFrames[w2.identity] == moved)
     }
 
+    /// WR-01 (review 03-26): Float clamps a large pre-dock frame into the Desktop the undock leaves, but keeps the
+    /// pre-dock frame as the wanted one, so the window grows back to it once the Desktop does (G-03-4, G-03-11).
+    @Test func aFloatedWindowGrowsBackToItsPreDockFrameWhenTheDesktopDoes() async throws {
+        let w1 = ref(1), w2 = ref(2)
+        let big = Rect(x: 100, y: 100, width: 1200, height: 700)
+        var harness = await Harness.started(frames: [1: big, 2: Rect(x: 730, y: 400, width: 150, height: 120)])
+        await harness.send(.command(.dock, focused: w1))
+        await harness.send(.command(.dock, focused: w2))
+        await harness.send(.command(.float, focused: w1))
+        let clamped = try #require(await harness.frame(w1))
+        #expect(clamped != big && clamped.height < big.height, "w1 was not clamped beside w2: \(clamped)")
+        #expect(harness.arranger.wantedFrames[w1.identity] == big)
+        await harness.send(.command(.float, focused: w2))
+        #expect(await harness.frame(w1) == big)
+    }
+
     /// CR-01 (review 03-26): a floater zoomed by a title-bar double-click, then un-zoomed back to where Float put it,
     /// stays un-zoomed. Pane's last write is history once the window has been anywhere else.
     @Test func aFloaterMovedBackOntoPanesLastWriteIsNotMovedAway() async throws {

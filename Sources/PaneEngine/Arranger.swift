@@ -870,15 +870,19 @@ public struct Arranger: Sendable {
         let gap = gap
         let show = showingDesktop()
         let wanted = wantedFrames[window.identity]
+        var kept: Rect?
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
             // A floating window can't exist while the Desktop is hidden (UI-SPEC Surface 2), so floating shows it.
             if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
             try desk.tree.remove(window)
             let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
-            try desk.desktop.add(window, frame: Planner.floatFrame(wanted: wanted, tile: tile, desktop: desktop, minimum: mins[window]))
+            let frame = Planner.floatFrame(wanted: wanted, tile: tile, desktop: desktop, minimum: mins[window])
+            try desk.desktop.add(window, frame: frame)
+            // Float's clamp of the pre-dock frame is Pane's: the pre-dock frame stays wanted, re-planned as the Desktop changes (WR-01).
+            kept = wanted.map { Planner.clamp($0, into: desktop) } == frame ? wanted : frame
             if state != .present { try desk.desktop.setState(state, for: window) }
         }
-        wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
+        wantedFrames[window.identity] = kept
         return replan()
     }
 
