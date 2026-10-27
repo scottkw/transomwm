@@ -687,7 +687,11 @@ public struct Arranger: Sendable {
         // A floater's frame during a boundary drag is Pane's clamp or the app's late answer to it: the mouse holds the drag.
         let own = [lastApplied[window.identity], floating ? lastRequested[window.identity] : nil]
             .contains { $0.map { Self.near($0, frame, within: 2) } ?? false } || (floating && (liveGap != nil || drag?.kind == .resize))
-        if floating, !own { wantedFrames[window.identity] = frame }
+        if floating, !own {
+            wantedFrames[window.identity] = frame
+            // Once the window has been elsewhere, Pane's last read-back is history: a move back onto it is not Pane's (CR-01).
+            lastApplied[window.identity] = nil
+        }
         // The app went below its floor after all (late, or by the user): that axis stops pinning the Desktop (T-03-71).
         if floating, var floor = floaterFloors[window.identity] {
             let t = MinimumSizeLearner.tolerance

@@ -131,4 +131,40 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
         #expect(await harness.frame(w2) == moved)
         #expect(harness.arranger.wantedFrames[w2.identity] == moved)
     }
+
+    /// CR-01 (review 03-26): a floater zoomed by a title-bar double-click, then un-zoomed back to where Float put it,
+    /// stays un-zoomed. Pane's last write is history once the window has been anywhere else.
+    @Test func aFloaterMovedBackOntoPanesLastWriteIsNotMovedAway() async throws {
+        let w1 = ref(1)
+        var harness = await Harness.started(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232)])
+        await harness.send(.command(.dock, focused: w1))
+        await harness.send(.greenButton(w1))
+        let floated = try #require(await harness.frame(w1))
+        await harness.fake.userMove(1, to: Rect(x: 0, y: 25, width: 1440, height: 875))
+        await harness.settle()
+        await harness.fake.userMove(1, to: floated)
+        await harness.settle()
+        let focus = await harness.send(.event(.windowFocused(w1)))
+        #expect(setFrames(focus)[w1] == nil)
+        #expect(await harness.frame(w1) == floated)
+        #expect(harness.arranger.wantedFrames[w1.identity] == floated)
+    }
+
+    /// CR-01, Window > Center: with no pre-dock frame Float centres the window; the user moves it, then centres it again.
+    @Test func aFloaterCentredAgainByTheUserStaysCentred() async throws {
+        let w1 = ref(1)
+        var harness = await Harness.started(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232)])
+        await harness.send(.command(.dock, focused: w1))
+        harness.arranger.wantedFrames[w1.identity] = nil  // a window with no pre-dock frame, e.g. one restored docked
+        await harness.send(.command(.float, focused: w1))
+        let centred = try #require(await harness.frame(w1))
+        #expect(abs(centred.midX - 720) < 1, "Float did not centre the window: \(centred)")
+        await harness.fake.userMove(1, to: Rect(x: 100, y: 100, width: 400, height: 300))
+        await harness.settle()
+        await harness.fake.userMove(1, to: centred)
+        await harness.settle()
+        let focus = await harness.send(.event(.windowFocused(w1)))
+        #expect(setFrames(focus)[w1] == nil)
+        #expect(await harness.frame(w1) == centred)
+    }
 }
