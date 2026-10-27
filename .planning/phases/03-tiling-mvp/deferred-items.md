@@ -107,3 +107,7 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   session-only and counted by boundary drags only.
 - **(03-25) Float All keeps its tile-rect placement (TILE-16).** The 2026-10-27 decision names Float and the green
   button only. Option: Float All could use each window's pre-dock frame too.
+
+## Polish (user, 2026-10-27)
+
+- Green button: after Pane takes a plain click, macOS 15's Move & Resize hover popup (ThemeWidgetControlViewService, layer 101) stays open until the pointer leaves, because the swallowed press never reaches it. Close or dismiss it after a taken press. User asked to log it as polish (G-03-4 hand check on 0.3.10).
