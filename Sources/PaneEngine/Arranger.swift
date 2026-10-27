@@ -119,7 +119,7 @@ public struct Arranger: Sendable {
     private var lastCorrection: [WindowIdentity: ContinuousClock.Instant] = [:]
     private var pendingCorrections: Set<WindowIdentity> = []
     private static let correctionInterval: Duration = .seconds(1)
-    /// The tile each docked window refused and was sent once more (G-03-6); a new tile allows one new retry.
+    /// The tile each docked window refused and was sent once more (G-03-6); a new tile, or docking again, allows one new retry.
     private var refusalRetried: [WindowIdentity: Rect] = [:]
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
@@ -1390,6 +1390,10 @@ public struct Arranger: Sendable {
             (desk.tree.windows + desk.desktop.windows.map(\.window)).filter { desk.state(of: $0) == .present }.map(\.identity)
         })
         lastRequested = lastRequested.filter { planned.contains($0.key) || hidden.contains($0.key) }
+        // A window that left the tree gets its retry again when it is docked back into the same tile (WR-03).
+        refusalRetried = refusalRetried.filter { id, _ in
+            windows[id].map { info in world.desks.values.contains { $0.tree.state(of: info.window) != nil } } ?? false
+        }
         parkRequested = parkRequested.filter { parkedNow.contains($0) || hidden.contains($0) }
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])

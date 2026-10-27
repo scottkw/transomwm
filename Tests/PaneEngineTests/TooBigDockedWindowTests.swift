@@ -130,6 +130,21 @@ private func hasWake(_ effects: [ArrangerEffect]) -> Bool {
         #expect(setFrames(await harness.send(.tick))[a] == newTile)
     }
 
+    /// WR-03: a window floated and docked again into the same tile gets that tile's retry again.
+    @Test func aWindowDockedAgainIntoTheSameTileIsRetriedAgain() async throws {
+        var (harness, tile) = try await dockedAlone()
+        #expect(hasWake(await refuse(&harness, a, tile)))
+        await advance(&harness, by: .seconds(1))
+        _ = await harness.send(.tick)
+        #expect(!hasWake(await refuse(&harness, a, tile)))
+        await harness.send(.command(.float, focused: a))
+        // The user moves it a little while it floats, then docks it back on the same side.
+        await harness.send(.event(.windowMoved(a, Rect(x: tile.x + 20, y: tile.y + 20, width: tile.width, height: tile.height - 40))))
+        let again = try #require(setFrames(await harness.send(.command(.dock, focused: a)))[a])
+        #expect(again == tile)
+        #expect(hasWake(await refuse(&harness, a, tile)))
+    }
+
     @Test func aFloatingWindowGetsNoRetry() async throws {
         var (harness, tile) = try await dockedAlone()
         await harness.send(.command(.float, focused: a))
