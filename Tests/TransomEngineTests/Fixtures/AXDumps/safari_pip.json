@@ -12,7 +12,7 @@
   },
   "case" : "safari_pip",
   "expected" : {
-    "confirmedBy" : "executor-proposed",
+    "confirmedBy" : "developer",
     "kind" : "neverDock"
   },
   "schemaVersion" : 1,

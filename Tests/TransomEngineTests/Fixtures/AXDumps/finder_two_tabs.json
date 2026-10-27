@@ -12,7 +12,7 @@
   },
   "case" : "finder_two_tabs",
   "expected" : {
-    "confirmedBy" : "executor-proposed",
+    "confirmedBy" : "developer",
     "kind" : "dockable"
   },
   "schemaVersion" : 1,

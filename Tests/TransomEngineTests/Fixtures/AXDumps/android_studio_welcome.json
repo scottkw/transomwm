@@ -12,7 +12,7 @@
   },
   "case" : "android_studio_welcome",
   "expected" : {
-    "confirmedBy" : "executor-proposed",
+    "confirmedBy" : "developer",
     "kind" : "dockable"
   },
   "schemaVersion" : 1,

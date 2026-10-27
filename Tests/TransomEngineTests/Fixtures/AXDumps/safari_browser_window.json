@@ -12,7 +12,7 @@
   },
   "case" : "safari_browser_window",
   "expected" : {
-    "confirmedBy" : "executor-proposed",
+    "confirmedBy" : "developer",
     "kind" : "dockable"
   },
   "schemaVersion" : 1,

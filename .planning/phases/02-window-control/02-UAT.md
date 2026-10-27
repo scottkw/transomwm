@@ -1,5 +1,5 @@
 ---
-status: testing
+status: partial
 phase: 02-window-control
 source: [02-VERIFICATION.md]
 started: 2026-10-25T21:20:07Z
@@ -7,12 +7,9 @@ updated: 2026-10-27T19:35:00-05:00
 ---
 
 ## Current Test
+<!-- OVERWRITE each test - shows where we are -->
 
-number: 1
-name: Accessibility grant flow: `tccutil reset Accessibility com.eightabyte.pane.debug`, then `scripts/run-debug.sh --no-build`; follow the setup window
-expected: |
-  S1 with a default 'Open System Settings'; the macOS prompt appears exactly once; after enabling 'Pane Debug' the window shows 'Pane is ready' with no click; the glyph changes from exclamationmark.triangle to rectangle.split.2x1
-awaiting: user response
+[testing paused - 5 blocked: 2, 3, 17 on G-02-1; 11 on G-02-10; 9 on the second display. Gaps G-02-1, G-02-10, G-02-12 to diagnose]
 
 ## Tests
 
@@ -46,7 +43,8 @@ note: "Claude-driven in the VM via screenshots: split-rectangle glyph visible in
 
 ### 6. Lock and sleep: with 10 windows in several apps and Tracked Windows open, lock (Ctrl-Cmd-Q) for 30 s and unlock; sleep for a minute from the Apple menu and wake; optionally switch users
 expected: All 10 rows remain after each cycle; footer briefly shows 'Refreshing after wake · '; nothing moved or forgotten
-result: [pending]
+result: pass
+note: "VM, Claude-driven lock (Ctrl-Cmd-Q at 20:13:28) and user unlock after about 60 s: log shows session paused: locked or asleep, then session resumed after a full refresh 6 s after unlock; the menu still reads Tracking 16 windows with the same 16 on-screen windows. Not run: sleep and wake (a sleeping VM may not wake over SSH) and switch users"
 
 ### 7. Real kill -STOP: open TextEdit and Safari windows, `kill -STOP <TextEdit pid>`, open a new Safari window and open Pane's menu; then `kill -CONT`
 expected: Menu opens instantly; the new Safari window is counted within a second; '1 app not responding' appears within about 7 s; after CONT it clears within about 4 s and TextEdit's windows were never dropped
@@ -94,7 +92,8 @@ note: "Claude-driven in the VM: about 30 min of use across Finder, Safari, Termi
 
 ### 15. Corpus review before pushing publicly (SECURITY T-02-08): read every JSON in Tests/PaneEngineTests/Fixtures/AXDumps (`git log -p -- Tests/PaneEngineTests/Fixtures/AXDumps`), especially libreoffice_start_center and android_studio_welcome; then set confirmedBy to 'developer'
 expected: No title, path, URL or account name; every label matches the window. All 11 cases currently read confirmedBy 'executor-proposed'
-result: [pending]
+result: pass
+note: "Claude scanned all 12 fixtures (11 old plus safari_pip): no free-text strings at all (titles redacted), no path, URL or account name, every label matches its window; the developer confirmed on 2026-10-27 and all 12 now read confirmedBy developer; ClassifierCorpusTests pass"
 
 ### 16. Picture-in-picture capture (backstop 02-03): play a video in Safari or Chrome, enter PiP, `swift run pane-dump --app com.apple.Safari --list`, then capture with `--label neverDock --family native --case safari_pip`; run `swift test --filter ClassifierCorpusTests`
 expected: The PiP case is labelled neverDock and classifies neverDock
@@ -109,14 +108,15 @@ reason: "The setup-window items (GroupBox callout padding, long CFBundleName wra
 
 ### 18. Prohibition review (judgment tier, non-authoritative LLM verdicts in the report): confirm no TrellisWM material and no code copied from AeroSpace, Amethyst, yabai or Loop (Loop is GPL-3.0; the SkyLight shim must be an independent reimplementation)
 expected: Developer confirms clean-room status
-result: [pending]
+result: pass
+note: "Developer confirmed clean-room status on 2026-10-27"
 
 ## Summary
 
 total: 18
-passed: 7
+passed: 10
 issues: 3
-pending: 3
+pending: 0
 skipped: 0
 blocked: 5
 
