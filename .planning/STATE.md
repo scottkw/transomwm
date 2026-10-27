@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Window Control
-status: executing
-stopped_at: Completed 02-18-PLAN.md
-last_updated: "2026-10-27T20:59:03.225Z"
+status: verifying
+stopped_at: Completed 02-19-PLAN.md
+last_updated: "2026-10-27T21:12:16.461Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 3 complete, transitioned to Phase 2
-state_head: 03787554a7bf3a18f98a58a8d74e8623bbb5eb77
+state_head: 062d6057fb867c95af4866d9d74cd85a3bcbf0be
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 51
-  completed_plans: 50
+  completed_plans: 51
   percent: 22
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 Phase: 2 — Window Control
 Plan: 19 of 19
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-27 — Phase 3 complete, transitioned to Phase 2
 
 Progress: [██░░░░░░░░] 22%
@@ -100,6 +100,7 @@ Progress: [██░░░░░░░░] 22%
 | Phase 03 P25 | 30min | 3 tasks | 7 files |
 | Phase 03 P26 | 5 min | 2 tasks | 7 files |
 | Phase 02 P18 | 6min | 1 tasks | 3 files |
+| Phase 2 P19 | 8 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -242,6 +243,8 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-26: wanted frames are an optional layout.json key; schemaVersion stays 1, older files load with none
 - [Phase 03]: 03-26: at re-attach a floater moved >2 pt while Pane was off keeps its real frame; a stranded saved wanted frame is dropped
 - [Phase 02]: 02-18: the setup window uses sizingOptions [.preferredContentSize] and one setContentSize(fittingSize) before centring; preferredContentSize alone sizes the window only after a run-loop turn on macOS 27, too late for the centring code
+- [Phase 2]: 02-19: on macOS 15.7.7 a hidden tab keeps its CG bounds from when it was hidden (G-02-10), so TabGroupTracker links a shown tab to the tab shown just before it by timing (wentHidden), keeps own members whatever their bounds, and joins a new tab to the group whose shown tab went hidden; bounds only find candidates and break ties
+- [Phase 2]: 02-19: the timing opener and timing join are refused after a blind Space switch (spaceChanged without Space data), like the 02-17 orphan handoff and folds
 
 ### Quick Tasks Completed
 
@@ -278,8 +281,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T20:58:53.872Z
-Stopped at: Completed 02-18-PLAN.md
+Last session: 2026-10-27T21:12:16.233Z
+Stopped at: Completed 02-19-PLAN.md
 Resume file: None
 
 ## Deferred Verification
