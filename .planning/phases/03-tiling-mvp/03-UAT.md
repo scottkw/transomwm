@@ -3,13 +3,13 @@ status: partial
 phase: 03-tiling-mvp
 source: 03-VERIFICATION.md human_verification (from 03-01..03-17 SUMMARYs)
 started: 2026-10-26T16:50:00-05:00
-updated: 2026-10-26T22:30:00-05:00
+updated: 2026-10-27T13:55:00-05:00
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing paused - gap fixes 03-18..03-23 re-tested in the VM and passing; pending: green button and gap drag by hand, tests 16-17 display half on the host's second display]
+[testing paused - 03-23 review fixes VM-checked on 0.3.8: 4 pass, locked start fails (G-03-10); pending: G-03-10 fix, green button and gap drag by hand, tests 16-17 display half on the host's second display]
 
 ## Tests
 
@@ -128,11 +128,20 @@ note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the De
 - New: a closed Safari window (2174) stays in layout.json as present; Safari keeps its CG entry (no Space) after close, and 03-23's dormant rule then keeps it across relaunch (G-03-9)
 - Evidence: scratchpad uat-rerun.md (session-local)
 
+## VM checks after the 03-23 review fixes (Pane 0.3.8 / 1006, HEAD 9c6727d, Tart VM, Claude-driven, 2026-10-27)
+
+- Minimised (Notes) and Cmd-H hidden (Calculator) windows on hidden Space 41: SkyLight reports Space 41 for both from Space 1 (also Space 1 on the shown Space); clean relaunch keeps both desks; Notes returns to its tile on unminimise: pass (WR-03 risk does not occur for these)
+- Docked Safari closed with Cmd-W (twice, incl. a Cmd-N window): tile freed at once, still free after relaunch: pass; Safari's no-Space ghost entry did not recur, so that path is headless-only
+- Finder tab group, newer tab (2399) selected over docked 731: hidden tab 731 reports no Space; after relaunch the group appears once, floating (CR-01); the tile is lost as before 03-23: pass as designed
+- Parked floater (Reminders, Space 41 Desktop hidden by Ctrl-Opt-Cmd-H), kill -9 from Space 1, relaunch: back on screen at its home frame, Desktop shown: pass (CR-02)
+- Locked start (Ctrl-Cmd-Q, launch, unlock): paused while locked and layout.json untouched; after unlock hidden Space 41 kept its desk but shown Space 1 lost every tile (Terminal, TextEdit 202/578 now floating, frames unmoved): fail (G-03-10)
+- Calculator on Space 41 was not parked when its Desktop was hidden (observed, not yet a gap)
+
 ## Summary
 
 total: 18
 passed: 11
-issues: 5
+issues: 6
 pending: 0
 skipped: 0
 blocked: 2
@@ -270,7 +279,19 @@ blocked: 2
     - "Treat a layer-0 entry with a known-empty Space list as absent; measure minimised/hidden/tab windows' Spaces first"
   debug_session: ".planning/debug/g-03-9-closed-safari-lingers.md"
 
+- gap_id: G-03-10
+  truth: "Starting Pane while the screen is locked keeps every saved desk once the screen is unlocked (SAFE-06, CR-03)"
+  status: failed
+  reason: "Claude-driven VM check on 0.3.8: Pane launched while locked logged 'session paused: locked or asleep' and kept layout.json; after unlock ('session resumed after a full refresh') the shown Space 1 desk lost all 3 docked tiles (Terminal 160, TextEdit 202, TextEdit 578 became floating, frames unmoved); hidden Space 41 (Notes docked, Reminders/Calculator floating) was kept"
+  severity: major
+  test: 17
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+
 ## Observed, not yet a gap
 
 - (promoted to G-03-8) Space 2 desk emptied on relaunch.
+- Calculator (Space 41) stays on screen when its desk's Desktop is hidden, while Reminders is parked.
 - After a Dock restart, Pane stopped correcting one window's frame changes (seen by the G-03-4 debugger, possibly caused by the restart).
