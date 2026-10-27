@@ -300,6 +300,22 @@ extension ArrangerDragTests {
         #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
     }
 
+    /// WR-02 (review 03-26): undoing a ⇧-undock docks the window again with its pre-dock frame, where Float sends it.
+    @Test func undoingAShiftUndockGivesBackThePreDockFrame() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
+        let point = Point(x: desktop.midX, y: desktop.minY + 40)
+        _ = await drag(&harness, b, from: rb, to: point, [.shift])
+        harness.now += .milliseconds(150)
+        await harness.send(.tick)
+        await harness.send(pointer(.up, point.x, point.y, [.shift]))
+        #expect(harness.arranger.world[mainKey]?.desktop.frame(of: b) == released(rb, at: point))
+        await harness.send(.command(.undo, focused: b))
+        #expect(harness.arranger.world[mainKey]?.tree.state(of: b) != nil, "the undo did not dock b again")
+        await harness.send(.command(.float, focused: b))
+        #expect(await harness.frame(b) == frameB)
+    }
+
     @Test func shiftWithTheDesktopHiddenShowsTheLabelledSnapBackAndAnnounces() async throws {
         var (harness, _) = try await docked()
         await harness.send(.command(.toggleDesktop, focused: a))

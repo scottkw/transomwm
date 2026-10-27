@@ -140,7 +140,10 @@ extension Arranger {
                 if state != .present { try desk.desktop.setState(state, for: window) }
             }
         }
-        for (window, _, _) in docked { wantedFrames[window.identity] = world[key]?.desktop.frame(of: window) }
+        for (window, _, _) in docked {
+            undockedWanted[window.identity] = wantedFrames[window.identity]
+            wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
+        }
         return replan() + [.notice(.floatedAll(count: docked.count))]
     }
 

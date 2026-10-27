@@ -103,10 +103,15 @@ public struct Arranger: Sendable {
     /// Where each parked window goes back to (plan 08); restored from layout.json.
     public private(set) var homeFrames: [WindowIdentity: Rect] = [:]
     /// The frame each window goes back to when it floats (G-03-11). Only user actions and the frames a window takes
-    /// on its own write it; it is kept while the window is docked, so it is the pre-dock frame (G-03-4). Undo, echoes
-    /// of Pane's own writes, parks and rescues leave it alone. Dock's centre and the overlap tests read the recorded
-    /// frame, never this one. internal(set): the command handlers in Arranger+Commands.swift write it.
+    /// on its own write it; it is kept while the window is docked, so it is the pre-dock frame (G-03-4). Undo (except
+    /// to give back `undockedWanted`), echoes of Pane's own writes, parks and rescues leave it alone. Dock's centre and
+    /// the overlap tests read the recorded frame, never this one. internal(set): the command handlers in Arranger+Commands.swift write it.
     public internal(set) var wantedFrames: [WindowIdentity: Rect] = [:]
+    /// The wanted frame Float All or a ⇧-undock replaced, per window. Wanted frames are not in the desk snapshots, so an
+    /// Undo that docks the window again gives this one back, and Float still goes to the pre-dock frame (WR-02).
+    /// shortcut: one level per window, so an Undo across two undocks of one window gives back the later one's; snapshot
+    /// wanted frames per undo step if that matters.
+    var undockedWanted: [WindowIdentity: Rect] = [:]
     /// The size each floating window's app refused to go below, per axis, from its read-backs (G-03-11 B). Session-only,
     /// never learned or saved; only boundary drags count it, so a drag stops at the floater's real size.
     private var floaterFloors: [WindowIdentity: Size] = [:]
@@ -536,6 +541,7 @@ public struct Arranger: Sendable {
                 if parkRequested.remove(from.identity) != nil { parkRequested.insert(to.window.identity) }
                 if let home = homeFrames.removeValue(forKey: from.identity) { homeFrames[to.window.identity] = home }
                 if let wanted = wantedFrames.removeValue(forKey: from.identity) { wantedFrames[to.window.identity] = wanted }
+                if let wanted = undockedWanted.removeValue(forKey: from.identity) { undockedWanted[to.window.identity] = wanted }
                 if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 subject = to.window.identity
@@ -661,6 +667,7 @@ public struct Arranger: Sendable {
         parkRequested.remove(window.identity)
         homeFrames[window.identity] = nil
         wantedFrames[window.identity] = nil
+        undockedWanted[window.identity] = nil
         floaterFloors[window.identity] = nil
         focusOrder.removeAll { $0 == window.identity }
     }
@@ -888,10 +895,14 @@ public struct Arranger: Sendable {
 
     /// Restores the previous layout of the focused window's desk (TILE-09). Windows the undo revived get their real
     /// states first (`requery`, then `requeried`); otherwise the desk is re-planned at once. Wanted frames are not part
-    /// of a desk snapshot: a window an undo floats again goes back to its kept wanted frame.
+    /// of a desk snapshot: a window an undo floats again goes back to its kept wanted frame, and one it docks again gets
+    /// back the wanted frame Float All or a ⇧-undock replaced (`undockedWanted`, WR-02).
     private mutating func undo(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = targetKey(focused), let revived = try LifecycleSync.undo(key, world: &world, history: &history) else {
             return [.beep]
+        }
+        for window in world[key]?.tree.windows ?? [] {
+            if let wanted = undockedWanted.removeValue(forKey: window.identity) { wantedFrames[window.identity] = wanted }
         }
         // The snapshot predates OS facts with no undo step (a window admitted, rehomed or excluded since): apply them again.
         var faults: [ArrangerEffect] = []
@@ -1301,6 +1312,7 @@ public struct Arranger: Sendable {
                 try desk.desktop.setFrame(clamped, for: window)
             }
         }
+        undockedWanted[window.identity] = wantedFrames[window.identity]
         wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
         lastRequested[window.identity] = nil
         return replan()

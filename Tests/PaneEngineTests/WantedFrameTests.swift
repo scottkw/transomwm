@@ -148,6 +148,20 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
         #expect(await harness.frame(w1) == big)
     }
 
+    /// WR-02 (review 03-26): Float All lands at the tile rect (TILE-16); undoing it gives back the pre-dock frame.
+    @Test func undoingFloatAllGivesBackThePreDockFrames() async throws {
+        let w1 = ref(1), frame1 = Rect(x: 40, y: 80, width: 320, height: 232)
+        var harness = await Harness.started(frames: [1: frame1, 2: Rect(x: 730, y: 400, width: 150, height: 120)])
+        let dock = await harness.send(.command(.dock, focused: w1))
+        let tile = try #require(setFrames(dock)[w1])
+        await harness.send(.command(.floatAll, focused: w1))
+        #expect(await harness.frame(w1) == tile)
+        await harness.send(.command(.undo, focused: w1))
+        #expect(harness.arranger.world[key]?.tree.state(of: w1) != nil, "the undo did not dock w1 again")
+        await harness.send(.command(.float, focused: w1))
+        #expect(await harness.frame(w1) == frame1)
+    }
+
     /// CR-01 (review 03-26): a floater zoomed by a title-bar double-click, then un-zoomed back to where Float put it,
     /// stays un-zoomed. Pane's last write is history once the window has been anywhere else.
     @Test func aFloaterMovedBackOntoPanesLastWriteIsNotMovedAway() async throws {
