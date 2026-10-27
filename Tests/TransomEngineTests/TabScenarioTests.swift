@@ -256,6 +256,42 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events).isEmpty)
     }
 
+    /// 02-19 known limit: W (5), a same-frame window of the same app, leaves the Space (moved, not a Space switch) in
+    /// the same refresh as Cmd-T in O (10) opens 40 taller. Without Space data both went hidden at the same origin and
+    /// width, so the lowest ID, W, is taken as the opener and leads the group: an identity misattributed. When W
+    /// returns as a single window it rebinds its group alone (the leader stays a member), and 40 founds a fresh
+    /// identity. Nothing is destroyed. With Space data W is known to be on Space 2 and O is the opener.
+    @Test(arguments: modes)
+    func knownLimitAWindowLeavingTheSpaceWithACmdTCanBeTakenAsItsOpener(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        await fake.open(.standard(id: 5, pid: pid, frame: frame, space: 1))
+        await fake.open(.standard(id: 10, pid: pid, frame: frame, space: 1))
+        await fake.showSpace(1)
+        await refresh(fake)
+        let taller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height + 28)
+        await fake.newTab(40, in: 10, frame: taller)
+        await fake.update(5) {
+            $0.space = 2
+            $0.listedInAX = false
+            $0.onScreen = false
+        }
+        for _ in 0..<3 { await refresh(fake, advancing: true) }
+        var rows = await summary(fake)
+        #expect(rows == (spacesAvailable ? [[5, 5, 1], [10, 40, 2]] : [[5, 40, 2], [10, 10, 1]]))
+
+        await fake.update(5) {
+            $0.space = 1
+            $0.listedInAX = true
+            $0.onScreen = true
+        }
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        rows = await summary(fake)
+        #expect(rows == (spacesAvailable ? [[5, 5, 1], [10, 40, 2]] : [[5, 5, 1], [10, 10, 1], [40, 40, 2]]))
+        let events = await drain(fake.events)
+        #expect(created(events).map(\.window) == (spacesAvailable ? [ref(5), ref(10)] : [ref(5), ref(10), ref(40)]))
+        #expect(destroyed(events).isEmpty)
+    }
+
     /// Review D1 (iteration 4): A (10) gains tab 40; then Cmd-T (50) and a click back on tab 10 land in one refresh,
     /// so the leader is listed with a new AXTabs count while the old shown tab sits offscreen.
     @Test(arguments: modes)
