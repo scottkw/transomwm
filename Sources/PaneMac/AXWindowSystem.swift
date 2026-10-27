@@ -53,6 +53,10 @@ import os
     /// The user's exclusion list (D-12), and the bundle IDs whose dropped commands were already logged.
     private var excluded: Set<String> = []
     private var loggedExcluded: Set<String> = []
+    /// `inventory().liveWindows`: the latest sweep's layer-0 CG windows of tracked apps, nil when unknown (G-03-8).
+    private var liveWindows: [CGWindowEntry]?
+    /// The IDs of the latest non-nil `liveWindows`; a change yields `.liveWindowsChanged`.
+    private var liveWindowIDs: Set<UInt32>?
 
     /// `appFilter(pid, bundleKey)` limits which apps get a thread (tests track only the fixture).
     /// `forceWindowIDFallback` (test seam) identifies windows by frame even when `_AXUIElementGetWindow` works.
@@ -144,7 +148,8 @@ import os
     public func inventory() async -> WindowInventory {
         WindowInventory(
             displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded,
-            sessionPaused: sessionPaused, initialRefreshComplete: initialRefreshComplete
+            sessionPaused: sessionPaused, initialRefreshComplete: initialRefreshComplete,
+            liveWindows: sessionPaused ? nil : liveWindows
         )
     }
 
@@ -288,6 +293,12 @@ import os
         // nil when it failed: each refresh then reads its own. The reads begin here, so the Space-switch generation too.
         let readGeneration = spaceSwitches.generation
         let cgWindows = CGWindowList.snapshot()
+        // Windows on Spaces AX does not list are still here, in the tracked apps' scope (G-03-8).
+        liveWindows = paused ? nil : cgWindows?.filter { $0.layer == 0 && threads[$0.pid] != nil }
+        if let ids = liveWindows.map({ Set($0.map(\.windowID)) }) {
+            if let previous = liveWindowIDs, previous != ids { emit([.liveWindowsChanged]) }
+            liveWindowIDs = ids
+        }
         let pids = threads.keys.filter { responsiveness.shouldRefresh(pid: $0) }
         await withTaskGroup(of: Void.self) { group in
             for pid in pids {

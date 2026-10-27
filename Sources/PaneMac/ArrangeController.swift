@@ -125,9 +125,11 @@ import os
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
                 // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does
-                // the first complete inventory, which a saved layout waits for (SAFE-06).
+                // the first complete inventory, which a saved layout waits for (SAFE-06), and a changed CG list while
+                // a saved window is dormant, whose `liveWindows` prunes the ones that closed (G-03-8).
                 var feed = !self.fedCompleteInventory && inventory.initialRefreshComplete
                 if case .displaysChanged = event { feed = true }
+                if case .liveWindowsChanged = event, self.arranger.hasDormantWindows { feed = true }
                 if feed {
                     self.fedCompleteInventory = self.fedCompleteInventory || inventory.initialRefreshComplete
                     await self.run(self.arranger.handle(.inventory(inventory), now: .now))
