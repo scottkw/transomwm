@@ -107,6 +107,9 @@ public struct Arranger: Sendable {
     /// of Pane's own writes, parks and rescues leave it alone. Dock's centre and the overlap tests read the recorded
     /// frame, never this one. internal(set): the command handlers in Arranger+Commands.swift write it.
     public internal(set) var wantedFrames: [WindowIdentity: Rect] = [:]
+    /// The size each floating window's app refused to go below, per axis, from its read-backs (G-03-11 B). Session-only,
+    /// never learned or saved; only boundary drags count it, so a drag stops at the floater's real size.
+    private var floaterFloors: [WindowIdentity: Size] = [:]
     public var gap: Double
     /// While any reason is set, facts still change the World but no window command is sent (TILE-08).
     public private(set) var pauseReasons: Set<PauseReason> = []
@@ -527,6 +530,7 @@ public struct Arranger: Sendable {
                 if parkRequested.remove(from.identity) != nil { parkRequested.insert(to.window.identity) }
                 if let home = homeFrames.removeValue(forKey: from.identity) { homeFrames[to.window.identity] = home }
                 if let wanted = wantedFrames.removeValue(forKey: from.identity) { wantedFrames[to.window.identity] = wanted }
+                if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
@@ -534,6 +538,17 @@ public struct Arranger: Sendable {
                 return try moved(window, to: frame, now: now)
             case .frameApplied(let window, let requested, let actual):
                 lastApplied[window.identity] = actual
+                if isFloating(window) {
+                    let t = MinimumSizeLearner.tolerance, old = floaterFloors[window.identity] ?? Size(width: 0, height: 0)
+                    let floor = Size(
+                        width: actual.width > requested.width + t ? max(old.width, actual.width) : old.width,
+                        height: actual.height > requested.height + t ? max(old.height, actual.height) : old.height)
+                    if floor != old {
+                        floaterFloors[window.identity] = floor
+                        // This step's cut is recomputed at once while a boundary drag is live.
+                        if liveGap != nil || drag?.kind == .resize { return replan() }
+                    }
+                }
                 return retryRefusal(window, requested: requested, actual: actual, now: now)
             case .windowStateChanged(let window, let state):
                 if state == .closed { forget(window) } else { windows[window.identity]?.state = state }
@@ -631,13 +646,14 @@ public struct Arranger: Sendable {
         parkRequested.remove(window.identity)
         homeFrames[window.identity] = nil
         wantedFrames[window.identity] = nil
+        floaterFloors[window.identity] = nil
         focusOrder.removeAll { $0 == window.identity }
     }
 
     // MARK: Moves
 
-    /// A window moved or resized. Within 2 pt of Pane's last read-back (or, for a floating window, of its last request:
-    /// an app that applies it late) it is Pane's own write coming back: a floating window's frame is still recorded as
+    /// A window moved or resized. Within 2 pt of Pane's last read-back (or, for a floating window, of its last request
+    /// or at any point of a boundary drag: an app that applies it late) it is Pane's own write coming back: a floating window's frame is still recorded as
     /// a fact, and nothing is answered. Otherwise a floating window's frame is recorded (TILE-07, no undo step) and
     /// becomes its wanted frame, even while paused, clamped into the Desktop only if it now overlaps a docked tile, and a docked
     /// window goes back to its tile, at most once per second (T-03-13). There is no pointer state yet, so every move
@@ -653,9 +669,17 @@ public struct Arranger: Sendable {
         // A parked window keeps its Desktop frame: the move is the park, and showing the Desktop brings it back there.
         if floating, desk.tree.isDesktopHidden == true { return [] }
         if floating { try world.recordFloatingFrame(frame, for: window) }
+        // A floater's frame during a boundary drag is Pane's clamp or the app's late answer to it: the mouse holds the drag.
         let own = [lastApplied[window.identity], floating ? lastRequested[window.identity] : nil]
-            .contains { $0.map { Self.near($0, frame, within: 2) } ?? false }
+            .contains { $0.map { Self.near($0, frame, within: 2) } ?? false } || (floating && (liveGap != nil || drag?.kind == .resize))
         if floating, !own { wantedFrames[window.identity] = frame }
+        // The app went below its floor after all (late, or by the user): that axis stops pinning the Desktop (T-03-71).
+        if floating, var floor = floaterFloors[window.identity] {
+            let t = MinimumSizeLearner.tolerance
+            if frame.width < floor.width - t { floor.width = 0 }
+            if frame.height < floor.height - t { floor.height = 0 }
+            floaterFloors[window.identity] = floor
+        }
         guard pauseReasons.isEmpty else { return [] }  // paused: the fact is recorded, nothing is answered (D-23)
         guard windows[window.identity]?.isExcluded != true else { return [] }  // never clamped or corrected (D-29)
         if own { return [] }
@@ -1325,8 +1349,8 @@ public struct Arranger: Sendable {
     /// give before its minimum, so the stored weights say what the screen shows (no dead zone on the way back).
     func boundaryChange(_ key: DeskKey, _ moves: [BoundaryMove]) throws(LayoutError) -> ((inout Desk, inout IDSource) throws(LayoutError) -> Void)? {
         guard !moves.isEmpty, let desk = world[key], let area = display(for: key)?.visibleFrame else { return nil }
-        let gap = gap, mins = minimums
-        let before = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution
+        let gap = gap, mins = minimums, floors = floaterFloors
+        let before = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, floors: floors).resolution
         func size(_ id: NodeID, _ axis: Axis, _ resolution: Resolution) -> Double {
             resolution.nodeRects[id].map { axis == .horizontal ? $0.width : $0.height } ?? 0
         }
@@ -1354,7 +1378,7 @@ public struct Arranger: Sendable {
         }
         var raw = desk
         try apply(moves, to: &raw)
-        let after = try Planner.plan(desk: raw, area: area, gap: gap, mins: mins).resolution
+        let after = try Planner.plan(desk: raw, area: area, gap: gap, mins: mins, floors: floors).resolution
         let cut = try moves.map { move throws(LayoutError) -> BoundaryMove in
             guard case .split(let axis, let children, _)? = desk.tree.node(move.split) else { throw .nodeNotFound(move.split) }
             let loser = children[move.points > 0 ? move.second : move.first]

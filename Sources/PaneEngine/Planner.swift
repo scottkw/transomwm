@@ -20,12 +20,18 @@ public enum Planner {
     /// largest minimum area are dropped from it one at a time until they do; then each dropped floater that still fits
     /// is added back, last dropped first (WR-02). A dropped floater is only clamped, and may still overlap a tile if
     /// its app refuses to shrink (T-03-58). A floater's wanted frame is `wanted[identity]`, else its recorded frame
-    /// (G-03-11), so with no wanted frames only floaters that overlap a tile are planned.
+    /// (G-03-11), so with no wanted frames only floaters that overlap a tile are planned. `floors` raise floaters'
+    /// minimums for the Desktop tile only, never docked windows' (G-03-11 B).
     public static func plan(
-        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:]
+        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:],
+        floors: [WindowIdentity: Size] = [:]
     ) throws(LayoutError) -> FramePlan {
         let floating = desk.desktop.windows.filter { $0.state == .present }
-        var sizing = floating.compactMap { window in mins[window.window].map { (window: window.window, min: $0) } }
+        var sizing = floating.compactMap { window -> (window: WindowRef, min: Size)? in
+            let min = mins[window.window], floor = floors[window.window.identity]
+            guard min != nil || floor != nil else { return nil }
+            return (window.window, Size(width: max(min?.width ?? 0, floor?.width ?? 0), height: max(min?.height ?? 0, floor?.height ?? 0)))
+        }
             .sorted { lhs, rhs in
                 let l = lhs.min.width * lhs.min.height, r = rhs.min.width * rhs.min.height
                 return l != r ? l > r : lhs.window.identity < rhs.window.identity
