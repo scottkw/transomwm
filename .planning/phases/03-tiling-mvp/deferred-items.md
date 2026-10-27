@@ -69,3 +69,6 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   with Dock Window enabled and no log line. pane://split-finder was refused the same way while Safari's window sat in
   the full-width Desktop tile. Both are D-26 behaving as designed; the silent refusal is what can be mistaken for a
   focus bug. Options: log the refusal at info level, or disable Dock Window when the plan has no room.
+- **(03-22) Notices are never logged.** `.notice(.lostRoom(...))` goes only to the toast, and the toast is not visible
+  over VNC, so a VM run cannot show that the lost-room notice fired; it can only infer it from a docked window turning
+  floating with no command. Options: log each notice at info level in ArrangeController when it is queued.
