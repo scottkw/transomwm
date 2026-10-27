@@ -8,39 +8,39 @@ let macSettings: [SwiftSetting] = [
 ]
 
 let package = Package(
-    name: "Pane",
+    name: "Transom",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "PaneModel", targets: ["PaneModel"]),
-        .library(name: "PaneEngine", targets: ["PaneEngine"]),
-        .library(name: "PaneMac", targets: ["PaneMac"]),
+        .library(name: "TransomModel", targets: ["TransomModel"]),
+        .library(name: "TransomEngine", targets: ["TransomEngine"]),
+        .library(name: "TransomMac", targets: ["TransomMac"]),
     ],
     dependencies: [
         // The only runtime dependency (STACK.md). Pinned exactly; Package.resolved pins the tag's commit (T-03-10).
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "3.1.0"),
     ],
     targets: [
-        .target(name: "PaneModel"),
-        .target(name: "PaneEngine", dependencies: ["PaneModel"]),
-        .target(name: "PanePrivate"),
+        .target(name: "TransomModel"),
+        .target(name: "TransomEngine", dependencies: ["TransomModel"]),
+        .target(name: "TransomPrivate"),
         .target(
-            name: "PaneMac",
-            dependencies: ["PaneEngine", "PanePrivate", .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts")],
+            name: "TransomMac",
+            dependencies: ["TransomEngine", "TransomPrivate", .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts")],
             swiftSettings: macSettings
         ),
-        .executableTarget(name: "PaneApp", dependencies: ["PaneMac"], swiftSettings: [.defaultIsolation(MainActor.self)]),
-        .executableTarget(name: "PaneFixtureApp", swiftSettings: [.defaultIsolation(MainActor.self)]),
-        .executableTarget(name: "pane-dump", dependencies: ["PaneMac", "PaneEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
-        .target(name: "PaneTestSupport", dependencies: ["PaneEngine"]),
-        .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
-        .testTarget(name: "PaneEngineTests", dependencies: ["PaneEngine", "PaneTestSupport"], exclude: ["Fixtures"]),
+        .executableTarget(name: "TransomApp", dependencies: ["TransomMac"], swiftSettings: [.defaultIsolation(MainActor.self)]),
+        .executableTarget(name: "TransomFixtureApp", swiftSettings: [.defaultIsolation(MainActor.self)]),
+        .executableTarget(name: "transom-dump", dependencies: ["TransomMac", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
+        .target(name: "TransomTestSupport", dependencies: ["TransomEngine"]),
+        .testTarget(name: "TransomModelTests", dependencies: ["TransomModel"]),
+        .testTarget(name: "TransomEngineTests", dependencies: ["TransomEngine", "TransomTestSupport"], exclude: ["Fixtures"]),
         .testTarget(
-            name: "PaneMacTests",
-            dependencies: ["PaneMac", "PanePrivate", .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts")]
+            name: "TransomMacTests",
+            dependencies: ["TransomMac", "TransomPrivate", .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts")]
         ),
         .testTarget(
-            name: "PaneMacIntegrationTests",
-            dependencies: ["PaneMac", "PanePrivate", "PaneFixtureApp"]
+            name: "TransomMacIntegrationTests",
+            dependencies: ["TransomMac", "TransomPrivate", "TransomFixtureApp"]
         ),
     ],
     swiftLanguageModes: [.v6]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Local release pipeline for Pane 0.3.0 (D-30): builds the universal Developer ID Release app through
+# Local release pipeline for Transom 0.3.0 (D-30): builds the universal Developer ID Release app through
 # build-debug.sh --release, refuses to continue on any signing problem (RESEARCH Pitfall 1), then
-# notarises and staples the app, builds build/Pane-0.3.0.dmg, signs, notarises and staples it, and
+# notarises and staples the app, builds build/Transom-0.3.0.dmg, signs, notarises and staples it, and
 # prints the DMG's sha256 last. Nothing is uploaded. Notarisation needs credentials stored once with
 # `xcrun notarytool store-credentials pane-notary`.
 # Usage: scripts/release.sh [--build-only | --skip-notarize]
@@ -23,11 +23,12 @@ esac
 [ $# -le 1 ] || { echo "release: too many arguments" >&2; exit 2; }
 
 version=0.3.0
-identifier=com.eightabyte.pane
+identifier=com.eightabyte.transom
 team=S2K7P43927
 signer="Developer ID Application: Ken Scott ($team)"
+# The notary keychain profile was stored before the rename and keeps that name; no new store-credentials run is needed.
 profile=pane-notary
-dmg="build/Pane-$version.dmg"
+dmg="build/Transom-$version.dmg"
 staging=build/dmg-staging
 fail() { echo "release: $1" >&2; exit 1; }
 
@@ -53,7 +54,7 @@ case " $archs " in *" arm64 "*) ;; *) fail "executable lacks arm64 (has: $archs)
 shown="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
 [ "$shown" = "$version" ] || fail "CFBundleShortVersionString is $shown, want $version"
 scheme="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$plist")"
-[ "$scheme" = pane ] || fail "URL scheme is $scheme, want pane"
+[ "$scheme" = transom ] || fail "URL scheme is $scheme, want transom"
 
 if [ "$build_only" = 1 ]; then
     echo "$app"
@@ -74,27 +75,27 @@ mkdir -p build
 
 # 2. Notarise and staple the app, so a copy dragged out of the DMG passes Gatekeeper offline.
 if [ "$notarize" = 1 ]; then
-    rm -f build/Pane.zip
-    ditto -c -k --keepParent "$app" build/Pane.zip
-    notarize build/Pane.zip
+    rm -f build/Transom.zip
+    ditto -c -k --keepParent "$app" build/Transom.zip
+    notarize build/Transom.zip
     xcrun stapler staple "$app" >&2 || fail "stapler staple failed for $app"
 fi
 
 # 3. DMG, signed (and notarised and stapled unless skipping).
 rm -rf "$staging" "$dmg"
 mkdir -p "$staging"
-ditto "$app" "$staging/Pane.app"
+ditto "$app" "$staging/Transom.app"
 if command -v create-dmg >/dev/null 2>&1; then
     # --app-drop-link adds the /Applications link itself; --skip-jenkins avoids a Finder AppleScript
     # and its Automation prompt. --notarize submits, waits and staples.
     extra=()
     [ "$notarize" = 1 ] && extra=(--notarize "$profile")
-    create-dmg --volname "Pane $version" --app-drop-link 400 120 --skip-jenkins \
+    create-dmg --volname "Transom $version" --app-drop-link 400 120 --skip-jenkins \
         --codesign "$signer" ${extra[@]+"${extra[@]}"} "$dmg" "$staging/" >&2 || fail "create-dmg failed"
 else
     echo "release: create-dmg not found, falling back to hdiutil" >&2
     ln -s /Applications "$staging/Applications"
-    hdiutil create -volname "Pane $version" -srcfolder "$staging" -format UDZO "$dmg" >&2 \
+    hdiutil create -volname "Transom $version" -srcfolder "$staging" -format UDZO "$dmg" >&2 \
         || fail "hdiutil could not build $dmg"
     codesign --timestamp --sign "$signer" "$dmg" >&2 || fail "codesign of $dmg failed"
     if [ "$notarize" = 1 ]; then

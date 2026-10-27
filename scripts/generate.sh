@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates xcode/Pane.xcodeproj from xcode/project.yml (D-05). The project is gitignored.
+# Generates xcode/Transom.xcodeproj from xcode/project.yml (D-05). The project is gitignored.
 # Usage: scripts/generate.sh
 # Exit: 0 generated, 2 xcodegen is not installed, otherwise xcodegen's exit status.
 set -euo pipefail

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Fails if PaneModel or PaneEngine imports a UI framework (D-23), so they stay headless-testable.
-# Usage: scripts/check-no-appkit.sh [dir ...]   (default: Sources/PaneModel Sources/PaneEngine)
+# Fails if TransomModel or TransomEngine imports a UI framework (D-23), so they stay headless-testable.
+# Usage: scripts/check-no-appkit.sh [dir ...]   (default: Sources/TransomModel Sources/TransomEngine)
 # Exit: 0 clean, 1 violation found, 2 a directory is missing or has no .swift files.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
-if [ "$#" -eq 0 ]; then set -- Sources/PaneModel Sources/PaneEngine; fi
+if [ "$#" -eq 0 ]; then set -- Sources/TransomModel Sources/TransomEngine; fi
 
 # An import at the line start or after `;`, with any attributes (with or without arguments), of a UI
 # framework or an umbrella that pulls one in. A `;` inside a comment can over-match; that only fails safe.

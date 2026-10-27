@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the Developer-ID-signed app (D-03, D-04): "Pane Debug.app" by default, "Pane.app" with --release,
+# Builds the Developer-ID-signed app (D-03, D-04): "Transom Debug.app" by default, "Transom.app" with --release,
 # then checks its signature and designated requirement so TCC grants survive rebuilds.
 # Usage: scripts/build-debug.sh [--release]
 # Exit: 0 built and verified (last stdout line is the app path), 1 a check failed, 2 bad usage.
@@ -8,17 +8,17 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-config=Debug product="Pane Debug" identifier=com.eightabyte.pane.debug
+config=Debug product="Transom Debug" identifier=com.eightabyte.transom.debug
 case "${1:-}" in
     "") ;;
-    --release) config=Release product=Pane identifier=com.eightabyte.pane ;;
+    --release) config=Release product=Transom identifier=com.eightabyte.transom ;;
     *) echo "build-debug: unknown argument: $1 (usage: scripts/build-debug.sh [--release])" >&2; exit 2 ;;
 esac
 team=S2K7P43927
 app="$root/xcode/.xcode-build/Build/Products/$config/$product.app"
 
 scripts/generate.sh
-build=(xcodebuild -project xcode/Pane.xcodeproj -scheme Pane -configuration "$config"
+build=(xcodebuild -project xcode/Transom.xcodeproj -scheme Transom -configuration "$config"
     -derivedDataPath xcode/.xcode-build build)
 if command -v xcbeautify >/dev/null 2>&1; then
     "${build[@]}" | xcbeautify >&2

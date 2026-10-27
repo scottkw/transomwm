@@ -8,7 +8,7 @@ permissions:
 jobs:
   test:
     runs-on: macos-26
-    # Live AX suites are opt-in (PANE_LIVE=1), so even an AX-trusted runner skips the fixture suite.
+    # Live AX suites are opt-in (TRANSOM_LIVE=1), so even an AX-trusted runner skips the fixture suite.
     steps:
       - uses: actions/checkout@v5
       - run: swift --version

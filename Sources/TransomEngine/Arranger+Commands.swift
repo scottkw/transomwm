@@ -1,0 +1,223 @@
+import TransomModel
+
+/// The keyboard layout commands (TILE-11 to 14, TILE-16). Each user edit is one `World.edit`, dry-run first, so a
+/// refusal changes nothing (D-26); a floating window's snap is a frame fact with no undo step (TILE-07).
+extension Arranger {
+    /// Grow Tile and Shrink Tile move this fraction of the split's length (UI-SPEC Surface 6).
+    static let resizeStep = 0.1
+
+    /// Moves a docked window into the tile across `edge`, docking it on that tile's near edge (D-11, TILE-13), or
+    /// snaps a floating one to that half of the Desktop tile (TILE-14). No neighbour: beep.
+    mutating func moveOrSnap(_ window: WindowRef, toward edge: Edge) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        if desk.desktop.contains(window) { return try snap(window, to: edge.half) }
+        let resolution = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution
+        guard let leaf = desk.tree.leaf(containing: window), let rect = resolution.nodeRects[leaf],
+            let neighbour = Neighbours.neighbour(
+                of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: resolution, gap: gap, recency: recency(on: desk))
+        else { return [.beep] }
+        // A sibling's near edge is the window's own slot, so docking there changes nothing: it goes past the sibling.
+        let side = desk.tree.parent(of: leaf) == desk.tree.parent(of: neighbour) ? edge : edge.opposite
+        // The neighbour's NodeID survives the remove: only splits collapse.
+        return try commit(key, flashing: window) { desk, ids throws(LayoutError) in
+            try desk.tree.remove(window)
+            try desk.tree.insert(window, at: side, of: neighbour, ids: &ids)
+        }
+    }
+
+    /// Restore All Windows (SAFE-03): every stranded window back on screen and every hidden Desktop tile holding windows
+    /// shown, one undo step per desk shown. Runs while paused; N6 counts the windows moved.
+    mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
+        let moves = rescueStranded(desks: world)
+        try showParkedDesktops(keeping: moves, undoable: true)
+        return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + [.notice(.restored(count: moves.count))]
+    }
+
+    /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step.
+    mutating func snap(_ window: WindowRef, to target: SnapTarget) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let desk = world[key], let frame = desk.desktop.frame(of: window),
+            let area = display(for: key)?.visibleFrame,
+            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).desktopRect
+        else { return [.beep] }
+        let snapped = Snap.frame(target, window: frame, desktop: desktop, gap: gap)
+        try world.recordFloatingFrame(snapped, for: window)
+        wantedFrames[window.identity] = snapped
+        return replan()
+    }
+
+    /// Swaps a docked window with the docked panel focused before it on its desk (TILE-11). None: beep.
+    mutating func swapPrevious(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+        guard let other = previousDocked(before: window), let key = deskKey(of: window) else { return [.beep] }
+        return try commit(key, flashing: window) { desk, _ throws(LayoutError) in try desk.tree.swap(window, other) }
+    }
+
+    /// Grows (positive) or shrinks the window's tile by `delta` of its split's length, from or to its siblings
+    /// (TILE-13). At a size limit, where no rect would change, it beeps and pushes no undo step.
+    mutating func resize(_ window: WindowRef, by delta: Double) throws(LayoutError) -> [ArrangerEffect] {
+        guard let (key, split, index) = parentSplit(of: window) else { return [.beep] }
+        do {
+            return try commit(key, flashing: window, refusingNoChange: true) { desk, _ throws(LayoutError) in
+                try desk.tree.resizeChild(in: split, index: index, by: delta)
+            }
+        } catch {
+            if case .atSizeLimit = error { return [.beep] }
+            throw error
+        }
+    }
+
+    /// Balance, rotate or flip with the window's parent split, as one undo step (TILE-12). Rotate turns the whole
+    /// layout from the root whichever split it is given (03-02).
+    mutating func editSplit(
+        of window: WindowRef, _ edit: (inout LayoutTree, NodeID) throws(LayoutError) -> Void
+    ) throws(LayoutError) -> [ArrangerEffect] {
+        guard let (key, split, _) = parentSplit(of: window) else { return [.beep] }
+        return try commit(key, flashing: window) { desk, _ throws(LayoutError) in try edit(&desk.tree, split) }
+    }
+
+    /// Docks every eligible floating window of the target desk in screen order (top to bottom, then left to right),
+    /// each on the longer side of the largest tile, as one undo step (TILE-16, D-13). A window whose dry run leaves
+    /// any window without room stays floating, and N5 counts them; when none docks: beep, and the first one's
+    /// blocked frame flashes.
+    mutating func arrangeAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let order = desk.desktop.windows.filter { floating in
+            floating.state == .present
+                && windows[floating.window.identity].map { $0.kind == .dockable && !$0.isExcluded && $0.state == .present } == true
+        }
+        .sorted { ($0.frame.minY, $0.frame.minX, $0.window.identity) < ($1.frame.minY, $1.frame.minX, $1.window.identity) }
+        .map(\.window)
+        guard !order.isEmpty else { return [.beep] }
+        let gap = gap, mins = minimums
+        var skipped = 0
+        var blocked: Rect?
+        var candidate = world, candidateHistory = history
+        try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
+            for window in order {
+                var trial = desk, trialIDs = ids
+                try trial.desktop.remove(window)
+                let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
+                guard let (target, rect) = Self.largestTile(resolution, in: trial.tree) else {
+                    skipped += 1
+                    continue
+                }
+                do {
+                    try trial.tree.insert(window, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
+                } catch {
+                    skipped += 1  // a full split
+                    continue
+                }
+                if try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).unfit.isEmpty {
+                    desk = trial
+                    ids = trialIDs
+                } else {
+                    skipped += 1
+                    if blocked == nil { blocked = try Planner.plan(desk: trial, area: area, gap: gap, mins: [:]).frames[window] }
+                }
+            }
+        }
+        guard skipped < order.count else { return [.beep] + (blocked.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? []) }
+        world = candidate
+        history = candidateHistory
+        return replan() + (skipped == 0 ? [] : [.notice(.arrangeLeftovers(count: skipped))])
+    }
+
+    /// Floats every docked window of the target desk at its tile rect, clamped into the Desktop that leaves, as one
+    /// undo step that also shows a hidden Desktop (TILE-16). N4 says how many. Nothing docked: beep.
+    mutating func floatAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame, !desk.tree.windows.isEmpty
+        else { return [.beep] }
+        let plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
+        let docked = desk.tree.windows.map { window in
+            (window, desk.tree.state(of: window) ?? .present, plan.frames[window] ?? windows[window.identity]?.frame ?? area)
+        }
+        let gap = gap, mins = minimums, show = showingDesktop()
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
+            for (window, _, _) in docked { try desk.tree.remove(window) }
+            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
+            for (window, state, tile) in docked {
+                try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
+                if state != .present { try desk.desktop.setState(state, for: window) }
+            }
+        }
+        for (window, _, _) in docked {
+            undockedWanted[window.identity] = wantedFrames[window.identity]
+            wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
+        }
+        return replan() + [.notice(.floatedAll(count: docked.count))]
+    }
+
+    /// The largest placed leaf (the Desktop tile included); ties go to the smaller NodeID.
+    private static func largestTile(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
+        let leaves = resolution.nodeRects.filter { if case .split? = tree.node($0.key) { false } else { true } }
+        return leaves.max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
+            .map { ($0.key, $0.value) }
+    }
+
+    /// The docked panel focused most recently before `window` on its desk, when `window` is a present docked panel.
+    func previousDocked(before window: WindowRef) -> WindowRef? {
+        guard let key = deskKey(of: window), let tree = world[key]?.tree, Self.isPresentPanel(window, in: tree) else { return nil }
+        return focusOrder.lazy.filter { $0 != window.identity }
+            .compactMap { id in tree.windows.first { $0.identity == id } }
+            .first { Self.isPresentPanel($0, in: tree) }
+    }
+
+    /// The split holding a present docked window's leaf, and the leaf's index in it.
+    func parentSplit(of window: WindowRef) -> (key: DeskKey, split: NodeID, index: Int)? {
+        guard let key = deskKey(of: window), let tree = world[key]?.tree, tree.state(of: window) == .present,
+            let leaf = tree.leaf(containing: window), let split = tree.parent(of: leaf),
+            case .split(_, let children, _)? = tree.node(split), let index = children.firstIndex(of: leaf)
+        else { return nil }
+        return (key, split, index)
+    }
+
+    private static func isPresentPanel(_ window: WindowRef, in tree: LayoutTree) -> Bool {
+        guard tree.state(of: window) == .present, let leaf = tree.leaf(containing: window), case .panel? = tree.node(leaf) else { return false }
+        return true
+    }
+
+    /// Applies `change` to `key`'s desk as one undo step, unless the result leaves a window without room: then it
+    /// beeps, announces it and flashes the blocked preview at `window`'s would-be frame, changing nothing (D-26).
+    /// With `refusingNoChange`, an edit that leaves every rect where it was only beeps.
+    private mutating func commit(
+        _ key: DeskKey, flashing window: WindowRef, refusingNoChange: Bool = false,
+        _ change: (inout Desk, inout IDSource) throws(LayoutError) -> Void
+    ) throws(LayoutError) -> [ArrangerEffect] {
+        guard let area = display(for: key)?.visibleFrame, let desk = world[key] else { return [.beep] }
+        var candidate = world, candidateHistory = history
+        try candidate.edit(key, history: &candidateHistory, change)
+        guard let edited = candidate[key] else { return [.beep] }
+        let plan = try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums)
+        guard plan.unfit.isEmpty else {
+            let frame = try Planner.plan(desk: edited, area: area, gap: gap, mins: [:]).frames[window]
+            return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
+        }
+        if refusingNoChange, try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution == plan.resolution {
+            return [.beep]
+        }
+        world = candidate
+        history = candidateHistory
+        return replan()
+    }
+}
+
+extension Edge {
+    fileprivate var opposite: Edge {
+        switch self {
+        case .left: .right
+        case .right: .left
+        case .top: .bottom
+        case .bottom: .top
+        }
+    }
+
+    /// The half of the Desktop tile ⌃⌥⌘⇧ and this arrow snap a floating window to.
+    fileprivate var half: SnapTarget {
+        switch self {
+        case .left: .leftHalf
+        case .right: .rightHalf
+        case .top: .topHalf
+        case .bottom: .bottomHalf
+        }
+    }
+}
