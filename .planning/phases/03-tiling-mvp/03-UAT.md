@@ -160,7 +160,7 @@ blocked: 2
 
 - gap_id: G-03-3
   truth: "Dragging the gap between two tiles resizes both tiles smoothly and the new split sticks"
-  status: failed
+  status: resolved
   reason: "User reported: Pass, but the gap drag is a little janky.  It sometimes goes back to the way it was.  Sometimes one of the windows won't let you drag in a particulat direction."
   severity: minor
   test: 3
@@ -174,11 +174,12 @@ blocked: 2
     - "Re-base split weights to resolved child sizes (or apply delta in points) before capping"
     - "Hold the pending gap move in Arranger state until mouse-up and apply it in every replan()"
     - "Tests: pinned growing side; mid-drag windowChanged / off-plan windowResized must not write pre-drag tiles"
+  resolved_by: "03-20; VM re-run on 0.3.7/1005 (HEAD 8653fcc) passed scripted (pinned-side drag moves, no snap-back over 122 and 274 sampled changes, Undo exact); user hand checks on 0.3.8 (smoother, no snap-back while holding) and 0.3.10 (drag down stops at the floaters' floor by design, G-03-11 B; back up restores them). Closed by the verifier 2026-10-27"
   debug_session: ".planning/debug/g-03-3-gap-drag.md"
 
 - gap_id: G-03-5
   truth: "Keyboard and menu commands act on the app's focused window, so a second window of an app with a docked window can be docked (CR-01)"
-  status: failed
+  status: resolved
   reason: "Claude-driven UAT: with TextEdit A docked, focused TextEdit windows B and C can't be docked by Ctrl-Opt-Cmd-D; the menu treats docked A as frontmost"
   severity: major
   test: 6
@@ -193,11 +194,12 @@ blocked: 2
   missing:
     - "Keep an unresolved focus hint until the window is tracked (or refresh focus from AXMain when a created window is main), keeping focusedIdentities' tab-switch/panel behaviour"
     - "Test: second window of the same app created after a windowFocused becomes the command target"
+  resolved_by: "03-19; VM re-run on 0.3.7/1005 (HEAD 8653fcc): tests 6 and 7 passed (new window B docks by Ctrl-Opt-Cmd-D, menu enablement follows B, split-finder with other Finder windows open); PendingFocusTests pass at d0321f2. Closed by the verifier 2026-10-27"
   debug_session: ".planning/debug/g-03-5-focused-window-identity.md"
 
 - gap_id: G-03-6
   truth: "A docked window that can't fit its tile floats to the Desktop instead of overlapping a neighbour (core value: windows never overlap)"
-  status: failed
+  status: resolved
   reason: "Claude-driven UAT on Space 2: Reminders' fixed-size Welcome window (768x692) was docked beside Notes; it stays 768 wide at (12,25), overlapping Notes at x 370, and sits 12pt into the top gap"
   severity: major
   test: 15
@@ -216,6 +218,7 @@ blocked: 2
     - "Decide docked-tile overflow under 32 pt"
     - "Cap the Desktop minimum at the area / ignore floaters that can never fit, so floating one window doesn't float the whole desk"
     - "Tests: window that opens at its minimum; minimum height within 32 pt of the tile"
+  resolved_by: "03-21/03-22; VM re-run on 0.3.7/1005 (HEAD 8653fcc): test 15 passed (Reminders floats about 2 s after docking, Notes keeps its tile, no com.apple.reminders hint saved; the overlap of a floater that cannot shrink is accepted T-03-58). TooBigDockedWindowTests and RefusalRetryBoundTests are unchanged since and pass at d0321f2. Closed by the verifier 2026-10-27"
   debug_session: ".planning/debug/g-03-6-fixed-size-window-overlap.md"
 
 - gap_id: G-03-4
@@ -259,7 +262,7 @@ blocked: 2
 
 - gap_id: G-03-8
   truth: "Docked windows on every Space come back to their own layouts after quitting and relaunching Pane, apps still running (SAFE-06)"
-  status: failed
+  status: resolved
   reason: "Verifier + VM: after a Pane relaunch (clean or crash-recovery) the hidden Space's desk comes back empty; reproduced 4/4"
   severity: major
   test: 17
@@ -278,6 +281,7 @@ blocked: 2
     - "Seed lastRequested for a dormant docked window when it is first created so the Space-switch plan is written"
     - "Close a dormant window when its ID leaves the CG list or its app terminates"
     - "Headless test with a fresh fake at relaunch (fails today); fix ArrangerMultiDeskRestoreTests the same way; VM re-check of UAT 17's Space half"
+  resolved_by: "03-23 (+ 03-23 review fixes, 03-24); VM re-run on 0.3.7/1005: test 17 Space half passed (clean quit and kill -9 keep both desks); 0.3.8 clean relaunch kept Space 1 and Space 41 desks; 0.3.9 locked start kept both. ArrangerMultiDeskRestoreTests pass at d0321f2 (RED at fbfa115 confirmed by the earlier verification). Display half stays with test 17 (blocked: second display). Closed by the verifier 2026-10-27"
   debug_session: ".planning/debug/g-03-8-hidden-space-relaunch.md"
 
 - gap_id: G-03-9
