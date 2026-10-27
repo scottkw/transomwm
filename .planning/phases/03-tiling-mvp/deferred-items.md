@@ -94,3 +94,16 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   that pid's initial refresh into a non-initial follow-up (AXWindowSystem `refresh`, the `inFlight` guard), so that
   app's new windows can still be settling at `.sessionPaused(false)`. Options: keep a shown-Space saved window dormant
   while its app's first read failed, or hold the restore until every app's first read succeeded or it was degraded.
+
+## Found in 03-25 and 03-26
+
+- **(G-03-11, a non-goal of 03-25) A floater the user leaves past the screen edge, clear of tiles, is still left
+  alone.** The orchestrator's default was to clamp any floater sticking out of the Desktop back in. In a planning
+  experiment that broke the 03-04 fence `aFloatingWindowOffTheScreenEdgeButClearOfTilesIsLeftAlone` (D-24) and six drag
+  and reflow tests. Only frames Pane's own clamp left outside are corrected. Option: ask the user whether D-24 should
+  change.
+- **(03-25) Floater floors can stop a boundary drag early for an app that applies writes late (T-03-71).** The
+  read-back still shows the old size, so the floor holds until that app's next smaller frame event drops it. Floors are
+  session-only and counted by boundary drags only.
+- **(03-25) Float All keeps its tile-rect placement (TILE-16).** The 2026-10-27 decision names Float and the green
+  button only. Option: Float All could use each window's pre-dock frame too.

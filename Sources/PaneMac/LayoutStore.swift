@@ -71,7 +71,7 @@ public enum LayoutStoreError: Error, Equatable {
     }
 
     /// Size cap, then a version probe, then the full decode (World's own validation), then every home frame
-    /// (Persistence.swift's order). The session record has no field to check beyond its decode.
+    /// and wanted frame (Persistence.swift's order). The session record has no field to check beyond its decode.
     private static func decode(_ url: URL) throws(LayoutStoreError) -> LayoutFile {
         let data: Data
         do {
@@ -105,6 +105,11 @@ public enum LayoutStoreError: Error, Equatable {
         for (index, home) in contents.homeFrames.enumerated() {
             guard home.frame.isValidGeometry else { throw .invalidEntry("home frame \(index): not finite or out of range") }
             guard seen.insert(home.window).inserted else { throw .invalidEntry("home frame \(index): duplicate window") }
+        }
+        seen = []
+        for (index, wanted) in contents.wantedFrames.enumerated() {
+            guard wanted.frame.isValidGeometry else { throw .invalidEntry("wanted frame \(index): not finite or out of range") }
+            guard seen.insert(wanted.window).inserted else { throw .invalidEntry("wanted frame \(index): duplicate window") }
         }
         return contents
     }
