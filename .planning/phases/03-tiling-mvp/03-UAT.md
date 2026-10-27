@@ -322,10 +322,23 @@ blocked: 2
   reason: "User hand check in the VM: dragging the gap between docked Finder (top) and the Desktop tile down shrank the floating windows; dragging it back up left them small (Finder 546/580/2252 460x252, TextEdit 132 tall, Terminal 127 tall, all at y 569) and some end below the screen's bottom edge"
   severity: major
   test: 3
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Two causes. (A) A floating window has one stored frame (DesktopLayer FloatingWindow.frame), and Arranger.moved records every frame event as that frame, including the echo of Pane's own clamp write, before its own-write check (Arranger.swift:639 vs 642). So each gap-drag step's clamp (Planner.swift:55-57), or the app's refused read-back, replaces the frame the user gave the window. When the Desktop grows back, the small stored frame overlaps no tile and nothing enlarges it. (B) During a live drag the Desktop tile's minimum (Planner.swift:30) does not know the floaters' real minimum heights. The drag shrinks the Desktop below them (132 pt), the apps refuse (Finder 252, Safari 224) and the windows hang below the Desktop and the screen. Planner re-clamps only floaters that overlap a docked tile (Planner.swift:55), so they are never corrected. The learner never confirms these unmoved refusals, because A means Pane never re-sends the write (MinimumSizeLearner.swift:63-72). Engine probe reproduces the VM shape. Skipping the echo record restores the exact start frames; known minimums stop the drag at 252 with nothing off screen."
+  artifacts:
+    - path: "Sources/PaneEngine/Arranger.swift"
+      issue: "moved (~639) stores Pane's own clamp echo as the floater's only frame; that frame also serves as the real frame for dock (~772) and planShown (~1451), so the line can't just be dropped (E1 breaks TooBigDockedWindowTests)"
+    - path: "Sources/PaneEngine/Planner.swift"
+      issue: "plan (~55) clamps from the stored frame and only when it overlaps a docked tile; a floater hanging past the Desktop or screen is never re-clamped. Desktop minimum (~30) is unaware of floater heights during a live drag"
+    - path: "Sources/PaneModel/DesktopLayer.swift"
+      issue: "FloatingWindow has one frame: no separate 'wanted' frame"
+    - path: "Sources/PaneEngine/MinimumSizeLearner.swift"
+      issue: "unmoved refusals need a repeat write >= 1 s later, which floaters never get (refusal retry exists for docked windows only, Arranger.retryRefusal ~663)"
+  missing:
+    - "A per-window wanted frame, set only by user actions (first admit frame, the user moving or resizing a floater, drop or miss release frame, and the pre-dock frame G-03-4 needs). Pane's clamps, refused read-backs, lost-room floats, parks and rescues never write it. It is kept while the window is docked, and saved in layout.json"
+    - "Shown frame = clamp(wanted, into: Desktop rect), recomputed every plan, so the Desktop shrinking and growing back returns floaters to their wanted size. The real frame used by dock's centre, the overlap test and planShown comes from Arranger.windows[id].frame, not the wanted frame"
+    - "Re-clamp a floater whose frame leaves the Desktop rect, not only one that crosses a tile (orchestrator default 2026-10-27: D-24's 'clear of every tile is left alone' still holds for a floater inside the Desktop; one sticking out past the Desktop is clamped back in, since floaters live inside the Desktop's bounds, CONTEXT D)"
+    - "The Desktop tile's minimum must cover a floater's real size during a gap drag: count a refused floater clamp (read-back > request + margin) as its minimum at once, or extend retryRefusal to floaters, so boundaryChange's cut stops the drag there"
+    - "Tests: a gap drag that shrinks and then grows the Desktop returns floaters to their start frames; a floater whose minimum is above the shrunken Desktop never ends below the Desktop or screen; a refused clamp still docks at the real centre (keep TooBigDockedWindowTests green)"
+  debug_session: ".planning/debug/g-03-11-floaters-stay-shrunk.md"
 
 ## Observed, not yet a gap
 
