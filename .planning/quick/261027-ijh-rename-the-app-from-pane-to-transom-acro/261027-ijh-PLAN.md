@@ -165,7 +165,7 @@ After these moves, `git ls-files | grep -v '^\.planning/' | grep -E '[Pp]ane([^l
 
 <tasks>
 
-<task type="tracer">
+<task type="auto">
   <name>Task 1: End-to-end mechanical rename, SwiftPM modules to Xcode project to signed Transom.app, in one building commit</name>
   <files>Package.swift, Package.resolved, Sources/** (git mv + rewrite), Tests/** (git mv + rewrite), xcode/project.yml, xcode/Transom-Info.plist, xcode/Transom.entitlements, scripts/build-debug.sh, scripts/check-no-appkit.sh, scripts/generate.sh, scripts/release.sh, scripts/run-debug.sh, scripts/vm-live-test.sh, .github/workflows/ci.yml</files>
   <precondition>`git status --short` shows nothing except ` M .planning/config.json` and `?? .planning/state.json` (plus this task's .planning/quick directory). HEAD is 82697cf or a docs-only descendant.</precondition>
