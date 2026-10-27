@@ -253,6 +253,23 @@ blocked: 2
     - "Headless test with a fresh fake at relaunch (fails today); fix ArrangerMultiDeskRestoreTests the same way; VM re-check of UAT 17's Space half"
   debug_session: ".planning/debug/g-03-8-hidden-space-relaunch.md"
 
+- gap_id: G-03-9
+  truth: "Closing a window removes it from Pane's tracking and layout.json"
+  status: deferred
+  deferred_to: "Phase 6 (user decision 2026-10-26)"
+  reason: "Claude-driven VM re-run: closed Safari window 2174 stays present; survives relaunch as dormant"
+  severity: minor
+  test: 14
+  root_cause: "Safari keeps the closed window's CG optionAll entry (layer 0, offscreen, no Space) for minutes; CloseRule needs the CG entry gone, and 03-23's isAlive/liveWindows count any layer-0 entry as alive. Bookkeeping only, no overlap."
+  artifacts:
+    - path: "Sources/PaneEngine/CloseRule.swift"
+      issue: "CG presence alone blocks every close"
+    - path: "Sources/PaneEngine/LayoutRestore.swift"
+      issue: "isAlive checks only layer, ID and pid"
+  missing:
+    - "Treat a layer-0 entry with a known-empty Space list as absent; measure minimised/hidden/tab windows' Spaces first"
+  debug_session: ".planning/debug/g-03-9-closed-safari-lingers.md"
+
 ## Observed, not yet a gap
 
 - (promoted to G-03-8) Space 2 desk emptied on relaunch.
