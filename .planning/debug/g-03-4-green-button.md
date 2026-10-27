@@ -2,7 +2,8 @@
 status: diagnosed
 trigger: "G-03-4: plain green-button click maximises (docked and floating) instead of toggling dock/float; Option-click green docks instead of zooming natively. User: 'Seems you might have them backwards'."
 created: 2026-10-26T16:00:00-05:00
-updated: 2026-10-26T16:15:00-05:00
+updated: 2026-10-27T14:40:00-05:00
+reopened: 2026-10-27
 goal: find_root_cause_only
 ---
 
@@ -98,6 +99,102 @@ lead: an earlier Safari debug session saw the tap event's window-under-pointer f
 ## Resolution
 
 root_cause: "Items 1/2: CGWindowList.topmostWindow(at:) (Sources/PaneMac/CGWindowList.swift:20-23), the tap's fallback when the session tap reports window 0 (always, HID or injected), takes the first on-screen window of another process containing the point with no layer filter. On macOS 15 that is the Dock's full-screen layer-20 window (CG 7), so InputTap passes id 7, GreenButton.shouldSwallow finds no rects[7], and the plain click reaches macOS (full screen). Item 3: not an inversion; Option passes through as designed, macOS zooms, and D-33 snaps a docked window back into its tile / clamps a floating one crossing a tile into the Desktop rect, which reads as docking."
+fix:
+verification:
+files_changed: []
+
+## Reopened 2026-10-27
+
+<!-- The sections above are the 2026-10-26 session (fixed by 03-18 + CR-01). Everything below is the reopened investigation. -->
+
+### Symptoms (reopened, immutable)
+
+expected: a plain green-button click with the real mouse floats docked Notes / docks floating Notes (TILE-06)
+actual: Pane 0.3.8 (HEAD code), Tart VM macOS 15.7.7, user's real mouse in the Tart window: plain click on docked Notes' green button (Space 41, Notes window 150), twice: only the macOS 15 "Move & Resize / Fill & Arrange / Full Screen" hover popup appears; Notes neither floats nor docks. Option-click works (zoom, D-33 return). A menu over the green button gets the click. Notes is floating on Space 41 now (cause unknown).
+errors: none
+reproduction: hover the green button like a human (popup shows), then click
+started: after 03-18 + CR-01 (ae5560e); Claude-driven instant injected / VNC clicks passed
+
+### Current Focus (reopened)
+
+bug_class: Bohrbug (deterministic: every toggle on a desk whose only docked window is the clicked one)
+hypothesis: CONFIRMED (H2). The tap takes the human-pattern click and Pane toggles Notes, but in the user's layout neither toggle changes anything on screen. Notes was the only docked window on Space 41: float keeps it at its tile rect (the Desktop rect the undock leaves is the whole area, so the clamp is a no-op) and dock-at-centre puts it back on the same right tile at the same frame. The only window that changes is the gap handle, which is drawn at opacity 0. The macOS hover popup stays up because the swallowed press never reaches it, so "only the popup appears" is all the user can see.
+next_action: none (goal find_root_cause_only); hand to plan-phase --gaps
+reasoning_checkpoint:
+  hypothesis: "The user's plain clicks were taken and toggled float/dock, but in that layout (Notes the lone docked window, floaters only beside it) Arranger.float and Arranger.dock leave every window frame unchanged, so a working toggle is invisible"
+  confirming_evidence:
+    - "VM, exact screenshot layout (Notes docked 370,37 642x664, Reminders 12,25 768x692, Calculator floating): human-pattern hover 1.5 s + click -> layout.json Notes floating, all frames byte-identical; second click -> docked, frames identical; only Pane#2459 (gap handle, opacity 0) appears/disappears"
+    - "VM, Pane paused (no rects published), same hover + click with the popup up -> Notes enters full screen (new Space 116): a click Pane does NOT take is visible. The user saw no full screen, so Pane took both presses"
+    - "The user's next check (Option-click zoom, D-33 returns it to its tile) needs Notes DOCKED, which matches float + dock (two invisible toggles)"
+  falsification_test: "a press that Pane passes through would full-screen Notes (shown above); a press Pane takes but does not toggle would leave layout.json unchanged. Either observation in the exact layout would refute H2; neither occurred"
+  fix_rationale: "the fault is the missing observable, not the tap: give the toggle a visible result (or a cue) even when no sibling tile reflows, and make the UAT check read a state that changes"
+  blind_spots: "no real HID click was observed by a probe (Tart pointer events not reproducible from inside the guest); the user's history is reconstructed, and why Notes ended floating after the hand session is unknown (odd number of taken presses, e.g. a third click, or a host first-click swallowed by Tart, or a later command)"
+  candidate_causes:
+    - "code/spec: Arranger.float keeps the tile rect, Arranger.dock of a lone floater restores the same tile, no feedback effect (confirmed)"
+    - "code: CR-01 topmost() returns nil when the hover popup owns the point (eliminated: popup 57,59 / 396,71 never contains the button centre; injected human-pattern clicks are taken)"
+    - "environment: Tart real-pointer events differ from CGEvent posts (not refuted directly; refuted indirectly: a pass-through is visible as full screen, the user saw none)"
+    - "code: press taken but toggle refused (eliminated: rects and the .greenButton guards use the same conditions; layout.json toggled every time)"
+  and_gate: "yes: (1) the clicked window is the only docked window on its desk, so no sibling reflows; (2) float/dock keep the frame by spec (TILE-09 float at the tile rect; D-12 dock at the centre drop); (3) Pane has no other float/dock cue (gap handle invisible until hovered). Remove any one and the toggle is visible (cf. 2026-10-26: 722 floated and its neighbours reflowed)"
+
+### Evidence (reopened, append only)
+
+- timestamp: 2026-10-27T14:20:00-05:00
+  checked: VM Space 41, Notes 150 floating at 31,25 642x664, AX zoom/full-screen button 89,43 16x16 (centre 97,51); injected `move` onto the centre with Notes NOT frontmost, 2 s, CG on-screen list
+  found: no popup appears and no new window is listed when Notes is not the active app
+  implication: the hover popup needs the window's app active (the user's screenshot shows Notes active)
+
+- timestamp: 2026-10-27T14:22:00-05:00
+  checked: same, after an injected click in Notes' sidebar (Notes frontmost), `move` onto 97,51, 2 s, CG list front-to-back
+  found: the popup is `ThemeWidgetControlViewService#2494 pid 12242 layer 101 alpha 1 bounds 57,59 224x212` (a separate XPC service process, not Notes, not Dock), listed first. Its bounds start at y 59, i.e. at the button's bottom edge; they do NOT contain the button centre 97,51. Dock#843 layer 20 full-display is next, then Notes#150 layer 0.
+  implication: at the button centre CR-01's topmost() still skips the Dock overlay and returns 150. H1 holds only for the bottom row of the button (y = 59, if the rect is half-open at 59). Need the press itself.
+
+- timestamp: 2026-10-27T14:06:00-05:00
+  checked: VM Space 41, Notes 150 FLOATING at 31,25 (active app), injected `move` to the button centre, ~2 s with the popup up, then an injected click at 97,51
+  found: Notes DOCKED (12,37 642x664, Reminders reflowed to 666,25); popup stayed on screen and moved with the window (38,71)
+  implication: a press arriving while the popup is up is still taken and toggled; the hover delay alone does not break the tap path for CGEvent posts
+
+- timestamp: 2026-10-27T14:07:00-05:00
+  checked: same, popup up, injected click on docked Notes' button (81,63 inside 70,55 16x16); log stream around it
+  found: Notes became FLOATING in layout.json, frame unchanged 12,37 642x664; no drag-log press line (a swallowed press logs none)
+  implication: docked -> float also works with the popup up
+
+- timestamp: 2026-10-27T14:09:00-05:00
+  checked: rebuilt the user's exact screenshot state (7.png measured: Notes at 370,37 642x664, Reminders 12,25 768x692 behind it): axset Notes to 370,37 642x664, instant green click -> layout `docked ['Notes#150'] floating [reminders, calculator]`, Desktop tile 12..358 (gap handle Pane#2459 358,37 12x664). Then human pattern: move away, move onto 436,63 in 3 steps, 1.5 s (popup up at 396,71), click; then again (1 s hover, click)
+  found: click 1: layout -> Notes FLOATING; every frame byte-identical before/after (Notes 370,37 642x664, Reminders 12,25 768x692, Calculator 122,184 198x350); only change on screen: the 12-pt gap handle window 2459 disappears. Click 2: layout -> Notes DOCKED again; frames again identical; gap handle back. Popup stays up throughout (the swallowed press never reaches the popup service).
+  implication: H1 ELIMINATED for this layout: the tap takes the human-pattern click and Pane toggles. NEW H2: both of the user's clicks may have worked: with Notes the only docked window on its desk, float keeps the window at its tile rect (Arranger.float, TILE-09 "at its tile rect, clamped into the Desktop rect the undock leaves" -> the whole area) and dock-at-centre (Arranger.dock, D-12) puts it back on the same right tile, so neither toggle moves anything; the still-visible macOS popup is the only thing the user sees
+
+- timestamp: 2026-10-27T14:12:00-05:00
+  checked: VM, Pane paused (ctrl-opt-cmd-P, no rects published), Notes docked at 370,37, human-pattern hover (popup 2494 up), plain click on 436,63; then unfs Notes and resume
+  found: Notes entered full screen (Notes 150 0,0 1024x768 + toolbar window 2496, Space 116 created). After unfs + resume: back at 370,37 642x664, docked, Space 116 gone.
+  implication: a plain click that Pane does not take is plainly visible even with the popup up. The user saw no full screen on either click, so Pane's tap took both of the user's presses; the real-HID-path difference cannot have made them pass through
+
+- timestamp: 2026-10-27T14:14:00-05:00
+  checked: Sources/PaneEngine/Arranger.swift:302-307 (.greenButton -> .dock / .float), 765-790 (dock at the centre drop, D-12), 792-811 (float: tile rect clamped into the Desktop rect the undock leaves, TILE-09, line 807); Sources/PaneMac/Overlay/GapHandlePanels.swift:27 (handle layer opacity 0 until hovered); 03-CONTEXT B ("Dock, or the green button, on a floating window: docks it where a drop at its centre would land"); Tests/PaneEngineTests/ArrangerGreenButtonTests.swift (button == command world, no visibility check); 2026-10-26 evidence (722 floated, neighbours reflowed)
+  found: by design a float moves nothing itself; the change is only visible through siblings reflowing into the freed tile. With no other docked window the undock leaves Desktop rect == area, clamp(tile) == tile; docking a lone floater gives it the side tile at its own frame. No announce, flash or border marks either state. The swallowed press also leaves the macOS hover popup up (it never sees the click), so the popup is the only thing on screen that reacts.
+  implication: the reopened symptom is a missing observable, not a dropped click. The UAT step tested on a layout where success and failure look identical
+
+- timestamp: 2026-10-27T14:15:00-05:00
+  checked: why Notes was floating after the hand session; persisted Pane log (info level) 13:48-14:05
+  found: no persisted lines after "session resumed" at 13:48 (Pane's drag/press lines are debug level, not kept). The Option-click check passing ("returns it to its tile") needs Notes docked at that point, i.e. an even number of taken presses before it.
+  implication: unexplained, not needed for this gap: an odd number of taken presses (a third click, or a Tart host first-click that never reached the VM) or a later command floated it. My runs left Notes DOCKED at 370,37 642x664 on Space 41; VM back on Space 1; Pane 12113 still running.
+
+### Eliminated (reopened, append only)
+
+- hypothesis: H1, the macOS 15 hover popup (or its tracking window) owns the button point at a layer above 0, so CR-01's topmost() returns nil and the press passes
+  evidence: the popup is one window, ThemeWidgetControlViewService (separate pid) layer 101, anchored BELOW the button (57,59 / 38,71 / 396,71 224x212), never containing the button centre; injected presses with the popup up were taken and toggled 4/4 (dock, float, float, dock)
+  timestamp: 2026-10-27T14:09:00-05:00
+
+- hypothesis: H3, the user's real Tart pointer clicks are not taken (window field / location differ from CGEvent posts) and pass to macOS
+  evidence: a pass-through click with the popup up full-screens Notes (paused-Pane run); the user saw no full screen on either click
+  timestamp: 2026-10-27T14:12:00-05:00
+
+- hypothesis: H4, the press is taken but the toggle is refused (trackedWindow nil or the .greenButton guard)
+  evidence: layout.json flipped on every taken press in the exact layout; the published rect and the guard share the conditions (dockable, not excluded, present, on a desk, not paused)
+  timestamp: 2026-10-27T14:10:00-05:00
+
+### Resolution (reopened)
+
+root_cause: "Not a dropped click. Pane takes the plain press and toggles (layout.json flips every time, also with the hover popup up), but on the user's desk the toggle has no visible effect: Notes was the only docked window on Space 41, so Arranger.float (Sources/PaneEngine/Arranger.swift:792-811, frame = clamp(tile, into: Desktop rect) at 807, where the Desktop rect becomes the whole area) leaves it exactly where it was, and Arranger.dock (765-790, D-12 drop at its centre) puts the floater back on the same tile at the same frame. No sibling reflows, the gap handle that comes and goes is drawn at opacity 0 (Sources/PaneMac/Overlay/GapHandlePanels.swift:27), and Pane has no float/dock cue. Because the press is swallowed, the macOS 15 hover popup never sees it and stays up, so the popup is the only reaction the user sees. A press Pane does not take would full-screen Notes, which the user did not see."
 fix:
 verification:
 files_changed: []
