@@ -110,7 +110,7 @@ import os
                 }
             }
             if let saved = store.contents {
-                await run(arranger.handle(.restore(saved.world, homeFrames: saved.homeFrameMap), now: .now))
+                await run(arranger.handle(.restore(saved.world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap), now: .now))
             }
             // This launch's session record (cleanExit false) goes down at once, with the saved layout still in it.
             write()
@@ -485,7 +485,7 @@ import os
         let snapshot = arranger.snapshot
         let session = SessionRecord(
             cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal, survivedMinute: survivedMinute)
-        let file = LayoutFile(world: snapshot.world, homeFrames: snapshot.homeFrames, session: session)
+        let file = LayoutFile(world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session)
         do {
             try store.save(file)
         } catch {

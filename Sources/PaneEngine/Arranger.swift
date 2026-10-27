@@ -9,7 +9,7 @@ public enum ArrangerInput: Sendable {
     /// The instant a `wake` asked for has come.
     case tick
     /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
-    case restore(World, homeFrames: [WindowIdentity: Rect])
+    case restore(World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:])
     /// Sets or clears one pause reason; Stage Manager (plan 16) and the crash loop (plan 14) arrive this way.
     case setPaused(PauseReason, Bool)
     /// The gap between tiles (D-27), already validated by the shell's allow-list.
@@ -130,9 +130,9 @@ public struct Arranger: Sendable {
     /// The tile each docked window refused and was sent once more (G-03-6); a new tile, or docking again, allows one new retry.
     private var refusalRetried: [WindowIdentity: Rect] = [:]
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
-    private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect])?
+    private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect])?
     /// A saved layout that could not be re-attached: still what is saved, so this session cannot overwrite it (WR-04).
-    private var unattached: (world: World, homeFrames: [WindowIdentity: Rect])?
+    private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect])?
     /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
     private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
@@ -290,8 +290,8 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore(let world, let homeFrames):
-            pendingRestore = (world, homeFrames)
+        case .restore(let world, let homeFrames, let wantedFrames):
+            pendingRestore = (world, homeFrames, wantedFrames)
             return []
         case .setPaused(let reason, let on):
             let wasPaused = !pauseReasons.isEmpty
@@ -318,7 +318,7 @@ public struct Arranger: Sendable {
         case .launch(let mode):
             launch = mode
             // No saved layout, but the first complete inventory still runs the restore path, so stranded windows are rescued.
-            if mode == .unreadable { pendingRestore = (World(), [:]) }
+            if mode == .unreadable { pendingRestore = (World(), [:], [:]) }
             // D-18: a crash loop starts paused; Resume clears it. Stranded windows still come on screen (UI-SPEC N3).
             guard mode == .crashLoop else { return [] }
             pauseReasons.insert(.crashLoop)
@@ -328,8 +328,8 @@ public struct Arranger: Sendable {
 
     /// What layout.json should hold now: while a restore waits, or after it failed, the saved layout itself, so a write
     /// then loses nothing.
-    public var snapshot: (world: World, homeFrames: [WindowIdentity: Rect]) {
-        pendingRestore ?? unattached ?? (world, homeFrames)
+    public var snapshot: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]) {
+        pendingRestore ?? unattached ?? (world, homeFrames, wantedFrames)
     }
 
     /// A saved layout is waiting for a usable inventory: the shell feeds it every inventory until then.
@@ -360,7 +360,7 @@ public struct Arranger: Sendable {
     /// or frame cannot be applied keeps its saved one. If the saved layout cannot be re-attached at all, the World starts
     /// empty and the saved layout stays what is saved. `unplaced` counts the tracked windows the saved layout did not hold.
     private mutating func reattach(
-        _ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?
+        _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?
     ) -> (effects: [ArrangerEffect], unplaced: Int) {
         history = UndoHistory()
         do throws(LayoutError) {
@@ -368,6 +368,10 @@ public struct Arranger: Sendable {
             var candidate = reattached.world
             var seeded: [WindowIdentity: Rect] = [:]
             var faults: [ArrangerEffect] = []
+            // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
+            var wanted = restore.wantedFrames.filter { id, frame in
+                candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
+            }
             for info in tracked where info.state != .closed {
                 guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
                     continue
@@ -377,6 +381,7 @@ public struct Arranger: Sendable {
                     if !desk.desktop.contains(info.window) {
                         seeded[info.window.identity] = info.frame
                     } else if info.state == .present {
+                        if movedWhileOff(info, saved: desk) { wanted[info.window.identity] = info.frame }
                         try candidate.recordFloatingFrame(info.frame, for: info.window)
                     }
                 } catch {
@@ -385,6 +390,7 @@ public struct Arranger: Sendable {
             }
             world = candidate
             lastRequested = seeded
+            wantedFrames.merge(wanted) { $1 }
             for desk in world.desks.values {
                 for floating in desk.desktop.windows where wantedFrames[floating.window.identity] == nil {
                     wantedFrames[floating.window.identity] = floating.frame
@@ -606,10 +612,19 @@ public struct Arranger: Sendable {
         } else if info.state == .present, desk.tree.isDesktopHidden != true, !Recovery.isStranded(info.frame, displays: displays) {
             // A parked or stranded frame never replaces the desk's: the re-plan moves the window back there (CR-02).
             try world.recordFloatingFrame(info.frame, for: info.window)
-            wantedFrames[info.window.identity] = info.frame
+            if movedWhileOff(info, saved: desk) { wantedFrames[info.window.identity] = info.frame }
         }
         try release(info)  // its app was excluded while it was dormant (WR-02, D-29)
         try rehome(info)
+    }
+
+    /// A present floater on a shown Desktop whose real frame is on screen and more than 2 pt off its saved floating
+    /// frame: the user moved it while Pane was not running, so its real frame is what it wants (T-03-74).
+    private func movedWhileOff(_ info: WindowInfo, saved desk: Desk) -> Bool {
+        guard info.state == .present, desk.tree.isDesktopHidden != true, !Recovery.isStranded(info.frame, displays: displays),
+            let saved = desk.desktop.frame(of: info.window)
+        else { return false }
+        return !Self.near(info.frame, saved, within: 2)
     }
 
     /// Saved windows a desk holds that the window system does not track: kept at the restore because the CG list still
