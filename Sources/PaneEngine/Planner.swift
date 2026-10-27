@@ -100,11 +100,12 @@ public enum Planner {
 
     /// Where Dock puts a window whose centre is at `point`: the drop target there (D-12), except that a tile's centre
     /// zone means the nearest edge band of the same tile, since centre drops make tab groups only from Phase 7.
+    /// At the exact centre the tie picks the left edge (user decision 2026-10-27).
     public static func dockTarget(at point: Point, desk: Desk, area: Rect, resolution: Resolution) -> DropTarget? {
         let target = DropZones.target(at: point, in: area, tree: desk.tree, resolution: resolution)
         guard case let .tile(id, .center)? = target, let rect = resolution.nodeRects[id] else { return target }
         let fx = (point.x - rect.minX) / rect.width, fy = (point.y - rect.minY) / rect.height
-        if min(fx, 1 - fx) <= min(fy, 1 - fy) { return .tile(id, .edge(fx < 0.5 ? .left : .right)) }
+        if min(fx, 1 - fx) <= min(fy, 1 - fy) { return .tile(id, .edge(fx <= 0.5 ? .left : .right)) }
         return .tile(id, .edge(fy < 0.5 ? .top : .bottom))
     }
 }
