@@ -124,7 +124,7 @@ Plans:
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
   7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
-**Plans:** 24/24 plans executed (7 gap-closure plans from UAT)
+**Plans:** 24/26 plans executed (9 gap-closure plans from UAT)
 
 Plans:
 **Wave 1**
@@ -190,6 +190,10 @@ Plans:
 
 **Gap closure (G-03-10), Wave 1** *(from the 03-23 review-fix VM checks; no plan dependency)*
 - [x] 03-24-PLAN.md — G-03-10: the initial sweep counts only when it ran unpaused, so a start while locked restores every saved desk after unlock (AXWindowSystem + fake mirror, locked-start regression); AX-read failure just after unlock recorded as a non-goal
+
+**Gap closure (G-03-4 reopened, G-03-11), Waves 1-2** *(from the 03-24 VM hand checks; 03-26 blocked on 03-25)*
+- [ ] 03-25-PLAN.md — G-03-11/G-03-4: per-window wanted frame only user actions write (kept while docked); floaters planned from it so a Desktop that shrinks and grows back returns them; a refused floater read-back stops a boundary drag at its real size; Float and the green button go to the pre-dock frame (or a 90% centred frame) so every toggle is visible
+- [ ] 03-26-PLAN.md — G-03-4/G-03-11: wanted frames saved in layout.json (optional key, old files load with none, validated like home frames); re-attach keeps frames the user changed while Pane was not running and drops stranded ones
 
 **UI hint**: yes
 **Research**: Standard patterns; drop-zone geometry starts from yabai's numbers (edge bands ~25%, centre ~50%) and is tuned in UAT
