@@ -38,7 +38,7 @@ public enum LifecycleSync {
             try world.rekey(from: from, to: to.window, history: &history)
             return true
         case .windowCreated, .windowMoved, .windowResized, .windowFocused, .windowChanged, .frameApplied,
-             .appResponsiveness, .sessionPaused, .appLaunched, .appTerminated, .displaysChanged, .spaceChanged:
+             .appResponsiveness, .sessionPaused, .appLaunched, .appTerminated, .displaysChanged, .spaceChanged, .liveWindowsChanged:
             return false
         }
     }

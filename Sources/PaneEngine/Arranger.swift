@@ -191,7 +191,11 @@ public struct Arranger: Sendable {
             }
             sessionPaused = inventory.sessionPaused
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
-            guard let restore = pendingRestore else { return place(inventory) }
+            guard let restore = pendingRestore else {
+                // A dormant window whose ID left the CG list closed (G-03-8); a paused, unknown or empty list decides nothing.
+                guard !inventory.sessionPaused, let live = inventory.liveWindows, !live.isEmpty else { return place(inventory) }
+                return closeDormant { !LayoutRestore.isAlive($0.identity, in: live) } + place(inventory)
+            }
             // The saved layout waits for every app's first answer, so no saved window is dropped as untracked.
             guard inventory.initialRefreshComplete else { return [] }
             pendingRestore = nil
@@ -517,7 +521,12 @@ public struct Arranger: Sendable {
             case .windowFocused(let window):
                 focusOrder.removeAll { $0 == window.identity }
                 focusOrder.insert(window.identity, at: 0)
-            case .appResponsiveness, .appLaunched, .appTerminated, .displaysChanged:
+            case .appTerminated(let pid):
+                // Its tracked windows are still in `windows` here and close on their own windowDestroyed.
+                faults += closeDormant { $0.pid == pid }
+            case .liveWindowsChanged:
+                return []  // the inventory the shell feeds next prunes
+            case .appResponsiveness, .appLaunched, .displaysChanged:
                 break
             }
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
@@ -531,7 +540,7 @@ public struct Arranger: Sendable {
         } catch {
             return [.fault("ignored an event: \(error)")]
         }
-        guard case .windowCreated(let info) = event else { return hidden + replan() }
+        guard case .windowCreated(let info) = event else { return faults + hidden + replan() }
         do throws(LayoutError) {
             return try faults + takeFinderWindow(info, now: now) + replan()
         } catch {
@@ -551,6 +560,30 @@ public struct Arranger: Sendable {
             try world.recordFloatingFrame(info.frame, for: info.window)
         }
         try rehome(info)
+    }
+
+    /// Saved windows a desk holds that the window system does not track: kept at the restore because the CG list still
+    /// had them (G-03-8), until their first windowCreated.
+    public var hasDormantWindows: Bool { !dormantWindows.isEmpty }
+
+    private var dormantWindows: [WindowRef] {
+        world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }
+            .filter { windows[$0.identity] == nil }.sorted { $0.identity < $1.identity }
+    }
+
+    /// Closes the dormant windows `predicate` picks, in identity order, through the OS-fact close path any closed window
+    /// takes: no undo step, purged from the snapshots. Returns a fault per window that could not be closed.
+    private mutating func closeDormant(where predicate: (WindowRef) -> Bool) -> [ArrangerEffect] {
+        var faults: [ArrangerEffect] = []
+        for window in dormantWindows where predicate(window) {
+            forget(window)
+            do throws(LayoutError) {
+                _ = try LifecycleSync.handle(.windowDestroyed(window), world: &world, history: &history)
+            } catch {
+                faults.append(.fault("could not prune the closed window \(window): \(error)"))
+            }
+        }
+        return faults
     }
 
     private mutating func forget(_ window: WindowRef) {

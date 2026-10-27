@@ -145,6 +145,9 @@ public enum WindowEvent: Equatable, Sendable {
     case appTerminated(pid: Int32)
     case displaysChanged
     case spaceChanged(displayUUID: String, spaceID: UInt64?)
+    /// The window system's set of layer-0 CG windows of tracked apps changed. It carries nothing: the shell then feeds
+    /// the inventory, whose `liveWindows` prunes dormant saved windows that closed (G-03-8).
+    case liveWindowsChanged
 }
 
 /// Something the engine asks the window system to do.
