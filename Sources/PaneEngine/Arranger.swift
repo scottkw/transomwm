@@ -338,7 +338,8 @@ public struct Arranger: Sendable {
         for info in inventory.windows {
             do throws(LayoutError) {
                 try release(info)
-                try rehome(info)
+                // The pressed window may be crossing displays; where it lands is decided at mouse-up (WR-04).
+                if drag?.window != info.window { try rehome(info) }
                 try admit(info)
             } catch { faults.append(.fault("could not add \(info.window): \(error)")) }
         }

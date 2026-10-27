@@ -129,6 +129,24 @@ private func previews(_ effects: [ArrangerEffect]) -> [PreviewState] {
         #expect(up.contains(.pollDragFrame(nil)))
     }
 
+    /// WR-04: an inventory fed mid-drag (a display change, or a CG list change while a window is dormant) never
+    /// re-homes the pressed window: where it lands is decided at mouse-up, as for a windowChanged.
+    @Test func anInventoryMidDragNeverRehomesThePressedWindow() throws {
+        let start = ContinuousClock.now
+        let right = DisplayInfo(uuid: "right", frame: Rect(x: 1440, y: 0, width: 1440, height: 900),
+                                visibleFrame: Rect(x: 1440, y: 25, width: 1440, height: 875), currentSpaceID: nil)
+        var arranger = Arranger()
+        _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay, right], windows: [info(2, frame: floatingFrame)], initialRefreshComplete: true)), now: start)
+        try #require(arranger.deskKey(of: f) == mainKey)
+        _ = drag(&arranger, f, from: floatingFrame, to: Point(x: 1500, y: 310), at: start)
+        try #require(arranger.isDragging)
+
+        var crossed = info(2, frame: shifted(floatingFrame, 1000))
+        crossed.displayUUID = "right"
+        _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay, right], windows: [crossed], initialRefreshComplete: true)), now: start)
+        #expect(arranger.deskKey(of: f) == mainKey, "the pressed window was re-homed mid-drag")
+    }
+
     @Test func aClickWithoutTravelStartsNoPollAndChangesNothing() async throws {
         var harness = await Harness.started(frames: [2: floatingFrame])
         let world = harness.arranger.world
