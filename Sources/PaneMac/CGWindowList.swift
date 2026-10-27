@@ -18,14 +18,26 @@ public nonisolated enum CGWindowList {
     /// The topmost visible layer-0 window of another process under `point`: the tap's fallback when an event carries no
     /// window (0 at the session tap, 03-11), so a green button under another window is never taken.
     static func topmostWindow(at point: Point) -> UInt32? {
-        onScreenFrontToBack().flatMap { topmost(at: point, in: $0, excludingPID: getpid()) }
+        var id: CGDirectDisplayID = 0
+        var count: UInt32 = 0
+        let display = CGGetDisplaysWithPoint(CGPoint(x: point.x, y: point.y), 1, &id, &count) == .success && count > 0
+            ? CGDisplayBounds(id) : nil
+        let bounds = display.map { Rect(x: $0.minX, y: $0.minY, width: $0.width, height: $0.height) }
+        return onScreenFrontToBack().flatMap { topmost(at: point, in: $0, excludingPID: getpid(), display: bounds) }
     }
 
-    /// The first entry of the front-to-back `list` at layer 0, of a pid other than `own`, visible and containing `point`.
-    /// Layer 0 skips the Dock's full-screen layer-20 window (macOS 15, G-03-4) and other overlay layers, as pressWindow
-    /// does. Accepted trade-off (T-03-52): another app's non-zero-layer panel over a green button no longer blocks it.
-    static func topmost(at point: Point, in list: [CGWindowEntry], excludingPID own: Int32) -> UInt32? {
-        list.first { $0.layer == 0 && $0.pid != own && $0.alpha > 0 && $0.bounds.contains(point) }?.windowID
+    /// The first entry of the front-to-back `list` of a pid other than `own`, visible and containing `point`, if it is
+    /// at layer 0; nil when a window above layer 0 owns the point first (a menu, Dock tile, popover or banner, CR-01).
+    /// Only an overlay covering the whole `display` under the point is looked through: the Dock's full-screen layer-20
+    /// window on macOS 15 (G-03-4).
+    static func topmost(at point: Point, in list: [CGWindowEntry], excludingPID own: Int32, display: Rect?) -> UInt32? {
+        for entry in list where entry.pid != own && entry.alpha > 0 && entry.bounds.contains(point) {
+            if entry.layer == 0 { return entry.windowID }
+            if let display, entry.bounds.minX <= display.minX, entry.bounds.minY <= display.minY,
+               entry.bounds.maxX >= display.maxX, entry.bounds.maxY >= display.maxY { continue }
+            return nil
+        }
+        return nil
     }
 
     private static func read(_ options: CGWindowListOption) -> [CGWindowEntry]? {
