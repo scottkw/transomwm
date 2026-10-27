@@ -218,7 +218,30 @@ blocked: 2
   resolved_by: "test fix in the commit that adds this entry"
   debug_session: ".planning/debug/g-03-7-live-too-big-test.md"
 
+- gap_id: G-03-8
+  truth: "Docked windows on every Space come back to their own layouts after quitting and relaunching Pane, apps still running (SAFE-06)"
+  status: failed
+  reason: "Verifier + VM: after a Pane relaunch (clean or crash-recovery) the hidden Space's desk comes back empty; reproduced 4/4"
+  severity: major
+  test: 17
+  root_cause: "AX kAXWindowsAttribute lists only the shown Space's windows, so at launch WindowTracker never tracks hidden-Space windows; Arranger.process(.inventory) runs LayoutRestore.reattach once at the first complete inventory and it closes every saved window not tracked yet (World.apply(.closed)). The windows are alive: CGWindowList optionAll still has them at layer 0 with the same IDs and SkyLight reports their Space. ArrangerMultiDeskRestoreTests misses it because its relaunch reuses the first session's fake tracker."
+  artifacts:
+    - path: "Sources/PaneEngine/LayoutRestore.swift"
+      issue: "reattach (18-23) treats not-yet-tracked as closed"
+    - path: "Sources/PaneEngine/Arranger.swift"
+      issue: "restore runs once at the first complete inventory (194-218)"
+    - path: "Sources/PaneMac/AXWindowSystem.swift"
+      issue: "has the optionAll CG list and SkyLight Spaces at the first sweep but never passes live-untracked windows to the engine"
+    - path: "Tests/PaneEngineTests/ArrangerMultiDeskRestoreTests.swift"
+      issue: "relaunch (120-123) keeps the same FakeWindowSystem"
+  missing:
+    - "Report saved windows still alive (layer-0 CG optionAll entry, same windowID+pid) to reattach and keep them dormant in their desk"
+    - "Seed lastRequested for a dormant docked window when it is first created so the Space-switch plan is written"
+    - "Close a dormant window when its ID leaves the CG list or its app terminates"
+    - "Headless test with a fresh fake at relaunch (fails today); fix ArrangerMultiDeskRestoreTests the same way; VM re-check of UAT 17's Space half"
+  debug_session: ".planning/debug/g-03-8-hidden-space-relaunch.md"
+
 ## Observed, not yet a gap
 
-- Space 2's docked Notes/Reminders were missing from layout.json after a Pane relaunch at 20:42 UTC (seen by the G-03-6 debugger). May be test 17's multi-desk relaunch; needs a clean repro.
+- (promoted to G-03-8) Space 2 desk emptied on relaunch.
 - After a Dock restart, Pane stopped correcting one window's frame changes (seen by the G-03-4 debugger, possibly caused by the restart).
