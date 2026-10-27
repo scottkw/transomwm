@@ -1,320 +1,201 @@
 ---
 phase: 03-tiling-mvp
-reviewed: 2026-10-26T14:42:37Z
+reviewed: 2026-10-27T00:50:29Z
 depth: standard
-files_reviewed: 55
+scope: "gap-closure diff since 53d5faa (plans 03-18..03-22, PANE_LIVE opt-in gate, scripts/vm-live-test.sh); replaces the earlier full phase-3 review"
+diff_base: 53d5faa
+files_reviewed: 9
 files_reviewed_list:
-  - Sources/PaneEngine/Arranger+Commands.swift
   - Sources/PaneEngine/Arranger.swift
-  - Sources/PaneEngine/Command.swift
-  - Sources/PaneEngine/DragSession.swift
-  - Sources/PaneEngine/GapHandles.swift
-  - Sources/PaneEngine/LayoutFile.swift
-  - Sources/PaneEngine/LayoutRestore.swift
-  - Sources/PaneEngine/LifecycleSync.swift
-  - Sources/PaneEngine/Notice.swift
+  - Sources/PaneEngine/MinimumSizeLearner.swift
+  - Sources/PaneEngine/PendingFocus.swift
   - Sources/PaneEngine/Planner.swift
-  - Sources/PaneEngine/WindowSnapshot.swift
-  - Sources/PaneEngine/WindowSystem.swift
-  - Sources/PaneEngine/WindowTracker.swift
-  - Sources/PaneFixtureApp/main.swift
-  - Sources/PaneMac/AX/AXAppThread.swift
-  - Sources/PaneMac/AX/AXSnapshotReader.swift
-  - Sources/PaneMac/AX/MenuPress.swift
   - Sources/PaneMac/AXWindowSystem.swift
-  - Sources/PaneMac/ArrangeController.swift
   - Sources/PaneMac/CGWindowList.swift
-  - Sources/PaneMac/Displays.swift
-  - Sources/PaneMac/GapPreference.swift
-  - Sources/PaneMac/Input/DragFramePoller.swift
-  - Sources/PaneMac/Input/GreenButton.swift
-  - Sources/PaneMac/Input/Hotkeys.swift
-  - Sources/PaneMac/Input/InputTap.swift
-  - Sources/PaneMac/LayoutStore.swift
-  - Sources/PaneMac/Overlay/GapHandlePanels.swift
-  - Sources/PaneMac/Overlay/NoticeQueue.swift
-  - Sources/PaneMac/Overlay/PreviewPanel.swift
-  - Sources/PaneMac/Overlay/PreviewStyle.swift
-  - Sources/PaneMac/Overlay/Toast.swift
-  - Sources/PaneMac/PaneMacApp.swift
-  - Sources/PaneMac/Shell/CommandMenu.swift
-  - Sources/PaneMac/Shell/MenuCopy.swift
-  - Sources/PaneMac/Shell/NoticeCopy.swift
-  - Sources/PaneMac/Shell/StatusItemController.swift
-  - Sources/PaneModel/DesktopLayer.swift
-  - Sources/PaneModel/IDs.swift
-  - Sources/PaneModel/LayoutTree.swift
-  - Sources/PaneModel/Neighbours.swift
-  - Sources/PaneModel/Resolve.swift
-  - Sources/PaneModel/Snap.swift
   - Sources/PaneModel/TreeEdits.swift
-  - Sources/PaneModel/Undo.swift
-  - Sources/PaneModel/World.swift
-  - Sources/PanePrivate/SkyLightSpaces.swift
-  - Sources/PaneTestSupport/FakeWindowSystem.swift
-  - Tests/PaneEngineTests/ArrangerMultiDeskRestoreTests.swift
-  - scripts/release.sh
-  - xcode/project.yml
-  - Sources/PaneEngine/PaneURL.swift
-  - Sources/PaneMac/AppDelegate.swift
-  - Sources/PaneEngine/Recovery.swift
-  - Sources/PaneEngine/PermissionReducer.swift
+  - scripts/vm-live-test.sh
+  - Tests/PaneMacIntegrationTests/IntegrationSupport.swift
 findings:
   critical: 2
-  warning: 6
-  info: 9
-  total: 17
+  warning: 5
+  info: 3
+  total: 10
 status: issues_found
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (gap-closure diff since 53d5faa)
 
-**Reviewed:** 2026-10-26T14:42:37Z
+**Reviewed:** 2026-10-27T00:50:29Z
 **Depth:** standard
-**Files Reviewed:** 55
+**Files Reviewed:** 9
 **Status:** issues_found
 
 ## Summary
 
-This review covers the 51 files in the phase-3 list. It also read four files outside that list, because the focus areas depend on them: `PaneURL.swift`, `AppDelegate.swift` (the URL scheme and the quit restore), `Recovery.swift` (crash and quit rules) and the Phase 2 `PermissionReducer.swift` (the root cause of the Accessibility grant finding). Items already logged in `deferred-items.md` are not reported again.
+This review covers only the changes made since `53d5faa` (`git diff 53d5faa HEAD`): plans 03-18 to 03-22 (G-03-3, G-03-4, G-03-5, G-03-6), the `PANE_LIVE=1` opt-in gate for the live AX suites, and `scripts/vm-live-test.sh`. It replaces the earlier full phase-3 review that was in this file. I also read the code these changes call (`InputTap`, `GreenButton`, `WindowTracker`'s learner and bundle-hint path, `MinimumHintsStore`, `planShown` / `planFloatingLostRoom`, `TreeEdits.commit` / `normalize`).
 
-The model layer is careful and holds up well: copy-then-commit edits, validated decoding, iterative walks and typed throws. `TreeEdits`, `Resolve`, `Neighbours` and `Snap` showed no correctness defects. The URL parser is a strict whitelist. The event tap re-enables itself on `tapDisabledBy*` and does no AX work in its callback. The quit restore is bounded and off main.
+The four fixes do what their summaries say on the paths they were tested on. Two of them have side effects that will cause real harm:
 
-The defects are in how the Engine's state stays in sync with the OS:
+- **G-03-4 (CR-01).** The layer-0 filter skips every window that is not at layer 0, not only the Dock's full-screen overlay. A click on a menu item, a context-menu item, or a Dock icon that sits over a green button is now eaten, and Pane docks or floats the window underneath.
+- **G-03-6 part 2 (CR-02).** For the first time, a fixed-size window can now be learned. Its size is merged into the per-bundle hint, which only ever grows and is saved to disk. One Welcome or About window then sets the minimum for every window of that app, permanently. The 03-22 VM run already wrote `com.apple.reminders width 768` this way.
 
-- **Undo** can silently drop a window from every desk.
-- **Parking** puts windows onto a neighbouring display. This happens on the user's own two-display setup.
-- **Desk keys** depend on a Space lookup that can switch off or return 0 partway through a session. When it does, existing desks are stranded.
+The other findings: the live gap move silently reverts lost-room floats, so the notice repeats on every drag event (WR-01). The Planner's greedy floater drop removes more floaters than it needs to and is biased against width-only hints (WR-02). The retry state has a gap when a window is docked again into the same tile (WR-03). The VM script has robustness problems (WR-04, WR-05).
 
-Two of today's live findings have causes in this code:
-
-- **Accessibility grant not picked up (WR-02):** the cause is confirmed. The reducer never polls on the plain launch path.
-- **Safari not docking (WR-03):** the cause is a probable one that still needs one live log line to confirm. It points at the drag classifier.
+The `PANE_LIVE` gate itself is correct. All 21 integration suites go through `IntegrationEnv.trusted`, and nothing else in Sources, Tests, scripts or CI still reads `PANE_SKIP_AX_INTEGRATION`.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: Undo silently drops every window that joined the desk after the undone edit
+### CR-01: The green-button fallback now eats clicks meant for menus, context menus and the Dock
 
-**File:** `Sources/PaneModel/World.swift:236-255`, `Sources/PaneEngine/Arranger.swift:582-590`, `Sources/PaneEngine/Arranger.swift:685-690`
-**Issue:** Undo restores the snapshot desk as it was, so any window that came onto the desk later disappears. Several routes add a window to a desk without an undo step, through `World.reflow`:
+**File:** `Sources/PaneMac/CGWindowList.swift:27-29` (called from `Sources/PaneMac/Input/InputTap.swift:134-140`)
 
-- `admit` (a new window floats on the Desktop)
-- `rehome` (a window that moved to this display or Space)
-- `release` (an app that was just excluded)
-- `planFloatingLostRoom`
+**Issue:** `topmost(at:in:excludingPID:)` returns the first entry that is at layer 0 and contains the point. It skips every non-zero layer, not just the Dock's full-screen layer-20 overlay that G-03-4 was about. Before this change, any window in front of the green button blocked the swallow. The session tap's window field is always 0 (03-11), so every press inside a green-button rect now resolves to the app window underneath. That includes presses on:
 
-None of these push a snapshot. `World.undo` replaces the whole desk with the snapshot (`candidate.desks[key] = snapshot`). It reconciles the states of windows present in both, but a window that is in the current desk and not in the snapshot is simply gone. `Arranger.undo` then calls only `replan()`, and nothing re-admits the window.
+- menu-bar dropdowns and context menus (layer 101). The first items of the app menu or File menu ("About …", "Settings…") lie right over the green button of a window docked at the top-left: window at (12, 37), button rect about x 58–74, y 43–59.
+- Dock icons (layer 20) when the Dock is on the left or auto-hidden.
+- popovers, Notification Center banners, and Control Center or status-item menus over a right-side tile.
 
-Example: dock A, open a new window B (admitted floating), press ⌃⌥⌘Z. B is now on no desk. As a result:
+`GreenButton.shouldSwallow` then returns true. The menu or Dock never gets the click, and Pane toggles dock/float on an unrelated window. T-03-52 accepted this for "another app's panel". Menus and the Dock are much more common than panels, and that acceptance did not consider them. This is a regression introduced by this diff.
 
-- the Planner does not size the Desktop tile for B's minimum;
-- Dock and Move on B beep (`availability(.dock)` needs a desk);
-- moving B by hand does nothing, because `moved()` returns early when `deskKey` is nil;
-- B is only picked up again by an unrelated `windowChanged` or `windowCreated` event, or by a display-change inventory.
-
-The reverse case is just as bad. A window whose app was excluded after the snapshot is docked again by the undo, which breaks D-29 until the next `windowChanged` event.
-
-No test covers "undo after a window was admitted".
-**Fix:** After an undo, reconcile the tracked windows against the World. For example, at the end of `Arranger.undo`:
+**Fix:** Skip only see-through overlays that cover a whole display. Any other window above layer 0 that contains the point owns the click. `CGDisplayBounds` is safe to call on the tap thread.
 ```swift
-guard let key = targetKey(focused), let revived = try LifecycleSync.undo(key, world: &world, history: &history) else { return [.beep] }
-for info in windows.values.sorted(by: { $0.window.identity < $1.window.identity }) {
-    try release(info)   // an app excluded since the snapshot floats again
-    try admit(info)     // a window the snapshot did not hold floats on its Desktop
-}
-return revived.windows.isEmpty ? replan() : [.requery(revived)]
-```
-Alternatively, have `World.undo` carry each current-only window onto the snapshot's Desktop layer at its current frame. Add a regression test for "dock A, open B, undo: B is still floating on the desk".
-
-### CR-02: Parked windows land on the neighbouring display, visible and overlapping its tiles
-
-**File:** `Sources/PaneEngine/WindowSystem.swift:21-23`, `Sources/PaneMac/AXWindowSystem.swift:196-201`, `Sources/PaneEngine/Recovery.swift:67`
-**Issue:** `parkedFrame` always puts a window's top-left corner at `visibleFrame.maxX - 1, visibleFrame.maxY - 1` of its own display. With a second display to the right of it, or below it, the parked window ends up almost entirely on that other display. This is the user's own setup: the built-in display plus a DELL S3425DW beside it.
-
-Hide Desktop on the left display, and its floating windows appear on the right display on top of that display's docked tiles. That breaks the core "never overlap" promise.
-
-`Recovery.swift:67` already notes "A park corner can show on a neighbouring display", but only the quit path works around it. The same blind spot also affects `rescueStranded` / Restore All (`Arranger+Commands.swift:31`). A window parked onto the other display has most of its area visible, so `Recovery.isStranded` returns false and Restore All does not bring it back while paused.
-**Fix:** Pick the park corner that has no neighbouring display, as AeroSpace does, and fall back to an off-screen point outside the union of all display frames:
-```swift
-public func parkedFrame(size: Size, among displays: [DisplayInfo]) -> Rect {
-    let corners = [(visibleFrame.maxX - 1, visibleFrame.maxY - 1), (visibleFrame.minX - size.width + 1, visibleFrame.maxY - 1),
-                   (visibleFrame.maxX - 1, visibleFrame.minY - size.height + 1), (visibleFrame.minX - size.width + 1, visibleFrame.minY - size.height + 1)]
-    for (x, y) in corners {
-        let r = Rect(x: x, y: y, width: size.width, height: size.height)
-        if !displays.contains(where: { $0.uuid != uuid && $0.frame.overlaps(r) }) { return r }
+static func topmost(at point: Point, in list: [CGWindowEntry], excludingPID own: Int32, displays: [Rect]) -> UInt32? {
+    for entry in list where entry.pid != own && entry.alpha > 0 && entry.bounds.contains(point) {
+        if entry.layer == 0 { return entry.windowID }
+        // The Dock's full-screen layer-20 window (macOS 15, G-03-4) covers a whole display: look through it.
+        if displays.contains(where: { $0 == entry.bounds }) { continue }
+        return nil  // a menu, Dock tile, popover or banner is on top: never swallow
     }
-    return Rect(x: visibleFrame.maxX - 1, y: visibleFrame.maxY - 1, width: size.width, height: size.height)
+    return nil
 }
 ```
-Pass `displays` from `AXWindowSystem.perform`. Add a two-display fake test where display B sits to the right of A.
+Add `TopmostWindowTests` cases for a layer-101 menu entry and a small layer-20 Dock-tile entry listed before the layer-0 window. Both should give nil. Also consider not skipping Pane's own layer-101 status-menu window. That is an older version of the same problem.
+
+### CR-02: A fixed-size window now writes a permanent, grow-only minimum for its whole app
+
+**File:** `Sources/PaneEngine/MinimumSizeLearner.swift:59-73` (the new unmoved-promotion path), together with `Sources/PaneEngine/Arranger.swift:584-598` (`retryRefusal`). The minimum spreads through `Sources/PaneEngine/WindowTracker.swift:165-172`, `Sources/PaneMac/AXWindowSystem.swift:436-440` and `Sources/PaneMac/MinimumHintsStore.swift:61-68`.
+
+**Issue:** Before 03-22, a window that never moves when written to was never learned. 03-22 adds two pieces: (a) an unmoved refusal that repeats at least 1 s later is promoted to a candidate, and (b) the Arranger itself sends that repeat write. A fixed-size window (Welcome, About, onboarding, a fixed settings window) therefore now always confirms its own size as a "minimum". From there the value:
+
+1. is merged into `bundleHints[bundleID]` for the rest of the session (WindowTracker 170-171);
+2. is reported through `onLearnedMinimum` and saved to `min-size-hints.json` per bundle (AXWindowSystem 439, PaneMacApp 44-50);
+3. only ever grows (`record` and `seed` take the max), and nothing in the code resets it.
+
+As a result, every later window of that app, including resizable main windows whose real minimum is much smaller, starts with the fixed window's size. D-26 then refuses to dock them, or floats them, whenever the tile is narrower. The 03-22 VM run shows this happening: `min-size-hints.json` gained `{'bundleID': 'com.apple.reminders', 'width': 768}` from the Welcome window. The run only got rid of it by copying the old file back. On a user's Mac it would stay. The same path also learns any window of an app that stays unresponsive for more than about 2 s, which the doc comment admits as a "Known limit". Pane's own retry makes that case easy to hit, and this per-bundle spread turns it into permanent damage.
+
+**Fix:** Keep minimums learned from unmoved refusals per window and for the current session only. Never merge them into bundle hints or persist them. Only refusals where the window moved toward the request should feed D-13. For example:
+```swift
+private struct Candidate { var width: Double?; var height: Double?; var writtenAt: ContinuousClock.Instant; var unmoved: Bool }
+// confirm(...) -> (minimum: Size, persistable: Bool)?
+// WindowTracker: update bundleHints and set info.learnedMinimumIsPersistable only when persistable;
+// AXWindowSystem.emit: call onLearnedMinimum only for persistable minimums.
+```
+Alternatively, before promoting an unmoved refusal, check that the window is resizable at all (`AXUIElementIsAttributeSettable(kAXSizeAttribute)` or a grow area). Also give users a way to reset a bundle's hint, because learned values can never shrink.
 
 ## Warnings
 
-### WR-01: A Space lookup that turns off or returns 0 mid-session strands every existing desk
+### WR-01: During a live gap drag, lost-room floats are undone and the notice repeats on every drag event
 
-**File:** `Sources/PaneMac/Displays.swift:33`, `Sources/PanePrivate/SkyLightSpaces.swift:59-63`, `Sources/PaneEngine/Arranger.swift:605-622`, `Sources/PaneEngine/Arranger.swift:1239-1241`, `Sources/PaneEngine/Arranger.swift:1371-1373`
-**Issue:** A desk's key is `(displayUUID, currentSpaceID)`. The Space ID becomes nil in two ways:
+**File:** `Sources/PaneEngine/Arranger.swift:1301-1315` and `1189-1194`
 
-- `SLSManagedDisplayGetCurrentSpace` answers 0, which can happen transiently during a display reconfiguration.
-- The capability switches off for the session after `failureLimit` (5) consecutive failed `spaces(of:)` batches (`Capabilities.swift:85`).
+**Issue:** After G-03-3 H2, every `replan()` call made during a gap drag goes through `replan(with:on:)`. That function runs `planShown()` on a temporary World and restores it with `defer { world = committed }`. `planShown` calls `planFloatingLostRoom`, which floats unfit docked windows by changing `world` (`World.reflow`). Those floats are now thrown away, for every shown display, not just the dragged desk. The `.notice(.lostRoom)` and the `setFrame` commands for the post-float layout are still emitted.
 
-Once that happens, every display's key becomes `(uuid, nil)`, and the consequences follow:
+The next drag event, at pointer rate, finds the same window unfit again, floats it again on a fresh temporary World, and emits the notice again. Mouse-up then floats it for real. This can happen whenever a docked window becomes unfit mid-drag: a minimum confirmed by the learner or by the new `retryRefusal`, an un-minimise, or a display change on another screen. The comment at 1192 ("weights never make a window unfit, so replan floats nothing here") was true only for the original edge-resize use. It no longer holds now that every event's replan goes through this path.
 
-- **Never planned again:** existing desks `(uuid, X)` no longer match any shown key, so `replan` skips them and they are never planned again.
-- **No migration:** `rehome` does not move their windows, because the display is the same and `leftSpace` is false with `spaces == nil`.
-- **Commands beep:** commands on those windows beep, because `display(for:)` is nil.
-- **Phantom desk:** windows admitted during a transient nil go to a `(uuid, nil)` desk. Once the lookup recovers, that desk is never shown again either.
+**Fix:** In the live path, do the lost-room float on the committed World first, then apply the gap move. For example, run `planFloatingLostRoom` (or a pass that only floats) on `world` before taking the `committed` snapshot. Or have `replan(with:on:)` keep any tree changes `planFloatingLostRoom` made and revert only the weight change. Add a test: during a gap drag, a learned minimum that leaves a window unfit floats it once, gives one notice, and later drag events give no notice.
 
-The layout looks frozen, and the state is persisted to layout.json.
-**Fix:** In `Displays.current()`, keep the last known non-nil Space ID when SkyLight answers 0. When the capability turns off for the session, merge each display's desks into one `(uuid, nil)` desk, through `World.reflow`, once. At minimum, have `home(of:)` / `rehome` treat a nil shown Space as matching any desk on the same display.
+### WR-02: The Planner's greedy floater drop removes more floaters than needed, and drops width-only hints last
 
-### WR-02: Root cause: an Accessibility grant made while Pane runs is never noticed (live finding)
+**File:** `Sources/PaneEngine/Planner.swift:23-40`
 
-**File:** `Sources/PaneEngine/PermissionReducer.swift:74-75`, `Sources/PaneEngine/PermissionReducer.swift:93`, `Sources/PaneMac/Permission/PermissionController.swift:46-54`, `Sources/PaneMac/ArrangeController.swift:171-189`
-**Issue:**
+**Issue:** Floaters are dropped in descending order of `min.width * min.height`, and a dropped floater is never added back. Two consequences:
 
-- **The reducer never starts polling:** at launch without trust, `(.notTrusted, .launched(false))` returns `[]`, so no polling starts. Polling begins only from `.openSettingsClicked`, the "Open System Settings" button in Set Up Pane.
-- **A poll could not move the state anyway:** `.pollTick` is handled only in `.waitingForGrant`.
+1. **Over-dropping.** Suppose floaters A (300×600) and B (768×200) sit beside docked W (642 wide) on 1024 pt. B's width is the problem, but A has the larger area, so A goes first. W is still unfit, so B goes next. Now A no longer sizes the Desktop, even though it would fit next to W. A is then clamped below its own minimum and overlaps a tile (T-03-58), without any need.
+2. **Single-axis hints sort last.** A learned minimum with one axis still at 0 has area 0. The under-32 pt rule in 03-22 produces these, for example Reminders' `768×0`. Such a floater is always dropped last, after every two-axis floater, even when it is the only one causing the problem.
 
-So if the user grants access directly in System Settings, through the system prompt, or after closing the Set Up window, `phase` stays `.notTrusted` forever. Then `.startTracking` never fires, and `onTrackingStarted` / `startTap` never run.
-
-The tap watchdog cannot recover from this either. It is created only inside `startTap()`, so on this path it does not exist. This matches the log: no transition on the first launch, and notTrusted → probing → ready after a relaunch.
-**Fix:**
+**Fix:** After the loop, try to add back each dropped floater, in reverse drop order. Keep it if `unfit` is still a subset of `baselineUnfit`:
 ```swift
-case (.notTrusted, .launched(let trusted)):
-    if !trusted { return [.startPolling] }
-    ...
-case (.notTrusted, .pollTick(let trusted, _)):
-    guard trusted else { return [] }
-    state.phase = .probing
-    return [.stopPolling, .runProbe]
+var dropped: [(window: WindowRef, min: Size)] = []
+while !resolution.unfit.isSubset(of: baselineUnfit) { dropped.append(sizing.removeFirst()); resolution = try resolved(sizing) }
+for floater in dropped.reversed() {
+    let trial = try resolved(sizing + [floater])
+    if trial.unfit.isSubset(of: baselineUnfit) { sizing.append(floater); resolution = trial }
+}
 ```
-Add a reducer test for "launched untrusted, a later poll tick says trusted, so the state goes to probing".
+Or order the drops by how far each floater's minimum goes past the room the Desktop can have on the axis that overflows, not by area. Add a PlannerTests case for each of the two consequences.
 
-### WR-03: Probable root cause of Safari not docking: drag classification depends on mouse-dragged events and on AX and CG sizes matching (live finding)
+### WR-03: `refusalRetried` is never cleared, so a window docked again into the same tile is never retried or learned
 
-**File:** `Sources/PaneEngine/Arranger.swift:826-844`, `Sources/PaneEngine/DragSession.swift:124-139`, `Sources/PaneEngine/Arranger.swift:1024-1034`, `Sources/PaneMac/ArrangeController.swift:283-290`
-**Issue:** A drag becomes a `.move`, the only kind that can dock, only when both of these hold:
+**File:** `Sources/PaneEngine/Arranger.swift:587-598` (state at 123; cleared only in `forget` at 540)
 
-1. **Travel.** `travelled` is computed only from `session.pointer`, which only `.leftMouseDragged` and `.flagsChanged` tap events update (`Arranger.swift:829`). The frame poll starts only after travel (`:832-835`). If a window drag is driven so that no `leftMouseDragged` reaches the session tap, for example a toolbar drag handed to the WindowServer, the session never travels. It is never classified and never polled.
-2. **Equal sizes.** `observe` compares every sample's size with `startFrame` within 1 pt. `startFrame` is the AX frame, while the samples are CG bounds from `DragFramePoller`. If an app's CG bounds differ in size from its AX frame (unified toolbar, glass chrome), the first poll sample classifies the press as `.resize`.
+**Issue:** The entry is keyed by the exact tile `Rect`, and it is removed only when the window is forgotten. Take a refused window whose minimum was not learned the first time: the app was late at the confirm, or the refresh fell through `dropDue`. It stays docked and overlapping. If the user floats it and docks it again into the same layout, the deterministic Planner produces the identical rect. `refusalRetried[id] == requested`, so there is no retry. With no repeat write, the learner's unmoved record is never promoted. That window can then never be learned at that tile, which is exactly the G-03-6 overlap this plan was meant to remove.
 
-Either way, `release` takes the `.miss` path, or the unclassified "app's own frame change" path (`:1024-1034`). For a floating window, that only records its frame. The result is exactly "Safari stays floating", with no preview and no refusal, while TextEdit, whose AX frame and CG bounds agree, docks fine.
+**Fix:** Clear the entry when the window leaves the tree, and when a write fits its tile:
+```swift
+// in retryRefusal, before the guard's overflow test:
+if actual.width <= requested.width + margin, actual.height <= requested.height + margin { refusalRetried[id] = nil }
+// and wherever a window is undocked/floated (float, commitUndock, planFloatingLostRoom): refusalRetried[id] = nil
+```
 
-Also, `.up` does not update `session.pointer` (`:841-844`).
+### WR-04: `vm-live-test.sh` says "VM busy" on a fresh checkout
+
+**File:** `scripts/vm-live-test.sh:21-22`
+
+**Issue:** `mkdir .build/pane-vm.lock` fails when `.build/` does not exist yet, for example on a fresh clone or after `swift package clean`. The script then prints "VM busy (.build/pane-vm.lock exists)" and exits, which points the user at the wrong problem. `.build` is only created later, at line 25.
+
 **Fix:**
+```bash
+mkdir -p .build
+mkdir .build/pane-vm.lock 2>/dev/null || { echo "vm-live-test: VM busy (.build/pane-vm.lock exists)" >&2; exit 1; }
+```
 
-- Log `session.kind`, `travelled` and the first sample against `startFrame` at release, and run one Safari drag to confirm which of the two conditions fails.
-- Take `startFrame` from `DragFramePoller.bounds(of:)` at mouse-down, so CG bounds are compared with CG bounds.
-- Count travel from the window's origin displacement as well as from pointer samples, for example `travelled || abs(frame.x - startFrame.x) + abs(frame.y - startFrame.y) >= minimumTravel`.
-- Set `session.pointer = event.location` on `.up`.
+### WR-05: An interrupted VM run leaves Pane quit and fixture apps running in the guest
 
-### WR-04: If re-attaching the saved layout fails, the next save erases layout.json
+**File:** `scripts/vm-live-test.sh:36-47`
 
-**File:** `Sources/PaneEngine/Arranger.swift:321-323`, `Sources/PaneEngine/Arranger.swift:272-275`, `Sources/PaneMac/ArrangeController.swift:360-363`, `Sources/PaneMac/ArrangeController.swift:434-445`
-**Issue:** When `reattach` throws, the World stays empty and `pendingRestore` is already nil. Possible causes include `recordFloatingFrame` rejecting a live frame as out of range (`isValidGeometry`), or `apply` failing validation. `place(inventory)` then admits windows, which changes the World and emits `.save(.debounced)`. Half a second later, `write()` saves the empty-plus-floating World over the user's layout.json. The saved layout is lost with only a log line. This is not the `.corrupt` path, which LayoutStore sets aside safely; this file was valid.
-**Fix:** On a re-attach failure, keep the saved layout:
+**Issue:** The remote cleanup (`pkill -x PaneFixtureApp`, relaunching Pane) runs only if the test helper returns normally. A Ctrl-C, an SSH drop, or the helper hanging and being killed all skip it. The guest is then left with Pane not running and PaneFixtureApp windows open, and the next UAT or live run on that guest starts from a dirty desk. The local `trap` releases only the local lock. Also, `osascript … quit` followed by a fixed `sleep 2` does not check that Pane actually quit. If Pane quits slowly, it is still tiling while the fixture suites run.
 
-- either keep `snapshot` returning the saved World for the rest of the session (as `pendingRestore` does),
-- or have the shell copy layout.json to `layout.json.unattached` before the first write.
-
-Also make the failure isolated per window. Skip a window whose frame or state cannot be applied instead of failing the whole re-attach.
-
-### WR-05: A rejected or newer-schema layout.json skips crash rescue at launch
-
-**File:** `Sources/PaneMac/ArrangeController.swift:98-100`, `Sources/PaneMac/LayoutStore.swift:36-52`, `Sources/PaneEngine/Arranger.swift:177`
-**Issue:** `launchMode` comes from `store.contents?.session`. When the file was rejected (`.corrupt`, set aside) or comes from a newer schema, `contents` is nil, so the launch counts as `.normal`. That holds even if the previous session crashed with its Desktop hidden. `rescueStranded` runs only in non-normal modes, so windows parked at a display corner stay stranded until the user finds Restore All. "Stranded windows come on screen first" (D-17) is exactly the guarantee this case needs.
-**Fix:** If `store.loadError != nil`, treat the launch as `.recovery` for rescue purposes only, since there is no layout to re-apply. Alternatively, always run `rescueStranded` at the first complete inventory: it only moves windows that are less than half on screen.
-
-### WR-06: Home frames are cleared only by `replan`, which does not run while paused, so a quit sends windows back to stale homes
-
-**File:** `Sources/PaneEngine/Arranger.swift:1230`, `Sources/PaneEngine/Arranger.swift:1265`, `Sources/PaneEngine/Arranger+Commands.swift:30-34`, `Sources/PaneEngine/Recovery.swift:66-71`
-**Issue:**
-
-1. Restore All runs while paused (by design). It shows hidden Desktops through `showParkedDesktops`.
-2. `replan()` returns at once while paused or while the session is paused, so the line that spends home frames on a shown Desktop (`:1265`) never runs.
-3. If the user then moves those floating windows (`moved()` still records the frames) and quits while still paused, `Recovery.terminationPlan` sees a home frame for each one and writes it back to its old home.
-
-The same happens to any floating window left with a home frame whenever `replan` has been skipped.
-**Fix:** Clear the home frames of a desk's floating windows inside `showingDesktop()`'s commit path, or in `showParkedDesktops` / `toggleDesktop`, rather than in `replan`. Or have `terminationPlan` use a home frame only while the window's desk still has its Desktop hidden.
+**Fix:** Put a `trap` in the remote script and wait for Pane to exit:
+```bash
+ssh ... "
+  cleanup() { pkill -x PaneFixtureApp || true; [ -n \"\$was_running\" ] && open -a /Applications/Pane.app; }
+  trap cleanup EXIT HUP INT TERM
+  ...
+  [ -n \"\$was_running\" ] && osascript -e 'quit app \"Pane\"' && for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Pane >/dev/null || break; sleep 0.5; done
+"
+```
+Consider `ssh -t` so a Ctrl-C reaches the remote process group.
 
 ## Info
 
-### IN-01: The press-window fallback skips an untracked topmost window and picks a tracked window beneath it
+### IN-01: Comments no longer describe the code after 03-20 and 03-21
 
-**File:** `Sources/PaneMac/ArrangeController.swift:268-273`
-**Issue:** The session tap always reports window 0, so every press goes through the CG front-to-back scan. If the topmost layer-0 window under the pointer is untracked, for example Pane's own Set Up or Tracked Windows window, or an app Pane does not track, the loop continues and returns a tracked window underneath. A drag session and a 60 Hz poll then start for a window the user did not press. They usually stay unclassified, but this is wrong.
-**Fix:** Stop at the first layer-0 entry containing the point. Return its tracked window, or nil.
+**File:** `Sources/PaneEngine/Arranger.swift:1192`, `Sources/PaneEngine/Arranger.swift:1426-1429`
 
-### IN-02: A rekey does not update the drag session or remove duplicates from `focusOrder`
+**Issue:** "weights never make a window unfit, so replan floats nothing here" stopped being true once every replan goes through this function during a gap drag (see WR-01). `planFloatingLostRoom`'s doc still says "A floated window's minimum sizes the Desktop tile, which can leave a neighbour without room in turn, so this repeats". Since 03-21, the Planner drops a floater that would push a docked window out, so that cascade no longer happens.
 
-**File:** `Sources/PaneEngine/Arranger.swift:440-450`
-**Issue:** `drag.window` keeps the old identity, so the moves and `dragFrame` events of a window being dragged go unmatched, and the docked window gets corrected against the user. `focusOrder.map` can also leave the new identity in the list twice.
-**Fix:** End or re-point `drag` when `drag?.window == from`, and remove duplicates after the map.
+**Fix:** Update both comments, or remove them, along with the WR-01 fix.
 
-### IN-03: The tap callback can do WindowServer IPC and log
+### IN-02: `setWeights` says it normalises to sum 1, but `commit` also clamps to `minWeight`
 
-**File:** `Sources/PaneMac/Input/InputTap.swift:134-136`, `Sources/PaneMac/CGWindowList.swift:26-29`
-**Issue:** A press inside any published green-button rect calls `CGWindowListCopyWindowInfo` inside the callback, and on failure it logs at error level. Both go against T-03-29 ("no logging"). Under WindowServer load this can push the callback toward `tapDisabledByTimeout`.
-**Fix:** Use a log-free variant in the callback, and consider resolving "topmost window" from a snapshot cached on the tap thread.
+**File:** `Sources/PaneModel/TreeEdits.swift:241-250`
 
-### IN-04: A gap drag whose split disappears mid-drag leaves the in-progress frames until the next replan
+**Issue:** `commit` calls `normalize()`, which clamps every weight to at least `minWeight` (0.01). A re-based share below 1 % therefore does not come out as the caller passed it, and the caller cannot tell. In `boundaryChange`, the `resizeBetween` delta that follows is then computed against weights that were not actually stored. The effect is tiny today.
 
-**File:** `Sources/PaneEngine/Arranger.swift:1315-1320`
-**Issue:** The guard returns `[]`, with no `replan()`, when the handle's split is gone, for example because a window closed during the drag. The `ended` call therefore never sets the neighbours back.
-**Fix:** Return `replan()` from that guard when `ended` is true.
+**Fix:** Either reject weights below `minWeight` in the guard, or say in the doc comment that they are clamped.
 
-### IN-05: layout.json is briefly 0644 before the chmod
+### IN-03: `vm-live-test.sh` relies on word splitting and string interpolation for its SSH options and arguments
 
-**File:** `Sources/PaneMac/LayoutStore.swift:65-66`
-**Issue:** `Data.write(options: .atomic)` creates the file with the umask's default mode, and `setAttributes(0o600)` runs afterwards. ~/Library is normally 0700 and titles are removed, so the impact is minimal.
-**Fix:** Write with `FileManager.createFile(atPath:contents:attributes: [.posixPermissions: 0o600])` to a temporary file, then `replaceItemAt`.
+**File:** `scripts/vm-live-test.sh:18, 35, 42-43`
 
-### IN-06: Any page or app can toggle the Desktop tile through `pane://toggle-desktop`
+**Issue:** `-e "ssh ${ssh_opts[*]}"` breaks when the key path contains a space. Extra `VAR=value` arguments (`$*`) and the filter (`'$filter'`) are pasted into the remote shell string unquoted or single-quoted, so a value containing a space or a `'` breaks the remote command. These values come from the operator, not from outside, so this is about robustness, not security. Host-key checking is off (`StrictHostKeyChecking=no`, `UserKnownHostsFile=/dev/null`). That is acceptable for a local Tart VM, but it should be stated in the script's header.
 
-**File:** `Sources/PaneEngine/PaneURL.swift:7`, `Sources/PaneMac/AppDelegate.swift:53-65`
-**Issue:** The parser is strict and the rate limit is per command, so this is safe from injection. But an unattended `toggle-desktop` parks every floating window, and a page can repeat it once a second. Browsers do prompt before opening a custom scheme.
-**Fix:** Consider a shared limit across commands, or leaving `toggle-desktop` out of the URL surface until there is a user-visible need.
-
-### IN-07: release.sh never runs a Gatekeeper assessment on the DMG itself
-
-**File:** `scripts/release.sh:110-114`
-**Issue:** `spctl` assesses only `$app`, so a DMG whose ticket or signature Gatekeeper rejects would still pass. The known hdiutil disappearance (deferred-items, 03-17) is also caught only at line 107, after `codesign` has already failed on line 99.
-**Fix:** Add `spctl -a -t open --context context:primary-signature -v "$dmg"`, and run `[ -f "$dmg" ] || retry once` right after line 97.
-
-### IN-08: Dead centre-zone check in `dock`
-
-**File:** `Sources/PaneEngine/Arranger.swift:645`
-**Issue:** `Planner.dockTarget` already maps `.center` to the nearest edge, so this branch cannot run.
-**Fix:** Remove it, or turn it into an assertion.
-
-### IN-09: The restore test redoes LayoutStore's encoding instead of calling it
-
-**File:** `Tests/PaneEngineTests/ArrangerMultiDeskRestoreTests.swift:104-111`
-**Issue:** The test copies the redaction and encoder settings by hand, so a change to `LayoutStore.save`/`decode`, such as encoder options or home-frame validation, would not be caught. The test also covers only a `.normal` launch.
-**Fix:** Round-trip through `LayoutStore(directory: tempDir).save` / `load()`, and add a `.recovery` variant.
+**Fix:** Escape the remote arguments with `printf '%q '`, for example `remote_env=$(printf '%q ' "$@")` and `filter_q=$(printf '%q' "$filter")`, and pass `-e "ssh $(printf '%q ' "${ssh_opts[@]}")"` to rsync.
 
 ---
 
-_Reviewed: 2026-10-26T14:42:37Z_
+_Reviewed: 2026-10-27T00:50:29Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
-
-## Fix log
-
-**Fixed:** 2026-10-26 (gsd-code-fixer, iteration 1)
-**Scope:** CR-01, CR-02, WR-01, WR-02, WR-04, WR-05, WR-06. WR-03 is deferred until a live Safari drag log shows which condition fails. IN-01 to IN-09 are out of scope.
-**Verification:** headless only, run in the isolated review-fix worktree: `swift test --filter "PaneModelTests|PaneEngineTests|PaneMacTests"` gave 190 + 188 + 448 tests passing, and `scripts/check-no-appkit.sh` passed. No integration or live tests were run.
-
-| ID | Status | Commit | Fix | Regression tests |
-|----|--------|--------|-----|------------------|
-| CR-01 | fixed: requires human verification | adb93d2 | `Arranger.undo` re-applies `release` and `admit` to every tracked window after `World.undo`. | `ArrangerLifecycleTests.undoKeepsAWindowAdmittedSinceTheUndoneEdit`, `ArrangerExclusionTests.undoNeverDocksAWindowExcludedSinceTheSnapshot` |
-| CR-02 | fixed | d8a66cd | `DisplayInfo.parkedFrame(size:among:)` uses the bottom-right corner, else the bottom-left, whichever overlaps no other display. If both overlap, it falls back to the bottom-right corner of all displays together. `AXWindowSystem` and `FakeWindowSystem` pass their displays. The quit path still trusts the home frame (`Recovery.swift` note). | `RecoveryTests.theParkCornerAvoidsANeighbouringDisplay`, `RecoveryTests.withBothBottomCornersTakenTheParkGoesPastEveryDisplay`, `ArrangerDesktopTests.hidingNeverParksAWindowOntoTheDisplayBeside` |
-| WR-01 | fixed: requires human verification | 5e614e2 | The Arranger keeps each display's last known Space when an inventory or a `spaceChanged` reports nil. Desks stay planned and no phantom `(uuid, nil)` desk appears. Limit: once the capability is off for the session, Space switches can no longer be seen, so the last shown Space's desk stays the planned one. | `ArrangerSpacesTests.aSpaceLookupLostMidSessionKeepsTheLastShownSpacesDesk` |
-| WR-02 | fixed | e008eb0 | `.launched(trusted: false)` starts polling, and `.pollTick(trusted: true)` in `.notTrusted` goes to probing. | `PermissionReducerTests.untrustedLaunchStaysNotTrustedAndPolls` (was `…WithNoEffects`), `PermissionReducerTests.aGrantMadeWithoutTheSettingsButtonIsNoticedByThePoll` |
-| WR-03 | skipped | — | Needs a live Safari drag log first (user decision). | — |
-| WR-04 | fixed | 641b02b | Re-attach failures are now isolated per window: such a window keeps its saved state and frame. A whole re-attach failure keeps the saved layout as `snapshot` for the rest of the session. | `ArrangerRestoreTests.aWindowWhoseFrameCannotBeRecordedDoesNotLoseTheSavedLayout` |
-| WR-05 | fixed: requires human verification | 04ba317 | New `LaunchMode.unreadable`, used when `store.loadError != nil`. The first complete inventory runs the restore path with an empty layout, so stranded windows are rescued, with no notice. It counts as a recovery launch for crash-loop accounting. | `RecoveryTests.anUnreadableLayoutIsAnUnreadableLaunch`, `ArrangerRestoreTests.anUnreadableLayoutLaunchRescuesStrandedWindowsWithNoNotice` |
-| WR-06 | fixed | 82f767c | `Arranger.handle` spends the home frames on every desk whose Desktop is shown after each input. The copy inside `replan` is removed. | `ArrangerRestoreTests.restoreAllWhilePausedSpendsTheHomeFramesSoAQuitLeavesMovedWindowsAlone` |
