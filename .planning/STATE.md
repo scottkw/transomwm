@@ -240,6 +240,12 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-26: wanted frames are an optional layout.json key; schemaVersion stays 1, older files load with none
 - [Phase 03]: 03-26: at re-attach a floater moved >2 pt while Pane was off keeps its real frame; a stranded saved wanted frame is dropped
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261027-gqo | green click on a full-Desktop floater docks left | 2026-10-27 | 18d2d04 | [261027-gqo-green-click-on-a-floater-filling-the-des](./quick/261027-gqo-green-click-on-a-floater-filling-the-des/) |
+
 ### Pending Todos
 
 None yet.
