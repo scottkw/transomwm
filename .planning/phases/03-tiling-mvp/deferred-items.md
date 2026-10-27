@@ -63,6 +63,8 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
 - **(03-18) Space 2's docked windows are dropped on every Pane relaunch.** Clean repro, twice in the VM: layout.json
   had a second desk (spaceID 41) with Notes#150 and reminders#693 docked, both apps running; after quit and relaunch
   on Space 1 the desk key stays but its docked list is empty. Matches the 03-UAT.md note on test 17.
+  **Resolved by 03-23 (G-03-8):** saved windows still in the layer-0 CG list stay dormant in their desk and re-attach
+  when their Space is shown; VM clean and kill -9 relaunches on 0.3.7 (1005) kept Space 41 intact.
 - **(03-19) Dock Window is enabled in the menu when the dock will be refused for lack of room.** `Arranger.availability`
   checks only that the focused window floats and is present. In the VM desk (floating Finder windows, 460 pt minimum,
   and Safari in the Desktop tile) no split of the 574x326 Desktop tile fits, so ⌃⌥⌘D on a new TextEdit window beeped
