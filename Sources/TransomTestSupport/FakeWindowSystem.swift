@@ -144,7 +144,8 @@ public actor FakeWindowSystem: WindowSystem {
     }
 
     /// A native tab group (D-08): standard windows sharing `frame` and `space`. Only `visible` is listed in AX and
-    /// onscreen; the other tabs exist only in the CG list, offscreen.
+    /// onscreen; the other tabs exist only in the CG list, offscreen. Hidden tabs keep the frame they had when they
+    /// were hidden, as on macOS 15.7.7 (G-02-10).
     public func tabGroup(ids: [UInt32], frame: Rect, pid: Int32, visible: UInt32, space: UInt64? = nil) {
         for id in ids {
             var tab = FakeWindow.standard(id: id, pid: pid, frame: frame, title: "Tab \(id)", space: space)
@@ -154,20 +155,33 @@ public actor FakeWindowSystem: WindowSystem {
         selectTab(visible)
     }
 
-    /// Cmd-T in `window`: AppKit opens tab `id` in its frame and on its Space, and shows it.
-    public func newTab(_ id: UInt32, in window: UInt32) {
+    /// Cmd-T in `window`: AppKit opens tab `id` on its Space at `frame`, else at the frame of the group's shown tab
+    /// (the host's when it has no group yet), and shows it. The tab hidden by it keeps its own frame (G-02-10: Terminal's
+    /// first Cmd-T grows the new tab by the tab bar; Finder may open it at a hidden sibling's frame).
+    public func newTab(_ id: UInt32, in window: UInt32, frame: Rect? = nil) {
         guard let host = windows[window] else { return }
         let group = host.tabGroupID ?? window
         windows[window]?.tabGroupID = group
-        var tab = FakeWindow.standard(id: id, pid: host.pid, frame: host.frame, title: "Tab \(id)", space: host.space)
+        let groupFrame = selectedTabs[group].flatMap { windows[$0]?.frame } ?? host.frame
+        var tab = FakeWindow.standard(id: id, pid: host.pid, frame: frame ?? groupFrame, title: "Tab \(id)", space: host.space)
         tab.tabGroupID = group
         windows[id] = tab
-        selectTab(id)
+        show(id)
     }
 
-    /// Shows tab `id`, as AppKit does: it becomes its group's one listed, onscreen member (while its Space is shown)
-    /// and its `AXTabs` count is the number of its group's tabs AX still knows. The others go unlisted and offscreen.
+    /// Shows tab `id`, as AppKit does: it takes the frame of its group's previously shown tab (the group frame; AppKit
+    /// applies it only when it shows a tab, debug E2), then becomes its group's one listed, onscreen member (while its
+    /// Space is shown), and its `AXTabs` count is the number of its group's tabs AX still knows. The others go unlisted
+    /// and offscreen, each keeping its own frame (G-02-10).
     public func selectTab(_ id: UInt32) {
+        guard let group = windows[id]?.tabGroupID else { return }
+        if let previous = selectedTabs[group], previous != id, let groupFrame = windows[previous]?.frame {
+            windows[id]?.frame = groupFrame
+        }
+        show(id)
+    }
+
+    private func show(_ id: UInt32) {
         guard let group = windows[id]?.tabGroupID else { return }
         selectedTabs[group] = id
         let members = windows.values.filter { $0.tabGroupID == group && $0.inCGList }

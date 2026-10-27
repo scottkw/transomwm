@@ -75,4 +75,50 @@ private func nextEvent(_ stream: AsyncStream<WindowEvent>) async -> WindowEvent?
         await fake.perform(Array(commands.suffix(1)))
         #expect(await fake.performed == commands)
     }
+
+    // MARK: 02-19 (G-02-10): hidden tabs keep the frame they had when hidden, as on macOS 15.7.7
+
+    /// The CG bounds the fake reports for `id` right now.
+    private func cgBounds(_ fake: FakeWindowSystem, _ id: UInt32) async -> Rect? {
+        await fake.inventory().liveWindows?.first { $0.windowID == id }?.bounds
+    }
+
+    @Test func aNewTabOpensAtItsOwnFrameAndTheTabItHidKeepsItsFrame() async {
+        let fake = await fakeWithOneWindow()
+        let taller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height + 28)
+        await fake.newTab(40, in: 42, frame: taller)
+        #expect(await cgBounds(fake, 40) == taller)
+        #expect(await cgBounds(fake, 42) == frame)
+    }
+
+    @Test func aNewTabWithoutAFrameOpensAtTheShownTabsFrame() async {
+        let fake = await fakeWithOneWindow()
+        let taller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height + 28)
+        await fake.newTab(40, in: 42)
+        #expect(await cgBounds(fake, 40) == frame, "the host is shown: its frame, as before")
+        await fake.newTab(50, in: 42, frame: taller)
+        await fake.newTab(60, in: 42)
+        #expect(await cgBounds(fake, 60) == taller, "the group's shown tab (50), not the hidden host")
+    }
+
+    @Test func showingATabGivesItTheGroupFrameAndLeavesTheOthersAlone() async {
+        let fake = await fakeWithOneWindow()
+        let taller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height + 28)
+        await fake.newTab(40, in: 42, frame: taller)
+        await fake.selectTab(42)
+        #expect(await cgBounds(fake, 42) == taller)
+        #expect(await cgBounds(fake, 40) == taller)
+    }
+
+    @Test func aTabShownFirstInANewGroupKeepsItsFrame() async {
+        let fake = await fakeWithOneWindow()
+        let other = Rect(x: 300, y: 300, width: 500, height: 300)
+        var tab = FakeWindow.standard(id: 43, pid: pid, frame: other)
+        tab.tabGroupID = 42
+        await fake.open(tab)
+        await fake.update(42) { $0.tabGroupID = 42 }
+        await fake.selectTab(43)
+        #expect(await cgBounds(fake, 43) == other)
+        #expect(await cgBounds(fake, 42) == frame)
+    }
 }
