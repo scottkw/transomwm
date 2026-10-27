@@ -91,6 +91,9 @@ private func sampleFile() throws -> LayoutFile {
         ("huge home frame", { try edited("\"width\" : 400,\n        \"x\" : 50", "\"width\" : 2e6,\n        \"x\" : 50") }),
         ("duplicate home frame", { try edited("\"homeFrames\" : [", "\"homeFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}},") }),
         ("session missing a field", { try edited("\"cleanExit\" : false,", "") }),
+        ("non-finite wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1e400,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
+        ("huge wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":2e6,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
+        ("duplicate wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}},{\"frame\":{\"x\":5,\"y\":5,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
     ]
 
     @Test(arguments: badFiles)
@@ -137,5 +140,41 @@ private func sampleFile() throws -> LayoutFile {
         #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
         #expect(try store.save(try sampleFile()) == false)
         #expect(try dir.text() == newer, "a save overwrote a newer Pane's layout")
+    }
+}
+
+/// G-03-11, SAFE-06: wanted frames in layout.json. A file from before them loads with none.
+extension LayoutStoreTests {
+    @Test func aFileFromBeforeWantedFramesLoadsWithNone() throws {
+        let dir = Directory()
+        let sample = try sampleFile()
+        try LayoutStore(directory: dir.url).save(sample)
+        var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: dir.file)) as? [String: Any])
+        try #require(json.removeValue(forKey: "wantedFrames") != nil)
+        try JSONSerialization.data(withJSONObject: json).write(to: dir.file)
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        let contents = try #require(fresh.contents)
+        #expect(contents.wantedFrames.isEmpty)
+        #expect(contents.world == sample.world)
+        #expect(contents.homeFrames == sample.homeFrames)
+    }
+
+    @Test func wantedFramesRoundTripSortedThroughTheStore() throws {
+        let dir = Directory()
+        let sample = try sampleFile()
+        let file = LayoutFile(
+            world: sample.world, homeFrames: sample.homeFrameMap,
+            wantedFrames: [ref(2).identity: Rect(x: 700, y: 300, width: 400, height: 300), ref(1).identity: Rect(x: 40, y: 80, width: 320, height: 232)],
+            session: sample.session)
+        try LayoutStore(directory: dir.url).save(file)
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == file)
+        #expect(fresh.contents?.wantedFrames.map(\.window) == [ref(1).identity, ref(2).identity])
     }
 }
