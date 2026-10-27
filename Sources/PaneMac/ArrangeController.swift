@@ -399,6 +399,7 @@ import os
             case .beep:
                 beep()
             case .announce(let text):
+                logger.info("\(text, privacy: .public)")  // refusals are otherwise only a beep and a VoiceOver line
                 postAnnouncement(text)
             case .fault(let message):
                 logger.error("\(message, privacy: .public)")
