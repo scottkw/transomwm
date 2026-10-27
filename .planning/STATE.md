@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Tiling MVP
 status: verifying
-stopped_at: Completed 03-25-PLAN.md
-last_updated: "2026-10-27T15:14:57.087Z"
+stopped_at: Completed 03-26-PLAN.md
+last_updated: "2026-10-27T15:21:35.061Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: dae0ffbafa474d7d27ea97630e3e7fdc05b0e6ef
+state_head: 7dcb43038a930e65315e585983b3018664538426
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 49
-  completed_plans: 48
+  completed_plans: 49
   percent: 11
 ---
 
@@ -97,6 +97,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase 3 P16 | 11 min | 3 tasks | 19 files |
 | Phase 03 P17 | 13h wall (checkpoint wait) | 3 tasks | 3 files |
 | Phase 03 P25 | 30min | 3 tasks | 7 files |
+| Phase 03 P26 | 5 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -236,6 +237,8 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-17: 0.3.0 DMG sha256 ee940af0c6badf8f16e2a4124f4083507d6c775dc45eeee2c9fa4028a0dc5761 stays local; nothing published until the Transom rename
 - [Phase 03]: 03-12 move rule approved by user 2026-10-26: when a window and its neighbour share a parent split, move swaps them ([a|b|Desktop], b moves left -> H[b,a,Desktop]); across a split boundary the near-edge insert stands
 - [Phase 03]: 03-25: per-window wantedFrames (user actions only, kept while docked) plan floaters; floaterFloors cut boundary drags only; Float/green button use Planner.floatFrame (pre-dock frame or 90% centred)
+- [Phase 03]: 03-26: wanted frames are an optional layout.json key; schemaVersion stays 1, older files load with none
+- [Phase 03]: 03-26: at re-attach a floater moved >2 pt while Pane was off keeps its real frame; a stranded saved wanted frame is dropped
 
 ### Pending Todos
 
@@ -263,8 +266,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T15:14:56.708Z
-Stopped at: Completed 03-25-PLAN.md
+Last session: 2026-10-27T15:21:34.674Z
+Stopped at: Completed 03-26-PLAN.md
 Resume file: None
 
 ## Deferred Verification
