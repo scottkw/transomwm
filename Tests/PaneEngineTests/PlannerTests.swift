@@ -146,6 +146,38 @@ extension PlannerTests {
         #expect(desktop.width < 768)
     }
 
+    /// H[Desktop, Notes, x] with Notes' 400 pt minimum: the Desktop's own share is 288 pt, under a 300 pt floater.
+    private func threeDocked(floating: [(WindowRef, Rect)]) throws -> Desk {
+        var desk = try notesDesk(floating: floating)
+        var ids = IDSource(next: 100)
+        try desk.tree.insert(ref(16), at: .right, of: try #require(desk.tree.leaf(containing: notes)), ids: &ids)
+        return desk
+    }
+
+    /// WR-02: the larger-area floater goes first, but once the real culprit is dropped too, it is added back.
+    @Test func aFloaterDroppedOnlyForItsAreaIsAddedBack() throws {
+        let tall = ref(13), wide = ref(14)
+        let desk = try threeDocked(floating: [
+            (tall, Rect(x: 20, y: 40, width: 300, height: 600)), (wide, Rect(x: 40, y: 60, width: 300, height: 200)),
+        ])
+        let mins = [notes: Size(width: 400, height: 100), tall: Size(width: 300, height: 600), wide: Size(width: 768, height: 200)]
+        let plan = try Planner.plan(desk: desk, area: small, gap: 12, mins: mins)
+        #expect(plan.unfit.isEmpty)
+        #expect(try #require(plan.desktopRect).width >= 300)
+    }
+
+    /// WR-02: a width-only hint (area 0) sorts last, but the floater dropped before it is added back.
+    @Test func aWidthOnlyHintIsNotKeptAtTheCostOfAFloaterThatFits() throws {
+        let safari = ref(12), reminders = ref(15)
+        let desk = try threeDocked(floating: [
+            (safari, Rect(x: 20, y: 40, width: 300, height: 300)), (reminders, Rect(x: 40, y: 60, width: 300, height: 300)),
+        ])
+        let mins = [notes: Size(width: 400, height: 100), safari: Size(width: 300, height: 300), reminders: Size(width: 768, height: 0)]
+        let plan = try Planner.plan(desk: desk, area: small, gap: 12, mins: mins)
+        #expect(plan.unfit.isEmpty)
+        #expect(try #require(plan.desktopRect).width >= 300)
+    }
+
     @Test func aDockedWindowTooBigOnItsOwnIsStillUnfit() throws {
         let safari = ref(12)
         let desk = try notesDesk(floating: [(safari, Rect(x: 20, y: 40, width: 300, height: 300))])

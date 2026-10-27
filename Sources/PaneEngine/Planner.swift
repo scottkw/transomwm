@@ -16,8 +16,9 @@ public enum Planner {
     /// Lays `desk` out in `area` (the display's visibleFrame). The Desktop tile's minimum is the per-axis maximum
     /// of its present floating windows' minimums, so they keep room to sit in it. Docked windows win over floaters
     /// (G-03-6): if that leaves docked windows unfit that would fit beside a 1x1 Desktop, the floaters with the
-    /// largest minimum area are dropped from it one at a time until they do. A dropped floater is only clamped, and
-    /// may still overlap a tile if its app refuses to shrink (T-03-58).
+    /// largest minimum area are dropped from it one at a time until they do; then each dropped floater that still fits
+    /// is added back, last dropped first (WR-02). A dropped floater is only clamped, and may still overlap a tile if
+    /// its app refuses to shrink (T-03-58).
     public static func plan(desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size]) throws(LayoutError) -> FramePlan {
         let floating = desk.desktop.windows.filter { $0.state == .present }
         var sizing = floating.compactMap { window in mins[window.window].map { (window: window.window, min: $0) } }
@@ -32,10 +33,19 @@ public enum Planner {
         var resolution = try resolved(sizing)
         if !resolution.unfit.isEmpty {
             let baselineUnfit = try resolved([]).unfit
+            var dropped: [(window: WindowRef, min: Size)] = []
             // Ends: with no floater left, the resolution is the baseline.
             while !resolution.unfit.isSubset(of: baselineUnfit) {
-                sizing.removeFirst()
+                dropped.append(sizing.removeFirst())
                 resolution = try resolved(sizing)
+            }
+            // The area order can drop a floater that was never the problem (or before a single-axis hint, area 0).
+            for floater in dropped.reversed() {
+                let trial = try resolved(sizing + [floater])
+                if trial.unfit.isSubset(of: baselineUnfit) {
+                    sizing.append(floater)
+                    resolution = trial
+                }
             }
         }
         var frames = resolution.windowRects
