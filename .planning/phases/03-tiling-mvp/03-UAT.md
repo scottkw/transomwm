@@ -228,7 +228,13 @@ blocked: 2
     - "topmostWindow(at:) picks the topmost layer-0 window, as pressWindow does, ideally as a pure function over [CGWindowEntry] with a unit test (Dock layer-20 full-screen entry first)"
     - "Re-test with real hand clicks"
   debug_session: ".planning/debug/g-03-4-green-button.md"
-  reopened: "2026-10-27: 03-18's fix passed with instant injected/VNC clicks, but a real hand click on 0.3.8 in the VM only shows the macOS 15 Move & Resize hover popup and Pane neither floats nor docks (twice). Lead (unverified): the hover delay before a human click."
+  reopened: "2026-10-27: a real hand click on 0.3.8 in the VM only showed the macOS 15 Move & Resize hover popup; Notes looked unchanged (twice)"
+  reopened_root_cause: "Not a dropped click (95f6b7a): with the popup up the tap still takes the plain press and Pane toggles (layout.json flips every time; the popup, ThemeWidgetControlViewService layer 101, sits below the button). Notes was the desk's only docked window, so Arranger.float keeps its tile rect (Desktop becomes the whole area, clamp no-op, Arranger.swift:792-811) and Arranger.dock (D-12, 765-790) returns it to the same tile at the same frame. Nothing moves, the gap handle is invisible (GapHandlePanels.swift:27), and the swallowed press leaves the popup up. A press passed through would have gone full screen (checked with Pane paused)."
+  decision: "User 2026-10-27: floating returns the window to where it was before it was docked (or a slightly smaller centred frame when unknown); docking fills the tile, so the toggle always moves the window visibly"
+  reopened_missing:
+    - "Float (green button and Float command) moves the window to its pre-dock frame, clamped into the Desktop; without one, a slightly smaller centred frame inside the Desktop"
+    - "Remember the pre-dock frame when a floating window docks (drag drop, Dock command, green button)"
+    - "Tests: only docked window floated by the green button gets a visibly different frame; re-test by hand"
 
 - gap_id: G-03-7
   truth: "Live test aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop passes (D-26 live)"
