@@ -9,7 +9,7 @@ updated: 2026-10-27T13:55:00-05:00
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing paused - 0.3.10 in the VM: G-03-10 resolved, G-03-4 and G-03-11 pass scripted; pending: user hand check of green button and gap drag, tests 16-17 display half on the host's second display]
+[testing paused - all VM gaps resolved on 0.3.10 (G-03-4, G-03-10, G-03-11 by hand); pending: tests 16-17 display half on the host's second display]
 
 ## Tests
 
@@ -145,13 +145,13 @@ note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the De
 
 - G-03-11: Space 1, Finder 2399 docked on top, 9 floaters set by AX to normal frames; gap handle dragged down 190 then back up (pathdrag, 600 ms hold): the drag stopped with the Desktop at 253 pt (Terminal's real height), every floater stayed inside the Desktop; after the drag back up all 9 floaters returned to their exact start frames: pass (scripted)
 - G-03-4: Space 41, Notes the desk's only docked window; hover 1.5 s then click its green button: floats to 191,71 642x598 (no pre-dock frame known, centred fallback); click again: docks into the bottom tile 12,375 1000x326 (D-12 drop at its centre); click again: floats back to 191,71 642x598 (wanted frame): pass (scripted). Note: once floating, Reminders can cover Notes, so a click lands on Reminders until Notes is raised
-- Pending: user hand check of both on 0.3.10
+- User hand check on 0.3.10 (Tart window, real mouse): green button on Notes docks it (bottom tile), next click floats it back to its centred frame: pass (the macOS hover popup stays open after a taken click: logged as polish in deferred-items.md). Gap drag down stops at the 253 pt floor with every floater inside the Desktop; drag back up returns all 9 floaters to frames identical to the start: pass
 
 ## Summary
 
 total: 18
 passed: 11
-issues: 6
+issues: 4
 pending: 0
 skipped: 0
 blocked: 2
@@ -220,7 +220,7 @@ blocked: 2
 
 - gap_id: G-03-4
   truth: "A plain green-button click toggles dock/float; Option-click zooms natively and D-33 returns the window to its tile (TILE-06, TILE-19)"
-  status: failed
+  status: resolved
   reason: "User reported: 1. Green button still maximizes. 2. Green button still maximizes. 3. Option-green button docks, not maximizes.  Seems you might have them backwards if that is what you intended."
   severity: major
   test: 4
@@ -241,6 +241,7 @@ blocked: 2
     - "Float (green button and Float command) moves the window to its pre-dock frame, clamped into the Desktop; without one, a slightly smaller centred frame inside the Desktop"
     - "Remember the pre-dock frame when a floating window docks (drag drop, Dock command, green button)"
     - "Tests: only docked window floated by the green button gets a visibly different frame; re-test by hand"
+  resolved_by: "03-25/03-26; user hand check on 0.3.10 (HEAD 5e6bd67) 2026-10-27: plain green click docks and floats Notes visibly, Option-click and menu-over-button pass"
 
 - gap_id: G-03-7
   truth: "Live test aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop passes (D-26 live)"
@@ -325,7 +326,7 @@ blocked: 2
 
 - gap_id: G-03-11
   truth: "Floating windows keep the size the user gave them: a Desktop tile that shrinks and grows back returns them to that size, and none ends off screen (core value: stay correctly arranged)"
-  status: failed
+  status: resolved
   reason: "User hand check in the VM: dragging the gap between docked Finder (top) and the Desktop tile down shrank the floating windows; dragging it back up left them small (Finder 546/580/2252 460x252, TextEdit 132 tall, Terminal 127 tall, all at y 569) and some end below the screen's bottom edge"
   severity: major
   test: 3
@@ -346,6 +347,7 @@ blocked: 2
     - "The Desktop tile's minimum must cover a floater's real size during a gap drag: count a refused floater clamp (read-back > request + margin) as its minimum at once, or extend retryRefusal to floaters, so boundaryChange's cut stops the drag there"
     - "Tests: a gap drag that shrinks and then grows the Desktop returns floaters to their start frames; a floater whose minimum is above the shrunken Desktop never ends below the Desktop or screen; a refused clamp still docks at the real centre (keep TooBigDockedWindowTests green)"
   debug_session: ".planning/debug/g-03-11-floaters-stay-shrunk.md"
+  resolved_by: "03-25/03-26; user hand check on 0.3.10 (HEAD 5e6bd67) 2026-10-27: gap drag down stops at the floaters' floor, back up restores all 9 floater frames exactly"
 
 ## Observed, not yet a gap
 
