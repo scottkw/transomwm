@@ -116,6 +116,18 @@ reported: "Claude-driven in the Tart VM (single display, via scripts/vm-live-tes
 severity: minor
 note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the Desktop tile's exact middle (fx = 0.5), a tie that a 1 pt area change resolved as a column split, so nothing lost room. Fixed in the test (centre in the right edge band); the suite then passed 3 runs in a row in the VM. The "main-display sizing" explanation is dropped
 
+## Re-run after gap closure (Pane 0.3.7 / 1005, HEAD 8653fcc, Tart VM, Claude-driven)
+
+- 3 gap drag / close reflow / Gaps: pass (pinned-side drag moves; hold mid-drag shows no snap-back over 122 and 274 sampled changes; Undo exact)
+- 4 green button: pass (real VNC plain click floats/docks, never fullscreen; Option-click zooms then D-33 returns; minimise/fullscreen return; CR-01: a Finder menu item over the green button got the click 3/3, window stayed docked)
+- 6 menu / focus: pass (new window B docks by Ctrl-Opt-Cmd-D; Undo case; menu enablement follows B)
+- 7 pane:// URLs: pass (toggle-desktop, split-finder with other Finder windows open, restore, restore?x=1 rejected)
+- 14 new window placement: pass
+- 15 Space 2 Reminders: pass (floats ~2 s after docking, Notes keeps its tile, no com.apple.reminders hint saved; ~410 pt overlap is accepted T-03-58)
+- 17 Space half: pass (clean quit and kill -9 both restore both desks; Notes re-tiles and is tracked)
+- New: a closed Safari window (2174) stays in layout.json as present; Safari keeps its CG entry (no Space) after close, and 03-23's dormant rule then keeps it across relaunch (G-03-9)
+- Evidence: scratchpad uat-rerun.md (session-local)
+
 ## Summary
 
 total: 18
