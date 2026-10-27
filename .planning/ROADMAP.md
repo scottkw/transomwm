@@ -124,7 +124,7 @@ Plans:
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
   7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
-**Plans:** 23/24 plans executed (7 gap-closure plans from UAT)
+**Plans:** 24/24 plans executed (7 gap-closure plans from UAT)
 
 Plans:
 **Wave 1**
@@ -189,7 +189,7 @@ Plans:
 - [x] 03-23-PLAN.md — G-03-8: saved windows on a Space not shown at relaunch stay dormant in their desk while alive in the CG list and re-attach in their tiles when shown; pruned when they close or their app quits; VM re-check of UAT 17
 
 **Gap closure (G-03-10), Wave 1** *(from the 03-23 review-fix VM checks; no plan dependency)*
-- [ ] 03-24-PLAN.md — G-03-10: the initial sweep counts only when it ran unpaused, so a start while locked restores every saved desk after unlock (AXWindowSystem + fake mirror, locked-start regression); AX-read failure just after unlock recorded as a non-goal
+- [x] 03-24-PLAN.md — G-03-10: the initial sweep counts only when it ran unpaused, so a start while locked restores every saved desk after unlock (AXWindowSystem + fake mirror, locked-start regression); AX-read failure just after unlock recorded as a non-goal
 
 **UI hint**: yes
 **Research**: Standard patterns; drop-zone geometry starts from yabai's numbers (edge bands ~25%, centre ~50%) and is tuned in UAT
@@ -311,7 +311,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 17/17 | In Progress | - |
-| 3. Tiling MVP | 23/23 | In Progress | - |
+| 3. Tiling MVP | 24/24 | In Progress | - |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
