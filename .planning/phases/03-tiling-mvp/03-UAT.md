@@ -147,6 +147,19 @@ note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the De
 - G-03-4: Space 41, Notes the desk's only docked window; hover 1.5 s then click its green button: floats to 191,71 642x598 (no pre-dock frame known, centred fallback); click again: docks into the bottom tile 12,375 1000x326 (D-12 drop at its centre); click again: floats back to 191,71 642x598 (wanted frame): pass (scripted). Note: once floating, Reminders can cover Notes, so a click lands on Reminders until Notes is raised
 - User hand check on 0.3.10 (Tart window, real mouse): green button on Notes docks it (bottom tile), next click floats it back to its centred frame: pass (the macOS hover popup stays open after a taken click: logged as polish in deferred-items.md). Gap drag down stops at the 253 pt floor with every floater inside the Desktop; drag back up returns all 9 floaters to frames identical to the start: pass
 
+## VM checks after the 03-26 review fixes (0.3.11)
+
+Pane 0.3.11 / 1009, HEAD d0321f2, Tart VM, Claude-driven (scripted), 2026-10-27.
+
+- CR-01 zoom: Space 41, Notes 150 moved to 100,100 642x450, docked, green button: floats to 100,100 642x450. Window > Zoom: 0,25 1024x688; Zoom again: 100,100 642x450; focus Reminders, Notes, Calculator, Notes: stays 100,100 642x450 in every sample: pass
+- CR-01 centre: Notes 150's wanted frame removed from layout.json while Pane was quit (a window with no pre-dock frame); Float centres it at 191,71 642x598; user move to 60,120; Window > Center gives 191,70 (1 pt from Pane's write); focus changes: stays 191,70. AX move back onto exactly 191,71, focus changes: stays 191,71: pass
+- CR-01 side effect: samples every 0.5 s for 5 s after each Float, and after a dock that clamped Terminal 160 and the Float that freed it: no frame changed after the first sample: pass. No deliberately two-step app was found, so the late-echo case is only partly covered
+- WR-01: Space 1, TextEdit 202 set to 150,60 760x600 and docked, Finder 2399 docked beside it; Float TextEdit: clamped to 12,60 494x600 with its wanted frame still 150,60 760x600; Float Finder: TextEdit grows back to 150,60 760x600: pass
+- WR-02 Float All: both re-docked; Float All leaves them on their tile rects (282,37 460x664 and 754,37 258x664); Undo re-docks them and restores the wanted frames (150,60 760x600 and 62,229 900x280); Float TextEdit (clamped 12,60 494x600), then Float Finder: TextEdit goes to 150,60 760x600 and Finder to 62,229 900x280: pass
+- WR-02 ⇧-drag: a small host-built injector (Shift on every mouse event) dragged TextEdit 202 out of its tile: it floats where dropped, at 68,161 258x664 (partly below the screen), and its wanted frame becomes that drop; Undo re-docks it with its wanted frame back to 150,60 760x600; Float both: TextEdit goes to 150,60 760x600: pass
+- Ending state: Space 1 is the same as at the start (Finder 2399 docked on top, 9 floaters on their start frames); Space 41 has nothing docked and Notes 150 at 191,71 642x598
+- Observed, not a gap: Dock on Calculator (likely fixed size) and on Reminders (min 768x692) did not dock them, and Reminders moved to 244,25. Notes' secondary note window 2481 is not tracked
+
 ## Summary
 
 total: 18
