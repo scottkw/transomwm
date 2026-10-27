@@ -32,8 +32,10 @@ import Testing
         var ready = PermissionState()
         ready.phase = .ready
         permission.overrideStateForTesting(ready)
+        // Wait for SwiftUI to re-render the ready content, then for the window to follow it.
         let fitsNewContent = await waitFor {
-            hostingView.fittingSize.height != 0 && abs(window.contentLayoutRect.height - hostingView.fittingSize.height) <= 1
+            let fitting = hostingView.fittingSize.height
+            return abs(fitting - beforeFitting) > 1 && abs(window.contentLayoutRect.height - fitting) <= 1
         }
         let after = hostingView.fittingSize.height
         // The ready content must differ in height, or the test would pass with a window that never resizes.

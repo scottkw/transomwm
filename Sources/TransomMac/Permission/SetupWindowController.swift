@@ -41,13 +41,18 @@ import SwiftUI
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? ProcessInfo.processInfo.processName
         let view = SetupView(permission: permission, appName: appName) { [weak self] in self?.window?.performClose(nil) }
         let hosting = NSHostingController(rootView: view)
-        hosting.sizingOptions = [.intrinsicContentSize]  // the window's height follows each state's content
+        // The hosting controller publishes SwiftUI's size as preferredContentSize, which the window applies,
+        // so its height follows each state's content (G-02-1).
+        hosting.sizingOptions = [.preferredContentSize]
         let window = KeyClosableWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable]
         window.title = "Set Up Transom"
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.layoutIfNeeded()
+        // AppKit may apply preferredContentSize only on a later layout pass (measured on macOS 27), so size the
+        // window once now, before the centring reads window.frame; later states are sized by preferredContentSize.
+        window.setContentSize(hosting.view.fittingSize)
         // Centred on the menu-bar screen (the first screen), on first show only.
         if let screen = NSScreen.screens.first?.visibleFrame {
             let size = window.frame.size
