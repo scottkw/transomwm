@@ -37,7 +37,7 @@ import SwiftUI
         if state.phase != .ready && !userClosed { show() }
     }
 
-    private func makeWindow() -> NSWindow {
+    func makeWindow() -> NSWindow {
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? ProcessInfo.processInfo.processName
         let view = SetupView(permission: permission, appName: appName) { [weak self] in self?.window?.performClose(nil) }
         let hosting = NSHostingController(rootView: view)

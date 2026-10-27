@@ -22,6 +22,12 @@ import os
         self.system = system
     }
 
+    /// Test seam: replaces the state directly, bypassing `PermissionReducer`, so no effect runs (no prompt, no
+    /// System Settings, no probe, no tracking). Production code uses `send(_:)`.
+    func overrideStateForTesting(_ state: PermissionState) {
+        self.state = state
+    }
+
     /// Time since launch; the reducer's clock for the stale-form-B delay.
     var elapsed: Duration { ContinuousClock.now - launchedAt }
 
