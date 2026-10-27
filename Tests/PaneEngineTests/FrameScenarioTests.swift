@@ -118,8 +118,9 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         #expect(events.filter { if case .windowChanged = $0 { true } else { false } } == [.windowChanged(info)])
     }
 
-    /// probe3c "at-min static": the window opens at its minimum, so the read-back equals the frame it had. That is
-    /// indistinguishable from a late applier (lead decision 2026-10-25), so it is learned only once a write moves it.
+    /// probe3c "at-min static": the window opens at its minimum, so the read-back equals the frame it had. One such
+    /// write is indistinguishable from a late applier (lead decision 2026-10-25): it is learned once a write moves it,
+    /// or once the same clamp repeats at least a second later (G-03-6, below).
     @Test func aWindowThatOpensAtItsMinimumLearnsItOnceAWriteMovesIt() {
         var tracker = tracker(at: r(500, 600))
         write(&tracker, r(300, 600), readsBack: r(500, 600), at: t0)
@@ -130,6 +131,27 @@ private func twoApps(hiddenMinimum: Size? = Size(width: 250, height: 150)) async
         write(&tracker, r(300, 600), readsBack: r(500, 600), at: time)
         refresh(&tracker, at: r(500, 600), time: time + confirmDelay)
         #expect(learned(tracker) == Size(width: 500, height: 0))
+    }
+
+    /// G-03-6 (Reminders' Welcome window): opened at its minimum, refused unmoved twice a second apart, then confirmed.
+    @Test func aWindowAtItsMinimumLearnsItWhenTheSameClampRepeatsASecondLater() {
+        var tracker = tracker(at: r(500, 600))
+        write(&tracker, r(300, 600), readsBack: r(500, 600), at: t0)
+        refresh(&tracker, at: r(500, 600), time: t0 + confirmDelay)
+        #expect(learned(tracker) == nil, "one unmoved refusal teaches nothing")
+        write(&tracker, r(300, 600), readsBack: r(500, 600), at: t0 + confirmDelay)
+        #expect(tracker.awaitsMinimumConfirmation(pid: pid))
+        refresh(&tracker, at: r(500, 600), time: t0 + confirmDelay * 2)
+        #expect(learned(tracker) == Size(width: 500, height: 0))
+    }
+
+    @Test func anUnmovedRepeatSoonerThanTheConfirmDelayLearnsNothing() {
+        var tracker = tracker(at: r(500, 600))
+        write(&tracker, r(300, 600), readsBack: r(500, 600), at: t0)
+        write(&tracker, r(300, 600), readsBack: r(500, 600), at: t0 + .milliseconds(10))
+        #expect(!tracker.awaitsMinimumConfirmation(pid: pid))
+        refresh(&tracker, at: r(500, 600), time: t0 + .milliseconds(10) + confirmDelay)
+        #expect(learned(tracker) == nil)
     }
 
     /// probe3c "snap": a 16-pt row snap rounds 510 up to 518, which is under the 32-pt margin.
