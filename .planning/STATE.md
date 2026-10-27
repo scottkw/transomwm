@@ -4,10 +4,10 @@ current_phase: 3
 current_phase_name: Tiling MVP
 status: verifying
 stopped_at: Completed 03-26-PLAN.md
-last_updated: "2026-10-27T15:21:35.061Z"
+last_updated: "2026-10-27T18:12:19.623Z"
 last_activity: 2026-10-25
 last_activity_desc: Phase 3 execution started
-state_head: 7dcb43038a930e65315e585983b3018664538426
+state_head: 307834ba8df2a4b1ccaa06df2db51f35efdb3226
 progress:
   total_phases: 9
   completed_phases: 1
@@ -245,6 +245,7 @@ Recent decisions affecting current work:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261027-gqo | green click on a full-Desktop floater docks left | 2026-10-27 | 18d2d04 | [261027-gqo-green-click-on-a-floater-filling-the-des](./quick/261027-gqo-green-click-on-a-floater-filling-the-des/) |
+| 2 | Log refusal announcements so the no-room dock refusal is not silent (03-19) | 2026-10-27 | 307834b | — |
 
 ### Pending Todos
 
