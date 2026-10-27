@@ -86,6 +86,31 @@ private func desk(floating: [(WindowRef, Rect)] = []) throws -> Desk {
         #expect(plan.frames[f] == nil)
     }
 
+    /// G-03-4: Float's placement.
+    @Test func floatFrameIsTheWantedFrameClampedIntoTheDesktop() {
+        let tile = Rect(x: 8, y: 33, width: 708, height: 859), desktop = Rect(x: 8, y: 33, width: 1424, height: 859)
+        let inside = Rect(x: 800, y: 100, width: 300, height: 200)
+        #expect(Planner.floatFrame(wanted: inside, tile: tile, desktop: desktop, minimum: nil) == inside)
+        let partly = Rect(x: 1300, y: 800, width: 300, height: 200)
+        #expect(Planner.floatFrame(wanted: partly, tile: tile, desktop: desktop, minimum: nil) == Planner.clamp(partly, into: desktop))
+    }
+
+    @Test func floatFrameFallsBackToACentredFrame90PercentOfTheTile() {
+        let tile = Rect(x: 8, y: 33, width: 708, height: 859), desktop = Rect(x: 8, y: 33, width: 1424, height: 859)
+        let centred = Rect(x: desktop.midX - 0.9 * 708 / 2, y: desktop.midY - 0.9 * 859 / 2, width: 0.9 * 708, height: 0.9 * 859)
+        #expect(Planner.floatFrame(wanted: nil, tile: tile, desktop: desktop, minimum: nil) == centred)
+        let onTheTile = Rect(x: 9, y: 32, width: 707, height: 860)
+        #expect(Planner.floatFrame(wanted: onTheTile, tile: tile, desktop: desktop, minimum: nil) == centred)
+    }
+
+    @Test func floatFramesFallbackKeepsTheMinimumAndNeverExceedsTheDesktop() {
+        let tile = Rect(x: 8, y: 33, width: 708, height: 859), desktop = Rect(x: 8, y: 33, width: 1424, height: 859)
+        let big = Planner.floatFrame(wanted: nil, tile: tile, desktop: desktop, minimum: Size(width: 700, height: 850))
+        #expect(big.width == 700 && big.height == 850)
+        let huge = Planner.floatFrame(wanted: nil, tile: desktop, desktop: desktop, minimum: Size(width: 2000, height: 2000))
+        #expect(huge == desktop)
+    }
+
     @Test func theDesktopMinimumIsThePerAxisMaximumOfThePresentFloatingWindows() throws {
         let wide = ref(5), tall = ref(6)
         let desk = try desk(floating: [(wide, Rect(x: 800, y: 100, width: 300, height: 200)), (tall, Rect(x: 900, y: 100, width: 300, height: 200))])

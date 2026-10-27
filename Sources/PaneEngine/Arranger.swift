@@ -837,7 +837,10 @@ public struct Arranger: Sendable {
         return replan()
     }
 
-    /// Undocks a window to the Desktop at its tile rect, clamped into the Desktop rect the undock leaves (TILE-09).
+    /// Undocks a window to the Desktop (TILE-09); the green button floats through here too. It goes to its pre-dock
+    /// (wanted) frame clamped into the Desktop rect the undock leaves; with none known, or one that would land back on
+    /// the tile, to a centred frame 90% of the tile (`Planner.floatFrame`). Docking fills the tile (D-12), so the toggle
+    /// always moves the window (G-03-4).
     private mutating func float(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame,
             let state = desk.tree.state(of: window)
@@ -847,12 +850,13 @@ public struct Arranger: Sendable {
         else { return [.beep] }
         let gap = gap
         let show = showingDesktop()
+        let wanted = wantedFrames[window.identity]
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
             // A floating window can't exist while the Desktop is hidden (UI-SPEC Surface 2), so floating shows it.
             if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
             try desk.tree.remove(window)
             let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
-            try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
+            try desk.desktop.add(window, frame: Planner.floatFrame(wanted: wanted, tile: tile, desktop: desktop, minimum: mins[window]))
             if state != .present { try desk.desktop.setState(state, for: window) }
         }
         wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)

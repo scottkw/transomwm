@@ -202,7 +202,7 @@ func info(_ id: UInt32, frame: Rect, kind: WindowKind = .dockable, excluded: Boo
 
 /// TILE-09: Float and Undo, each one undo step, and the availability rule shared by menu items and hotkeys.
 extension ArrangerLifecycleTests {
-    @Test func floatPutsADockedWindowOnTheDesktopAtItsClampedTileRect() async throws {
+    @Test func floatPutsADockedWindowOnTheDesktopAtItsPreDockFrame() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))
         await harness.send(.command(.dock, focused: w2))
@@ -211,7 +211,8 @@ extension ArrangerLifecycleTests {
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.tree.state(of: w1) == nil)
         let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        #expect(desk.desktop.frame(of: w1) == Planner.clamp(tile, into: desktop))
+        #expect(desk.desktop.frame(of: w1) == Planner.clamp(frame1, into: desktop))  // G-03-4, user decision 2026-10-27
+        #expect(desk.desktop.frame(of: w1) != tile)
         #expect(setFrames(effects)[w2] != nil, "the neighbour was not re-planned")
         #expect(harness.arranger.history.depth(for: key) == 3)
         #expect(await harness.frame(w1) == desk.desktop.frame(of: w1))
