@@ -41,10 +41,10 @@ private func startFrame(_ index: Int, on visible: Rect) -> Rect {
 
 /// A real relaunch (G-03-8): a NEW window system, whose tracker knows nothing, over the same running windows. Each
 /// display shows its Space in `shown` with no notification, then the initial sweep runs. The caller feeds `.launch`,
-/// `.restore` and the first inventory.
+/// `.restore` and the first inventory. `locked`: the screen is locked during that sweep (G-03-10).
 private func relaunched(
     with windows: [FakeWindow], displays: [DisplayInfo], showing shown: [String: UInt64],
-    apps: [FakeApp] = [FakeApp(pid: pid, bundleID: bundleID)]
+    apps: [FakeApp] = [FakeApp(pid: pid, bundleID: bundleID)], locked: Bool = false
 ) async -> Harness {
     let harness = Harness()
     await harness.fake.setDisplays(displays)
@@ -52,6 +52,7 @@ private func relaunched(
     for app in apps { await harness.fake.addApp(app) }
     for window in windows.sorted(by: { $0.id < $1.id }) { await harness.fake.open(window) }
     for (uuid, space) in shown.sorted(by: { $0.key < $1.key }) { await harness.fake.showSpace(space, onDisplay: uuid, notifies: false) }
+    if locked { await harness.fake.setLocked(true) }
     await harness.fake.refreshAll()
     _ = await harness.inbox.take()
     return harness
@@ -434,6 +435,39 @@ extension Harness {
         #expect(!harness.arranger.awaitsRestore)
         #expect(harness.arranger.world == first.saved)
         #expect(harness.arranger.world[deskA2]?.tree.windows == [ref(3)])
+    }
+
+    /// G-03-10, SAFE-06, CR-03: Pane started while the screen is locked. Its first sweep observes nothing, so it is not
+    /// the initial one: the restore waits through the lock, and the post-resume sweep, now the initial one, tracks
+    /// every window with no settle hold before the inventory is fed. Both desks come back, window 1 in its tile.
+    @Test func aStartWhileLockedKeepsEveryDeskOnceUnlocked() async throws {
+        let first = try await firstSession(space2: [3])
+        var harness = await relaunched(with: Array(await first.harness.fake.windows.values), displays: [displayA], showing: ["A": 1], locked: true)
+        #expect(await harness.fake.inventory().initialRefreshComplete == false, "a sweep while locked counted as the initial one")
+        await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(harness.arranger.awaitsRestore)
+        #expect(harness.arranger.world.desks.isEmpty, "the saved layout was re-attached while locked")
+        #expect(harness.arranger.snapshot.world == first.saved)
+
+        // Unlock: the post-resume sweep, its events to the Arranger, then the inventory, as ArrangeController does.
+        await harness.fake.setLocked(false)
+        await harness.fake.refreshAll()
+        #expect(await harness.fake.inventory().initialRefreshComplete)
+        await harness.settle()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(!harness.arranger.awaitsRestore)
+        #expect(harness.arranger.world == first.saved, "the restore after unlock lost a desk")
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+        #expect(harness.arranger.world[deskA2]?.tree.windows == [ref(3)])
+
+        // The settle follow-up refresh admits nothing new: window 1 stays docked in its tile.
+        await harness.fake.advance(by: .milliseconds(300))
+        _ = await harness.refresh()
+        #expect(harness.arranger.world == first.saved)
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+        #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(1)) != true, "window 1 ended floating")
+        #expect(await harness.frame(ref(1)) == first.tiles[ref(1)])
     }
 
     /// CR-03: an unknown CG list decides nothing, so the restore never waits on a list that may not come: it runs at
