@@ -1,6 +1,6 @@
 # Open-source TrellisWM alternative: plan
 
-Working name: **Pane** (rename freely).
+Name: **Transom**.
 Target: macOS 14+, Apple Silicon and Intel, Swift, MIT or GPL-3.0.
 
 ## 0. Ground rules (clean room)
@@ -52,11 +52,11 @@ Pro (free in our version):
 ## 2. Architecture (mirror the 3-layer split; it is a good one)
 
 ```
-PaneModel    (pure Swift, no AppKit) layout tree + geometry. 100% unit-testable.
-PaneEngine   (pure Swift)            camera, navigation, drag/drop/resize sessions,
-                                     saved views, layout tweens. Talks to a WindowSystem protocol.
-Pane.app    (AppKit)                AX window control, SkyLight Spaces queries, event taps,
-                                     multitouch, ScreenCaptureKit, overlays, menu bar, settings.
+TransomModel  (pure Swift, no AppKit) layout tree + geometry. 100% unit-testable.
+TransomEngine (pure Swift)            camera, navigation, drag/drop/resize sessions,
+                                      saved views, layout tweens. Talks to a WindowSystem protocol.
+Transom.app   (AppKit)                AX window control, SkyLight Spaces queries, event taps,
+                                      multitouch, ScreenCaptureKit, overlays, menu bar, settings.
 ```
 
 The `WindowSystem` protocol is the seam. The engine gets a fake in tests and an Accessibility-backed `AXWindowSystem` in the app.

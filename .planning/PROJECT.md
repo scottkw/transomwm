@@ -1,8 +1,8 @@
-# Pane
+# Transom
 
 ## What This Is
 
-Pane is a free, open-source (MIT) macOS window manager where windows never overlap. They are docked into nested tiled spaces on a zoomable "desk": zoom out to see everything, zoom in to whatever you need. It is a clean-room reimplementation of the ideas in the commercial app TrellisWM, built for public release.
+Transom is a free, open-source (MIT) macOS window manager where windows never overlap. They are docked into nested tiled spaces on a zoomable "desk": zoom out to see everything, zoom in to whatever you need. It is a clean-room reimplementation of the ideas in the commercial app TrellisWM, built for public release.
 
 ## Core Value
 
@@ -22,7 +22,7 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 - [ ] Trackpad gestures: ⌥-pinch/pan anywhere, pinch on bare desktop
 - [ ] Overview of all windows on all displays with a Spaces bar; optional Mission Control replacement; multi-display
 - [ ] Tab groups: drop onto the middle of a window to group; tab strip overlay with group-wide traffic lights
-- [ ] Saved views 1–9 and `pane://` URL commands
+- [ ] Saved views 1–9 and `transom://` URL commands
 - [ ] Settings, onboarding, launch at login, update check against GitHub Releases (gifsmith-style), signed and notarised builds, Homebrew cask
 
 ### Out of Scope
@@ -36,16 +36,16 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 ## Context
 
 - Feature spec comes from a static REA analysis of `TrellisWM-0.9.8.dmg`; see `PLAN.md` (sections 1–5). That analysis used only metadata, symbol names, strings and imports, with no decompilation.
-- The shipped app splits into a pure layout model, a behaviour engine and an AppKit layer; Pane mirrors this as `PaneModel`, `PaneEngine` and `Pane.app`.
+- The shipped app splits into a pure layout model, a behaviour engine and an AppKit layer; Transom mirrors this as `TransomModel`, `TransomEngine` and `Transom.app`.
 - Inferred zoom technique (not observed at runtime): a full-screen overlay draws ScreenCaptureKit snapshots; when the camera settles, real windows are resized via AX and off-view windows are parked small.
 - Prior art to study (MIT): AeroSpace (closest match), Amethyst, yabai (non-SIP parts), OpenMultitouchSupport.
-- Open questions: drop-zone geometry, per-Space vs per-display layout state, camera curve. Pane picks its own values.
+- Open questions: drop-zone geometry, per-Space vs per-display layout state, camera curve. Transom picks its own values.
 
 ## Constraints
 
 - **Platform**: macOS 14+, Apple Silicon and Intel — matches the reference app's floor and keeps ScreenCaptureKit available
 - **Tech stack**: Swift + Swift Package Manager; AppKit for overlays; SwiftUI acceptable for Settings
-- **Testability**: `PaneModel` and `PaneEngine` must not import AppKit, so they can be unit-tested headless
+- **Testability**: `TransomModel` and `TransomEngine` must not import AppKit, so they can be unit-tested headless
 - **Private APIs**: each one (`_AXUIElementGetWindow`, SkyLight, MultitouchSupport, CoreDock) isolated in one file with a fallback; they can break on any macOS update
 - **Legal**: clean room — implementers work from the spec and public prior art, never from the binary
 - **License**: MIT
@@ -59,7 +59,7 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 | v1 = all 9 phases | User wants full feature parity for public release | — Pending |
 | Model / Engine / App layering | Mirrors the reference app's proven split; makes core logic testable | — Pending |
 | Snapshot-overlay zoom, no SIP | Only way to "zoom" other apps' windows without disabling SIP | — Pending |
-| Model / Engine / App layering | PaneModel is Foundation-only; enforced by `scripts/check-no-appkit.sh` inside `swift test` | ✓ Good (Phase 1) |
+| Model / Engine / App layering | TransomModel is Foundation-only; enforced by `scripts/check-no-appkit.sh` inside `swift test` | ✓ Good (Phase 1) |
 | Undo covers user edits only | OS lifecycle reports go through `World.apply`, off the undo stack; a confirmed close purges the window from history | ✓ Good (Phase 1 review) |
 | `World.undo` returns restored windows | Model can't know OS state for windows on no desk; the engine re-reports them | — Pending (Phase 2 must honour) |
 | Unfit windows reported, never overlapped | Water-filling resolve pins minimums; windows that can't fit get no rect | ✓ Good (Phase 1) |

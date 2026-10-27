@@ -1,4 +1,4 @@
-# Requirements: Pane
+# Requirements: Transom
 
 **Defined:** 2026-10-23
 **Core Value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize.
@@ -21,13 +21,13 @@
 ### Window Control
 
 - [x] **WIN-01**: User is guided through granting Accessibility permission, and a stale grant is detected and explained
-- [x] **WIN-02**: Pane tracks every standard window of every running app, including windows opened or closed later
-- [x] **WIN-03**: A hung or slow app never freezes Pane or delays arranging other apps' windows
-- [x] **WIN-04**: Pane moves and resizes windows and learns an app's real minimum size when it refuses a size
+- [x] **WIN-02**: Transom tracks every standard window of every running app, including windows opened or closed later
+- [x] **WIN-03**: A hung or slow app never freezes Transom or delays arranging other apps' windows
+- [x] **WIN-04**: Transom moves and resizes windows and learns an app's real minimum size when it refuses a size
 - [x] **WIN-05**: Dialogs, sheets, popovers and picture-in-picture windows are never docked (classifier tested against recorded AX dumps)
 - [x] **WIN-06**: Native tabs (Finder, Terminal, Safari, etc.) count as one window
 - [x] **WIN-07**: A window that goes native fullscreen keeps its tile reserved and returns to it
-- [x] **WIN-08**: User can list apps whose windows Pane never arranges
+- [x] **WIN-08**: User can list apps whose windows Transom never arranges
 - [x] **WIN-09**: A window is only treated as closed when two sources confirm it; lock screen, sleep and timeouts never close windows
 
 ### Tiling
@@ -55,12 +55,12 @@
 
 ### Safety & Recovery
 
-- [x] **SAFE-01**: On quit, every window Pane moved returns to a sensible on-screen frame
+- [x] **SAFE-01**: On quit, every window Transom moved returns to a sensible on-screen frame
 - [x] **SAFE-02**: After a crash or force-quit, the next launch restores stranded windows on-screen
 - [x] **SAFE-03**: "Restore all windows" brings every window back on-screen from the menu and by URL
-- [x] **SAFE-04**: Pane detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
-- [x] **SAFE-05**: A missing or broken private API disables only its own feature; Pane still launches
-- [x] **SAFE-06**: Quitting and relaunching Pane while apps keep running restores each display's layout with the same windows in their tiles
+- [x] **SAFE-04**: Transom detects macOS edge tiling, Stage Manager and click-wallpaper-to-reveal, explains the conflict and offers to turn them off, restoring originals on request
+- [x] **SAFE-05**: A missing or broken private API disables only its own feature; Transom still launches
+- [x] **SAFE-06**: Quitting and relaunching Transom while apps keep running restores each display's layout with the same windows in their tiles
 
 ### Zoom
 
@@ -88,11 +88,11 @@
 ### Overview, Spaces & Displays
 
 - [ ] **OVER-01**: Overview shows every window on every display, with Spaces along the top; clicking a window goes to it
-- [ ] **OVER-02**: User can opt in to having Mission Control's swipe and shortcut open Pane's overview instead
-- [ ] **OVER-03**: If Pane crashes while replacing Mission Control, the system shortcuts are restored on next launch
+- [ ] **OVER-02**: User can opt in to having Mission Control's swipe and shortcut open Transom's overview instead
+- [ ] **OVER-03**: If Transom crashes while replacing Mission Control, the system shortcuts are restored on next launch
 - [ ] **OVER-04**: Each display (and each Space) keeps its own layout
 - [ ] **OVER-05**: Unplugging and re-plugging a display, or sleep/wake, restores that display's layout
-- [ ] **OVER-06**: Pane remembers layouts per display arrangement and applies the matching one automatically when the arrangement changes (e.g. docking and undocking a laptop)
+- [ ] **OVER-06**: Transom remembers layouts per display arrangement and applies the matching one automatically when the arrangement changes (e.g. docking and undocking a laptop)
 
 ### Tab Groups
 
@@ -107,20 +107,20 @@
 
 - [ ] **VIEW-01**: User can save the current view to slots 1–9 and return to it with a hotkey
 - [ ] **VIEW-02**: Saved views survive layout changes and app restarts
-- [ ] **VIEW-03**: Pane commands run from `pane://` URLs (for Raycast, Alfred, Shortcuts, scripts)
+- [ ] **VIEW-03**: Transom commands run from `transom://` URLs (for Raycast, Alfred, Shortcuts, scripts)
 - [ ] **VIEW-04**: Layouts persist across reboots and app relaunches (new window IDs), with windows re-matched to their tiles
-- [ ] **VIEW-05**: A bundled `pane` command-line tool runs the same commands as `pane://` URLs and reports errors with a non-zero exit code
+- [ ] **VIEW-05**: A bundled `transom` command-line tool runs the same commands as `transom://` URLs and reports errors with a non-zero exit code
 
 ### Ship
 
 - [ ] **SHIP-01**: Settings window covers gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
 - [ ] **SHIP-02**: First-run onboarding walks through permissions and conflicting macOS features
-- [ ] **SHIP-03**: User can launch Pane at login
-- [ ] **SHIP-04**: Pane checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
+- [ ] **SHIP-03**: User can launch Transom at login
+- [ ] **SHIP-04**: Transom checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
 - [ ] **SHIP-05**: Releases are Developer ID signed, notarised, and installable with `brew install --cask`
 - [ ] **SHIP-06**: Menu bar shows back, forward and saved-view buttons with the current view highlighted, and Settings lets the user choose and reorder which controls appear, down to icon only
 - [ ] **SHIP-07**: The menu includes "Report a Problem", and the menu bar icon shows a dot when an update is available
-- [ ] **SHIP-08**: `pane://settings?pane=` opens a specific Settings pane
+- [ ] **SHIP-08**: `transom://settings?pane=` opens a specific Settings pane
 
 ## v2 Requirements
 
@@ -135,14 +135,14 @@
 
 | Feature | Reason |
 |---------|--------|
-| Licensing, trials, paid tiers, window limits | Pane is free |
+| Licensing, trials, paid tiers, window limits | Transom is free |
 | Mac App Store | Private APIs required |
 | Features needing SIP disabled | Keeps install safe and simple |
 | Moving windows between native Spaces | Needs SIP since macOS 14.5 |
 | Auto-tiling every new window | Research: top source of user frustration; new windows go to the Desktop tile |
 | Animating real windows during zoom | Causes resize storms; only the snapshot overlay animates |
 | Borders drawn around other apps' windows | Fragile, performance cost, low value |
-| Scripting language / text-config DSL as main interface | Pane is GUI-first; URL commands cover automation |
+| Scripting language / text-config DSL as main interface | Transom is GUI-first; URL commands cover automation |
 | Second (scrolling) layout engine | Scope; one model done well |
 | Mission Control takeover on by default | Risky; opt-in only |
 | Copying any TrellisWM text, assets or code | Clean-room rule |

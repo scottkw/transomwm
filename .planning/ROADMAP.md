@@ -1,8 +1,8 @@
-# Roadmap: Pane
+# Roadmap: Transom
 
 ## Overview
 
-Pane is built bottom-up along its dependency chain: a pure, headless layout model (Phase 1), a non-blocking Accessibility window-control layer (Phase 2), then drag-to-dock nested tiling with crash-safe recovery (Phase 3). Phase 3 is the **first usable release** and must work with zoom and Screen Recording turned off (TILE-10), so the Core Value ships before any risky feature. Phases 4-8 add the differentiators on top (zoom camera, trackpad gestures, overview/Spaces/multi-display, tab groups, saved views + `pane://` URLs + persistence), and Phase 9 polishes and ships a signed, notarised, Homebrew-installable build. Every retrofit-or-never decision (async AX, window lifecycle states, `DeskKey`, coordinate space, bundle ID and signing) lands in Phases 1-3.
+Transom is built bottom-up along its dependency chain: a pure, headless layout model (Phase 1), a non-blocking Accessibility window-control layer (Phase 2), then drag-to-dock nested tiling with crash-safe recovery (Phase 3). Phase 3 is the **first usable release** and must work with zoom and Screen Recording turned off (TILE-10), so the Core Value ships before any risky feature. Phases 4-8 add the differentiators on top (zoom camera, trackpad gestures, overview/Spaces/multi-display, tab groups, saved views + `transom://` URLs + persistence), and Phase 9 polishes and ships a signed, notarised, Homebrew-installable build. Every retrofit-or-never decision (async AX, window lifecycle states, `DeskKey`, coordinate space, bundle ID and signing) lands in Phases 1-3.
 
 ## Phases
 
@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop
 - [ ] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts
 - [ ] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons
-- [ ] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `pane://` commands, layouts restored across restarts and reboots
+- [ ] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `transom://` commands, layouts restored across restarts and reboots
 - [ ] **Phase 9: Polish & Ship** - Settings, onboarding, launch at login, GitHub Releases update check, Homebrew cask
 
 ## Phase Details
@@ -227,8 +227,8 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. ⌥-pinch on the trackpad zooms in and out over any app, and ⌥-two-finger pan moves the camera
   2. Pinch and pan on the bare desktop work without holding ⌥
-  3. Gestures Pane handles never reach the app under the pointer, while ordinary pinch and scroll inside apps keep working
-  4. Gestures keep working after sleep/wake and after the trackpad disconnects and reconnects; if the private multitouch API is unavailable Pane falls back and still launches
+  3. Gestures Transom handles never reach the app under the pointer, while ordinary pinch and scroll inside apps keep working
+  4. Gestures keep working after sleep/wake and after the trackpad disconnects and reconnects; if the private multitouch API is unavailable Transom falls back and still launches
 
 **Plans**: TBD
 **Research**: Needs phase research. One-day spike comparing MultitouchSupport raw touches against event-tap magnify events (types 29/30, visibility over other apps unverified); verify MT callback struct layout and the macOS 27 `int32_t` return semantics
@@ -242,10 +242,10 @@ Plans:
 **Requirements**: OVER-01, OVER-02, OVER-03, OVER-04, OVER-05, OVER-06
 **Success Criteria** (what must be TRUE):
   1. Opening the overview shows every window on every display with the Spaces along the top, and clicking a window goes to it
-  2. User can opt in to Mission Control's swipe and shortcut opening Pane's overview and opt out to get the system behaviour back; if Pane crashes while the takeover is on, the next launch restores the system shortcuts
+  2. User can opt in to Mission Control's swipe and shortcut opening Transom's overview and opt out to get the system behaviour back; if Transom crashes while the takeover is on, the next launch restores the system shortcuts
   3. Each display and each Space keeps its own layout, and switching Spaces leaves the other layouts untouched
   4. Unplugging and re-plugging a display, or sleeping and waking the Mac, restores that display's layout, with "Displays have separate Spaces" both on and off
-  5. Pane remembers a layout set per display arrangement and switches to the matching one automatically when a laptop is docked or undocked
+  5. Transom remembers a layout set per display arrangement and switches to the matching one automatically when a laptop is docked or undocked
 
 **Plans**: TBD
 **UI hint**: yes
@@ -273,38 +273,38 @@ Plans:
 
 ### Phase 8: Saved Views, URLs & Persistence
 
-**Goal**: As a power user, I want to save views to hotkeys and run Pane from pane:// URLs, so that my layouts and automations survive restarts.
+**Goal**: As a power user, I want to save views to hotkeys and run Transom from transom:// URLs, so that my layouts and automations survive restarts.
 **Mode:** mvp
 **Depends on**: Phase 4
 **Requirements**: VIEW-01, VIEW-02, VIEW-03, VIEW-04, VIEW-05
 **Success Criteria** (what must be TRUE):
-  1. User can save the current view to slots 1-9 and return to it with a hotkey, and it still lands on the right windows after the layout changes and after Pane restarts
-  2. Raycast, Alfred, Shortcuts or a shell `open pane://...` can run Pane commands, and unknown commands are rejected without side effects
-  3. After quitting and relaunching Pane, or rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires rather than a permanent hole
-  4. A bundled `pane` command-line tool runs every `pane://` command and exits non-zero with a message on errors
+  1. User can save the current view to slots 1-9 and return to it with a hotkey, and it still lands on the right windows after the layout changes and after Transom restarts
+  2. Raycast, Alfred, Shortcuts or a shell `open transom://...` can run Transom commands, and unknown commands are rejected without side effects
+  3. After quitting and relaunching Transom, or rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires rather than a permanent hole
+  4. A bundled `transom` command-line tool runs every `transom://` command and exits non-zero with a message on errors
 
 **Plans**: TBD
 **Research**: Standard patterns; cheap on top of the Phase 3 command dispatcher and Phase 4 `NodeID` camera targets
-**Scope notes**: Layout-aware default chords for views; `pane://` with an allow-list and rate limit; re-matching uses persisted match hints with a score threshold.
+**Scope notes**: Layout-aware default chords for views; `transom://` with an allow-list and rate limit; re-matching uses persisted match hints with a score threshold.
 
 ### Phase 9: Polish & Ship
 
-**Goal**: As a new user, I want to install Pane with Homebrew and be guided through setup, so that it starts at login and keeps itself updated.
+**Goal**: As a new user, I want to install Transom with Homebrew and be guided through setup, so that it starts at login and keeps itself updated.
 **Mode:** mvp
 **Depends on**: Phase 5, Phase 6, Phase 7, Phase 8
 **Requirements**: SHIP-01, SHIP-02, SHIP-03, SHIP-04, SHIP-05, SHIP-06, SHIP-07, SHIP-08
 **Success Criteria** (what must be TRUE):
   1. The Settings window lets the user change gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
   2. On first run, onboarding walks the user through Accessibility, optional Screen Recording and the conflicting macOS features, without looping on permission prompts
-  3. User can turn on launch at login, and Pane starts at the next login
-  4. Settings (opened from the menu-bar icon) has an Updates section: an automatic-check toggle and a "Check for Updates" button; when GitHub has a newer release Pane notifies the user, and the downloaded DMG is opened only after its sha256 digest and Team ID verify
-  5. `brew install --cask` installs a Developer ID-signed, notarised Pane that opens without Gatekeeper warnings
-  6. The menu bar shows back, forward and saved-view controls (current view highlighted) that the user can choose and reorder in Settings; the menu has "Report a Problem", the icon shows a dot when an update is waiting, and `pane://settings?pane=` opens a given Settings pane
+  3. User can turn on launch at login, and Transom starts at the next login
+  4. Settings (opened from the menu-bar icon) has an Updates section: an automatic-check toggle and a "Check for Updates" button; when GitHub has a newer release Transom notifies the user, and the downloaded DMG is opened only after its sha256 digest and Team ID verify
+  5. `brew install --cask` installs a Developer ID-signed, notarised Transom that opens without Gatekeeper warnings
+  6. The menu bar shows back, forward and saved-view controls (current view highlighted) that the user can choose and reorder in Settings; the menu has "Report a Problem", the icon shows a dot when an update is waiting, and a `transom://settings` URL opens a given Settings section directly (query key as in SHIP-08)
 
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Standard patterns; port gifsmith's GitHub Releases updater (`~/dev/gifsmith/internal/update`, `internal/services/updates.go`) to Swift; notarisation and Homebrew are well documented (Rectangle and Amethyst casks as models)
-**Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Pane" for existing macOS apps before release.
+**Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Transom" for existing macOS apps before release.
 
 ## Progress
 
