@@ -30,7 +30,9 @@ public struct TabResolution: Equatable, Sendable {
 /// shares the frame slot no candidate of unknown Space is taken either (own members and the Cmd-T window excepted).
 /// A shown tab that was not in the previous refresh's CG list is brand new (Cmd-T, New Tab): it takes the tracked
 /// standalone window listed last refresh and leads a new group with it, even while a CG list older than the AX read
-/// (a sweep's) still shows that window onscreen and lacks the tab. A window listed in AXWindows without a tab
+/// (a sweep's) still shows that window onscreen and lacks the tab. When no such window is in its slot, it takes one
+/// that went hidden this refresh by timing (listed at the last update, unlisted now, offscreen in the CG list,
+/// AX-valid, not on a known other Space), whatever its bounds: Terminal's first Cmd-T grows the new tab by the tab bar. A window listed in AXWindows without a tab
 /// bar of its own is never a hidden tab, and leaves any group it was in unless it is the group's leader, its shown
 /// tab, or all that is left of it. A tracked standalone window not listed at the last refresh is never taken either.
 /// A listed member with a tab bar rebinds its group unless the two are on known different Spaces (a changed AXTabs
@@ -45,7 +47,8 @@ public struct TabResolution: Equatable, Sendable {
 /// Cmd-T opener and the room-rule join still apply: a Space switch cannot fake their evidence.
 /// shortcut: without Space data (capability off or missing) Transom runs single-Space behaviour, and two same-frame tab
 /// groups of one app on two Spaces can be tracked as one window; with Space data, an unknown-Space hidden tab can stay
-/// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected). A Space-switch
+/// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected). A Cmd-T in the same
+/// update as a Space switch without Space data is linked only if its opener is in the slot. A Space-switch
 /// notification that reaches main only after the update that already saw the new Space protects nothing; upgrade with
 /// the Phase 6 window-to-Space map.
 ///
@@ -103,6 +106,12 @@ public struct TabGroupTracker: Equatable, Sendable {
         let trackedIDs = Set(tracked.filter { $0.pid == pid }.map(\.windowID))
         let listedTabCount = Dictionary(visible.map { ($0.id, $0.tabCount) }, uniquingKeysWith: max)
         let wasListed = lastListed[pid] ?? []
+        let listedIDs = Set(visible.map(\.id))
+        /// Listed at the last update and hidden now, still offscreen in the CG list and AX-valid: shown just before (G-02-10).
+        func wentHidden(_ id: UInt32) -> Bool {
+            !blindSwitch && wasListed.contains(id) && !listedIDs.contains(id) && inCG.contains(id) && !onScreen.contains(id)
+                && !invalid.contains(id)
+        }
         func canBeHiddenTab(_ id: UInt32) -> Bool {
             if let tabCount = listedTabCount[id], tabCount < 2 { return false }
             // A window folded in earlier stays a member until the fold guard decides it.
@@ -133,7 +142,15 @@ public struct TabGroupTracker: Equatable, Sendable {
                 (!$0.onScreen || staleCG && mayBeOpener($0.windowID)) && !invalid.contains($0.windowID) && canBeHiddenTab($0.windowID)
                     && !Self.differ(space($0.windowID), shownSpace)
             }.map(\.windowID)
-            let opener = isNew ? standalone.first { mayBeOpener($0.windowID) && candidates.contains($0.windowID) }?.windowID : nil
+            var opener = isNew ? standalone.first { mayBeOpener($0.windowID) && candidates.contains($0.windowID) }?.windowID : nil
+            // Its opener can miss the slot: Terminal's first Cmd-T grows the new tab by the tab bar (G-02-10).
+            if opener == nil, isNew, v.tabCount >= 2 {
+                let hidden = standalone.map(\.windowID).filter {
+                    mayBeOpener($0) && wentHidden($0) && canBeHiddenTab($0) && !Self.differ(space($0), shownSpace)
+                }
+                let bounds = hidden.compactMap { id in cg.first { $0.windowID == id }.map { (id: id, bounds: $0.bounds) } }
+                opener = Self.nearest(bounds, to: v.frame).map { bounds[$0].id }
+            }
             var index = list.firstIndex { $0.members.contains(v.id) }
             var refused: Int?
             if let member = index, list[member].shown != v.id, v.tabCount >= 2, !mayRebind(list[member], v) {
@@ -169,7 +186,8 @@ public struct TabGroupTracker: Equatable, Sendable {
             }
             // Blind switch: no tracked standalone window becomes a new hidden tab (the opener and earlier folds excepted).
             // A refused member never takes its old group's tabs.
-            let pool = refused.map { r in candidates.filter { !list[r].members.contains($0) } } ?? candidates
+            let found = candidates + [opener].compactMap { $0 }.filter { !candidates.contains($0) }
+            let pool = refused.map { r in found.filter { !list[r].members.contains($0) } } ?? found
             let foldable = blindSwitch
                 ? pool.filter { id in id == opener || !standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) } }
                 : pool
@@ -250,6 +268,15 @@ public struct TabGroupTracker: Equatable, Sendable {
     /// Both Space sets known and disjoint: the windows are on different Spaces.
     private static func differ(_ a: Set<UInt64>, _ b: Set<UInt64>) -> Bool {
         !a.isEmpty && !b.isEmpty && a.isDisjoint(with: b)
+    }
+
+    /// The index of the entry nearest `frame`: a bounds match first, then the smallest difference in origin and width
+    /// (a tab bar changes only the height), then the lowest ID.
+    private static func nearest(_ entries: [(id: UInt32, bounds: Rect)], to frame: Rect) -> Int? {
+        func key(_ e: (id: UInt32, bounds: Rect)) -> (Int, Double, UInt32) {
+            (matches(e.bounds, frame) ? 0 : 1, abs(e.bounds.x - frame.x) + abs(e.bounds.y - frame.y) + abs(e.bounds.width - frame.width), e.id)
+        }
+        return entries.indices.min { key(entries[$0]) < key(entries[$1]) }
     }
 
     private static func matches(_ a: Rect, _ b: Rect) -> Bool {
