@@ -228,6 +228,70 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(resolution.folded.isEmpty)
     }
 
+    // MARK: 02-19 (G-02-10): a hidden tab keeps the CG bounds it had when hidden, so timing links a new tab to its opener
+
+    private static let taller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height + 28)
+
+    /// Standalone 10 listed alone, then Cmd-T: 40 shown 28 pt taller (Terminal's tab bar), 10 hidden at its old frame.
+    private func cmdTTaller(spaces: [UInt32: Set<UInt64>]? = nil, spaceChanged: Bool = false) -> (TabGroupTracker, TabResolution) {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)], tracked: [identity(10)])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2, Self.taller)], cgWindows: [cg(10), cg(40, Self.taller, onScreen: true)],
+            tracked: [identity(10)], spaces: spaces, spaceChanged: spaceChanged
+        )
+        return (tracker, resolution)
+    }
+
+    /// (a) The opener was listed last update and went hidden now: it leads the group though its bounds differ.
+    @Test func aNewTabTallerThanItsOpenerStillTakesIt() {
+        let (tracker, resolution) = cmdTTaller()
+        #expect(resolution.groupFor == [40: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+        #expect(resolution.folded.isEmpty)
+    }
+
+    /// (b) Two standalones went hidden in one refresh: the nearest by origin and width is the opener, in any order.
+    @Test(arguments: [false, true])
+    func twoWindowsGoneHiddenAreToldApartByOriginAndWidth(swapped: Bool) {
+        var tracker = TabGroupTracker()
+        let away = Rect(x: 800, y: frame.y, width: frame.width, height: frame.height)
+        let tracked = swapped ? [identity(20), identity(10)] : [identity(10), identity(20)]
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 1), visible(20, 1, away)],
+            cgWindows: [cg(10, onScreen: true), cg(20, away, onScreen: true)], tracked: tracked
+        )
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2, Self.taller)],
+            cgWindows: [cg(10), cg(20, away), cg(40, Self.taller, onScreen: true)], tracked: tracked
+        )
+        #expect(resolution.groupFor == [40: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+        #expect(tracker.members(of: identity(20)).isEmpty)
+        #expect(!resolution.memberIDs.contains(20))
+    }
+
+    /// (c) Without Space data, an update flagged `spaceChanged` links nothing by timing (02-17 rule). Known limit: a
+    /// Cmd-T in the same update as such a Space switch is linked only if its opener is in the slot.
+    @Test func aBlindSpaceSwitchLinksNoOpenerByTiming() {
+        let (_, resolution) = cmdTTaller(spaceChanged: true)
+        #expect(resolution.groupFor == [40: identity(40)])
+    }
+
+    /// (d) A window known to be on another Space is never the opener.
+    @Test func aWindowOnAnotherSpaceIsNeverTheOpenerByTiming() {
+        let (tracker, resolution) = cmdTTaller(spaces: [40: [1], 10: [2]])
+        #expect(resolution.groupFor == [40: identity(40)])
+        #expect(tracker.members(of: identity(10)).isEmpty)
+    }
+
+    /// (e) A hidden tab may report no Space: it can still be the opener.
+    @Test func aHiddenOpenerWithNoSpaceIsStillTheOpener() {
+        let (tracker, resolution) = cmdTTaller(spaces: [40: [1], 10: []])
+        #expect(resolution.groupFor == [40: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+    }
+
     /// S4 unchanged: a shown tab already in the previous CG list keeps today's ranking (untracked before standalone).
     @Test func aShownTabSeenBeforeKeepsTheUsualRanking() {
         var tracker = TabGroupTracker()

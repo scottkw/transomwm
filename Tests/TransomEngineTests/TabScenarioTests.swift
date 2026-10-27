@@ -168,6 +168,34 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events).isEmpty)
     }
 
+    /// G-02-10 E1 (Terminal): Cmd-N then Cmd-T, where the new tab is 28 pt taller (the tab bar) and the opener goes
+    /// hidden at its old frame. Bounds cannot link them; timing does.
+    @Test(arguments: modes)
+    func aCmdTWhoseNewTabIsTallerStaysOneWindowLedByItsOpener(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) async {
+        let fake = await spacesFake(spacesAvailable, hiddenTabsReportSpace)
+        await fake.open(.standard(id: 10, pid: pid, frame: frame, space: 1))
+        await fake.showSpace(1)
+        await refresh(fake)
+        let taller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height + 28)
+        await fake.newTab(40, in: 10, frame: taller)
+        for _ in 0..<3 { await refresh(fake, advancing: true) }
+        var rows = await summary(fake)
+        #expect(rows == [[10, 40, 2]])
+
+        await fake.selectTab(10)
+        await refresh(fake)
+        rows = await summary(fake)
+        #expect(rows == [[10, 10, 2]])
+
+        await fake.newTab(50, in: 10)
+        for _ in 0..<2 { await refresh(fake, advancing: true) }
+        rows = await summary(fake)
+        #expect(rows == [[10, 50, 3]])
+        let events = await drain(fake.events)
+        #expect(created(events).map(\.window) == [ref(10)])
+        #expect(destroyed(events).isEmpty)
+    }
+
     /// Review D1 (iteration 4): A (10) gains tab 40; then Cmd-T (50) and a click back on tab 10 land in one refresh,
     /// so the leader is listed with a new AXTabs count while the old shown tab sits offscreen.
     @Test(arguments: modes)
