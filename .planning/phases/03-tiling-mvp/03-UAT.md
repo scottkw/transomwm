@@ -136,12 +136,16 @@ note: G-03-7. The bug was in the test, not Pane: window 1 was docked from the De
 - Parked floater (Reminders, Space 41 Desktop hidden by Ctrl-Opt-Cmd-H), kill -9 from Space 1, relaunch: back on screen at its home frame, Desktop shown: pass (CR-02)
 - Locked start (Ctrl-Cmd-Q, launch, unlock): paused while locked and layout.json untouched; after unlock hidden Space 41 kept its desk but shown Space 1 lost every tile (Terminal, TextEdit 202/578 now floating, frames unmoved): fail (G-03-10)
 - Calculator on Space 41 was not parked when its Desktop was hidden (observed, not yet a gap)
+- User hand checks in the VM (Tart window, real mouse), 2026-10-27:
+  - Green button plain click on docked Notes (Space 41): only the macOS Move & Resize hover popup appears; Notes neither floats nor docks, twice: fail (G-03-4 reopened)
+  - Option-click: zooms, D-33 returns it to its tile: pass. Menu over the green button gets the click: pass
+  - Gap drag between docked Finder 2399 (top) and the Desktop tile (Space 1): smoother, no snap-back while holding: pass (G-03-3); floaters shrunk by the smaller Desktop tile stay small when it grows back, several end partly below the screen: fail (G-03-11)
 
 ## Summary
 
 total: 18
 passed: 11
-issues: 6
+issues: 7
 pending: 0
 skipped: 0
 blocked: 2
@@ -224,6 +228,7 @@ blocked: 2
     - "topmostWindow(at:) picks the topmost layer-0 window, as pressWindow does, ideally as a pure function over [CGWindowEntry] with a unit test (Dock layer-20 full-screen entry first)"
     - "Re-test with real hand clicks"
   debug_session: ".planning/debug/g-03-4-green-button.md"
+  reopened: "2026-10-27: 03-18's fix passed with instant injected/VNC clicks, but a real hand click on 0.3.8 in the VM only shows the macOS 15 Move & Resize hover popup and Pane neither floats nor docks (twice). Lead (unverified): the hover delay before a human click."
 
 - gap_id: G-03-7
   truth: "Live test aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop passes (D-26 live)"
@@ -304,6 +309,17 @@ blocked: 2
     - "Live risk: an app whose AX reads fail just after unlock stays untracked and is removed the same way; the restore should wait until windows are actually tracked, not only until unlock"
     - "VM re-check of the locked start (needs the user to unlock)"
   debug_session: ".planning/debug/g-03-10-locked-start.md"
+
+- gap_id: G-03-11
+  truth: "Floating windows keep the size the user gave them: a Desktop tile that shrinks and grows back returns them to that size, and none ends off screen (core value: stay correctly arranged)"
+  status: failed
+  reason: "User hand check in the VM: dragging the gap between docked Finder (top) and the Desktop tile down shrank the floating windows; dragging it back up left them small (Finder 546/580/2252 460x252, TextEdit 132 tall, Terminal 127 tall, all at y 569) and some end below the screen's bottom edge"
+  severity: major
+  test: 3
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
 
 ## Observed, not yet a gap
 
