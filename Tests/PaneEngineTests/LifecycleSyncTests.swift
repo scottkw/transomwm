@@ -163,6 +163,7 @@ private func fake(knowing known: [WindowRef], minimised: [WindowRef] = []) async
         .appTerminated(pid: pid),
         .displaysChanged,
         .spaceChanged(displayUUID: "D1", spaceID: 7),
+        .liveWindowsChanged,
     ])
     func nonLifecycleEventsLeaveTheWorldUnchanged(event: WindowEvent) throws {
         var history = UndoHistory()

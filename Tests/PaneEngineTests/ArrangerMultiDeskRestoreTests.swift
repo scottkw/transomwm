@@ -94,6 +94,16 @@ private func writes(to window: WindowRef, on fake: FakeWindowSystem) async -> [R
     await fake.performed.compactMap { if case .setFrame(window, let rect) = $0 { rect } else { nil } }
 }
 
+/// A fresh-fake relaunch with Space 1 shown: window 1 tracked and docked on Space 1, window 3 dormant on Space 2.
+private func dormantRelaunch() async throws -> (harness: Harness, tiles: [WindowRef: Rect]) {
+    let first = try await firstSession(space2: [3])
+    var harness = await relaunched(with: Array(await first.harness.fake.windows.values), displays: [displayA], showing: ["A": 1])
+    await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
+    await harness.send(.inventory(await harness.fake.inventory()))
+    try #require(harness.arranger.world[deskA2]?.tree.windows == [ref(3)])
+    return (harness, first.tiles)
+}
+
 extension Harness {
     /// A Space switch on one display as the live shell sees it: the notification's events, then a refresh, then the
     /// settle delay, so windows first seen on that Space are reported.
@@ -254,5 +264,74 @@ extension Harness {
         }
         #expect(!holds3, "a window of the relaunched app was kept")
         #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+    }
+
+    @Test func aDormantWindowIsNoLongerDormantOnceItsSpaceIsShown() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        #expect(harness.arranger.hasDormantWindows)
+        _ = await harness.switchDisplay("A", to: 2)
+        #expect(!harness.arranger.hasDormantWindows)
+    }
+
+    /// G-03-8 prune: a dormant window that closed (its ID left the CG list) leaves its desk, so layout.json drops it.
+    @Test func aDormantWindowThatLeftTheCGListIsPrunedWithNoUndoStep() async throws {
+        var (harness, tiles) = try await dormantRelaunch()
+        let history = harness.arranger.history
+        await harness.fake.close(3)
+        await harness.fake.refreshAll()
+        let effects = await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
+        #expect(effects.contains(.save(.debounced)))
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+        #expect(await harness.frame(ref(1)) == tiles[ref(1)])
+        #expect(harness.arranger.history == history)
+        #expect(!harness.arranger.hasDormantWindows)
+    }
+
+    @Test func aDormantWindowStillInTheCGListIsKeptByEveryInventory() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        let world = harness.arranger.world
+        for _ in 0..<3 {
+            await harness.fake.refreshAll()
+            let effects = await harness.send(.inventory(await harness.fake.inventory()))
+            #expect(!effects.contains(.save(.debounced)))
+        }
+        #expect(harness.arranger.world == world)
+    }
+
+    /// Its app quit: dormant windows of that pid close now; a tracked one of the same pid waits for its windowDestroyed.
+    @Test func aDormantWindowIsPrunedWhenItsAppTerminates() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        await harness.send(.event(.appTerminated(pid: pid)))
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)], "the tracked window was closed by appTerminated")
+    }
+
+    /// Nothing is decided blind: a locked session, an unknown CG list or an empty one prunes nothing (T-03-63).
+    @Test func aBlankOrUnknownCGListPrunesNothing() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        let world = harness.arranger.world
+        await harness.fake.close(3)
+        await harness.fake.setLocked(true)
+        let locked = await harness.fake.inventory()
+        #expect(locked.sessionPaused && locked.liveWindows == nil)
+        await harness.send(.inventory(locked))
+        #expect(harness.arranger.world == world, "a locked inventory pruned")
+        await harness.fake.setLocked(false)
+
+        var unknown = await harness.fake.inventory()
+        unknown.liveWindows = nil
+        await harness.send(.inventory(unknown))
+        var empty = unknown
+        empty.liveWindows = []
+        await harness.send(.inventory(empty))
+        #expect(harness.arranger.world == world, "an unknown or empty CG list pruned")
+    }
+
+    @Test func liveWindowsChangedAloneDoesNothing() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        let world = harness.arranger.world
+        #expect(harness.arranger.handle(.event(.liveWindowsChanged), now: harness.now).isEmpty)
+        #expect(harness.arranger.world == world)
     }
 }
