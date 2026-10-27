@@ -167,14 +167,18 @@ public struct CGWindowEntry: Codable, Equatable, Sendable {
     public var layer: Int
     public var onScreen: Bool
     public var alpha: Double
+    /// The window's Spaces (SkyLight), carried only by `WindowInventory.liveWindows`. Nil means unknown; empty means
+    /// the lookup reported none.
+    public var spaces: Set<UInt64>?
 
-    public init(windowID: UInt32, pid: Int32, bounds: Rect, layer: Int, onScreen: Bool, alpha: Double) {
+    public init(windowID: UInt32, pid: Int32, bounds: Rect, layer: Int, onScreen: Bool, alpha: Double, spaces: Set<UInt64>? = nil) {
         self.windowID = windowID
         self.pid = pid
         self.bounds = bounds
         self.layer = layer
         self.onScreen = onScreen
         self.alpha = alpha
+        self.spaces = spaces
     }
 }
 

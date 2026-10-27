@@ -328,6 +328,52 @@ extension Harness {
         #expect(harness.arranger.world == world, "an unknown or empty CG list pruned")
     }
 
+    /// CR-01: a tab group keeps its oldest member's identity for life, but a fresh window system founds it under its
+    /// shown tab. The saved leader, now a hidden tab on the shown Space, is no hidden-Space window: it is removed, so
+    /// the group is never both docked (an empty reserved tile) and floating. Whether the hidden tab reports the Space
+    /// or none, as the live lookup may answer.
+    @Test(arguments: [false, true])
+    func aTabGroupShownUnderAnotherTabAtRelaunchIsNotKeptTwice(hiddenTabsReportSpace: Bool) async throws {
+        func setUp(_ harness: Harness) async {
+            await harness.fake.setDisplays([displayA])
+            await harness.fake.setSpacesAvailable(true)
+            await harness.fake.setHiddenTabsReportSpace(hiddenTabsReportSpace)
+            await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        }
+        var first = Harness()
+        await setUp(first)
+        await first.fake.open(.standard(id: 1, pid: pid, frame: startFrame(0, on: visibleA), space: 1))
+        await first.fake.tabGroup(ids: [10, 11], frame: startFrame(1, on: visibleA), pid: pid, visible: 10, space: 1)
+        await first.fake.showSpace(1, notifies: false)
+        await first.fake.refreshAll()
+        _ = await first.inbox.take()
+        await first.send(.inventory(await first.fake.inventory()))
+        await first.send(.command(.dock, focused: ref(1)))
+        await first.send(.command(.dock, focused: ref(10)))
+        await first.fake.selectTab(11)
+        _ = await first.refresh()
+        await first.fake.advance(by: .milliseconds(300))
+        _ = await first.refresh()
+        try #require(first.arranger.windows[ref(10).identity]?.visibleMemberID == 11)
+        let saved = first.arranger.world
+        try #require(saved[deskA1]?.tree.windows == [ref(1), ref(10)])
+
+        var harness = Harness()
+        await setUp(harness)
+        for window in await first.fake.windows.values.sorted(by: { $0.id < $1.id }) { await harness.fake.open(window) }
+        await harness.fake.selectTab(11)
+        await harness.fake.showSpace(1, notifies: false)
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved, homeFrames: first.arranger.snapshot.homeFrames))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        try #require(harness.arranger.windows[ref(11).identity] != nil, "the fresh tracker founds the group under tab 11")
+        #expect(!harness.arranger.hasDormantWindows)
+        #expect(harness.arranger.deskKey(of: ref(10)) == nil, "the saved leader is kept as an empty docked tile")
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+        #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(11)) == true)
+    }
+
     @Test func liveWindowsChangedAloneDoesNothing() async throws {
         var (harness, _) = try await dormantRelaunch()
         let world = harness.arranger.world

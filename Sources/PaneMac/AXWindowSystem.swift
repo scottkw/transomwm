@@ -293,8 +293,16 @@ import os
         // nil when it failed: each refresh then reads its own. The reads begin here, so the Space-switch generation too.
         let readGeneration = spaceSwitches.generation
         let cgWindows = CGWindowList.snapshot()
-        // Windows on Spaces AX does not list are still here, in the tracked apps' scope (G-03-8).
-        liveWindows = paused ? nil : cgWindows?.filter { $0.layer == 0 && threads[$0.pid] != nil }
+        // Windows on Spaces AX does not list are still here, in the tracked apps' scope (G-03-8), each with its Spaces.
+        liveWindows = paused ? nil : cgWindows.map { all in
+            let live = all.filter { $0.layer == 0 && threads[$0.pid] != nil }
+            let spaces = SkyLightSpaces.spaces(of: live.map(\.windowID))
+            return live.map { entry in
+                var entry = entry
+                entry.spaces = spaces?[entry.windowID]
+                return entry
+            }
+        }
         if let ids = liveWindows.map({ Set($0.map(\.windowID)) }) {
             if let previous = liveWindowIDs, previous != ids { emit([.liveWindowsChanged]) }
             liveWindowIDs = ids

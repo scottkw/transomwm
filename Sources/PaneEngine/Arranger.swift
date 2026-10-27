@@ -202,7 +202,11 @@ public struct Arranger: Sendable {
             // Home frames are kept only for windows tracked under a real ID (synthetic IDs are session-only, 02-11), or
             // kept dormant because the CG list still has them (G-03-8).
             let real = Set(inventory.windows.filter { $0.idSource != .synthetic }.map(\.window.identity))
-            let live = inventory.liveWindows ?? []
+            // Only a window on a known Space that is not shown is a hidden-Space window. One AX does not list on a shown
+            // Space, or on none, is a hidden tab of a group now tracked under another member (CR-01) or an AX read that
+            // failed: it is removed, as before G-03-8. Unknown Spaces keep the G-03-8 rule.
+            let shown = Set(displays.compactMap(\.currentSpaceID))
+            let live = (inventory.liveWindows ?? []).filter { $0.spaces.map { !$0.isEmpty && $0.isDisjoint(with: shown) } ?? true }
             homeFrames = restore.homeFrames.filter { real.contains($0.key) || LayoutRestore.isAlive($0.key, in: live) }
             // After a crash, stranded windows come on screen first, before any layout work (D-17).
             let rescued = launch == .normal ? [] : rescueStranded(desks: restore.world)

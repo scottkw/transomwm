@@ -392,12 +392,14 @@ public actor FakeWindowSystem: WindowSystem {
     }
 
     /// `liveWindows` are the layer-0 CG windows of the apps the fake tracks (added, not terminated), as AXWindowSystem
-    /// reports those of its app threads; nil while locked, since the CG list is blank. The shell's `.liveWindowsChanged`
-    /// trigger is not modelled: tests feed the inventory as ArrangeController does.
+    /// reports those of its app threads, each with its Spaces as observations see them; nil while locked, since the CG
+    /// list is blank. The shell's `.liveWindowsChanged` trigger is not modelled: tests feed the inventory as
+    /// ArrangeController does.
     public func inventory() async -> WindowInventory {
+        let spaces = context().windowSpaces
         let live = locked ? nil : windows.values.filter { $0.inCGList && $0.cgLayer == 0 && apps[$0.pid]?.terminated == false }
             .sorted { $0.id < $1.id }
-            .map { CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1) }
+            .map { CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1, spaces: spaces?[$0.id]) }
         return WindowInventory(displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded, sessionPaused: locked && lockGate,
                                initialRefreshComplete: true, liveWindows: live)
     }
