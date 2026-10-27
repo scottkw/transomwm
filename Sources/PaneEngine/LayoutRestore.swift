@@ -4,14 +4,14 @@ import PaneModel
 /// inventory after a `.restore`.
 public enum LayoutRestore {
     /// Keeps a saved window when a tracked window has the same identity and a real ID, or when `isAlive` holds for it
-    /// in `live`. A kept untracked window stays dormant in its desk (a window on a Space not shown at launch, G-03-8)
-    /// until its first windowCreated. Synthetic IDs are session-only (02-11), so one from another session never claims
+    /// in `live`; a nil `live` (unknown) keeps every saved window. A kept untracked window stays dormant in its desk (a
+    /// window on a Space not shown at launch, G-03-8) until its first windowCreated. Synthetic IDs are session-only (02-11), so one from another session never claims
     /// a window. A window whose app relaunched has a new pid and is removed: re-matching it is VIEW-04's. Every other
     /// saved window is removed through the close path (`World.apply(.closed, …)` with a throwaway history). `unplaced`
     /// are the tracked dockable, present, non-excluded windows no desk holds afterwards; the caller floats them on their
     /// desk's Desktop. Throws only if closing a saved window leaves an invalid World; the caller then starts empty.
     public static func reattach(
-        _ saved: World, tracked: [WindowInfo], live: [CGWindowEntry] = []
+        _ saved: World, tracked: [WindowInfo], live: [CGWindowEntry]? = []
     ) throws(LayoutError) -> (world: World, removed: [WindowRef], unplaced: [WindowInfo]) {
         let real = Set(tracked.filter { $0.idSource != .synthetic }.map(\.window.identity))
         var world = saved
@@ -19,7 +19,7 @@ public enum LayoutRestore {
         var removed: [WindowRef] = []
         for (_, desk) in saved.desks.sorted(by: { $0.key < $1.key }) {
             for window in desk.tree.windows + desk.desktop.windows.map(\.window)
-            where !real.contains(window.identity) && !isAlive(window.identity, in: live) {
+            where !real.contains(window.identity) && live.map({ !isAlive(window.identity, in: $0) }) ?? false {
                 try world.apply(.closed, for: window, on: DeskKey(displayUUID: "", spaceID: nil), history: &history)
                 removed.append(window)
             }

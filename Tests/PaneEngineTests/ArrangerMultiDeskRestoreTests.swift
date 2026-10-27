@@ -409,6 +409,54 @@ extension Harness {
         #expect(frame == home)
     }
 
+    /// CR-03, T-03-63: a restore inventory from a locked session, or with a blank CG list, can't tell a closed saved
+    /// window from one on a hidden Space. The restore waits and removes nothing; the next usable inventory runs it.
+    @Test(arguments: [true, false])
+    func aRestoreWaitsForAnUnlockedSessionAndANonEmptyCGList(locked: Bool) async throws {
+        let first = try await firstSession(space2: [3])
+        var harness = await relaunched(with: Array(await first.harness.fake.windows.values), displays: [displayA], showing: ["A": 1])
+        await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
+        var blind = await harness.fake.inventory()
+        if locked {
+            // Started while locked: the sweep refreshed nothing (AXWindowSystem).
+            blind.sessionPaused = true
+            blind.windows = []
+            blind.liveWindows = nil
+        } else {
+            blind.liveWindows = []
+        }
+        await harness.send(.inventory(blind))
+        #expect(harness.arranger.world.desks.isEmpty, "the saved layout was re-attached from a blind inventory")
+        #expect(harness.arranger.snapshot.world == first.saved)
+        #expect(harness.arranger.awaitsRestore)
+
+        await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(!harness.arranger.awaitsRestore)
+        #expect(harness.arranger.world == first.saved)
+        #expect(harness.arranger.world[deskA2]?.tree.windows == [ref(3)])
+    }
+
+    /// CR-03: an unknown CG list decides nothing, so the restore never waits on a list that may not come: it runs at
+    /// once and keeps every saved window it does not track, dormant until a usable list prunes the closed ones.
+    @Test func aRestoreWithAnUnknownCGListKeepsEverySavedWindow() async throws {
+        let first = try await firstSession(space2: [3])
+        var harness = await relaunched(with: Array(await first.harness.fake.windows.values), displays: [displayA], showing: ["A": 1])
+        await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
+        var unknown = await harness.fake.inventory()
+        unknown.liveWindows = nil
+        await harness.send(.inventory(unknown))
+        #expect(!harness.arranger.awaitsRestore)
+        #expect(harness.arranger.world == first.saved)
+        #expect(harness.arranger.snapshot.world == first.saved)
+        #expect(harness.arranger.hasDormantWindows)
+
+        await harness.fake.close(3)
+        await harness.fake.refreshAll()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+    }
+
     @Test func liveWindowsChangedAloneDoesNothing() async throws {
         var (harness, _) = try await dormantRelaunch()
         let world = harness.arranger.world

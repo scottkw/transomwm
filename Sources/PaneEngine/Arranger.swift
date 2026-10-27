@@ -196,8 +196,11 @@ public struct Arranger: Sendable {
                 guard !inventory.sessionPaused, let live = inventory.liveWindows, !live.isEmpty else { return place(inventory) }
                 return closeDormant { !LayoutRestore.isAlive($0.identity, in: live) } + place(inventory)
             }
-            // The saved layout waits for every app's first answer, so no saved window is dropped as untracked.
-            guard inventory.initialRefreshComplete else { return [] }
+            // The saved layout waits for every app's first answer, so no saved window is dropped as untracked, and for an
+            // unlocked session with a non-empty CG list: a blank one can't tell a closed window from one on a hidden Space
+            // (T-03-63, CR-03). The shell feeds every inventory meanwhile (`awaitsRestore`). An unknown (nil) list never
+            // waits, since it may never come: it decides nothing, so every saved window is kept.
+            guard inventory.initialRefreshComplete, !inventory.sessionPaused, inventory.liveWindows?.isEmpty != true else { return [] }
             pendingRestore = nil
             // Home frames are kept only for windows tracked under a real ID (synthetic IDs are session-only, 02-11), or
             // kept dormant because the CG list still has them (G-03-8).
@@ -206,8 +209,8 @@ public struct Arranger: Sendable {
             // Space, or on none, is a hidden tab of a group now tracked under another member (CR-01) or an AX read that
             // failed: it is removed, as before G-03-8. Unknown Spaces keep the G-03-8 rule.
             let shown = Set(displays.compactMap(\.currentSpaceID))
-            let live = (inventory.liveWindows ?? []).filter { $0.spaces.map { !$0.isEmpty && $0.isDisjoint(with: shown) } ?? true }
-            homeFrames = restore.homeFrames.filter { real.contains($0.key) || LayoutRestore.isAlive($0.key, in: live) }
+            let live = inventory.liveWindows?.filter { $0.spaces.map { !$0.isEmpty && $0.isDisjoint(with: shown) } ?? true }
+            homeFrames = restore.homeFrames.filter { home in real.contains(home.key) || live.map { LayoutRestore.isAlive(home.key, in: $0) } ?? true }
             // After a crash, stranded windows come on screen first, before any layout work (D-17).
             let rescued = launch == .normal ? [] : rescueStranded(desks: restore.world)
             inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
@@ -313,6 +316,9 @@ public struct Arranger: Sendable {
         pendingRestore ?? unattached ?? (world, homeFrames)
     }
 
+    /// A saved layout is waiting for a usable inventory: the shell feeds it every inventory until then.
+    public var awaitsRestore: Bool { pendingRestore != nil }
+
     /// Adds every window of `inventory` no desk holds, after re-homing the ones whose display or Space changed.
     private mutating func place(_ inventory: WindowInventory) -> [ArrangerEffect] {
         var faults: [ArrangerEffect] = []
@@ -337,7 +343,7 @@ public struct Arranger: Sendable {
     /// or frame cannot be applied keeps its saved one. If the saved layout cannot be re-attached at all, the World starts
     /// empty and the saved layout stays what is saved. `unplaced` counts the tracked windows the saved layout did not hold.
     private mutating func reattach(
-        _ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]
+        _ restore: (world: World, homeFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?
     ) -> (effects: [ArrangerEffect], unplaced: Int) {
         history = UndoHistory()
         do throws(LayoutError) {
