@@ -1,0 +1,58 @@
+{
+  "app" : {
+    "activationPolicy" : "accessory",
+    "bundleID" : "com.apple.PIPAgent",
+    "family" : "native",
+    "hidden" : false
+  },
+  "capturedOn" : {
+    "appVersion" : "1.0",
+    "date" : "2026-10-27",
+    "macOS" : "15.7.7"
+  },
+  "case" : "safari_pip",
+  "expected" : {
+    "confirmedBy" : "executor-proposed",
+    "kind" : "neverDock"
+  },
+  "schemaVersion" : 1,
+  "title" : {
+    "length" : 3,
+    "redacted" : true
+  },
+  "window" : {
+    "cg" : {
+      "alpha" : 1,
+      "layer" : 19,
+      "onScreen" : true
+    },
+    "close" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "frame" : {
+      "height" : 144,
+      "width" : 256,
+      "x" : 748,
+      "y" : 42
+    },
+    "fullScreenButton" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "main" : false,
+    "minimize" : {
+      "enabled" : false,
+      "present" : false
+    },
+    "modal" : false,
+    "role" : "AXWindow",
+    "schemaVersion" : 1,
+    "sheetAttached" : false,
+    "subrole" : "AXSystemFloatingWindow",
+    "zoom" : {
+      "enabled" : false,
+      "present" : false
+    }
+  }
+}
