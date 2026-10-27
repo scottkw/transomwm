@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 3
-current_phase_name: Tiling MVP
+current_phase: 2
+current_phase_name: Window Control
 status: verifying
-stopped_at: Completed 03-26-PLAN.md
-last_updated: "2026-10-27T18:13:40.986Z"
-last_activity: 2026-10-25
-last_activity_desc: Phase 3 execution started
-state_head: 7e2b0a949b497a0405077bcad0cc0454b0b174d5
+stopped_at: Phase 3 complete, ready to verify Phase 2
+last_updated: "2026-10-27T18:20:10.029Z"
+last_activity: 2026-10-27
+last_activity_desc: Phase 3 complete, transitioned to Phase 2
+state_head: 5c2ca0cfcbfe1957fb916603ca40ea214bc97303
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 49
   completed_plans: 49
-  percent: 11
+  percent: 22
 ---
 
 # Project State
@@ -27,17 +27,17 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 ## Current Position
 
-Phase: 3 (Tiling MVP) — EXECUTING
-Plan: 17 of 17
+Phase: 2 — Window Control
+Plan: 17
 Status: Phase complete — ready for verification
-Last activity: 2026-10-25 — Phase 3 execution started
+Last activity: 2026-10-27 — Phase 3 complete, transitioned to Phase 2
 
-Progress: [█░░░░░░░░░] 11%
+Progress: [██░░░░░░░░] 22%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 32
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -46,6 +46,7 @@ Progress: [█░░░░░░░░░] 11%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 6 | - | - |
+| 3 | 26 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -251,7 +252,6 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 - Re-check on the first Transom build (deferred from Phase 3 by the user, 2026-10-27): UAT 16 (Hide Desktop on one display parks safely) and the display half of UAT 17 (two displays x two Spaces relaunch, clean and kill -9, plus a cross-display drag while a window is dormant, WR-04) on the DELL; in the VM, pre-dock frames survive a relaunch, and a Dock tile over a docked window's green button owns the click.
-- Register transomwm.app (available on 2026-10-27, RDAP 404).
 
 ### Blockers/Concerns
 
@@ -276,7 +276,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-10-27T15:21:34.674Z
-Stopped at: Completed 03-26-PLAN.md
+Stopped at: Phase 3 complete, ready to verify Phase 2
 Resume file: None
 
 ## Deferred Verification

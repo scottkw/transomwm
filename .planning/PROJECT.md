@@ -13,11 +13,11 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 ### Validated
 
 - ✓ Pure-Swift layout model: nested split tree with weights, panels, tab groups and a floating Desktop; insert at an edge, remove, resize, minimum sizes; serialisable — Phase 1 (141 tests, debug + release)
+- ✓ Drag-to-dock tiling with drop preview, reflow on close, gaps, drag-gap resize, green button docks/floats, crash-safe restore — Phase 3 (925 headless tests, VM UAT; second-display re-check deferred to the first Transom build)
 
 ### Active
 
 - [ ] Accessibility-based window control: permission flow, window tracking, move/resize, per-app exclusion list
-- [ ] Drag-to-dock tiling with drop preview, reflow on close, gaps, drag-gap resize, green button docks/floats
 - [ ] Zoom camera: overlay with window snapshots (colour + icon fallback without Screen Recording), zoom out to everything, step in/out a level, rectangle zoom, back/forward history, hotkeys
 - [ ] Trackpad gestures: ⌥-pinch/pan anywhere, pinch on bare desktop
 - [ ] Overview of all windows on all displays with a Spaces bar; optional Mission Control replacement; multi-display
@@ -54,7 +54,7 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Name "Pane" | User choice; check for existing macOS apps with the name before release | — Pending |
+| Name "Pane" → "Transom" | "Pane" is taken by several Mac window managers. Renamed after Phase 3: app Transom (`com.eightabyte.transom`, `transom://`), repo and folder `transomwm`, domain transomwm.app; no data migration (never shipped) | ✓ Decided 2026-10-27 |
 | MIT license | Matches AeroSpace/Amethyst/yabai ecosystem | — Pending |
 | v1 = all 9 phases | User wants full feature parity for public release | — Pending |
 | Model / Engine / App layering | Mirrors the reference app's proven split; makes core logic testable | — Pending |
@@ -64,6 +64,8 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 | `World.undo` returns restored windows | Model can't know OS state for windows on no desk; the engine re-reports them | — Pending (Phase 2 must honour) |
 | Unfit windows reported, never overlapped | Water-filling resolve pins minimums; windows that can't fit get no rect | ✓ Good (Phase 1) |
 | GitHub Releases update check instead of Sparkle | User wants the same updater as gifsmith: latest-release check with ETag, notify, Settings toggle + Check for Updates button, sha256 + Team ID verified DMG. Drops the Sparkle dependency; no in-place relaunch | — Pending (Phase 9, decided 2026-10-24) |
+| Dock at a tile's exact centre goes left | A plain green click on a floater filling the Desktop tile must dock, not beep (quick 261027-gqo) | ✓ Good (Phase 3) |
+| Every refusal and notice is logged | Toasts and VoiceOver lines are invisible over VNC; the log makes VM runs checkable | ✓ Good (Phase 3) |
 | Clean-room docs scrub | TrellisWM internal names removed from PLAN.md and research docs | ✓ Good |
 
 ## Evolution
@@ -84,4 +86,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-24 after Phase 1*
+*Last updated: 2026-10-27 after Phase 3*

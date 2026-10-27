@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Layout Model** - Headless PaneModel: nested split tree, Desktop layer, tab groups, desks, lifecycle states, JSON, undo (completed 2026-10-24)
 - [ ] **Phase 2: Window Control** - Accessibility permission, non-blocking window tracking and move/resize, classifier, exclusions, private-API fallback
-- [ ] **Phase 3: Tiling MVP** - Drag-to-dock nested tiling, reflow, gaps, commands, crash-safe restore; first usable signed release
+- [x] **Phase 3: Tiling MVP** - Drag-to-dock nested tiling, reflow, gaps, commands, crash-safe restore; first usable signed release (completed 2026-10-27)
 - [ ] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle
 - [ ] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop
 - [ ] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts
@@ -124,7 +124,7 @@ Plans:
   6. User can swap two tiles, balance, rotate and flip a split, move the focused window into a neighbouring tile and resize its tile from the keyboard, and snap floating Desktop windows to halves, thirds, quarters, maximised and centred by hotkey
   7. User can hide and show the Desktop, arrange all or float all windows, split a tile with a new Finder window and mark the frontmost app "Don't Arrange" from the menu; ⌥-clicking the green button gives the normal macOS zoom, and a minimised docked window returns to its tile
 
-**Plans:** 26/26 plans executed (9 gap-closure plans from UAT)
+**Plans:** 26/26 plans complete (9 gap-closure plans from UAT)
 
 Plans:
 **Wave 1**
@@ -315,7 +315,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 17/17 | In Progress | - |
-| 3. Tiling MVP | 26/26 | In Progress | - |
+| 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
