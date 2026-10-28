@@ -79,4 +79,13 @@ import Testing
         #expect(ZoomCopy.snapshotCacheLine(windows: 1, bytes: 3 * 1_048_576) == "Snapshot cache: 1 window, 3 MB")
         #expect(ZoomCopy.snapshotCacheLine(windows: 5, bytes: 40 * 1_048_576 + 400_000) == "Snapshot cache: 5 windows, 40 MB")
     }
+
+    @Test func theRubberBandCancelCopyMatchesTheContract() {
+        #expect(ZoomCopy.zoomCanceled == "Zoom canceled")
+        #expect(ZoomCopy.logRectNoTarget == "rect zoom: no target")
+        #expect(ZoomCopy.logRectCanceled == "rect zoom canceled (Esc)")
+        #expect(ZoomCopy.logRepost == "\u{2318}\u{21E7}-click re-posted")
+        #expect(ZoomCopy.logPickOn == "pick mode on")
+        #expect(ZoomCopy.logDesktopDoubleClick == "desktop double-click \u{2192} frame desktop")
+    }
 }

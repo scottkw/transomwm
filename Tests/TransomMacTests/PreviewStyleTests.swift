@@ -67,4 +67,21 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 1e-9 }
         #expect(!PreviewStyle.showsLabel(in: Size(width: 91, height: 52), labelSize: label))
         #expect(!PreviewStyle.showsLabel(in: Size(width: 92, height: 51), labelSize: label))
     }
+
+    @Test func theRubberBandTargetAndPickRingFollowTheZoomRecipe() {
+        let band = PreviewStyle.band(r, increaseContrast: false)
+        #expect(band.fill == .label && near(band.fillAlpha, 0.08) && band.border == .label && near(band.borderAlpha, 0.50))
+        #expect(band.borderWidth == 1 && band.cornerRadius == 0 && band.dash == nil)
+        let target = PreviewStyle.rectTarget(r, increaseContrast: false)
+        #expect(target.fill == .accent && near(target.fillAlpha, 0.20) && near(target.borderAlpha, 0.85))
+        #expect(target.borderWidth == 2 && target.cornerRadius == 12)
+        let ring = PreviewStyle.pickRing(r, radius: 10, increaseContrast: false)
+        #expect(near(ring.fillAlpha, 0) && ring.border == .accent && near(ring.borderAlpha, 0.85) && ring.borderWidth == 2)
+        #expect(ring.cornerRadius == 10)
+        // Increase Contrast: 8 -> 12, 20 -> 30, every border opaque.
+        #expect(near(PreviewStyle.band(r, increaseContrast: true).fillAlpha, 0.12))
+        #expect(near(PreviewStyle.band(r, increaseContrast: true).borderAlpha, 1))
+        #expect(near(PreviewStyle.rectTarget(r, increaseContrast: true).fillAlpha, 0.30))
+        #expect(near(PreviewStyle.pickRing(r, radius: 10, increaseContrast: true).borderAlpha, 1))
+    }
 }
