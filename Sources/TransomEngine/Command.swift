@@ -31,6 +31,14 @@ public enum Command: Hashable, Sendable {
     case arrangeAll, floatAll
     /// Bring every window Transom may move back on screen (SAFE-03); acts while paused.
     case restoreAll
+    /// A zoom camera command (ZOOM-01..04, 09..11). It acts on one display, so it runs as `ArrangerInput.camera`; a
+    /// bare `.command(.camera)` has no display and faults.
+    case camera(CameraCommand)
+}
+
+/// The camera commands every trigger (hotkey, menu, URL) sends (UI-SPEC Hotkeys and URLs).
+public enum CameraCommand: Hashable, Sendable {
+    case zoomOutAll, stepOut, stepIn
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and
@@ -38,9 +46,12 @@ public enum Command: Hashable, Sendable {
 public struct CommandContext: Equatable, Sendable {
     public var focused: WindowRef?
     public var ready: Bool
+    /// The display a camera command would act on (the pointer's, or the menu's); camera availability needs it.
+    public var displayUUID: String?
 
-    public init(focused: WindowRef?, ready: Bool) {
+    public init(focused: WindowRef?, ready: Bool, displayUUID: String? = nil) {
         self.focused = focused
         self.ready = ready
+        self.displayUUID = displayUUID
     }
 }

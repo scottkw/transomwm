@@ -46,6 +46,16 @@ nonisolated public enum MenuCopy {
         case .togglePause: pauseToggle(paused: false)
         case .toggleExcludeFrontmost: dontArrangeFallback
         case .restoreAll: "Restore All Windows"
+        case .camera(let command): cameraTitle(command)
+        }
+    }
+
+    /// A Zoom section item (UI-SPEC menu copy).
+    public static func cameraTitle(_ command: CameraCommand) -> String {
+        switch command {
+        case .zoomOutAll: "Zoom Out to All Windows"
+        case .stepOut: "Zoom Out One Level"
+        case .stepIn: "Zoom In One Level"
         }
     }
 

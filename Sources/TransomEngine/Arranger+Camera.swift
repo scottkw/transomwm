@@ -48,14 +48,25 @@ extension Arranger {
         return camera.views[Self.key(display)] ?? .home
     }
 
-    /// The view `planShown` plans for `key`: the committed one, or home when its node is gone (04-03 refines this with
-    /// ancestor paths).
-    mutating func effectiveView(for key: DeskKey, notes: inout [ArrangerEffect]) -> ViewTarget {
+    /// The committed view of `key`, or home when its node is gone.
+    func resolvedView(for key: DeskKey) -> ViewTarget {
         guard camera.enabled, case .node(let id)? = camera.views[key] else { return .home }
-        if world[key]?.tree.node(id) != nil { return .node(id) }
-        camera.views[key] = nil
-        notes.append(.info("view node gone; showing home"))
-        return .home
+        return world[key]?.tree.node(id) != nil ? .node(id) : .home
+    }
+
+    /// The view a camera command starts from: the pending target, else the committed view. A move pending on a desk no
+    /// longer shown (a Space switch) is stale.
+    func currentView(_ uuid: String, _ key: DeskKey) -> ViewTarget {
+        camera.pending[uuid].flatMap { $0.key == key ? $0.target : nil } ?? resolvedView(for: key)
+    }
+
+    /// The view `planShown` plans for `key` (`resolvedView`), committing the fallback when the node is gone.
+    mutating func effectiveView(for key: DeskKey, notes: inout [ArrangerEffect]) -> ViewTarget {
+        let view = resolvedView(for: key)
+        guard view != camera.views[key] ?? .home else { return view }
+        camera.views[key] = view == .home ? nil : view
+        notes.append(.info("view node gone; showing \(view)"))
+        return view
     }
 
     mutating func setZoomEnabled(_ on: Bool) -> [ArrangerEffect] {
@@ -76,8 +87,8 @@ extension Arranger {
         let key = Self.key(display)
         if case .node(let id) = target, desk.tree.node(id) == nil { return refused("node not found") }
         var notes: [ArrangerEffect] = []
-        // A move pending on a desk no longer shown (a Space switch) is stale.
-        let current = camera.pending[uuid].flatMap { $0.key == key ? $0.target : nil } ?? effectiveView(for: key, notes: &notes)
+        _ = effectiveView(for: key, notes: &notes)
+        let current = currentView(uuid, key)
         guard target != current else { return notes + refused("already showing") }
         let area = display.visibleFrame, mins = minimums
         let start: ViewPlan, end: ViewPlan

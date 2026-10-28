@@ -30,6 +30,8 @@ public enum ArrangerInput: Sendable {
     case zoomTo(ViewTarget, displayUUID: String)
     /// The stage finished move `moveID` on that display: the view is committed and written now.
     case cameraSettle(displayUUID: String, moveID: UInt64)
+    /// A camera command on that display (the pointer's), with the focused window and the pointer Step In reads.
+    case camera(CameraCommand, displayUUID: String, focused: WindowRef?, pointer: Point?)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -267,6 +269,8 @@ public struct Arranger: Sendable {
             guard pendingRestore == nil else { return [] }
             return handle(event, now: now)
         case .command(let command, let focused):
+            // Never guess a display (T-04-12): camera commands arrive as `.camera`.
+            if case .camera = command { return [.fault("camera command without a display")] }
             guard isAvailable(command, focused: focused) else { return [.beep] }
             do throws(LayoutError) {
                 switch (command, focused) {
@@ -289,6 +293,7 @@ public struct Arranger: Sendable {
                 case (.togglePause, _): return togglePause()
                 case (.restoreAll, _): return try restoreAll()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
+                case (.camera, _): return [.fault("camera command without a display")]  // answered above
                 case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
                     (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
                     return [.beep]
@@ -344,6 +349,8 @@ public struct Arranger: Sendable {
             return zoomTo(target, displayUUID: uuid)
         case .cameraSettle(let uuid, let moveID):
             return cameraSettle(displayUUID: uuid, moveID: moveID)
+        case .camera(let command, let uuid, let focused, let pointer):
+            return camera(command, displayUUID: uuid, focused: focused, pointer: pointer)
         }
     }
 
@@ -508,6 +515,8 @@ public struct Arranger: Sendable {
             return targetKey(focused).flatMap(display(for:)) != nil
         case .togglePause, .toggleExcludeFrontmost, .restoreAll:
             return true  // answered above
+        case .camera(let command):
+            return cameraAvailable(command, context: context)
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }
