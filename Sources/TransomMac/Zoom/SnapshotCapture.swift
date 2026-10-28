@@ -15,6 +15,8 @@ import os
     public static let failingAfter = 3
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "capture")
     private var scWindows: [CGWindowID: SCWindow] = [:]
+    /// Windows a re-read still did not list, so asking for them again does not re-read on every move (WR-03).
+    private var unlisted: Set<CGWindowID> = []
     /// Every successful capture, late ones included (04-SPIKE verdict condition 2: mandatory, not optional).
     private(set) var cache = SnapshotCache()
     /// Failed captures since the last success.
@@ -112,9 +114,20 @@ import os
     ) async -> [CGWindowID: CGImage] {
         guard !requests.isEmpty else { return [:] }
         let batch = Batch(requests)
+        // A window the list has never had (a fresh controller's first move, a window opened since the last reveal) is
+        // re-read first, inside the same deadline, so it gets a snapshot instead of always falling back (WR-03).
+        let unknown = requests.contains { scWindows[$0.0] == nil && !unlisted.contains($0.0) }
         return await withCheckedContinuation { continuation in
             batch.done = continuation
-            for _ in 0..<max(1, concurrency) { startNext(batch) }
+            Task {
+                if unknown {
+                    do { try await refreshShareable() } catch {
+                        Self.logger.notice("shareable content failed: \(String(describing: error), privacy: .public)")
+                    }
+                    unlisted.formUnion(requests.map(\.0).filter { scWindows[$0] == nil })
+                }
+                for _ in 0..<max(1, concurrency) { startNext(batch) }
+            }
             Task {
                 try? await Task.sleep(for: deadline)
                 batch.finish()
