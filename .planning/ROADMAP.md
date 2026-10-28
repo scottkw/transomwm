@@ -257,7 +257,28 @@ Plans:
   3. Gestures Transom handles never reach the app under the pointer, while ordinary pinch and scroll inside apps keep working
   4. Gestures keep working after sleep/wake and after the trackpad disconnects and reconnects; if the private multitouch API is unavailable Transom falls back and still launches
 
-**Plans**: TBD
+**Plans:** 8 plans
+
+Plans:
+**Wave 1**
+- [ ] 05-01-PLAN.md — Gesture spike: transom-gesture-spike CLI on the product's GestureTapRules, VM synthetic half, host checklist; go/no-go and E-01 (does multitouch ship?) checkpoint
+
+**Wave 2** *(blocked on Wave 1 and the spike decision)*
+- [ ] 05-02-PLAN.md — Engine: GestureRecognizer (pinch, pan, flick, overscroll, timeouts) from traces; non-committing previewMove/stillMove/gestureTarget
+- [ ] 05-03-PLAN.md — Product gesture tap under the zoom switch, GestureController, trackpad senders and hot-plug, wake re-publish, VM leak tests
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-04-PLAN.md — Live follow on the stage: snap through zoomTo/settle, spring back, pan, capture swap, Reduce Motion
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-05-PLAN.md — Overscroll and refusals (no beep), one level per gesture, gestures during a move (E-03), pick mode and collapsed blocks
+- [ ] 05-06-PLAN.md — Debug lines G1-G3 (GestureCopy), conditional "pan only" value
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 05-07-PLAN.md — MultitouchSupport in the product with capability, canary and rescan — only if E-01 = tap+multitouch, else skipped
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 05-08-PLAN.md — Phase gate: full host and VM suites, signed Debug build, the user's 16-item UAT on both trackpads
 **Research**: Needs phase research. One-day spike comparing MultitouchSupport raw touches against event-tap magnify events (types 29/30, visibility over other apps unverified); verify MT callback struct layout and the macOS 27 `int32_t` return semantics
 **Scope notes**: Own MultitouchSupport shim (port OpenMultitouchSupport headers, don't depend on 4.x), magnify-event fallback, device re-enumeration on wake and hot-plug, per-API crash canary.
 
