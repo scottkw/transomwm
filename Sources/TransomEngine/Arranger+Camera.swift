@@ -15,6 +15,8 @@ public struct CameraState: Sendable {
     public var paths: [DeskKey: [NodeID]] = [:]
     /// New windows outside the view, kept unparked until the move that shows them settles (RESEARCH Pitfall 3).
     public var unparkedNew: Set<WindowIdentity> = []
+    /// The collapsed blocks last sent per display, so only a change is sent again.
+    public var shownBlocks: [String: [CollapsedBlock]] = [:]
 
     public init() {}
 }
@@ -41,11 +43,23 @@ public struct CameraMove: Equatable, Sendable {
 }
 
 public struct TileMove: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case stay, entering, leaving }
+    /// `collapsed`: a collapsed block in the end view (drawn as a block, never a snapshot); it may enter or stay.
+    public enum Kind: Equatable, Sendable { case stay, entering, leaving, collapsed }
     public var window: WindowRef
     public var start: Rect
     public var end: Rect
     public var kind: Kind
+}
+
+/// A collapsed window's block (ZOOM-13): the tile it would have, in global top-left points; the window itself is parked.
+public struct CollapsedBlock: Equatable, Sendable {
+    public var window: WindowRef
+    public var rect: Rect
+
+    public init(window: WindowRef, rect: Rect) {
+        self.window = window
+        self.rect = rect
+    }
 }
 
 /// The camera (D-A): a zoom command emits one `.cameraMove` and changes nothing; the matching `.cameraSettle` commits the
@@ -108,7 +122,26 @@ extension Arranger {
         camera.histories = [:]
         camera.paths = [:]
         camera.unparkedNew = []
-        return replan()
+        camera.collapsible = []  // they float with N1: Phase 3 has no collapsed tiles (Surface 3)
+        return replan() + showBlocks([:])  // also when paused, so no block outlives zoom
+    }
+
+    /// D-A, ZOOM-13: with zoom on, an edit whose home plan leaves windows without room is accepted by collapsing them.
+    /// The collapsible set grown until `desk`'s home plan leaves nothing unfit, and the windows it adds that get no frame
+    /// (collapsed, or parked with no block); nil with zoom off.
+    func collapse(_ desk: Desk, area: Rect) throws(LayoutError) -> (set: Set<WindowIdentity>, newly: [WindowRef])? {
+        guard camera.enabled else { return nil }
+        var set = camera.collapsible
+        let mins = learnedMinimums
+        // ViewPlan.unfit never holds a member of `set`, so each pass adds one; the window count bounds it.
+        while true {
+            let plan = try ViewPlanner.plan(desk: desk, view: .home, area: area, gap: gap, mins: mins, collapsible: set)
+            guard !plan.unfit.isEmpty else {
+                let added = desk.tree.windows.filter { set.contains($0.identity) && !camera.collapsible.contains($0.identity) }
+                return (set, added.filter { plan.frames[$0] == nil })
+            }
+            set.formUnion(plan.unfit.map(\.identity))
+        }
     }
 
     mutating func zoomTo(
@@ -126,7 +159,7 @@ extension Arranger {
         _ = effectiveView(for: key, notes: &notes)
         let current = currentView(uuid, key)
         guard target != current else { return notes + refused("already showing") }
-        let area = display.visibleFrame, mins = minimums
+        let area = display.visibleFrame, mins = learnedMinimums
         let start: ViewPlan, end: ViewPlan
         do throws(LayoutError) {
             start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
@@ -141,14 +174,21 @@ extension Arranger {
             start.homeResolution.windowRects[window] ?? desk.desktop.frame(of: window) ?? rect
         }
         var tiles: [TileMove] = []
-        for window in Set(before.keys).union(after.keys) where windows[window.identity]?.isExcluded == false {
+        let all = Set(before.keys).union(after.keys).union(start.collapsed.keys).union(end.collapsed.keys)
+        for window in all where windows[window.identity]?.isExcluded == false {
             let tracked = windows[window.identity]?.frame
-            switch (before[window], after[window]) {
-            case let (from?, to?): tiles.append(TileMove(window: window, start: tracked ?? from, end: to, kind: .stay))
-            case let (from?, nil): tiles.append(TileMove(window: window, start: tracked ?? from, end: toMap(home(window, else: from)), kind: .leaving))
-            case let (nil, to?): tiles.append(TileMove(window: window, start: fromMap(home(window, else: to)), end: to, kind: .entering))
-            case (nil, nil): break
+            // A collapsed window is where its block is, never at its parked frame.
+            let from = start.collapsed[window] ?? before[window].map { tracked ?? $0 }
+            let to = end.collapsed[window] ?? after[window]
+            var tile: TileMove
+            switch (from, to) {
+            case let (from?, to?): tile = TileMove(window: window, start: from, end: to, kind: .stay)
+            case let (from?, nil): tile = TileMove(window: window, start: from, end: toMap(home(window, else: from)), kind: .leaving)
+            case let (nil, to?): tile = TileMove(window: window, start: fromMap(home(window, else: to)), end: to, kind: .entering)
+            case (nil, nil): continue
             }
+            if end.collapsed[window] != nil { tile.kind = .collapsed }
+            tiles.append(tile)
         }
         camera.nextMoveID += 1
         camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target, kind: kind, focus: focus)

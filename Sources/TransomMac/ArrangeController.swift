@@ -57,6 +57,8 @@ import os
     private(set) var previews: PreviewPresenter?
     /// The gap handles (TILE-05). A panel is made only when a handle first shows.
     private let gapPanels = GapHandlePanels()
+    /// The collapsed blocks at rest (ZOOM-13). A panel is made only when a block first shows.
+    private let collapsedPanels = CollapsedPanels()
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
@@ -92,6 +94,9 @@ import os
                 guard let self else { return }
                 await self.run(self.arranger.handle(.gapDrag(handle, delta: delta, ended: ended), now: .now))
             }
+        }
+        collapsedPanels.onDoubleClick = { [weak self] window, uuid in
+            Task { await self?.openBlock(window, displayUUID: uuid) }
         }
     }
 
@@ -512,6 +517,8 @@ import os
                 previews?.flashBlocked(rect, on: displayUUID)
             case .gapHandles(let handles, let displayUUID):
                 gapPanels.show(handles, on: displayUUID)
+            case .collapsedBlocks(let blocks, let displayUUID):
+                collapsedPanels.show(blocks, on: displayUUID)
             case .cameraMove(let move):
                 guard zoomEnabled else {
                     // Never expected: zoom off never enables the engine's camera. Settle at once so windows stay right.
@@ -519,6 +526,7 @@ import os
                     await settle(displayUUID: move.displayUUID, moveID: move.id)
                     continue
                 }
+                collapsedPanels.hide(on: move.displayUUID)  // the stage draws the blocks until the reveal
                 zoom().run(move) { [weak self] id in
                     Task { await self?.settle(displayUUID: move.displayUUID, moveID: id) }
                 }
@@ -535,6 +543,7 @@ import os
         zoom.appName = { Self.appName($0) }
         zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
         zoom.onRevealed = { [weak self] uuid, move in
+            self?.collapsedPanels.fadeIn(on: uuid)
             self?.revealed(uuid)
             self?.zoomInput.revealed(displayUUID: uuid, move: move)
         }
@@ -618,6 +627,17 @@ import os
     /// uses it).
     public func zoom(to target: ViewTarget, displayUUID: String, focus: TransomModel.WindowRef? = nil) async {
         await run(arranger.handle(.zoomTo(target, displayUUID: displayUUID, focus: focus), now: .now))
+    }
+
+    /// A collapsed block double-clicked (or pressed with VoiceOver): zoom to its leaf and focus it once it settles. While
+    /// paused: beep and say so (UI-SPEC Surface 3).
+    private func openBlock(_ window: TransomModel.WindowRef, displayUUID uuid: String) async {
+        guard arranger.pauseReasons.isEmpty else {
+            beep()
+            postAnnouncement(Navigator.Refusal.paused.announcement)
+            return
+        }
+        await zoomInput.zoom(toLeafOf: window, displayUUID: uuid)
     }
 
     /// Presses Finder's ⌘N menu item on Finder's AX thread (RESEARCH Pattern 14): no Apple Events, no Automation

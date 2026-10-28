@@ -40,6 +40,8 @@ import os
     private struct Pick {
         var displayUUID: String
         var tiles: [UInt32: CGRect]
+        /// Collapsed blocks: their windows are parked, so the tap cannot match them; `pointerDown` picks them instead.
+        var blocks: [(window: TransomModel.WindowRef, rect: CGRect)] = []
         var monitor: Any?
         var escape: Task<Void, Never>
         var hovered: UInt32?
@@ -99,6 +101,12 @@ import os
     /// and frames the Desktop on a double-click on its wallpaper (ZOOM-11), which is never taken.
     func pointerDown(_ event: TapEvent) {
         endBand()
+        if let current = pick, let block = current.blocks.first(where: { $0.rect.contains(event.location) }) {
+            endPick(reason: "picked")
+            log.info("\(ZoomCopy.logPick(block.window.windowID), privacy: .public)")
+            Task { await zoom(toLeafOf: block.window, displayUUID: current.displayUUID) }
+            return
+        }
         endPick(reason: "click")
         guard event.clickState == 2, published.armed else { return }
         // Its own task: Finder's hit test must not hold up the Arranger's view of this press.
@@ -152,8 +160,12 @@ import os
         guard shown.count > 1, let controller else { return }
         let arranger = controller.arranger
         var tiles: [UInt32: CGRect] = [:]
-        // shortcut: collapsed blocks are not pickable until 04-07 gives them panels; their click passes through.
+        var blocks: [(window: TransomModel.WindowRef, rect: CGRect)] = []
         for tile in shown {
+            if tile.kind == .collapsed {
+                blocks.append((tile.window, Self.cgRect(tile.end)))
+                continue
+            }
             guard let info = arranger.windows[tile.window.identity], let leaf = arranger.leafNode(of: tile.window), leaf != .desktop else { continue }
             tiles[info.visibleMemberID ?? tile.window.windowID] = Self.cgRect(tile.end)
         }
@@ -166,7 +178,7 @@ import os
                 self?.endPick(reason: "Esc")
             }
         }
-        pick = Pick(displayUUID: uuid, tiles: tiles, monitor: monitor, escape: escape)
+        pick = Pick(displayUUID: uuid, tiles: tiles, blocks: blocks, monitor: monitor, escape: escape)
         log.info("\(ZoomCopy.logPickOn, privacy: .public)")
         publish()
         hover()
@@ -215,7 +227,7 @@ import os
         await zoom(toLeafOf: window, displayUUID: uuid)
     }
 
-    private func zoom(toLeafOf window: TransomModel.WindowRef, displayUUID uuid: String) async {
+    func zoom(toLeafOf window: TransomModel.WindowRef, displayUUID uuid: String) async {
         guard let controller, let leaf = controller.arranger.leafNode(of: window), leaf != .desktop,
             let tree = controller.arranger.deskKey(of: window).flatMap({ controller.arranger.world[$0]?.tree })
         else { return }

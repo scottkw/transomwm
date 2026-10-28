@@ -90,6 +90,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case gapHandles([GapHandle], displayUUID: String)
     /// Animate this camera move, then feed `.cameraSettle` with its ID (RESEARCH Pattern 4).
     case cameraMove(CameraMove)
+    /// The collapsed blocks to show on that display; empty hides them (UI-SPEC Surface 3, ZOOM-13).
+    case collapsedBlocks([CollapsedBlock], displayUUID: String)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -698,6 +700,7 @@ public struct Arranger: Sendable {
         wantedFrames[window.identity] = nil
         undockedWanted[window.identity] = nil
         floaterFloors[window.identity] = nil
+        camera.collapsible.remove(window.identity)
         focusOrder.removeAll { $0 == window.identity }
     }
 
@@ -1246,6 +1249,10 @@ public struct Arranger: Sendable {
                 return Decision(preview: .dock(frame), action: .dock(key, target), display: uuid)
             }
             let loose = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]).frames[window]
+            // D-A: with zoom on the drop is accepted and the windows without room collapse.
+            if try collapse(desk, area: display.visibleFrame) != nil {
+                return Decision(preview: loose.map(PreviewState.dock), action: .dock(key, target), display: uuid)
+            }
             return Decision(preview: loose.map(PreviewState.blocked), action: .refuse(Self.noRoom), display: uuid)
         } catch {
             return miss  // the target went stale since the hit test
@@ -1314,12 +1321,18 @@ public struct Arranger: Sendable {
 
     private mutating func commitDock(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> [ArrangerEffect] {
         let candidate = try dropping(window, on: key, at: target)
-        guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key],
-            try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty
-        else { return [.announce(Self.noRoom)] + (try missed(window)) }
+        guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key] else {
+            return [.announce(Self.noRoom)] + (try missed(window))
+        }
+        var collapsed: (set: Set<WindowIdentity>, newly: [WindowRef])?
+        if try !Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty {
+            guard let collapse = try collapse(desk, area: area) else { return [.announce(Self.noRoom)] + (try missed(window)) }
+            collapsed = collapse
+        }
         world = candidate.world
         history = candidate.history
         lastRequested[window.identity] = nil
+        if let collapsed { camera.collapsible = collapsed.set }
         return replan()
     }
 
@@ -1539,6 +1552,7 @@ public struct Arranger: Sendable {
         var planned: Set<WindowIdentity> = []
         var lost: [WindowRef] = []
         var handles: [String: [GapHandle]] = [:]
+        var blocks: [String: [CollapsedBlock]] = [:]
         let mins = minimums
         for display in displays {
             let key = Self.key(display)
@@ -1550,11 +1564,14 @@ public struct Arranger: Sendable {
                 let floated: [WindowRef]
                 (plan, floated) = try planFloatingLostRoom(key, area: display.visibleFrame, mins: mins)
                 lost += floated
-                if view != .home, let desk = world[key] {
+                // With zoom on every view, home included, is planned with the collapse pass (ZOOM-13).
+                if camera.enabled, let desk = world[key] {
                     let viewPlan = try ViewPlanner.plan(
-                        desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: mins, wanted: wantedFrames,
+                        desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
                         collapsible: camera.collapsible)
-                    (plan.frames, plan.parks) = (viewPlan.frames, viewPlan.parks)
+                    (plan.frames, plan.parks, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.resolution)
+                    blocks[display.uuid] = viewPlan.collapsed.map { CollapsedBlock(window: $0.key, rect: $0.value) }
+                        .sorted { $0.window.identity < $1.window.identity }
                 }
             } catch {
                 faults.append(.fault("could not plan \(key): \(error)"))
@@ -1609,7 +1626,18 @@ public struct Arranger: Sendable {
         parkRequested = parkRequested.filter { parkedNow.contains($0) || hidden.contains($0) }
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
-            + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles)
+            + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles) + showBlocks(blocks)
+    }
+
+    /// Sends each display's collapsed blocks that changed; a display with none (or gone) gets an empty list.
+    mutating func showBlocks(_ blocks: [String: [CollapsedBlock]]) -> [ArrangerEffect] {
+        let uuids = Set(blocks.keys).union(camera.shownBlocks.keys).sorted()
+        return uuids.compactMap { uuid in
+            let next = blocks[uuid] ?? []
+            guard next != camera.shownBlocks[uuid] ?? [] else { return nil }
+            camera.shownBlocks[uuid] = next.isEmpty ? nil : next
+            return .collapsedBlocks(next, displayUUID: uuid)
+        }
     }
 
     /// Sends each display's handles that changed; a display with none planned (or gone) gets an empty list.
@@ -1688,8 +1716,17 @@ public struct Arranger: Sendable {
         return (plan, lost)
     }
 
-    /// Excluded windows have none: they never dock, and the Desktop tile is not sized for them.
+    /// The minimums every Phase 3 plan and dry run uses: `learnedMinimums`, with 1x1 for a collapsible window, which
+    /// may get less than it needs at home and so is never unfit there (ZOOM-13). Zoom off: the set is empty.
     var minimums: [WindowRef: Size] {
+        var mins = learnedMinimums
+        for window in mins.keys where camera.collapsible.contains(window.identity) { mins[window] = Size(width: 1, height: 1) }
+        return mins
+    }
+
+    /// Excluded windows have none: they never dock, and the Desktop tile is not sized for them. ViewPlanner gets these,
+    /// so it can tell which collapsible windows are collapsed.
+    var learnedMinimums: [WindowRef: Size] {
         Dictionary(
             windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }, uniquingKeysWith: { $1 })
     }

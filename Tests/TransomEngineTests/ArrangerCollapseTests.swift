@@ -90,7 +90,8 @@ private func moves(_ effects: [ArrangerEffect]) -> [CameraMove] {
         let save = try #require(up.firstIndex(of: .save(.now)), "no immediate save before the park")
         let park = try #require(up.firstIndex { parks([$0]).contains(.park(f, displayUUID: "main")) }, "f was not parked: \(up)")
         #expect(save < park)
-        #expect(up.contains(.collapsedBlocks([CollapsedBlock(window: f, rect: try loose(arranger))], displayUUID: "main")), "got \(up)")
+        let block = CollapsedBlock(window: f, rect: try loose(arranger))
+        #expect(up.contains(.collapsedBlocks([block], displayUUID: "main")), "got \(up)")
     }
 
     @Test func theSameDropIsRefusedWithZoomOff() throws {
@@ -129,7 +130,7 @@ private func moves(_ effects: [ArrangerEffect]) -> [CameraMove] {
         #expect(effects.contains(.notice(.lostRoom([a]))), "got \(effects)")
         #expect(arranger.world[mainKey]?.desktop.contains(a) == true)
         #expect(arranger.camera.collapsible.isEmpty)
-        #expect(blocks(effects).allSatisfy(\.isEmpty))
+        #expect(blocks(effects).allSatisfy { $0.isEmpty })
     }
 
     @Test func aCollapsedWindowIsATileKindCollapsedInAMove() throws {
