@@ -44,6 +44,15 @@ Zoom out to see every window on a display, zoom in to any node, ⌘⇧-drag a re
 - Zoom off: a menu toggle plus a preference. When off, the overlay is never created and ScreenCaptureKit is never touched, giving exactly Phase 3 behaviour (success criterion 5).
 - One camera and one back/forward stack per display: 50 entries of `NodeID`s, skipping entries whose node no longer exists. Zoom acts on the display under the pointer.
 
+### E. Post-research decisions (2026-10-27)
+- When a window outside the current view gets focus (Cmd-Tab, Dock click) or a new window opens, the camera widens to the smallest view containing both the current view and that window (RESEARCH open question 1).
+- Spike environment: install VS Code in the Tart VM for the spike's Electron settle gate. All spike runs stay in the VM; no host live runs. Core Animation numbers come from a virtual GPU and are treated as pessimistic (RESEARCH open question 4).
+- Literal UI-SPEC defaults accepted for RESEARCH open questions 2, 3 and 5:
+  - only drops and keyboard Dock/Move collapse a window
+  - an OS-caused loss of room still floats the window, as in Phase 3
+  - grow/shrink/rotate/flip/balance keep refusing when a window wouldn't fit
+  - the parking corner stays at the live-verified `visibleFrame` bottom corners
+
 ### Claude's Discretion
 - Camera/Navigator internals in TransomEngine (must stay AppKit-free and headless-testable).
 - Parking corner and offsets, snapshot cache size and refresh policy, capture concurrency limit (STACK.md suggests 4–6).
