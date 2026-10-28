@@ -246,9 +246,10 @@ import os
         }
     }
 
-    /// Zoom turned off: every snapshot and stage goes (T-04-13).
+    /// Zoom turned off: every snapshot and stage goes (T-04-13), and a post-reveal refresh still running makes no more
+    /// ScreenCaptureKit calls (WR-04).
     func purge() {
-        capture.purge()
+        capture.close()
         for (uuid, stage) in stages {
             stage.orderOut(nil)
             revealTimers[uuid]?.cancel()

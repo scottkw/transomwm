@@ -19,6 +19,8 @@ import os
     private(set) var cache = SnapshotCache()
     /// Failed captures since the last success.
     public private(set) var consecutiveFailures = 0
+    /// Zoom turned off: no ScreenCaptureKit call from here on, even from a refresh or capture already in flight (WR-04, D-D).
+    private var closed = false
 
     /// Every call that reaches ScreenCaptureKit or the Screen Recording permission; it exists for the zoom-off guard test
     /// (ZoomOffTests, success criterion 5), which expects 0.
@@ -38,6 +40,7 @@ import os
 
     /// Re-reads the shareable windows. Slow: never call it on a move's critical path.
     public func refreshShareable() async throws {
+        guard !closed else { return }
         Self.touches += 1
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         scWindows = Dictionary(content.windows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
@@ -45,6 +48,7 @@ import os
 
     /// One window at `pixelSize`, or nil when the window is unknown, the capture failed or it took over 1 s.
     public func capture(_ id: CGWindowID, pixelSize: CGSize) async -> CGImage? {
+        guard !closed else { return nil }
         Self.touches += 1
         guard let window = scWindows[id] else { return nil }
         let config = SCStreamConfiguration()
@@ -66,6 +70,7 @@ import os
                 once.resume(.failure(CaptureFailure(description: "timed out")))
             }
         }
+        guard !closed else { return nil }  // closed while it ran: nothing goes back into the cache
         switch result {
         case .success(let image):
             consecutiveFailures = 0
@@ -80,7 +85,11 @@ import os
 
     public func cached(_ id: CGWindowID) -> CGImage? { cache.image(for: id) }
     public func remove(_ id: CGWindowID) { cache.remove(id) }
-    public func purge() { cache.purge() }
+    /// Zoom off: every snapshot goes and nothing is captured again; the owner makes a new one for the next Turn On.
+    public func close() {
+        closed = true
+        cache.purge()
+    }
 
     /// UI-SPEC step 8: after a reveal, re-reads the shareable windows (off the move's critical path) and re-captures the
     /// windows now visible at their new size, into the cache only. Windows that closed leave the cache.
@@ -91,6 +100,7 @@ import os
             Self.logger.notice("shareable content failed: \(String(describing: error), privacy: .public)")
             return
         }
+        guard !closed else { return }
         for id in cache.ids where scWindows[id] == nil { cache.remove(id) }
         _ = await captureAll(requests, deadline: .seconds(2))
     }
