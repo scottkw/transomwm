@@ -147,7 +147,7 @@ The accent is **not** used for the rubber band itself, the stage, snapshot or fa
 | `canBecomeKey` / `canBecomeMain` | `false` | Never key, never main |
 | `level` | `.floating` (same as Phase 3 overlays). When the stage orders in, any visible toast or drop-preview panel is re-ordered front, so notices stay readable | Above normal windows; below the menu bar, the Dock and open menus (`.popUpMenu`). The spike reports the level against open menus (CONTEXT D) |
 | `collectionBehavior` | `[.canJoinAllSpaces, .stationary, .ignoresCycle]` | As Phase 3. No `.fullScreenAuxiliary`: fullscreen Spaces have no layout, and zoom commands there beep |
-| `sharingType` | `.none` | Never captured by Transom's own snapshots or by screen sharing (Pitfall 18) |
+| `sharingType` | `.none` | Never captured by Transom's own snapshots (single-window filters, Pitfall 18). It does **not** hide the stage from system screen recording or sharing: on macOS 15.7 `screencapture -v` records it (04-SPIKE G2, verdict condition 3) |
 | `isOpaque` / `backgroundColor` / `hasShadow` / `animationBehavior` | `true` / `.clear` / `false` / `.none` | The backdrop layer is opaque, so real windows moving underneath never show through |
 | Accessibility | `setAccessibilityElement(false)` | Transient. Each move is announced instead (Accessibility) |
 | Lifetime | Created lazily on the first move with zoom on, per display; destroyed when zoom is turned off or the display goes away | With zoom off the stage is never created (success criterion 5) |
@@ -229,7 +229,7 @@ The accent is **not** used for the rubber band itself, the stage, snapshot or fa
 
 **When.** A window is collapsed when its tile in the current view is smaller than its minimum size. With zoom on, this happens when a drop is accepted that doesn't fit at the home view (CONTEXT A), and in any zoomed view where a subtree is still too small. The window itself is parked; the block stands in its tile.
 
-**Panel (at rest).** One `NSPanel` per collapsed tile, recycled through a pool (the gap-handle pattern): `[.borderless, .nonactivatingPanel]`, `canBecomeKey = false`, `level = .floating`, `[.canJoinAllSpaces, .stationary, .ignoresCycle]`, `sharingType = .none`, `ignoresMouseEvents = false`. It covers **exactly** the tile rect, which would otherwise be bare wallpaper, so it steals no click from an app. Tracking area `[.mouseEnteredAndExited, .cursorUpdate, .activeAlways]`. Panels are ordered out when a move starts (the stage draws collapsed blocks itself) and fade in at reveal.
+**Panel (at rest).** One `NSPanel` per collapsed tile, recycled through a pool (the gap-handle pattern): `[.borderless, .nonactivatingPanel]`, `canBecomeKey = false`, `level = .floating`, `[.canJoinAllSpaces, .stationary, .ignoresCycle]`, `sharingType = .none` (keeps it out of Transom's own snapshots; like the stage it can still appear in system screen recordings on macOS 15.7, 04-SPIKE), `ignoresMouseEvents = false`. It covers **exactly** the tile rect, which would otherwise be bare wallpaper, so it steals no click from an app. Tracking area `[.mouseEnteredAndExited, .cursorUpdate, .activeAlways]`. Panels are ordered out when a move starts (the stage draws collapsed blocks itself) and fade in at reveal.
 
 | State | Visual | Cursor | Input |
 |---|---|---|---|

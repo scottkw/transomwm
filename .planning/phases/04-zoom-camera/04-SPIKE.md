@@ -135,7 +135,7 @@ None applied. G1 passed at p95 205.1 ms, so neither `FrameWriter.move` nor the p
 
 ## Verdict
 
-**Recommendation: GO with conditions** (awaiting your decision at the checkpoint; this section records your reply before any later plan starts).
+**GO with conditions** (user decision below, recorded before any later plan started).
 
 Gates against the RESEARCH thresholds:
 - G1 PASS: p95 205.1 ms in and 93.1 ms out for 15 windows with Electron; no ladder needed.
@@ -150,4 +150,6 @@ Conditions proposed:
 3. **`sharingType = .none` does not hide the stage from screen recording on macOS 15.7.** Update the UI-SPEC / threat-model wording ("never captured by screen sharing") to "excluded from Transom's own snapshots; may appear in system screen recordings on macOS 15+". The Debug capturable switch is then mainly useful on older systems. Transom's single-window captures never contain it.
 4. **ZOOM-07 budget definition.** The 500 ms gate measured the first write to the last read-back, as RESEARCH defines it. End to end from a keypress, the worst VM move is about 820 ms (capture 120 + animation 250 + settle 280 + 50 + fade 120). Confirm the RESEARCH definition, or say if ZOOM-07 means end to end.
 
-**User decision:** _pending (checkpoint Task 3)_
+**User decision (2026-10-28):** "go with: (1) accept the G4 crossfade stalls as VM noise, with no host confirmation run; (2) the snapshot cache in 04-04 is mandatory; (3) reword the UI-SPEC and threat model: the stage is visible to system screen recording on macOS 15.7 (sharingType=.none does not hide it); (4) the ZOOM-07 500 ms budget is the write path only, from the first AX write to the last read-back, with animation time separate."
+
+Applied: (2) as a must-have in 04-04-PLAN.md; (3) in 04-UI-SPEC.md Surfaces 1 and 3, 04-01 T-04-02 and 04-04 T-04-14; (4) in REQUIREMENTS.md ZOOM-07 and the 04-08 ZOOM-07 truth. Plans 04-02..04-08 are unlocked.

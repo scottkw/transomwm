@@ -70,7 +70,7 @@
 - [ ] **ZOOM-04**: User can go back and forward through previous views
 - [ ] **ZOOM-05**: Zoomed views show live window snapshots, or app colour and icon when Screen Recording isn't granted
 - [ ] **ZOOM-06**: Clicking a window in a zoomed view zooms in to it and focuses it
-- [ ] **ZOOM-07**: After a zoom settles, real windows are arranged at their new sizes within 500 ms for 15 windows, without visible flashing of stale layouts
+- [ ] **ZOOM-07**: After a zoom settles, real windows are arranged at their new sizes within 500 ms for 15 windows, without visible flashing of stale layouts (the 500 ms is the write path only: from the first AX write to the last read-back; the capture budget and the 250 ms animation are separate. 04-01 verdict, 2026-10-28)
 - [ ] **ZOOM-08**: Zoom hotkeys are rebindable
 - [ ] **ZOOM-09**: User can move the view to the neighbouring area left, right, up or down by hotkey and URL
 - [ ] **ZOOM-10**: User can frame the focused window on its own and toggle back, by hotkey, URL or double-clicking its title bar
