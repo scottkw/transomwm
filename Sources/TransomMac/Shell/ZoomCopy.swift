@@ -40,6 +40,36 @@ nonisolated public enum ZoomCopy {
     public static let captureNoPermission = "app-icon tiles (no Screen Recording)"
     public static let captureFailing = "app-icon tiles (capture failing)"
 
+    // MARK: Menu (Surface 6) and the zoom toggle's announcements (Accessibility)
+
+    public static let zoomSection = "Zoom"
+    public static let moveViewMenu = "Move View"
+    public static let allowWindowPreviews = "Allow Window Previews\u{2026}"
+    public static let turnOffZoom = "Turn Off Zoom"
+    public static let turnOnZoom = "Turn On Zoom"
+    public static let shortcutsItem = "Shortcuts\u{2026}"
+    public static let zoomedInDescription = "Transom: zoomed in"
+    public static let zoomOffAnnouncement = "Zoom off"
+    public static let zoomOnAnnouncement = "Zoom on"
+
+    // MARK: Debug submenu lines (Surface 6)
+
+    /// "Zoom: on, {capture state}" or "Zoom: off"; `capture` is one of the capture strings above.
+    public static func zoomStateLine(enabled: Bool, capture: String) -> String {
+        enabled ? "Zoom: on, \(capture)" : "Zoom: off"
+    }
+
+    public static func lastSettleLine(_ settle: (ms: Int, windows: Int)?) -> String {
+        guard let settle else { return "Last settle: none yet" }
+        return "Last settle: \(settle.ms) ms, " + (settle.windows == 1 ? "1 window" : "\(settle.windows) windows")
+    }
+
+    public static func snapshotCacheLine(windows: Int, bytes: Int) -> String {
+        guard windows > 0 else { return "Snapshot cache: empty" }
+        let mb = Int((Double(bytes) / 1_048_576).rounded())
+        return "Snapshot cache: " + (windows == 1 ? "1 window" : "\(windows) windows") + ", \(mb) MB"
+    }
+
     // MARK: Capture log lines (Logging, category capture)
 
     public static let logGranted = "screen recording: granted"

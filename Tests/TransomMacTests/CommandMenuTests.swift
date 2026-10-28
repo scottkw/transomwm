@@ -115,9 +115,9 @@ import Testing
 }
 
 /// 04 UI-SPEC Surface 6: the Zoom section's items, toggle, checkmarks and greying.
-@Suite @MainActor struct ZoomMenuTests {
+@Suite @MainActor struct ZoomCommandMenuTests {
     private let base: NSEvent.ModifierFlags = [.control, .option, .command]
-    private static let cameraCommands: [CameraCommand] = [
+    private nonisolated static let cameraCommands: [CameraCommand] = [
         .zoomOutAll, .stepOut, .stepIn, .back, .forward, .pan(.left), .pan(.right), .pan(.top), .pan(.bottom), .frameWindow, .frameDesktop,
     ]
 

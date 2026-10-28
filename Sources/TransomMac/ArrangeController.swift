@@ -66,6 +66,13 @@ import os
     private var zoomEnabled: Bool
     public var isZoomEnabled: Bool { zoomEnabled }
     private let zoomInputLog = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
+    private let cameraLog = Logger(subsystem: "com.eightabyte.transom", category: "camera")
+    /// Fires after each reveal and when zoom turns off (the status item's "zoomed in" description).
+    public var onViewChanged: (() -> Void)?
+    /// Turn Off Zoom in progress: the displays whose move home has not revealed yet.
+    private var turningOff = false
+    private var awaitingHome: Set<String> = []
+    private let zoomOffFallback = WakeTimer()
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
     private(set) var zoomController: ZoomController?
 
@@ -501,6 +508,7 @@ import os
         zoom.announce = { postAnnouncement($0) }
         zoom.appName = { Self.appName($0) }
         zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
+        zoom.onRevealed = { [weak self] uuid, _ in self?.revealed(uuid) }
         zoom.bringNoticesFront = { [weak self] in
             self?.toast.bringFront()
             self?.previews?.bringFront()
@@ -516,6 +524,58 @@ import os
         let writes = effects.flatMap { effect -> [WindowCommand] in if case .perform(let commands) = effect { commands } else { [] } }
         zoomController?.beginSettle(displayUUID: displayUUID, moveID: moveID, writes: writes)
         await run(effects)
+    }
+
+    private func revealed(_ uuid: String) {
+        onViewChanged?()
+        guard awaitingHome.remove(uuid) != nil, awaitingHome.isEmpty else { return }
+        Task { await finishZoomOff() }
+    }
+
+    /// Turn Off Zoom (D-D): every zoomed display moves home first, then, once those moves have revealed, the engine drops
+    /// the camera (collapsed windows float with N1), every zoom piece goes and the zoom hotkeys are disabled. Turn On Zoom
+    /// moves nothing. Either way the choice is saved as the `zoomEnabled` preference.
+    public func setZoomEnabled(_ on: Bool) async {
+        UserDefaults.standard.set(on, forKey: ZoomController.enabledKey)
+        guard on else {
+            guard zoomEnabled, !turningOff else { return }
+            turningOff = true
+            for display in arranger.displays {
+                let effects = arranger.handle(.zoomTo(.home, displayUUID: display.uuid), now: .now)
+                if effects.contains(where: { if case .cameraMove = $0 { true } else { false } }) { awaitingHome.insert(display.uuid) }
+                await run(effects)
+            }
+            guard awaitingHome.isEmpty else {
+                // A move that never reveals (its display went away) must not keep zoom on forever: settle cap + fades < 3 s.
+                zoomOffFallback.set(.now + .seconds(3)) { [weak self] in await self?.finishZoomOff() }
+                return
+            }
+            await finishZoomOff()
+            return
+        }
+        guard !zoomEnabled else { return }
+        zoomEnabled = true
+        await run(arranger.handle(.zoomEnabled(true), now: .now))
+        Hotkeys.setZoomHotkeys(enabled: true)
+        postAnnouncement(ZoomCopy.zoomOnAnnouncement)
+        cameraLog.info("zoom on")
+    }
+
+    private func finishZoomOff() async {
+        guard turningOff else { return }
+        turningOff = false
+        awaitingHome = []
+        zoomOffFallback.cancel()
+        zoomEnabled = false
+        let effects = arranger.handle(.zoomEnabled(false), now: .now)
+        let floated = effects.reduce(0) { count, effect in if case .notice(.lostRoom(let windows)) = effect { count + windows.count } else { count } }
+        await run(effects)
+        zoomController?.purge()
+        zoomController = nil
+        Hotkeys.setZoomHotkeys(enabled: false)
+        postAnnouncement(ZoomCopy.zoomOffAnnouncement)
+        cameraLog.info("zoom off (\(floated, privacy: .public) collapsed windows floated)")
+        onViewChanged?()
     }
 
     /// Zooms `displayUUID`'s camera to `target` (the shell entry point; pointer input uses it from 04-06).

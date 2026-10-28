@@ -73,7 +73,10 @@ import os
         addStatusItems(to: menu)
         addConflictItems(to: menu)
         menu.addItem(.separator())
-        addArrangeItems(to: menu)
+        let context = arrange.commandContext()
+        addArrangeItems(to: menu, context: context)
+        menu.addItem(.separator())
+        addZoomItems(to: menu, context: context)
         menu.addItem(.separator())
         menu.addItem(.sectionHeader(title: MenuCopy.safetySection))
         let pause = commands.item(for: .togglePause)
@@ -104,12 +107,12 @@ import os
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        KeyboardShortcuts.enable(Hotkeys.entries.map(\.name))
+        let zoomOn = arrange.isZoomEnabled  // zoom off keeps the zoom chords disabled (D-D)
+        KeyboardShortcuts.enable(Hotkeys.entries.map(\.name).filter { zoomOn || !Hotkeys.zoomNames.contains($0) })
     }
 
-    /// Items 6–18: the Arrange section, enabled by the one availability rule.
-    private func addArrangeItems(to menu: NSMenu) {
-        let context = arrange.commandContext()
+    /// Items 6–18: the Arrange section, enabled by the one availability rule (which also greys the camera items).
+    private func addArrangeItems(to menu: NSMenu, context: CommandContext) {
         commands.update(focusedFloats: arrange.arranger.isFloating(context.focused)) { arrange.arranger.availability($0, context: context) }
         commands.item(for: .toggleDesktop).title = MenuCopy.desktopToggle(hidden: arrange.arranger.isDesktopHidden(focused: context.focused))
         menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
@@ -123,6 +126,38 @@ import os
         menu.addItem(commands.item(for: .floatAll))
         menu.addItem(commands.item(for: .toggleDesktop))
         menu.addItem(gapsMenuItem())
+    }
+
+    /// The Zoom section (Surface 6), on the pointer's display. Screen Recording is never checked while zoom is off.
+    private func addZoomItems(to menu: NSMenu, context: CommandContext) {
+        let on = arrange.isZoomEnabled
+        var previews: NSMenuItem?
+        if on, !SnapshotCapture.isGranted() {
+            let item = NSMenuItem(title: ZoomCopy.allowWindowPreviews, action: #selector(allowPreviews), keyEquivalent: "")
+            item.target = self
+            previews = item
+        }
+        let toggle = NSMenuItem(title: "", action: #selector(toggleZoom), keyEquivalent: "")
+        toggle.target = self
+        let arranger = arrange.arranger
+        let uuid = context.displayUUID
+        let section = commands.zoomSection(
+            enabled: on, framingWindow: uuid.map { arranger.isFramingFocused(displayUUID: $0, focused: context.focused) } ?? false,
+            framingDesktop: uuid.map(arranger.isFramingDesktop) ?? false, previews: previews, toggle: toggle)
+        for item in section { menu.addItem(item) }
+    }
+
+    @objc private func toggleZoom() {
+        Task { await arrange.setZoomEnabled(!arrange.isZoomEnabled) }
+    }
+
+    /// Surface 2 recovery path: user-initiated, so not a re-prompt loop. Once the user has decided, macOS shows no prompt
+    /// and Transom opens the Screen Recording pane instead.
+    @objc private func allowPreviews() {
+        guard !SnapshotCapture.request(),
+            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Gaps ▸, a radio list; enabled while paused, where the change waits for Resume (D-27).
