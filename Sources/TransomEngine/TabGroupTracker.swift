@@ -44,7 +44,8 @@ public struct TabResolution: Equatable, Sendable {
 /// different Spaces (a changed AXTabs count is Cmd-T, a background tab or a closed tab); a refused member never takes
 /// its old group's tabs, and no group is ever founded under an identity a group already holds. A group whose shown tab
 /// and known members are all gone (out of the CG list or AX-invalid) passes its identity only to a former tab: a
-/// listed, unreported window that was offscreen in its slot at the last refresh. Nothing here destroys a window;
+/// listed, unreported window that was offscreen at the last refresh, with fewer tabs than the group had, nearest the
+/// group's frame (its bounds may be stale). Nothing here destroys a window;
 /// CloseRule's two sources still decide that. Without Space data, the first full update after a Space switch
 /// (`spaceChanged`) makes no orphan handoff and no new fold (a tracked standalone window taken as a hidden tab, as in
 /// Merge All Windows): a window the switch shows may be another Space's twin that sat offscreen in the slot, and a
@@ -107,6 +108,8 @@ public struct TabGroupTracker: Equatable, Sendable {
         let inCG = Set(cg.map(\.windowID))
         let onScreen = Set(cg.filter(\.onScreen).map(\.windowID))
         let listedSingles = Set(visible.filter { $0.tabCount < 2 }.map(\.id))
+        // Each group's AXTabs count at its last update, before it is recounted from its members below.
+        let lastTabCount = (groups[pid] ?? []).map(\.tabCount)
         var list = (groups[pid] ?? []).map { group in
             var group = group
             group.members.formIntersection(inCG)
@@ -188,14 +191,16 @@ public struct TabGroupTracker: Equatable, Sendable {
                 }
             }
             // Orphan handoff: a group whose shown tab and every known member are gone passes to a listed window only
-            // if it was an offscreen entry in the group's slot last refresh, so a former tab. A brand-new window never is.
+            // if it was an untracked offscreen entry last refresh, so a former tab, with fewer tabs than the group had.
+            // A brand-new window never is. A hidden tab keeps its stale bounds (G-02-10): they only break ties (WR-02).
             if index == nil, !blindSwitch, !trackedIDs.contains(v.id),
                let previous = previousCG?.first(where: { $0.windowID == v.id && !$0.onScreen })
             {
-                index = list.firstIndex { group in
-                    gone(group.shown) && group.members.allSatisfy(gone) && Self.matches(previous.bounds, group.frame)
-                        && !Self.differ(shownSpace, group.spaces)
+                let orphans = list.indices.filter { i in
+                    i < lastTabCount.count && v.tabCount < lastTabCount[i] && gone(list[i].shown) && list[i].members.allSatisfy(gone)
+                        && !Self.differ(shownSpace, list[i].spaces)
                 }
+                index = Self.nearest(orphans.map { (id: list[$0].leader.windowID, bounds: list[$0].frame) }, to: previous.bounds).map { orphans[$0] }
             }
             let own = index.map { list[$0].members } ?? []
             // A group keeps its own hidden tabs while they stay offscreen in the CG list and AX-valid, whatever their bounds.

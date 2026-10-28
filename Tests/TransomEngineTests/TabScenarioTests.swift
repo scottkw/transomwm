@@ -873,4 +873,16 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events).isEmpty)
         #expect(created(events).map(\.window) == [ref(5), ref(10)])
     }
+
+    /// WR-02 (P2T): the sweep sees 219 (AXTabs 3) with 216 and 208 hidden 28 pt shorter, so 219 is the group's only
+    /// known member. Cmd-W on 219 shows 216 at the group frame: the same window follows it, nothing closes or opens.
+    @Test func cmdWAfterARelaunchKeepsTheGroupsIdentity() {
+        var tracker = WindowTracker(settleDelay: .zero)
+        var events = ingest(&tracker, [listed(219, 3)], [cg(219, onScreen: true), cg(216, Self.shorter), cg(208, Self.shorter)], initial: true)
+        let gone = WindowObservation(windowID: 219, idSource: .axPrivate, read: .failure(.invalidElement), title: "", listedInAXWindows: false)
+        for _ in 0..<3 { events += ingest(&tracker, [listed(216, 2), gone], [cg(216, onScreen: true), cg(208, Self.shorter)]) }
+        #expect(rows(tracker) == [[219, 216, 2]])
+        #expect(destroyed(events).isEmpty)
+        #expect(created(events).map(\.window) == [ref(219)])
+    }
 }

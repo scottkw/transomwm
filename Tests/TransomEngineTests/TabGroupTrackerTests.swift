@@ -404,7 +404,7 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
     /// no other member. Then 30 closes (or AX reports it invalid) and a window is listed: does it take G's identity?
     private func orphanHandoff(
         previous: CGWindowEntry = cg(31), listed: UInt32 = 31, listedSpace: Set<UInt64> = [1], tracked: [WindowIdentity] = [],
-        shownGone: Bool = true, spaceChanged: Bool = false
+        shownGone: Bool = true, spaceChanged: Bool = false, listedTabs: Int = 1
     ) -> TabResolution {
         var tracker = TabGroupTracker()
         let first = tracker.update(
@@ -414,7 +414,7 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(tracker.members(of: identity(30)) == [30])
         #expect(first.groupFor == [30: identity(30)])
         return tracker.update(
-            pid: pid, bundleID: bundleID, visible: [visible(listed, 1)],
+            pid: pid, bundleID: bundleID, visible: [visible(listed, listedTabs)],
             cgWindows: [cg(10), cg(listed, onScreen: true)] + (shownGone ? [] : [cg(30)]),
             tracked: tracked + [identity(30)], spaces: [listed: listedSpace, 10: [2]], invalid: shownGone ? [] : [30],
             spaceChanged: spaceChanged
@@ -438,13 +438,40 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         ("onscreen in the previous CG list", cg(31, onScreen: true), 31, [1], false),
         ("on another Space", cg(31), 31, [3], false),
         ("already reported", cg(31), 31, [1], true),
-        ("outside the slot", cg(31, Rect(x: frame.x + 1.01, y: frame.y, width: frame.width, height: frame.height)), 31, [1], false),
     ] as [(String, CGWindowEntry, UInt32, Set<UInt64>, Bool)])
     func aWindowWithoutFormerTabEvidenceNeverTakesTheIdentity(
         _ reason: String, previous: CGWindowEntry, listed: UInt32, listedSpace: Set<UInt64>, reported: Bool
     ) {
         let resolution = orphanHandoff(previous: previous, listed: listed, listedSpace: listedSpace, tracked: reported ? [identity(listed)] : [])
         #expect(resolution.groupFor.isEmpty, "\(reason)")
+    }
+
+    /// WR-02: a hidden tab keeps the bounds it had when hidden (G-02-10), so a former tab outside the slot still takes
+    /// the identity. Before the review this case was refused (\"outside the slot\").
+    @Test func aFormerTabOutsideTheSlotStillTakesTheIdentity() {
+        let shifted = Rect(x: frame.x + 1.01, y: frame.y, width: frame.width, height: frame.height - 28)
+        #expect(orphanHandoff(previous: cg(31, shifted)).groupFor == [31: identity(30)])
+    }
+
+    /// WR-02: a window with as many tabs as the group had cannot be what is left of it after a close.
+    @Test func aWindowWithAsManyTabsAsTheGroupNeverTakesTheIdentity() {
+        #expect(orphanHandoff(listedTabs: 2).groupFor[31] != identity(30))
+    }
+
+    /// WR-02 (P2): a group first seen with stale-bounds hidden tabs (as after a Transom relaunch) knows only its shown
+    /// tab 219. Cmd-W on 219 shows 216, which sat offscreen 28 pt shorter: it takes the group's identity.
+    @Test func cmdWOnAGroupFirstSeenWithStaleHiddenTabsKeepsItsIdentity() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(219, 3)], cgWindows: [cg(219, onScreen: true), cg(216, Self.shorter), cg(208, Self.shorter)]
+        )
+        #expect(tracker.members(of: identity(219)) == [219])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(216, 2)], cgWindows: [cg(216, onScreen: true), cg(208, Self.shorter)],
+            tracked: [identity(219)]
+        )
+        #expect(resolution.groupFor == [216: identity(219)])
+        #expect(resolution.tabCount == [identity(219): 2])
     }
 
     /// With Space data a Space switch changes nothing: the former tab still takes the identity.
