@@ -23,9 +23,10 @@ private func shifted(_ rect: Rect, _ dx: Double, _ dy: Double = 0) -> Rect {
     Rect(x: rect.x + dx, y: rect.y + dy, width: rect.width, height: rect.height)
 }
 
-/// An Arranger fed `infos` on the main display, with zoom on or off.
-private func bare(_ infos: [WindowInfo], zoom: Bool) -> Arranger {
+/// An Arranger fed `infos` on the main display (and a saved `world`), with zoom on or off.
+private func bare(_ infos: [WindowInfo], world: World? = nil, zoom: Bool) -> Arranger {
     var arranger = Arranger()
+    if let world { _ = arranger.handle(.restore(world, homeFrames: [:]), now: .now) }
     _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: .now)
     if zoom { _ = arranger.handle(.zoomEnabled(true), now: .now) }
     return arranger
@@ -145,5 +146,167 @@ private func moves(_ effects: [ArrangerEffect]) -> [CameraMove] {
         let tile = try #require(back.tiles.first { $0.window == f })
         #expect(tile.kind == .collapsed)
         #expect(tile.end == block)
+    }
+}
+
+private let b = window(3), c = window(4), g = window(5)
+
+/// A saved main desk built by `build`, so its shape does not depend on where Dock would put each window.
+private func world(_ build: (inout LayoutTree, inout IDSource) throws -> Void) throws -> World {
+    var tree = LayoutTree.withDesktop()
+    var ids = IDSource()
+    try build(&tree, &ids)
+    return try World(ids: ids, desks: [mainKey: Desk(tree: tree)])
+}
+
+/// [a | Desktop] with a 1410 pt wide: any other window docked beside it leaves a without room.
+private func wideA(zoom: Bool, floating: Rect = floatingFrame) throws -> Arranger {
+    let saved = try world { tree, ids in try tree.insert(a, at: .left, of: .desktop, ids: &ids) }
+    return bare([info(1, frame: floatingFrame, minimum: Size(width: 1410, height: 100)), info(2, frame: floating)], world: saved, zoom: zoom)
+}
+
+private func announcements(_ effects: [ArrangerEffect]) -> [String] {
+    effects.compactMap { if case .announce(let text) = $0 { text } else { nil } }
+}
+
+/// UI-SPEC Surface 7 and the CONTEXT E boundaries: only drops and keyboard Dock/Move collapse, only with zoom on.
+extension ArrangerCollapseTests {
+    @Test func theDragPreviewIsCollapsedForTheDraggedWindow() throws {
+        var arranger = bare([info(2, frame: floatingFrame, minimum: huge)], zoom: true)
+        let (tick, up) = dropF(&arranger)
+        #expect(previews(tick) == [.collapsed(try loose(arranger), label: "Collapsed until you zoom in")], "tick gave \(tick)")
+        #expect(announcements(up) == ["Docked. Zoom in to see it."])
+    }
+
+    @Test func theDragPreviewIsCollapsedForOtherWindows() throws {
+        var arranger = try wideA(zoom: true)
+        let (tick, up) = dropF(&arranger)
+        let preview = try #require(previews(tick).last)
+        guard case .collapsed(_, let label) = preview else { Issue.record("tick gave \(tick)"); return }
+        #expect(label == "1 window collapses")
+        #expect(announcements(up) == ["Docked. 1 window collapsed."])
+        #expect(arranger.camera.collapsible == [a.identity])
+        #expect(arranger.world[mainKey]?.tree.state(of: f) == .present)
+    }
+
+    @Test func theCollapseCopyCountsWindows() {
+        #expect(CollapseCopy.draggedLabel == "Collapsed until you zoom in")
+        #expect(CollapseCopy.othersLabel(1) == "1 window collapses")
+        #expect(CollapseCopy.othersLabel(2) == "2 windows collapse")
+        #expect(CollapseCopy.dockedAnnouncement(dragged: true, others: 2) == "Docked. Zoom in to see it.")
+        #expect(CollapseCopy.dockedAnnouncement(dragged: false, others: 1) == "Docked. 1 window collapsed.")
+        #expect(CollapseCopy.dockedAnnouncement(dragged: false, others: 2) == "Docked. 2 windows collapsed.")
+    }
+
+    @Test func keyboardDockAndMoveCollapseWithZoomOn() throws {
+        var alone = bare([info(2, frame: floatingFrame, minimum: huge)], zoom: true)
+        let docked = alone.handle(.command(.dock, focused: f), now: .now)
+        #expect(announcements(docked) == ["Docked. Zoom in to see it."], "got \(docked)")
+        #expect(alone.world[mainKey]?.tree.state(of: f) == .present && alone.camera.collapsible == [f.identity])
+        #expect(!docked.contains(.beep))
+
+        // f's centre over the left of a's tile: Dock puts it on a's left edge.
+        var beside = try wideA(zoom: true, floating: Rect(x: 50, y: 400, width: 100, height: 100))
+        let other = beside.handle(.command(.dock, focused: f), now: .now)
+        #expect(announcements(other) == ["Docked. 1 window collapsed."], "got \(other)")
+        #expect(beside.camera.collapsible == [a.identity])
+
+        // [a | V[b, c] | Desktop]; c moved left: a + c + b side by side need 400 + 600 + 450, more than the row.
+        let saved = try world { tree, ids in
+            try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
+            try tree.insert(c, at: .bottom, of: try #require(tree.leaf(containing: b)), ids: &ids)
+        }
+        let infos = [
+            info(1, frame: floatingFrame, minimum: Size(width: 400, height: 100)), info(3, frame: floatingFrame, minimum: Size(width: 450, height: 100)),
+            info(4, frame: floatingFrame, minimum: Size(width: 600, height: 100)),
+        ]
+        var columns = bare(infos, world: saved, zoom: true)
+        let moved = columns.handle(.command(.moveOrSnap(.left), focused: c), now: .now)
+        #expect(announcements(moved) == ["Docked. Zoom in to see it."], "got \(moved)")
+        #expect(columns.camera.collapsible == [c.identity])
+
+        var refused = bare(infos, world: saved, zoom: false)
+        let before = refused.world
+        #expect(Array(refused.handle(.command(.moveOrSnap(.left), focused: c), now: .now).prefix(2)) == [.beep, .announce(Arranger.noRoom)])
+        #expect(refused.world == before)
+        var off = bare([info(2, frame: floatingFrame, minimum: huge)], zoom: false)
+        #expect(Array(off.handle(.command(.dock, focused: f), now: .now).prefix(2)) == [.beep, .announce(Arranger.noRoom)])
+    }
+
+    @Test func growShrinkRotateFlipBalanceStillRefuseWithZoomOn() throws {
+        // [a | b | Desktop], each 500 pt tall at least: stacked they need more than the 859 pt column.
+        let saved = try world { tree, ids in
+            try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
+        }
+        let tall = Size(width: 100, height: 500)
+        var arranger = bare([info(1, frame: floatingFrame, minimum: tall), info(3, frame: floatingFrame, minimum: tall)], world: saved, zoom: true)
+        let before = arranger.world
+        let rotated = arranger.handle(.command(.rotateSplit, focused: a), now: .now)
+        #expect(Array(rotated.prefix(2)) == [.beep, .announce(Arranger.noRoom)], "got \(rotated)")
+        #expect(arranger.world == before && arranger.camera.collapsible.isEmpty)
+        for command in [Command.growTile, .shrinkTile, .flipSplit, .balanceSplit] {
+            _ = arranger.handle(.command(command, focused: a), now: .now)
+            #expect(arranger.camera.collapsible.isEmpty, "\(command) collapsed a window")
+        }
+    }
+
+    @Test func arrangeAllStillFloatsWhatDoesNotFit() throws {
+        var arranger = bare([info(2, frame: floatingFrame, minimum: huge), info(5, frame: Rect(x: 100, y: 100, width: 300, height: 200))], zoom: true)
+        let effects = arranger.handle(.command(.arrangeAll, focused: g), now: .now)
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.state(of: g) == .present && desk.desktop.contains(f))
+        #expect(effects.contains(.notice(.arrangeLeftovers(count: 1))), "got \(effects)")
+        #expect(arranger.camera.collapsible.isEmpty)
+    }
+
+    @Test func theShiftBypassIntoATooSmallDesktopIsStillBlocked() throws {
+        // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
+        let saved = try world { tree, ids in
+            try tree.insert(a, at: .top, of: .desktop, ids: &ids)
+            try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
+        }
+        let frameA = Rect(x: 40, y: 80, width: 320, height: 232)
+        var arranger = bare(
+            [info(1, frame: frameA, minimum: Size(width: 100, height: 600)), info(3, frame: frameA, minimum: Size(width: 100, height: 300))],
+            world: saved, zoom: true)
+        let start = ContinuousClock.now
+        let infoA = try #require(arranger.windows[a.identity])
+        let grab = Point(x: infoA.frame.midX, y: infoA.frame.minY + 10)
+        _ = arranger.handle(pointer(.down, grab.x, grab.y, [.shift], press: a), now: start)
+        _ = arranger.handle(pointer(.dragged, grab.x + 10, grab.y, [.shift]), now: start)
+        _ = arranger.handle(pointer(.dragged, 700, 800, [.shift]), now: start)
+        let tick = arranger.handle(.tick, now: start + .milliseconds(150))
+        #expect(previews(tick).contains { if case .blocked = $0 { true } else { false } }, "tick gave \(tick)")
+        let up = arranger.handle(pointer(.up, 700, 800, [.shift]), now: start + .milliseconds(200))
+        #expect(up.contains(.announce(Arranger.noRoom)))
+        #expect(arranger.world[mainKey]?.tree.state(of: a) == .present && arranger.camera.collapsible.isEmpty)
+    }
+
+    @Test func turningZoomOffFloatsCollapsedWindowsWithTheLostRoomNotice() throws {
+        var arranger = bare([info(2, frame: floatingFrame, minimum: huge)], zoom: true)
+        _ = dropF(&arranger)
+        #expect(arranger.camera.collapsible == [f.identity])
+
+        let effects = arranger.handle(.zoomEnabled(false), now: .now)
+
+        #expect(effects.contains(.notice(.lostRoom([f]))), "got \(effects)")
+        #expect(effects.contains(.collapsedBlocks([], displayUUID: "main")))
+        #expect(arranger.world[mainKey]?.desktop.contains(f) == true)
+        #expect(arranger.camera.collapsible.isEmpty)
+    }
+
+    /// RESEARCH Pitfall 11: the set is never saved, so a relaunch floats a formerly collapsed window as lost room.
+    @Test func aRelaunchFloatsAFormerlyCollapsedWindow() throws {
+        var arranger = bare([info(2, frame: floatingFrame, minimum: huge)], zoom: true)
+        _ = dropF(&arranger)
+        var relaunched = Arranger()
+        _ = relaunched.handle(.restore(arranger.world, homeFrames: [:]), now: .now)
+        _ = relaunched.handle(.zoomEnabled(true), now: .now)
+        let infos = [info(2, frame: floatingFrame, minimum: huge)]
+        let effects = relaunched.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: .now)
+        #expect(effects.contains(.notice(.lostRoom([f]))), "got \(effects)")
+        #expect(relaunched.world[mainKey]?.desktop.contains(f) == true)
     }
 }
