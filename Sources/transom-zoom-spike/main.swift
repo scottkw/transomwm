@@ -776,7 +776,11 @@ final class LinkCounter: NSObject {
         let refresh = Double(screen.maximumFramesPerSecond)
         for run in 0..<runs {
             let forward = run % 2 == 0
-            stage.show(tiles: tiles.map { tile in forward ? tile : StageTile(id: tile.id, start: tile.end, end: tile.start, image: tile.image, fill: tile.fill) })
+            stage.show(tiles: tiles.map { tile in
+                var swapped = tile
+                if !forward { (swapped.start, swapped.end) = (tile.end, tile.start) }
+                return swapped
+            })
             try? await Task.sleep(for: .milliseconds(200))
             let counter = LinkCounter()
             guard let view = stage.contentView else { return }

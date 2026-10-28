@@ -11,8 +11,14 @@ import os
     public static let moveBudget: Duration = .milliseconds(120)
     /// A capture whose completion handler never fires must not hang its caller (RESEARCH Pattern 5, T-04-03).
     static let captureTimeout: Duration = .seconds(1)
+    /// Consecutive failures while granted that make the Debug state "capture failing" (UI-SPEC Surface 2).
+    public static let failingAfter = 3
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "capture")
     private var scWindows: [CGWindowID: SCWindow] = [:]
+    /// Every successful capture, late ones included (04-SPIKE verdict condition 2: mandatory, not optional).
+    private(set) var cache = SnapshotCache()
+    /// Failed captures since the last success.
+    public private(set) var consecutiveFailures = 0
 
     public init() {}
 
@@ -49,14 +55,35 @@ import os
         }
         switch result {
         case .success(let image):
+            consecutiveFailures = 0
+            cache.insert(image, for: id)
             return image
         case .failure(let failure):
+            consecutiveFailures += 1
             Self.logger.notice("capture failed window \(id, privacy: .public): \(failure.description, privacy: .public)")
             return nil
         }
     }
 
-    /// Captures at most `concurrency` windows at a time and returns those finished by `deadline`. Late results are dropped.
+    public func cached(_ id: CGWindowID) -> CGImage? { cache.image(for: id) }
+    public func remove(_ id: CGWindowID) { cache.remove(id) }
+    public func purge() { cache.purge() }
+
+    /// UI-SPEC step 8: after a reveal, re-reads the shareable windows (off the move's critical path) and re-captures the
+    /// windows now visible at their new size, into the cache only. Windows that closed leave the cache.
+    public func refresh(_ requests: [(CGWindowID, CGSize)]) async {
+        do {
+            try await refreshShareable()
+        } catch {
+            Self.logger.notice("shareable content failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        for id in cache.ids where scWindows[id] == nil { cache.remove(id) }
+        _ = await captureAll(requests, deadline: .seconds(2))
+    }
+
+    /// Captures at most `concurrency` windows at a time and returns those finished by `deadline`. Late results go only to
+    /// the cache; captures not yet started by then are not started.
     public func captureAll(
         _ requests: [(CGWindowID, CGSize)], deadline: Duration = moveBudget, concurrency: Int = maxConcurrency
     ) async -> [CGWindowID: CGImage] {
@@ -99,6 +126,49 @@ import os
             done?.resume(returning: results)
             done = nil
         }
+    }
+}
+
+/// Snapshots by CG window ID, least recently used evicted first once their decoded size (`width * height * 4`) passes
+/// `capacity`. Memory only: never written to disk or logged (T-04-13).
+nonisolated struct SnapshotCache {
+    static let capacity = 128 * 1024 * 1024
+    let capacityBytes: Int
+    private(set) var bytes = 0
+    private var entries: [CGWindowID: (image: CGImage, cost: Int, used: UInt64)] = [:]
+    private var tick: UInt64 = 0
+
+    init(capacity: Int = SnapshotCache.capacity) { capacityBytes = capacity }
+
+    var count: Int { entries.count }
+    var ids: [CGWindowID] { Array(entries.keys) }
+
+    /// Reading an entry makes it the most recently used.
+    mutating func image(for id: CGWindowID) -> CGImage? {
+        guard let entry = entries[id] else { return nil }
+        tick += 1
+        entries[id]?.used = tick
+        return entry.image
+    }
+
+    mutating func insert(_ image: CGImage, for id: CGWindowID) {
+        remove(id)
+        let cost = image.width * image.height * 4
+        guard cost <= capacityBytes else { return }
+        // shortcut: eviction scans every entry (O(n)); fine for a few hundred windows, use a linked list past that.
+        while bytes + cost > capacityBytes, let oldest = entries.min(by: { $0.value.used < $1.value.used })?.key { remove(oldest) }
+        tick += 1
+        entries[id] = (image, cost, tick)
+        bytes += cost
+    }
+
+    mutating func remove(_ id: CGWindowID) {
+        if let entry = entries.removeValue(forKey: id) { bytes -= entry.cost }
+    }
+
+    mutating func purge() {
+        entries = [:]
+        bytes = 0
     }
 }
 

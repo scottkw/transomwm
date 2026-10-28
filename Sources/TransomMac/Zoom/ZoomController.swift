@@ -161,9 +161,9 @@ import os
         stage.show(tiles: tiles)
         bringNoticesFront()
         active[uuid]?.phase = .moving
-        let snapshots = tiles.filter { $0.image != nil }.count
+        let snapshots = tiles.filter { if case .snapshot = $0.content { true } else { false } }.count
         logger.info("move display \(uuid, privacy: .public): \(String(describing: move.from), privacy: .public) → \(String(describing: move.to), privacy: .public), \(tiles.count, privacy: .public) tiles, \(snapshots, privacy: .public) snapshots, \(tiles.count - snapshots, privacy: .public) fallback")
-        stage.animate(crossfade: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) { [weak self] in
+        stage.animate { [weak self] in
             self?.animationEnded(uuid, move.id)
         }
     }
@@ -211,7 +211,8 @@ import os
 
     // MARK: Tiles
 
-    /// One tile per window visible at the start or end, in AppKit coordinates. A tile with no image shows its fill.
+    /// One tile per window visible at the start or end, in AppKit coordinates. Each picks its content on its own: this
+    /// move's capture, else the cached snapshot, else the app-colour fallback (UI-SPEC partial state).
     private func tiles(for move: CameraMove, images: [UInt32: CGImage]) -> [StageTile] {
         guard let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else { return [] }
         func appKit(_ rect: Rect) -> CGRect {
@@ -219,9 +220,26 @@ import os
             return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
         }
         return move.tiles.map { tile in
-            let id = cgWindow(tile.window) ?? tile.window.windowID
-            return StageTile(id: id, start: appKit(tile.start), end: appKit(tile.end), image: images[id], fill: NSColor.systemGray.cgColor)
+            let cg = cgWindow(tile.window)
+            let image = cg.flatMap { images[$0] ?? capture.cached($0) }
+            return StageTile(
+                id: cg ?? tile.window.windowID, start: appKit(tile.start), end: appKit(tile.end),
+                content: image.map { .snapshot($0) } ?? fallback(tile.window))
         }
+    }
+
+    /// App colour, app icon, and the AX title (the app name when it has none).
+    private func fallback(_ window: TransomModel.WindowRef) -> TileLayer.Content {
+        let app = NSRunningApplication(processIdentifier: window.pid)
+        let name = app?.localizedName ?? window.bundleID
+        return .fallback(
+            color: AppColor.color(forBundleID: window.bundleID, icon: app?.icon), icon: app?.icon,
+            title: window.titleHint.isEmpty ? name : window.titleHint)
+    }
+
+    /// A window closed: its snapshot leaves the cache (T-04-13).
+    func windowClosed(_ window: TransomModel.WindowRef) {
+        capture.remove(window.windowID)
     }
 
     /// The CG window a window shows (its visible tab); nil for a synthetic ID, which has none.

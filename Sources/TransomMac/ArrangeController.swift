@@ -134,6 +134,7 @@ import os
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
                 if case .displaysChanged = event { self.zoomController?.displaysChanged() }
+                if case .windowDestroyed(let window) = event { self.zoomController?.windowClosed(window) }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
                 // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does

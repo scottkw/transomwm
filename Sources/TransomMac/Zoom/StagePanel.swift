@@ -2,21 +2,31 @@ import AppKit
 import QuartzCore
 
 /// One window's tile on the stage. Rects are AppKit global coordinates (bottom-left origin); callers convert with
-/// `Coordinates.appKit(fromTopLeft:primaryHeight:)`. A nil `image` draws `fill`.
+/// `Coordinates.appKit(fromTopLeft:primaryHeight:)`.
 public struct StageTile {
     public var id: UInt32
     public var start: CGRect
     public var end: CGRect
-    public var image: CGImage?
-    public var fill: CGColor
+    var content: TileLayer.Content
 
-    public init(id: UInt32, start: CGRect, end: CGRect, image: CGImage?, fill: CGColor) {
+    init(id: UInt32, start: CGRect, end: CGRect, content: TileLayer.Content) {
         self.id = id
         self.start = start
         self.end = end
-        self.image = image
-        self.fill = fill
+        self.content = content
     }
+
+    /// A snapshot tile, or with no image a plain `fill` tile (the spike harness).
+    public init(id: UInt32, start: CGRect, end: CGRect, image: CGImage?, fill: CGColor) {
+        let content: TileLayer.Content = image.map { .snapshot($0) } ?? .fallback(color: NSColor(cgColor: fill) ?? .systemGray, icon: nil, title: "")
+        self.init(id: id, start: start, end: end, content: content)
+    }
+}
+
+/// Re-resolves the tiles' colours when the appearance changes.
+private final class StageContentView: NSView {
+    var onAppearanceChange: () -> Void = {}
+    override func viewDidChangeEffectiveAppearance() { onAppearanceChange() }
 }
 
 /// The camera stage (UI-SPEC Surface 1): one never-key panel per display covering its whole frame, shown only while
@@ -28,9 +38,10 @@ public final class StagePanel: NSPanel {
 
     private let backdrop = CALayer()
     /// The tiles moving toward `tiles`' end rects (with a crossfade, the end set fading in), by window ID.
-    private var layers: [UInt32: CALayer] = [:]
+    private var layers: [UInt32: TileLayer] = [:]
     /// Layers on their way out: a crossfade's start set, or tiles a retarget dropped. Removed at the next show.
-    private var leaving: [CALayer] = []
+    private var leaving: [TileLayer] = []
+    private var colorObserver: NSObjectProtocol?
     private var tiles: [StageTile] = []
     /// Chosen when a move starts (Reduce Motion), kept by its retargets.
     private var crossfade = false
@@ -52,7 +63,7 @@ public final class StagePanel: NSPanel {
         animationBehavior = .none
         hidesOnDeactivate = false
         setAccessibilityElement(false)
-        let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        let view = StageContentView(frame: NSRect(origin: .zero, size: screen.frame.size))
         view.wantsLayer = true
         contentView = view
         backdrop.frame = view.bounds
@@ -66,6 +77,16 @@ public final class StagePanel: NSPanel {
             view.effectiveAppearance.performAsCurrentDrawingAppearance { backdrop.backgroundColor = NSColor.windowBackgroundColor.cgColor }
         }
         view.layer?.addSublayer(backdrop)
+        view.onAppearanceChange = { [weak self] in self?.resolveColors() }
+        colorObserver = NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) {
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.resolveColors() }
+        }
+    }
+
+    private func resolveColors() {
+        guard let appearance = contentView?.effectiveAppearance else { return }
+        for layer in Array(layers.values) + leaving { layer.resolveColors(appearance) }
     }
 
     public override var canBecomeKey: Bool { false }
@@ -88,7 +109,11 @@ public final class StagePanel: NSPanel {
 
     /// Moves every tile from its start to its end rect (ease-out), or with `crossfade` (Reduce Motion) fades the start
     /// set out while an end set fades in, nothing moving. `completion` runs when the animation ends.
-    public func animate(duration: Double = StagePanel.moveDuration, crossfade: Bool, completion: @escaping () -> Void) {
+    /// The crossfade choice is read when each move starts (Reduce Motion), so a change applies from the next move.
+    public func animate(
+        duration: Double = StagePanel.moveDuration, crossfade: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+        completion: @escaping () -> Void
+    ) {
         self.crossfade = crossfade
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -100,8 +125,7 @@ public final class StagePanel: NSPanel {
             for layer in layers.values { fade(layer, from: 0, to: 1, duration: duration) }
         } else {
             for tile in tiles {
-                guard let layer = layers[tile.id] else { continue }
-                move(layer, tile, from: localRect(tile.start), duration: duration)
+                layers[tile.id]?.move(from: localRect(tile.start), to: localRect(tile.end), duration: duration, timing: Self.moveTiming)
             }
         }
         CATransaction.commit()
@@ -121,21 +145,12 @@ public final class StagePanel: NSPanel {
             layers = Dictionary(tiles.map { ($0.id, makeTile($0, at: $0.end)) }, uniquingKeysWith: { first, _ in first })
             for layer in layers.values { fade(layer, from: 0, to: 1, duration: duration) }
         } else {
-            var next: [UInt32: CALayer] = [:]
+            var next: [UInt32: TileLayer] = [:]
             for tile in tiles where next[tile.id] == nil {
-                if let layer = layers.removeValue(forKey: tile.id) {
-                    let from = layer.presentation()?.frame ?? layer.frame
-                    let image = layer.sublayers?.first
-                    let imageFrom = image.map { $0.presentation()?.frame ?? $0.frame }
-                    layer.removeAllAnimations()
-                    image?.removeAllAnimations()
-                    move(layer, tile, from: from, imageFrom: imageFrom, duration: duration)
-                    next[tile.id] = layer
-                } else {
-                    let layer = makeTile(tile, at: tile.start)
-                    move(layer, tile, from: localRect(tile.start), duration: duration)
-                    next[tile.id] = layer
-                }
+                let layer = layers.removeValue(forKey: tile.id) ?? makeTile(tile, at: tile.start)
+                // A tile already on stage goes on from its presentation() rect, so a retarget never jumps.
+                layer.move(from: layer.currentRect, to: localRect(tile.end), duration: duration, timing: Self.moveTiming)
+                next[tile.id] = layer
             }
             leaving += layers.values
             layers = next
@@ -161,52 +176,14 @@ public final class StagePanel: NSPanel {
 
     private func localRect(_ rect: CGRect) -> CGRect { rect.offsetBy(dx: -frame.minX, dy: -frame.minY) }
 
-    private func makeTile(_ tile: StageTile, at rect: CGRect) -> CALayer {
-        let container = CALayer()
-        container.frame = localRect(rect)
-        container.masksToBounds = true
-        if let image = tile.image {
-            let content = CALayer()
-            content.contents = image
-            content.frame = Self.imageFrame(image, in: container.bounds.size)
-            container.addSublayer(content)
-        } else {
-            container.backgroundColor = tile.fill
-        }
-        contentView?.layer?.addSublayer(container)
-        return container
-    }
+    private static let moveTiming = CAMediaTimingFunction(name: .easeOut)
 
-    /// Aspect-fill, anchored to the top edge so the title bar stays visible (layer y grows upward).
-    static func imageFrame(_ image: CGImage, in size: CGSize) -> CGRect {
-        let scale = max(size.width / CGFloat(max(1, image.width)), size.height / CGFloat(max(1, image.height)))
-        let width = CGFloat(image.width) * scale, height = CGFloat(image.height) * scale
-        return CGRect(x: (size.width - width) / 2, y: size.height - height, width: width, height: height)
-    }
-
-    /// Animates a tile container to its end rect, and its snapshot (if any) to the aspect-fill frame at that size.
-    private func move(_ layer: CALayer, _ tile: StageTile, from: CGRect, imageFrom: CGRect? = nil, duration: Double) {
-        let to = localRect(tile.end)
-        move(layer, from: from, to: to, duration: duration)
-        if let image = layer.sublayers?.first, let content = tile.image {
-            move(image, from: imageFrom ?? Self.imageFrame(content, in: from.size), to: Self.imageFrame(content, in: to.size), duration: duration)
-        }
-    }
-
-    private func move(_ layer: CALayer, from: CGRect, to: CGRect, duration: Double) {
-        let timing = CAMediaTimingFunction(name: .easeOut)
-        let position = CABasicAnimation(keyPath: "position")
-        position.fromValue = NSValue(point: CGPoint(x: from.midX, y: from.midY))
-        position.toValue = NSValue(point: CGPoint(x: to.midX, y: to.midY))
-        let bounds = CABasicAnimation(keyPath: "bounds")
-        bounds.fromValue = NSValue(rect: CGRect(origin: .zero, size: from.size))
-        bounds.toValue = NSValue(rect: CGRect(origin: .zero, size: to.size))
-        for animation in [position, bounds] {
-            animation.duration = duration
-            animation.timingFunction = timing
-            layer.add(animation, forKey: animation.keyPath)
-        }
-        layer.frame = to
+    /// A tile layer at `rect`, its fallback laid out for the tile's end size.
+    private func makeTile(_ tile: StageTile, at rect: CGRect) -> TileLayer {
+        let appearance = contentView?.effectiveAppearance ?? NSAppearance.currentDrawing()
+        let layer = TileLayer(tile.content, rect: localRect(rect), endSize: tile.end.size, appearance: appearance, scale: backingScaleFactor)
+        contentView?.layer?.addSublayer(layer)
+        return layer
     }
 
     /// Fades from the layer's current (presentation) opacity unless `from` is given.
