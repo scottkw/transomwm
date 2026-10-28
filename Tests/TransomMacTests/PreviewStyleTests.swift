@@ -85,3 +85,29 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 1e-9 }
         #expect(near(PreviewStyle.pickRing(r, radius: 10, increaseContrast: true).borderAlpha, 1))
     }
 }
+
+/// UI-SPEC Surface 7 and Surface 3: the Collapsed drop preview and the collapsed-block panel's VoiceOver label.
+@Suite struct CollapsedLookTests {
+    @Test func collapsedUsesTheDockColoursWithItsGlyphAndLabel() throws {
+        let layer = try #require(PreviewStyle.layers(for: .collapsed(r, label: "1 window collapses"), increaseContrast: false).first)
+        #expect(layer.rect == r && layer.fill == .accent && near(layer.fillAlpha, 0.20))
+        #expect(layer.border == .accent && near(layer.borderAlpha, 0.85) && layer.borderWidth == 2 && layer.dash == nil)
+        #expect(layer.label == PreviewStyle.Label(text: "1 window collapses", glyph: "arrow.down.right.and.arrow.up.left", glyphRole: .label))
+        let contrasted = try #require(PreviewStyle.layers(for: .collapsed(r, label: "x"), increaseContrast: true).first)
+        #expect(near(contrasted.fillAlpha, 0.30) && near(contrasted.borderAlpha, 1))
+    }
+
+    @Test func theCollapsedLabelFollowsTheClearanceRule() {
+        let label = Size(width: 220, height: 24)
+        #expect(!PreviewStyle.showsLabel(in: Size(width: 240, height: 120), labelSize: label))
+        #expect(PreviewStyle.showsLabel(in: Size(width: 252, height: 56), labelSize: label))
+    }
+
+    @Test func theBlockLabelNamesTheAppAndTheTitle() {
+        #expect(CollapsedBlockView.label(appName: "Safari", title: "Downloads") == "\u{201C}Safari\u{201D}, collapsed: Downloads")
+        #expect(CollapsedBlockView.label(appName: "Safari", title: "") == "\u{201C}Safari\u{201D}, collapsed")
+        let long = String(repeating: "a", count: 40)
+        #expect(CollapsedBlockView.label(appName: long, title: "") == "\u{201C}\(String(repeating: "a", count: 32))\u{2026}\u{201D}, collapsed")
+        #expect(CollapsedBlockView.help == "Double-click to zoom in")
+    }
+}
