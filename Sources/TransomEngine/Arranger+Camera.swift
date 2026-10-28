@@ -9,14 +9,19 @@ public struct CameraState: Sendable {
     public var nextMoveID: UInt64 = 0
     /// Windows the user accepted as collapsed by a drop or keyboard Dock/Move (ZOOM-13, fed from 04-07).
     public var collapsible: Set<WindowIdentity> = []
+    /// Back/Forward per display (D-D); changed only at settle.
+    public var histories: [String: CameraHistory] = [:]
 
     public init() {}
 }
 
 public struct PendingMove: Equatable, Sendable {
+    /// What the settle does to the history: push the view left, or travel that many entries back or forward.
+    public enum Kind: Equatable, Sendable { case navigate, back(Int), forward(Int) }
     public var id: UInt64
     public var key: DeskKey
     public var target: ViewTarget
+    public var kind: Kind = .navigate
 }
 
 /// One camera move for the stage: a start and end rect per window, no writes (RESEARCH Pattern 4).
@@ -74,10 +79,11 @@ extension Arranger {
         guard !on else { return [] }
         camera.views = [:]
         camera.pending = [:]
+        camera.histories = [:]
         return replan()
     }
 
-    mutating func zoomTo(_ target: ViewTarget, displayUUID uuid: String) -> [ArrangerEffect] {
+    mutating func zoomTo(_ target: ViewTarget, displayUUID uuid: String, kind: PendingMove.Kind = .navigate) -> [ArrangerEffect] {
         func refused(_ reason: String) -> [ArrangerEffect] { [.info("refused zoomTo: \(reason)")] }
         guard camera.enabled else { return [.info("zoom off: zoomTo ignored")] }
         guard pauseReasons.isEmpty, !sessionPaused else { return refused("paused") }
@@ -115,7 +121,7 @@ extension Arranger {
             }
         }
         camera.nextMoveID += 1
-        camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target)
+        camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target, kind: kind)
         let move = CameraMove(
             id: camera.nextMoveID, displayUUID: uuid, from: current, to: target, tiles: tiles.sorted { $0.window.identity < $1.window.identity })
         return notes + [.cameraMove(move)]
@@ -125,8 +131,29 @@ extension Arranger {
     mutating func cameraSettle(displayUUID uuid: String, moveID: UInt64) -> [ArrangerEffect] {
         guard let move = camera.pending[uuid], move.id == moveID else { return [] }
         camera.pending[uuid] = nil
+        let previous = resolvedView(for: move.key)
         camera.views[move.key] = move.target == .home ? nil : move.target
+        recordHistory(move, leaving: previous, on: uuid)
         return planShown()
+    }
+
+    /// The history changes only here (D-D), so a retarget never pushes twice.
+    private mutating func recordHistory(_ move: PendingMove, leaving previous: ViewTarget, on uuid: String) {
+        guard let tree = world[move.key]?.tree else { return }
+        var path: [NodeID] = []
+        if case .node(let id) = previous { path = Navigator.ancestors(of: id, in: tree) }
+        let left = previous == move.target ? nil : ViewEntry(desk: move.key, target: previous, path: path)
+        let live = { (entry: ViewEntry) in entry.desk == move.key && Self.exists(entry.target, in: tree) }
+        switch move.kind {
+        case .navigate: if let left { camera.histories[uuid, default: CameraHistory()].push(left) }
+        case .back(let count): camera.histories[uuid, default: CameraHistory()].travelBack(count, leaving: left, live: live)
+        case .forward(let count): camera.histories[uuid, default: CameraHistory()].travelForward(count, leaving: left, live: live)
+        }
+    }
+
+    static func exists(_ target: ViewTarget, in tree: LayoutTree) -> Bool {
+        guard case .node(let id) = target else { return true }
+        return tree.node(id) != nil
     }
 
     /// The affine map taking `viewRect` (the view's rect in the home resolution) onto `area` (identity for `.home`).

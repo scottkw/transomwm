@@ -242,7 +242,7 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
 }
 
 /// ZOOM-09, ZOOM-10, ZOOM-11: Move View, Frame Focused Window and Frame Desktop with toggle-back.
-@Suite struct NavigatorPanAndFrameTests {
+@Suite struct PanAndFrameNavigatorTests {
     @Test func panMovesToTheSameDepthNeighbourWithTheLongestSharedEdge() async throws {
         // n3 spans 0..496: with the bottom row cut at 200 it shares 292 pt with n7 and 196 with n5.
         let (tree, wide) = try rows(cut: 200)

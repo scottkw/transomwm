@@ -38,7 +38,11 @@ public enum Command: Hashable, Sendable {
 
 /// The camera commands every trigger (hotkey, menu, URL) sends (UI-SPEC Hotkeys and URLs).
 public enum CameraCommand: Hashable, Sendable {
-    case zoomOutAll, stepOut, stepIn
+    case zoomOutAll, stepOut, stepIn, back, forward
+    /// Move View: the node across that edge of the view at the same depth (ZOOM-09).
+    case pan(Edge)
+    /// Toggles: frame the focused docked window's leaf or the Desktop tile, or go back when already framed (ZOOM-10, 11).
+    case frameWindow, frameDesktop
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and

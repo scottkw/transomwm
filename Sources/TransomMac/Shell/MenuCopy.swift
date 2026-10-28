@@ -56,6 +56,11 @@ nonisolated public enum MenuCopy {
         case .zoomOutAll: "Zoom Out to All Windows"
         case .stepOut: "Zoom Out One Level"
         case .stepIn: "Zoom In One Level"
+        case .back: "Back"
+        case .forward: "Forward"
+        case .pan(let edge): direction(edge)  // the Move View submenu's items
+        case .frameWindow: "Frame Focused Window"
+        case .frameDesktop: "Frame Desktop"
         }
     }
 

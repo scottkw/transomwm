@@ -66,6 +66,92 @@ public enum Navigator {
         return children.compactMap { id in resolution.nodeRects[id].map { (area: $0.width * $0.height, id: id) } }
             .max { ($0.area, $1.id) < ($1.area, $0.id) }?.id
     }
+
+    /// The node across `edge` of the view's node in the home resolution, at the same depth (edges from the root): its
+    /// near side within `gap + 1` pt of the view's far side and overlapping it on the other axis. The longest overlap
+    /// wins, ties to the earliest in `recency` (the most recently viewed), then the lower NodeID. Nil at home.
+    /// `Neighbours.neighbour` skips splits, hence this variant.
+    public static func pan(view: ViewTarget, edge: Edge, tree: LayoutTree, homeResolution: Resolution, gap: Double, recency: [NodeID]) -> NodeID? {
+        guard case .node(let id) = view, let rect = homeResolution.nodeRects[id] else { return nil }
+        let depth = ancestors(of: id, in: tree).count
+        var best: (overlap: Double, rank: Int, id: NodeID)?
+        for (other, candidate) in homeResolution.nodeRects where other != id && ancestors(of: other, in: tree).count == depth {
+            let distance: Double, overlap: Double
+            switch edge {
+            case .right: distance = candidate.minX - rect.maxX
+            case .left: distance = rect.minX - candidate.maxX
+            case .bottom: distance = candidate.minY - rect.maxY
+            case .top: distance = rect.minY - candidate.maxY
+            }
+            switch edge.axis {
+            case .horizontal: overlap = min(rect.maxY, candidate.maxY) - max(rect.minY, candidate.minY)
+            case .vertical: overlap = min(rect.maxX, candidate.maxX) - max(rect.minX, candidate.minX)
+            }
+            guard abs(distance) <= gap + 1, overlap > 0 else { continue }
+            let next = (overlap: -overlap, rank: recency.firstIndex(of: other) ?? .max, id: other)  // negated: the longest sorts first
+            if best.map({ next < $0 }) ?? true { best = next }
+        }
+        return best?.id
+    }
+}
+
+/// A view the camera showed: its desk, its target and the target's `Navigator.ancestors` when it was shown.
+public struct ViewEntry: Hashable, Sendable {
+    public var desk: DeskKey
+    public var target: ViewTarget
+    public var path: [NodeID]
+
+    public init(desk: DeskKey, target: ViewTarget, path: [NodeID]) {
+        self.desk = desk
+        self.target = target
+        self.path = path
+    }
+}
+
+/// One display's Back and Forward stacks (D-D), the nearest entry last; each holds at most `limit`, dropping the oldest.
+public struct CameraHistory: Equatable, Sendable {
+    public static let limit = 50
+    public var back: [ViewEntry] = []
+    public var forward: [ViewEntry] = []
+
+    public init() {}
+
+    /// A new view: the one left goes on Back and Forward empties.
+    public mutating func push(_ entry: ViewEntry) {
+        forward = []
+        Self.append([entry], to: &back)
+    }
+
+    /// The camera went `count` entries back: the deepest of them is where it is now. The view left, then the live
+    /// entries passed over, go on Forward, so Forward retraces them.
+    mutating func travelBack(_ count: Int, leaving left: ViewEntry?, live: (ViewEntry) -> Bool) {
+        Self.travel(count, from: &back, to: &forward, leaving: left, live: live)
+    }
+
+    mutating func travelForward(_ count: Int, leaving left: ViewEntry?, live: (ViewEntry) -> Bool) {
+        Self.travel(count, from: &forward, to: &back, leaving: left, live: live)
+    }
+
+    /// The nearest entry of `stack` past the `skip` nearest that `live` accepts, and how many entries reaching it drops.
+    static func nearest(in stack: [ViewEntry], skipping skip: Int, where live: (ViewEntry) -> Bool) -> (entry: ViewEntry, count: Int)? {
+        var count = skip
+        for entry in stack.dropLast(skip).reversed() {
+            count += 1
+            if live(entry) { return (entry, count) }
+        }
+        return nil
+    }
+
+    private static func travel(_ count: Int, from: inout [ViewEntry], to: inout [ViewEntry], leaving left: ViewEntry?, live: (ViewEntry) -> Bool) {
+        let passed = from.suffix(count).dropFirst().filter(live)
+        from.removeLast(min(count, from.count))
+        append((left.map { [$0] } ?? []) + passed.reversed(), to: &to)
+    }
+
+    private static func append(_ entries: [ViewEntry], to stack: inout [ViewEntry]) {
+        stack += entries
+        if stack.count > limit { stack.removeFirst(stack.count - limit) }
+    }
 }
 
 /// The camera commands (UI-SPEC Surface 1): one path for hotkeys, menu items and URLs, so refusals behave the same.
@@ -75,7 +161,7 @@ extension Arranger {
         guard camera.enabled else { return [.info("zoom off: \(command) ignored")] }
         do throws(LayoutError) {
             switch try cameraStep(command, displayUUID: uuid, focused: focused, pointer: pointer) {
-            case .success(let target): return zoomTo(target, displayUUID: uuid)
+            case .success(let step): return zoomTo(step.target, displayUUID: uuid, kind: step.kind)
             case .failure(let refusal): return [.beep, .announce(refusal.announcement), .info("refused \(command): \(refusal)")]
             }
         } catch {
@@ -99,26 +185,80 @@ extension Arranger {
         return desk.tree.isDesktopHidden == false && desk.desktop.windows.contains { $0.window == window && $0.state == .present } ? .desktop : nil
     }
 
+    /// Whether that display's committed view frames the focused docked window (Frame Focused Window's checkmark).
+    public func isFramingFocused(displayUUID uuid: String, focused: WindowRef?) -> Bool {
+        guard let display = displays.first(where: { $0.uuid == uuid }), let focused,
+            let leaf = world[Self.key(display)]?.tree.leaf(containing: focused)
+        else { return false }
+        return resolvedView(for: Self.key(display)) == .node(leaf)
+    }
+
+    /// Whether that display's committed view frames the Desktop tile (Frame Desktop's checkmark).
+    public func isFramingDesktop(displayUUID uuid: String) -> Bool {
+        displays.first { $0.uuid == uuid }.map { resolvedView(for: Self.key($0)) == .node(.desktop) } ?? false
+    }
+
+    typealias CameraStep = (target: ViewTarget, kind: PendingMove.Kind)
+
     /// Where `command` takes the camera from the current view (the pending target while a move is pending).
     func cameraStep(
         _ command: CameraCommand, displayUUID uuid: String, focused: WindowRef?, pointer: Point?
-    ) throws(LayoutError) -> Result<ViewTarget, Navigator.Refusal> {
+    ) throws(LayoutError) -> Result<CameraStep, Navigator.Refusal> {
         guard let display = displays.first(where: { $0.uuid == uuid }), let desk = world[Self.key(display)] else { return .failure(.fullScreen) }
         guard pauseReasons.isEmpty, !sessionPaused else { return .failure(.paused) }
         let key = Self.key(display)
         let view = currentView(uuid, key)
+        let history = camera.histories[uuid] ?? CameraHistory()
+        let pending = camera.pending[uuid].flatMap { $0.key == key ? $0.kind : nil }
+        // An entry Back or Forward can go to: shown now, its node still there, and not the view itself.
+        let live = { (entry: ViewEntry) in entry.desk == key && entry.target != view && Self.exists(entry.target, in: desk.tree) }
+        func back() -> CameraStep? {
+            let skip = if case .back(let count)? = pending { count } else { 0 }  // a second press goes on from the pending one
+            return CameraHistory.nearest(in: history.back, skipping: skip, where: live).map { ($0.entry.target, .back($0.count)) }
+        }
+        func forward() -> CameraStep? {
+            let skip = if case .forward(let count)? = pending { count } else { 0 }
+            return CameraHistory.nearest(in: history.forward, skipping: skip, where: live).map { ($0.entry.target, .forward($0.count)) }
+        }
+        func navigate(_ target: ViewTarget?, else refusal: Navigator.Refusal) -> Result<CameraStep, Navigator.Refusal> {
+            target.map { .success(($0, .navigate)) } ?? .failure(refusal)
+        }
+        // Frame toggles: framed already (the pending target counts), it goes Back, or home with no earlier view.
+        func toggle(_ target: ViewTarget) -> Result<CameraStep, Navigator.Refusal> {
+            .success(view == target ? back() ?? (.home, .navigate) : (target, .navigate))
+        }
         switch command {
         case .zoomOutAll:
-            return view == .home ? .failure(.alreadyHome) : .success(.home)
+            return navigate(view == .home ? nil : .home, else: .alreadyHome)
         case .stepOut:
-            return Navigator.stepOut(view: view, tree: desk.tree).map { .success($0) } ?? .failure(.alreadyHome)
+            return navigate(Navigator.stepOut(view: view, tree: desk.tree), else: .alreadyHome)
         case .stepIn:
             let resolution = try ViewPlanner.plan(
                 desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames, collapsible: camera.collapsible
             ).resolution
             let focusedLeaf = focused.flatMap { deskKey(of: $0) == key ? leafNode(of: $0) : nil }
             let child = Navigator.stepIn(view: view, tree: desk.tree, resolution: resolution, focusedLeaf: focusedLeaf, pointer: pointer)
-            return child.map { .success(.node($0)) } ?? .failure(.nothingToZoomIn)
+            return navigate(child.map { .node($0) }, else: .nothingToZoomIn)
+        case .back:
+            return back().map { .success($0) } ?? .failure(.noEarlierView)
+        case .forward:
+            return forward().map { .success($0) } ?? .failure(.noLaterView)
+        case .pan(let edge):
+            guard view != .home else { return .failure(.noArea(edge)) }
+            let home = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames).resolution
+            let recency = history.back.reversed().compactMap { entry -> NodeID? in
+                if entry.desk == key, case .node(let id) = entry.target { id } else { nil }
+            }
+            let across = Navigator.pan(view: view, edge: edge, tree: desk.tree, homeResolution: home, gap: gap, recency: recency)
+            return navigate(across.map { .node($0) }, else: .noArea(edge))
+        case .frameWindow:
+            guard let focused, let info = windows[focused.identity], info.kind == .dockable, !info.isExcluded, deskKey(of: focused) == key,
+                desk.tree.state(of: focused) == .present, let leaf = desk.tree.leaf(containing: focused)
+            else { return .failure(.noDockedWindow) }
+            return toggle(.node(leaf))
+        case .frameDesktop:
+            guard desk.tree.isDesktopHidden == false else { return .failure(.desktopHidden) }
+            return toggle(.node(.desktop))
         }
     }
 }
