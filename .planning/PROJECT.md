@@ -13,11 +13,11 @@ Windows dock into nested, non-overlapping tiles by dragging, and stay correctly 
 ### Validated
 
 - ✓ Pure-Swift layout model: nested split tree with weights, panels, tab groups and a floating Desktop; insert at an edge, remove, resize, minimum sizes; serialisable — Phase 1 (141 tests, debug + release)
+- ✓ Accessibility-based window control: permission flow, window tracking (incl. native tab groups), move/resize, per-app exclusion list — Phase 2 (UAT 17/18 in the Tart VM; multi-display deferred)
 - ✓ Drag-to-dock tiling with drop preview, reflow on close, gaps, drag-gap resize, green button docks/floats, crash-safe restore — Phase 3 (925 headless tests, VM UAT; second-display re-check deferred to the first Transom build)
 
 ### Active
 
-- [ ] Accessibility-based window control: permission flow, window tracking, move/resize, per-app exclusion list
 - [ ] Zoom camera: overlay with window snapshots (colour + icon fallback without Screen Recording), zoom out to everything, step in/out a level, rectangle zoom, back/forward history, hotkeys
 - [ ] Trackpad gestures: ⌥-pinch/pan anywhere, pinch on bare desktop
 - [ ] Overview of all windows on all displays with a Spaces bar; optional Mission Control replacement; multi-display
@@ -86,4 +86,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-27 after Phase 3*
+*Last updated: 2026-10-28 after Phase 2 UAT and gap closure*

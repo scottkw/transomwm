@@ -13,7 +13,7 @@ Transom is built bottom-up along its dependency chain: a pure, headless layout m
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Layout Model** - Headless PaneModel: nested split tree, Desktop layer, tab groups, desks, lifecycle states, JSON, undo (completed 2026-10-24)
-- [ ] **Phase 2: Window Control** - Accessibility permission, non-blocking window tracking and move/resize, classifier, exclusions, private-API fallback
+- [x] **Phase 2: Window Control** - Accessibility permission, non-blocking window tracking and move/resize, classifier, exclusions, private-API fallback (completed 2026-10-27)
 - [x] **Phase 3: Tiling MVP** - Drag-to-dock nested tiling, reflow, gaps, commands, crash-safe restore; first usable signed release (completed 2026-10-27)
 - [ ] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle
 - [ ] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop
@@ -68,7 +68,7 @@ Plans:
   4. Freezing an app with `kill -STOP` neither stalls Pane nor delays arranging other apps' windows, and locking the screen, sleeping or an AX timeout never marks a window closed
   5. With `_AXUIElementGetWindow` forced unavailable, Pane still launches and tracks windows through its fallback
 
-**Plans**: 19/19 plans executed
+**Plans**: 19/19 plans complete
 
 Plans:
 **Wave 1**
@@ -318,7 +318,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
-| 2. Window Control | 19/19 | In Progress | - |
+| 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 0/TBD | Not started | - |
 | 5. Gestures | 0/TBD | Not started | - |
