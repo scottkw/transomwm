@@ -888,14 +888,20 @@ public struct Arranger: Sendable {
             try desk.tree.applyDrop(target, window: window, ids: &ids)
         }
         guard let docked = candidate[key] else { return [.beep] }
-        guard try Planner.plan(desk: docked, area: area, gap: gap, mins: mins).unfit.isEmpty else {
-            // Keyboard parity (UI-SPEC Surface 2): the blocked preview flashes at the frame it would have had.
-            let frame = try Planner.plan(desk: docked, area: area, gap: gap, mins: [:]).frames[window]
-            return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
+        var collapsed: Collapse?
+        if try !Planner.plan(desk: docked, area: area, gap: gap, mins: mins).unfit.isEmpty {
+            // Zoom on: accepted, the windows without room collapse (D-A).
+            collapsed = try collapse(docked, area: area)
+            guard collapsed != nil else {
+                // Keyboard parity (UI-SPEC Surface 2): the blocked preview flashes at the frame it would have had.
+                let frame = try Planner.plan(desk: docked, area: area, gap: gap, mins: [:]).frames[window]
+                return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
+            }
         }
         world = candidate
         history = candidateHistory
-        return replan()
+        let note = accept(collapsed, moving: window)
+        return replan() + note
     }
 
     /// Undocks a window to the Desktop (TILE-09); the green button floats through here too. It goes to its pre-dock
@@ -1250,8 +1256,10 @@ public struct Arranger: Sendable {
             }
             let loose = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]).frames[window]
             // D-A: with zoom on the drop is accepted and the windows without room collapse.
-            if try collapse(desk, area: display.visibleFrame) != nil {
-                return Decision(preview: loose.map(PreviewState.dock), action: .dock(key, target), display: uuid)
+            if let collapsed = try collapse(desk, area: display.visibleFrame) {
+                let copy = Self.collapseCopy(collapsed.newly, moving: window)
+                let preview = loose.map { rect in copy.map { PreviewState.collapsed(rect, label: $0.label) } ?? .dock(rect) }
+                return Decision(preview: preview, action: .dock(key, target), display: uuid)
             }
             return Decision(preview: loose.map(PreviewState.blocked), action: .refuse(Self.noRoom), display: uuid)
         } catch {
@@ -1324,7 +1332,7 @@ public struct Arranger: Sendable {
         guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key] else {
             return [.announce(Self.noRoom)] + (try missed(window))
         }
-        var collapsed: (set: Set<WindowIdentity>, newly: [WindowRef])?
+        var collapsed: Collapse?
         if try !Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty {
             guard let collapse = try collapse(desk, area: area) else { return [.announce(Self.noRoom)] + (try missed(window)) }
             collapsed = collapse
@@ -1332,8 +1340,8 @@ public struct Arranger: Sendable {
         world = candidate.world
         history = candidate.history
         lastRequested[window.identity] = nil
-        if let collapsed { camera.collapsible = collapsed.set }
-        return replan()
+        let note = accept(collapsed, moving: window)
+        return replan() + note
     }
 
     /// ⌘-drop: the two docked windows exchange tiles, one undo step (TILE-11).

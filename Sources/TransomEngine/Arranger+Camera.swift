@@ -126,10 +126,13 @@ extension Arranger {
         return replan() + showBlocks([:])  // also when paused, so no block outlives zoom
     }
 
+    /// The collapsible set an accepted edit leaves, and the windows it newly collapses.
+    typealias Collapse = (set: Set<WindowIdentity>, newly: [WindowRef])
+
     /// D-A, ZOOM-13: with zoom on, an edit whose home plan leaves windows without room is accepted by collapsing them.
     /// The collapsible set grown until `desk`'s home plan leaves nothing unfit, and the windows it adds that get no frame
     /// (collapsed, or parked with no block); nil with zoom off.
-    func collapse(_ desk: Desk, area: Rect) throws(LayoutError) -> (set: Set<WindowIdentity>, newly: [WindowRef])? {
+    func collapse(_ desk: Desk, area: Rect) throws(LayoutError) -> Collapse? {
         guard camera.enabled else { return nil }
         var set = camera.collapsible
         let mins = learnedMinimums
@@ -142,6 +145,22 @@ extension Arranger {
             }
             set.formUnion(plan.unfit.map(\.identity))
         }
+    }
+
+    /// Commits an accepted edit's collapse (before its replan) and returns its Surface 7 announcement.
+    mutating func accept(_ collapsed: Collapse?, moving window: WindowRef) -> [ArrangerEffect] {
+        guard let collapsed else { return [] }
+        camera.collapsible = collapsed.set
+        return Self.collapseCopy(collapsed.newly, moving: window).map { [.announce($0.announcement)] } ?? []
+    }
+
+    /// Who an accepted edit collapses, as the Collapsed preview's label and the announcement; nil when nobody does.
+    static func collapseCopy(_ newly: [WindowRef], moving window: WindowRef) -> (label: String, announcement: String)? {
+        let dragged = newly.contains(window), others = newly.count - (dragged ? 1 : 0)
+        guard dragged || others > 0 else { return nil }
+        return (
+            dragged ? CollapseCopy.draggedLabel : CollapseCopy.othersLabel(others), CollapseCopy.dockedAnnouncement(dragged: dragged, others: others)
+        )
     }
 
     mutating func zoomTo(

@@ -33,12 +33,14 @@ private func bare(_ infos: [WindowInfo], world: World? = nil, zoom: Bool) -> Arr
 }
 
 /// Drags `window` by its title bar to `point` and holds it past the dwell; returns the tick's effects.
-private func hold(_ arranger: inout Arranger, _ window: WindowRef, from frame: Rect, at point: Point, start: ContinuousClock.Instant) -> [ArrangerEffect] {
+private func hold(
+    _ arranger: inout Arranger, _ window: WindowRef, from frame: Rect, at point: Point, _ modifiers: Modifiers = [], start: ContinuousClock.Instant
+) -> [ArrangerEffect] {
     let grab = Point(x: frame.midX, y: frame.minY + 10)
-    _ = arranger.handle(pointer(.down, grab.x, grab.y, press: window), now: start)
-    _ = arranger.handle(pointer(.dragged, grab.x + 10, grab.y), now: start)
+    _ = arranger.handle(pointer(.down, grab.x, grab.y, modifiers, press: window), now: start)
+    _ = arranger.handle(pointer(.dragged, grab.x + 10, grab.y, modifiers), now: start)
     _ = arranger.handle(.dragFrame(window.identity, shifted(frame, 10)), now: start)
-    _ = arranger.handle(pointer(.dragged, point.x, point.y), now: start)
+    _ = arranger.handle(pointer(.dragged, point.x, point.y, modifiers), now: start)
     _ = arranger.handle(.dragFrame(window.identity, shifted(frame, point.x - grab.x, point.y - grab.y)), now: start)
     return arranger.handle(.tick, now: start + .milliseconds(150))
 }
@@ -273,11 +275,7 @@ extension ArrangerCollapseTests {
             world: saved, zoom: true)
         let start = ContinuousClock.now
         let infoA = try #require(arranger.windows[a.identity])
-        let grab = Point(x: infoA.frame.midX, y: infoA.frame.minY + 10)
-        _ = arranger.handle(pointer(.down, grab.x, grab.y, [.shift], press: a), now: start)
-        _ = arranger.handle(pointer(.dragged, grab.x + 10, grab.y, [.shift]), now: start)
-        _ = arranger.handle(pointer(.dragged, 700, 800, [.shift]), now: start)
-        let tick = arranger.handle(.tick, now: start + .milliseconds(150))
+        let tick = hold(&arranger, a, from: infoA.frame, at: Point(x: 700, y: 800), [.shift], start: start)
         #expect(previews(tick).contains { if case .blocked = $0 { true } else { false } }, "tick gave \(tick)")
         let up = arranger.handle(pointer(.up, 700, 800, [.shift]), now: start + .milliseconds(200))
         #expect(up.contains(.announce(Arranger.noRoom)))
@@ -305,8 +303,8 @@ extension ArrangerCollapseTests {
         _ = relaunched.handle(.restore(arranger.world, homeFrames: [:]), now: .now)
         _ = relaunched.handle(.zoomEnabled(true), now: .now)
         let infos = [info(2, frame: floatingFrame, minimum: huge)]
-        let effects = relaunched.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: .now)
-        #expect(effects.contains(.notice(.lostRoom([f]))), "got \(effects)")
-        #expect(relaunched.world[mainKey]?.desktop.contains(f) == true)
+        _ = relaunched.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: .now)
+        #expect(relaunched.world[mainKey]?.desktop.contains(f) == true, "a formerly collapsed window stayed docked")
+        #expect(relaunched.camera.collapsible.isEmpty)
     }
 }

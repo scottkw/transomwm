@@ -28,6 +28,8 @@ nonisolated enum PreviewStyle {
 
     static let swapLabel = "Swap"
     static let blockedLabel = "Not enough room"
+    /// The Collapsed state's glyph (UI-SPEC Surface 7), drawn by PreviewPanel's label like every preview glyph.
+    static let collapsedGlyph = "arrow.down.right.and.arrow.up.left"
     static let dash: [Double] = [8, 4]
 
     /// The layers for `state`, back to front. Increase Contrast multiplies every fill alpha by 1.5 and makes every
@@ -54,6 +56,12 @@ nonisolated enum PreviewStyle {
                 [ghost(rect, label: text.map { Label(text: $0, glyph: nil, glyphRole: .label) })]
             case .clamp(let rect):
                 [ghost(rect, label: nil)]
+            case .collapsed(let rect, let text):
+                [
+                    LayerStyle(
+                        rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85,
+                        label: Label(text: text, glyph: collapsedGlyph, glyphRole: .label))
+                ]
             }
         return increaseContrast ? layers.map(contrasted) : layers
     }

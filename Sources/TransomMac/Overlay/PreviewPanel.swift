@@ -415,7 +415,7 @@ private final class PreviewLabelView: NSView {
 
     private static func sameKind(_ a: PreviewState, _ b: PreviewState) -> Bool {
         switch (a, b) {
-        case (.dock, .dock), (.blocked, .blocked), (.swap, .swap), (.snapBack, .snapBack), (.clamp, .clamp): true
+        case (.dock, .dock), (.blocked, .blocked), (.swap, .swap), (.snapBack, .snapBack), (.clamp, .clamp), (.collapsed, .collapsed): true
         default: false
         }
     }
