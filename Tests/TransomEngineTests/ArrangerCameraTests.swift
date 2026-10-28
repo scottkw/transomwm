@@ -220,6 +220,20 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         #expect(harness.arranger.world[DeskKey(displayUUID: "side", spaceID: nil)]?.contains(b) != true)
     }
 
+    /// ZOOM-06 (engine): a click's zoom focuses its window right after the settle's writes.
+    @Test func zoomToWithFocusFocusesAfterTheWrites() async throws {
+        var harness = try await threeDocked()
+        await harness.send(.zoomEnabled(true))
+
+        let move = try #require(moves(await harness.send(.zoomTo(.node(try leaf(b, harness)), displayUUID: "main", focus: b))).first)
+        let settled = await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+
+        #expect(settled.last == .perform([.focus(b)]))
+        let writes = try #require(settled.firstIndex { if case .perform(let commands) = $0 { commands.contains { if case .setFrame = $0 { true } else { false } } } else { false } })
+        #expect(writes < settled.count - 1)
+        #expect(harness.arranger.focusOrder.first == b.identity)
+    }
+
     @Test func tilesAreSortedByIdentity() async throws {
         var harness = try await threeDocked()
         await harness.send(.zoomEnabled(true))

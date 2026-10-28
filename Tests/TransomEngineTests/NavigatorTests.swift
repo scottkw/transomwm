@@ -13,12 +13,14 @@ private func ref(_ id: UInt32) -> WindowRef {
 
 private let a = ref(1), b = ref(2), c = ref(3)
 
-/// [a | V[b, c] | Desktop] re-attached from a saved World (as ArrangerFocusTests), zoom on.
-private func nested() async throws -> Harness {
-    var harness = await Harness.started(frames: [
+/// [a | V[b, c] | Desktop] (with `four`, V[b, c, d]) re-attached from a saved World (as ArrangerFocusTests), zoom on.
+private func nested(four: Bool = false) async throws -> Harness {
+    var frames: [UInt32: Rect] = [
         1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 1000, y: 100, width: 300, height: 200),
         3: Rect(x: 1000, y: 600, width: 300, height: 200),
-    ])
+    ]
+    if four { frames[4] = Rect(x: 1000, y: 700, width: 300, height: 150) }
+    var harness = await Harness.started(frames: frames)
     var world = World()
     var history = UndoHistory()
     try world.addDesk(key)
@@ -28,12 +30,14 @@ private func nested() async throws -> Harness {
         try desk.tree.insert(b, at: .right, of: left, ids: &ids)
         guard let middle = desk.tree.leaf(containing: b) else { throw .windowNotFound(b) }
         try desk.tree.insert(c, at: .bottom, of: middle, ids: &ids)
+        guard four, let bottom = desk.tree.leaf(containing: c) else { return }
+        try desk.tree.insert(ref(4), at: .bottom, of: bottom, ids: &ids)
     }
     harness.arranger = Arranger()
     await harness.send(.restore(world, homeFrames: [:]))
     await harness.send(.inventory(await harness.fake.inventory()))
     await harness.send(.zoomEnabled(true))
-    #expect(harness.arranger.world[key]?.tree.windows == [a, b, c])
+    #expect(harness.arranger.world[key]?.tree.windows == (four ? [a, b, c, ref(4)] : [a, b, c]))
     return harness
 }
 
@@ -471,5 +475,131 @@ private func entry(_ raw: UInt64) -> ViewEntry {
 
         expectRefused(await harness.camera(.back), "No earlier view", command: "back")
         expectRefused(await harness.camera(.forward), "No later view", command: "forward")
+    }
+}
+
+/// H[n1 = a, n2 = V[n3 = b, n4 = c], Desktop] under root n5, with on-screen tiles side by side.
+private func band() throws -> (LayoutTree, [NodeID: Rect]) {
+    let tree = try LayoutTree(
+        root: n[5],
+        nodes: [
+            n[5]: .split(axis: .horizontal, children: [n[1], n[2], .desktop], weights: [0.4, 0.4, 0.2]),
+            n[2]: .split(axis: .vertical, children: [n[3], n[4]], weights: [0.5, 0.5]),
+            n[1]: .panel(a), n[3]: .panel(b), n[4]: .panel(c), .desktop: .desktop(hidden: false),
+        ],
+        states: [a.identity: .present, b.identity: .present, c.identity: .present])
+    let tiles: [NodeID: Rect] = [
+        n[1]: Rect(x: 0, y: 0, width: 400, height: 1000), n[3]: Rect(x: 400, y: 0, width: 400, height: 500),
+        n[4]: Rect(x: 400, y: 500, width: 400, height: 500), .desktop: Rect(x: 800, y: 0, width: 200, height: 1000),
+    ]
+    return (tree, tiles)
+}
+
+/// ZOOM-03 (engine): the rubber band's target is the lowest common ancestor of the tiles whose centres it holds.
+@Suite struct RectTargetNavigatorTests {
+    @Test func rectTargetIsTheLowestCommonAncestorOfCentresInside() throws {
+        let (tree, tiles) = try band()
+        // b's centre (600, 250) and c's (600, 750).
+        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 200, width: 100, height: 600), tiles: tiles, tree: tree) == n[2])
+        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 200, width: 100, height: 100), tiles: tiles, tree: tree) == n[3])
+        #expect(Navigator.rectTarget(band: Rect(x: 150, y: 200, width: 500, height: 100), tiles: tiles, tree: tree) == n[5])
+        #expect(Navigator.lowestCommonAncestor([n[3], n[4]], in: tree) == n[2])
+        #expect(Navigator.lowestCommonAncestor([n[3], NodeID(raw: 99)], in: tree) == nil)
+        #expect(Navigator.ancestors(of: n[4], in: tree) == [n[5], n[2], n[4]])
+    }
+
+    @Test func aCentreOnTheBandEdgeCounts() throws {
+        let (tree, tiles) = try band()
+        // The band's right and bottom edges pass exactly through b's centre.
+        #expect(Navigator.rectTarget(band: Rect(x: 500, y: 150, width: 100, height: 100), tiles: tiles, tree: tree) == n[3])
+        #expect(Navigator.rectTarget(band: Rect(x: 600, y: 250, width: 10, height: 10), tiles: tiles, tree: tree) == n[3])
+    }
+
+    @Test func noCentreInsideGivesNoTarget() throws {
+        let (tree, tiles) = try band()
+        #expect(Navigator.rectTarget(band: Rect(x: 410, y: 10, width: 100, height: 100), tiles: tiles, tree: tree) == nil)
+        #expect(Navigator.rectTarget(band: Rect(x: 0, y: 0, width: 0, height: 0), tiles: tiles, tree: tree) == nil)
+    }
+
+    @Test func collapsedAndDesktopTilesCount() async throws {
+        let (tree, tiles) = try band()
+        #expect(Navigator.rectTarget(band: Rect(x: 850, y: 450, width: 100, height: 100), tiles: tiles, tree: tree) == .desktop)
+        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 700, width: 400, height: 100), tiles: tiles, tree: tree) == n[5])
+
+        // The engine's tiles: every leaf of the committed view on screen, the Desktop tile included, splits never.
+        var harness = try await nested()
+        let shown = try harness.arranger.shownLeafRects(displayUUID: "main")
+        #expect(Set(shown.keys) == [try leaf(a, harness), try leaf(b, harness), try leaf(c, harness), .desktop])
+        try await harness.go(.node(try column(harness)))
+        #expect(Set(try harness.arranger.shownLeafRects(displayUUID: "main").keys) == [try leaf(b, harness), try leaf(c, harness)])
+    }
+}
+
+private let e = ref(5)
+
+/// CONTEXT E: focus or a new window outside the view widens the camera to the smallest view holding both; a vanished view
+/// node falls back to its deepest surviving ancestor.
+@Suite struct WideningNavigatorTests {
+    @Test func focusingAWindowOutsideTheViewWidensTheCamera() async throws {
+        var harness = try await nested()
+        try await harness.go(.node(try leaf(b, harness)))
+
+        let effects = await harness.send(.event(.windowFocused(c)))
+        #expect(moves(effects).count == 1)
+        #expect(moves(effects).first?.to == .node(try column(harness)))
+        await harness.settle(effects)
+
+        #expect(moves(await harness.send(.event(.windowFocused(a)))).first?.to == .home)
+    }
+
+    @Test func focusInsideTheViewDoesNotMoveTheCamera() async throws {
+        var harness = try await nested()
+        try await harness.go(.node(try column(harness)))
+
+        #expect(moves(await harness.send(.event(.windowFocused(b)))).isEmpty)
+        #expect(moves(await harness.send(.event(.windowFocused(c)))).isEmpty)
+    }
+
+    @Test func aNewWindowOutsideTheViewWidensAndIsNotParkedFirst() async throws {
+        var harness = try await nested()
+        try await harness.go(.node(try column(harness)))
+        #expect(await harness.fake.parked.contains(a.identity))
+
+        await harness.fake.open(.standard(id: 5, pid: pid, frame: Rect(x: 600, y: 300, width: 300, height: 200)))
+        var effects = await harness.refresh()
+        await harness.fake.advance(by: .milliseconds(300))
+        effects += await harness.refresh()
+
+        #expect(harness.arranger.world[key]?.desktop.contains(e) == true)
+        let move = try #require(moves(effects).first)
+        #expect(moves(effects).count == 1)
+        #expect(move.to == .home)
+        #expect(!effects.contains { if case .perform(let commands) = $0 { commands.contains(.park(e, displayUUID: "main")) } else { false } })
+        #expect(!(await harness.fake.parked.contains(e.identity)), "the new window was parked before the camera showed it")
+
+        await harness.settle(effects)
+        #expect(harness.arranger.view(on: "main") == .home)
+        #expect(!(await harness.fake.parked.contains(e.identity)))
+        #expect(!(await harness.fake.parked.contains(a.identity)))
+    }
+
+    @Test func aViewWhoseNodeDisappearedFallsBackToTheDeepestLiveAncestor() async throws {
+        var harness = try await nested(four: true)
+        let column = try column(harness)
+        #expect(harness.arranger.world[key]?.tree.parent(of: try leaf(ref(4), harness)) == column)
+        try await harness.go(.node(try leaf(c, harness)))
+
+        await harness.fake.close(3)
+        await harness.refresh()
+
+        #expect(harness.arranger.world[key]?.tree.node(column) != nil)
+        #expect(harness.arranger.view(on: "main") == .node(column))
+
+        // With nothing of the path left but the root, it is home.
+        var three = try await nested()
+        try await three.go(.node(try leaf(c, three)))
+        await three.fake.close(3)
+        await three.refresh()
+        #expect(three.arranger.view(on: "main") == .home)
     }
 }
