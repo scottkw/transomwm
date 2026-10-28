@@ -19,6 +19,7 @@ import os
     public private(set) var arranger: Arranger {
         didSet {
             publishGreenButtons()
+            zoomInput.publish()
             guard arranger.pauseReasons != reportedPause else { return }
             reportedPause = arranger.pauseReasons
             onPauseChanged?()
@@ -75,6 +76,8 @@ import os
     private let zoomOffFallback = WakeTimer()
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
     private(set) var zoomController: ZoomController?
+    /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
+    private lazy var zoomInput = ZoomInput(controller: self, tap: tap)
 
     public init(
         system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, zoomEnabled: Bool = false
@@ -142,7 +145,10 @@ import os
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
-                if case .displaysChanged = event { self.zoomController?.displaysChanged() }
+                if case .displaysChanged = event {
+                    self.zoomController?.displaysChanged()
+                    self.zoomInput.publish()  // a move whose display went away never reveals
+                }
                 if case .windowDestroyed(let window) = event { self.zoomController?.windowClosed(window) }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
@@ -231,6 +237,7 @@ import os
     public func accessChanged(ready: Bool) {
         tapAllowed = ready
         if ready { startTap() } else { stopTap() }
+        zoomInput.publish()
     }
 
     /// The green buttons the tap last got, so an unchanged set is not swapped in again.
@@ -260,6 +267,10 @@ import os
 
     /// Feeds one tap event to the Arranger. The press window is resolved on mouse-down only.
     private func handle(_ event: TapEvent) async {
+        if case .zoom(let kind) = event.kind {
+            await zoomInput.tapEvent(kind, event)
+            return
+        }
         if case .greenButton(let id) = event.kind {
             guard let window = trackedWindow(cgID: id) else { return }
             await run(arranger.handle(.greenButton(window), now: .now))
@@ -497,6 +508,7 @@ import os
                 zoom().run(move) { [weak self] id in
                     Task { await self?.settle(displayUUID: move.displayUUID, moveID: id) }
                 }
+                zoomInput.publish()  // no zoom presses taken until it reveals
             }
         }
     }
@@ -527,6 +539,7 @@ import os
     }
 
     private func revealed(_ uuid: String) {
+        zoomInput.publish()
         onViewChanged?()
         guard awaitingHome.remove(uuid) != nil, awaitingHome.isEmpty else { return }
         Task { await finishZoomOff() }
@@ -555,6 +568,7 @@ import os
         }
         guard !zoomEnabled else { return }
         zoomEnabled = true
+        zoomInput.publish()
         await run(arranger.handle(.zoomEnabled(true), now: .now))
         Hotkeys.setZoomHotkeys(enabled: true)
         postAnnouncement(ZoomCopy.zoomOnAnnouncement)
@@ -567,6 +581,7 @@ import os
         awaitingHome = []
         zoomOffFallback.cancel()
         zoomEnabled = false
+        zoomInput.publish()
         let effects = arranger.handle(.zoomEnabled(false), now: .now)
         let floated = effects.reduce(0) { count, effect in if case .notice(.lostRoom(let windows)) = effect { count + windows.count } else { count } }
         await run(effects)
@@ -578,9 +593,10 @@ import os
         onViewChanged?()
     }
 
-    /// Zooms `displayUUID`'s camera to `target` (the shell entry point; pointer input uses it from 04-06).
-    public func zoom(to target: ViewTarget, displayUUID: String) async {
-        await run(arranger.handle(.zoomTo(target, displayUUID: displayUUID), now: .now))
+    /// Zooms `displayUUID`'s camera to `target`, focusing `focus` after the settle (the shell entry point; pointer input
+    /// uses it).
+    public func zoom(to target: ViewTarget, displayUUID: String, focus: TransomModel.WindowRef? = nil) async {
+        await run(arranger.handle(.zoomTo(target, displayUUID: displayUUID, focus: focus), now: .now))
     }
 
     /// Presses Finder's ⌘N menu item on Finder's AX thread (RESEARCH Pattern 14): no Apple Events, no Automation

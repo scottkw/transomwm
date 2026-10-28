@@ -10,6 +10,8 @@ nonisolated struct TapEvent: Sendable {
         case pointer
         /// A swallowed press on this window's green button (TILE-06).
         case greenButton(windowID: UInt32)
+        /// A taken zoom press: every event of a rubber band, or the mouse-down of a pick or title-bar click (04-06).
+        case zoom(ZoomTapRules.Kind)
     }
 
     var kind: Kind = .pointer
@@ -17,6 +19,8 @@ nonisolated struct TapEvent: Sendable {
     let location: CGPoint
     let flags: CGEventFlags
     let windowUnderPointer: Int64
+    /// `mouseEventClickState`: 2 on the second press of a double-click.
+    var clickState: Int64 = 0
 }
 
 /// What the tap callback reaches through its refcon. Retained by the InputTap and by the tap thread for the tap's
@@ -25,21 +29,29 @@ nonisolated struct TapEvent: Sendable {
 nonisolated private final class TapBox: @unchecked Sendable {
     let continuation: AsyncStream<TapEvent>.Continuation
     let greenButtons: OSAllocatedUnfairLock<[UInt32: CGRect]>
+    let zoomState: OSAllocatedUnfairLock<ZoomTapState>
     /// A green-button press was taken and its click is not over yet. Read and written on the tap thread only.
     var swallowing = false
+    /// The zoom press being taken. Tap thread only.
+    var zoomSwallow = ZoomTapRules.Swallow.none
     var port: CFMachPort?
     var runLoop: CFRunLoop?
 
-    init(_ continuation: AsyncStream<TapEvent>.Continuation, greenButtons: OSAllocatedUnfairLock<[UInt32: CGRect]>) {
+    init(
+        _ continuation: AsyncStream<TapEvent>.Continuation, greenButtons: OSAllocatedUnfairLock<[UInt32: CGRect]>,
+        zoomState: OSAllocatedUnfairLock<ZoomTapState>
+    ) {
         self.continuation = continuation
         self.greenButtons = greenButtons
+        self.zoomState = zoomState
     }
 }
 
 /// The one active session event tap (RESEARCH Pattern 6): left mouse down, dragged and up, and flagsChanged. No keyboard
 /// key events are in the mask, so Transom never sees typed characters (T-03-28). It runs on its own thread with its own
 /// CFRunLoop, never main (Pitfall 5). The callback copies four fields and returns the event unchanged: no AX, no file
-/// I/O, no logging (T-03-29). The one exception is a press on a published green button, which it takes (TILE-06).
+/// I/O, no logging (T-03-29). The exceptions are a press on a published green button (TILE-06) and the zoom presses
+/// `ZoomTapRules` takes (04-06).
 /// Call `start`, `stop` and `watchdogTick` from one thread (main).
 nonisolated final class InputTap: @unchecked Sendable {
     let events: AsyncStream<TapEvent>
@@ -50,6 +62,7 @@ nonisolated final class InputTap: @unchecked Sendable {
     private(set) var thread: Thread?
     /// Writers swap the whole dictionary; the callback holds the lock only to copy it (T-03-35).
     private let greenButtons = OSAllocatedUnfairLock(initialState: [UInt32: CGRect]())
+    private let zoomState = OSAllocatedUnfairLock(initialState: ZoomTapState())
 
     private static let mask: CGEventMask = (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue)
         | (1 << CGEventType.leftMouseDragged.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
@@ -66,10 +79,15 @@ nonisolated final class InputTap: @unchecked Sendable {
         greenButtons.withLock { $0 = rects }
     }
 
+    /// What the zoom rules read (ZoomInput publishes it whole).
+    func setZoomState(_ state: ZoomTapState) {
+        zoomState.withLock { $0 = state }
+    }
+
     /// Creates the tap and starts its thread. False when macOS refuses the tap (no Accessibility access).
     func start() -> Bool {
         if isRunning { return true }
-        let box = TapBox(continuation, greenButtons: greenButtons)
+        let box = TapBox(continuation, greenButtons: greenButtons, zoomState: zoomState)
         guard let port = Self.makePort(box) else { return false }
         box.port = port
         let ready = DispatchSemaphore(value: 0)
@@ -127,21 +145,43 @@ nonisolated final class InputTap: @unchecked Sendable {
                 if let port = box.port { CGEvent.tapEnable(tap: port, enable: true) }
                 return Unmanaged.passUnretained(event)
             }
+            let userData = event.getIntegerValueField(.eventSourceUserData)
+            // Transom's own re-posted ⌘⇧-click goes straight to the app, unseen by every rule and by the Arranger.
+            if userData == ZoomTapRules.repostTag { return Unmanaged.passUnretained(event) }
             let location = event.location
+            let clickState = event.getIntegerValueField(.mouseEventClickState)
             var window = event.getIntegerValueField(.mouseEventWindowUnderMousePointer)
             let rects = box.greenButtons.withLock { $0 }
-            // No window in the event: only a press inside some button pays for one CG list read, to find who is on top.
-            if type == .leftMouseDown, window == 0, rects.values.contains(where: { $0.contains(location) }) {
+            let zoom = box.zoomState.withLock { $0 }
+            // No window in the event: only a press inside a published rect pays for one CG list read, to find who is on top.
+            if type == .leftMouseDown, window == 0,
+                rects.values.contains(where: { $0.contains(location) })
+                    || ZoomTapRules.needsWindow(location: location, clickState: clickState, state: zoom)
+            {
                 window = Int64(CGWindowList.topmostWindow(at: Point(x: location.x, y: location.y)) ?? 0)
             }
             let id = UInt32(truncatingIfNeeded: window)
+            // Zoom first, so a ⌘⇧ press never reaches the green-button rule.
+            switch ZoomTapRules.decide(
+                type: type, location: location, flags: event.flags, clickState: clickState, windowID: id, userData: userData, state: zoom,
+                swallow: &box.zoomSwallow)
+            {
+            case .consume(let kind?):
+                box.continuation.yield(
+                    TapEvent(kind: .zoom(kind), type: type, location: location, flags: event.flags, windowUnderPointer: window, clickState: clickState))
+                return nil
+            case .consume(nil):
+                return nil
+            case .pass:
+                break
+            }
             if GreenButton.shouldSwallow(type: type, location: location, flags: event.flags, windowID: id, rects: rects, swallowing: &box.swallowing) {
                 if type == .leftMouseDown {
                     box.continuation.yield(TapEvent(kind: .greenButton(windowID: id), type: type, location: location, flags: event.flags, windowUnderPointer: window))
                 }
                 return nil
             }
-            box.continuation.yield(TapEvent(type: type, location: location, flags: event.flags, windowUnderPointer: window))
+            box.continuation.yield(TapEvent(type: type, location: location, flags: event.flags, windowUnderPointer: window, clickState: clickState))
             return Unmanaged.passUnretained(event)
         }
         return CGEvent.tapCreate(
