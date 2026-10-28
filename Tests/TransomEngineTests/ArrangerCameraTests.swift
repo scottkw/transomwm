@@ -378,3 +378,44 @@ extension ArrangerCameraTests {
         #expect(sameTiles(after, [a: home[a], b: home[b], c: home[c]]), "Resume puts every window in its tile: \(after)")
     }
 }
+
+/// CR-01, CR-02 (04-REVIEW): Restore All and Turn Off Zoom leave no window parked, collapsed ones included (D-D).
+extension ArrangerCameraTests {
+    /// a (870 pt tall at least, taller than the tile column; learned from a refused write) docked with zoom on,
+    /// so a is collapsed and parked; b floats.
+    private func collapsedA() async throws -> Harness {
+        var harness = await Harness.started(frames: [
+            1: Rect(x: 40, y: 10, width: 1360, height: 885), 2: Rect(x: 900, y: 400, width: 300, height: 200),
+        ])
+        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 100, height: 870) }
+        // Zoom off: docked, written below its minimum, learned a second later, floated as lost room.
+        await harness.send(.command(.dock, focused: a))
+        await harness.fake.advance(by: .seconds(1.1))
+        await harness.refresh()
+        try #require(harness.arranger.windows[a.identity]?.learnedMinimum?.height == 870)
+        try #require(harness.arranger.world[key]?.desktop.contains(a) == true)
+        await harness.send(.zoomEnabled(true))
+        await harness.send(.command(.dock, focused: a))
+        try #require(harness.arranger.world[key]?.tree.state(of: a) == .present)
+        try #require(await harness.fake.parked == [a.identity], "a was not collapsed")
+        return harness
+    }
+
+    private func onScreen(_ window: WindowRef, _ harness: Harness) async throws {
+        let frame = try #require(await harness.frame(window))
+        #expect(!Recovery.isStranded(frame, displays: [mainDisplay]), "\(window) is still parked at \(frame)")
+        #expect(await !harness.fake.parked.contains(window.identity), "\(window) was parked again")
+    }
+
+    @Test func restoreAllBringsACollapsedWindowBackOnScreen() async throws {
+        var harness = try await collapsedA()
+
+        let effects = await harness.send(.command(.restoreAll, focused: nil))
+
+        try await onScreen(a, harness)
+        #expect(!parks(effects).contains(.park(a, displayUUID: "main")), "a was parked again in the same perform")
+        #expect(notices(effects).contains(.restored(count: 1)), "got \(notices(effects))")
+        #expect(notices(effects).contains(.lostRoom([a])), "a floats with N1, as with zoom off")
+        #expect(effects.contains(.collapsedBlocks([], displayUUID: "main")))
+    }
+}
