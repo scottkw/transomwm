@@ -41,7 +41,7 @@ This phase builds a headless Swift library, not an app. The template's layers ma
 
 - Any AppKit, Accessibility, window movement, overlays or UI (Phases 2-3)
 - `PaneEngine` implementation (Reconciler, Planner, sessions, camera) and a `PaneEngineTests` target; Phase 1 has only the draft `WindowSystem` protocol
-- `FakeWindowSystem` and `MacWindowSystem` (Phase 2)
+- `FakeWindowSystem` and `AXWindowSystem` (Phase 2)
 - Writing layouts to disk, debounced saves, crash restore (Phase 3) and restart/reboot re-matching (Phase 8)
 - Saved views storage in `World` (Phase 8, deferred in CONTEXT.md)
 - Learned-minimum persistence per bundleID (Phase 2/3, deferred in CONTEXT.md)
@@ -52,7 +52,7 @@ This phase builds a headless Swift library, not an app. The template's layers ma
 
 Each later phase adds one vertical slice on top of this skeleton without changing its architectural decisions:
 
-- Phase 2: Window Control — `MacWindowSystem` implements `WindowSystem`; real windows become `WindowRef`s with lifecycle states
+- Phase 2: Window Control — `AXWindowSystem` implements `WindowSystem`; real windows become `WindowRef`s with lifecycle states
 - Phase 3: Tiling MVP — drag-to-dock uses `DropZones` + `applyDrop`, frames come from `resolve`, undo from `World.undo`, first on-disk layouts via `World.encoded()`
 - Phase 4: Zoom Camera — unfit windows become the represented state; camera targets are `NodeID`s
 - Phase 5: Gestures — drive the Phase 4 camera

@@ -11,7 +11,7 @@
 
 ## TL;DR (prescriptive)
 
-1. **One `Package.swift`** holds all code as library targets: `PaneModel` → `PaneEngine` → `PaneMac` (AppKit), plus `PanePrivate` (dlsym shims). A thin **XcodeGen `project.yml`** produces `Pane.app` for signing, embedding Sparkle and notarisation. This is AeroSpace's exact pattern.
+1. **One `Package.swift`** holds all code as library targets: `TransomModel` → `TransomEngine` → `TransomMac` (AppKit), plus `TransomPrivate` (dlsym shims). A thin **XcodeGen `project.yml`** produces `Transom.app` for signing, embedding Sparkle and notarisation. This is AeroSpace's exact pattern.
 2. **Swift 6 language mode**, `swift-tools-version: 6.2`, `.macOS(.v14)`. Write new tests with **Swift Testing**. `swift test` runs them headless with no Xcode project.
 3. **Call system frameworks directly** for AX, CGEventTap, ScreenCaptureKit, Core Animation and SMAppService, with small wrappers we write ourselves. Take exactly two runtime dependencies: **Sparkle 2.10.0** and **KeyboardShortcuts 3.1.0**.
 4. **Load every private symbol with `dlopen`/`dlsym`**, including `_AXUIElementGetWindow`, into optional function pointers in one file per framework. Never link a private symbol at build time.
@@ -27,7 +27,7 @@
 |---|---|---|---|---|
 | Swift | **6.4** toolchain (Xcode 27.1 locally); package declares `swift-tools-version: 6.2`, Swift 6 language mode | Everything | AeroSpace does the same: tools-version 6.2 with `.swift-version` set to 6.4.0. Tools-version 6.2 is the floor for `.defaultIsolation(MainActor.self)` and `NonisolatedNonsendingByDefault`. It also lets the package build on GitHub's `macos-26` runners, which currently top out at Xcode 26.6. Don't declare 6.4 until CI has Xcode 27. | HIGH (local toolchain + runner-images README) |
 | Swift Package Manager | bundled with toolchain | Module graph, dependency resolution, headless build and test of Model and Engine | It enforces the Model / Engine / App split at module level, and `swift test` needs no Xcode project. Every new Swift WM (AeroSpace) keeps its real code in SPM targets. | HIGH |
-| XcodeGen | **2.46.0** (2026-07-16) | Generates `Pane.xcodeproj` from `project.yml` for release `.app` builds | AeroSpace's choice. The `.pbxproj` is never committed, so there are no merge conflicts and no hand-edited signing settings. Xcode builds the bundle, embeds Sparkle.framework, applies the entitlements and Info.plist keys, and handles signing. All code stays in SPM, so the project file has only one or two targets. 2.46 supports synced folders and package traits. | HIGH (release API) |
+| XcodeGen | **2.46.0** (2026-07-16) | Generates `Transom.xcodeproj` from `project.yml` for release `.app` builds | AeroSpace's choice. The `.pbxproj` is never committed, so there are no merge conflicts and no hand-edited signing settings. Xcode builds the bundle, embeds Sparkle.framework, applies the entitlements and Info.plist keys, and handles signing. All code stays in SPM, so the project file has only one or two targets. 2.46 supports synced folders and package traits. | HIGH (release API) |
 | AppKit | macOS 14 SDK floor, built with the latest SDK | Overlays (`NSPanel`), status item, event plumbing, window-level control | Click-through, full-screen, borderless, non-activating panels at custom window levels are only practical in AppKit. Every WM studied (AeroSpace, Amethyst, Rectangle, Loop) is AppKit-first. | HIGH |
 | ApplicationServices / HIServices (Accessibility API) | system | Enumerate, observe, move and resize other apps' windows | No other public API can move another process's windows. Use `AXUIElement`, `AXObserver` and `AXUIElementSetMessagingTimeout` directly. | HIGH |
 | ScreenCaptureKit | system, `SCScreenshotManager` (macOS **14.0**) | Window snapshots for the zoom stage | `SCScreenshotManager.captureImage(contentFilter:configuration:)` plus `SCContentFilter(desktopIndependentWindow:)` is available exactly at our floor (14.0). It captures one window even when occluded. `SCStreamConfiguration.ignoreShadowsSingleWindow` is also 14.0. The old `CGWindowListCreateImage` is **unavailable** when the deployment target is ≥15 (verified: compile error with `-target macos15`) and deprecated at 14. | HIGH (Apple doc JSON + local compile) |
@@ -44,9 +44,9 @@
 | swift-collections (Apple) | **1.7.4** | `OrderedDictionary` / `Deque` for window registries, MRU and history stacks | Optional. Add only once a real need appears, such as the back/forward history ring or an ordered window registry. AeroSpace uses it. | HIGH (version) |
 | OSLog (`os.Logger`) | system | Structured logging with per-subsystem categories (`ax`, `tap`, `camera`, `skylight`) | Always. No dependency, near-zero cost when disabled, readable in Console.app. Users can send `log collect` output for bug reports. | HIGH |
 | SwiftUI | system | Settings window, onboarding and permission-flow screens only | Host it in an AppKit-owned `NSWindow` through `NSHostingController`. Do not use the SwiftUI `App`/`Settings` scene lifecycle (see What NOT to Use). | HIGH |
-| Foundation `Codable` + `JSONEncoder` | system | Persist the layout tree, saved views and per-display state to `~/Library/Application Support/Pane/` | Always. `PaneModel` may import Foundation but not AppKit. Value types plus Codable give free round-trip tests. | HIGH |
+| Foundation `Codable` + `JSONEncoder` | system | Persist the layout tree, saved views and per-display state to `~/Library/Application Support/Transom/` | Always. `TransomModel` may import Foundation but not AppKit. Value types plus Codable give free round-trip tests. | HIGH |
 | `UserDefaults` / `@AppStorage` | system | Preferences: gaps, exclusions, toggles | Always. Skip `Defaults` (sindresorhus) unless the settings surface grows past ~30 keys. | MEDIUM (judgement) |
-| *(reference only)* OpenMultitouchSupport (Kyome22, MIT) | 4.0.0 (2026-05-28) | Raw trackpad contacts | **Do not depend on it.** 4.0.0 raised its floor to **macOS 15** (our floor is 14) and ships a **prebuilt binary XCFramework**, an unauditable private-API blob. Read its headers and port the ~10 `MT*` signatures into our own `PanePrivate/MultitouchSupport.swift` dlsym shim. | HIGH (Package.swift + release notes) |
+| *(reference only)* OpenMultitouchSupport (Kyome22, MIT) | 4.0.0 (2026-05-28) | Raw trackpad contacts | **Do not depend on it.** 4.0.0 raised its floor to **macOS 15** (our floor is 14) and ships a **prebuilt binary XCFramework**, an unauditable private-API blob. Read its headers and port the ~10 `MT*` signatures into our own `TransomPrivate/MultitouchSupport.swift` dlsym shim. | HIGH (Package.swift + release notes) |
 
 ### Development Tools
 
@@ -70,22 +70,22 @@
 Package.swift                 // swift-tools-version: 6.2, platforms: [.macOS(.v14)]
 .swift-version                // 6.4
 Sources/
-  PaneModel/                  // import Foundation only. Value-type tree, geometry, Codable. No concurrency annotations needed (Sendable structs).
-  PaneEngine/                 // depends: PaneModel. Camera, navigator, drag/drop/resize sessions, saved views, tweens.
+  TransomModel/                  // import Foundation only. Value-type tree, geometry, Codable. No concurrency annotations needed (Sendable structs).
+  TransomEngine/                 // depends: TransomModel. Camera, navigator, drag/drop/resize sessions, saved views, tweens.
                               //   Defines `protocol WindowSystem` (+ Snapshotter, Clock); never imports AppKit.
-  PanePrivate/                // Swift target. One file per private framework: SkyLight.swift, MultitouchSupport.swift,
+  TransomPrivate/                // Swift target. One file per private framework: SkyLight.swift, MultitouchSupport.swift,
                               //   HIServicesPrivate.swift (_AXUIElementGetWindow, CoreDockSendNotification), SymbolicHotKeys.swift.
                               //   Every symbol is `static let fn: FnType? = load("name")`.
-  PaneMac/                    // depends: PaneEngine, PanePrivate, Sparkle, KeyboardShortcuts. AppKit + AX + SCK + taps + overlays.
-                              //   `MacWindowSystem: WindowSystem`. This is AeroSpace's "AppBundle" library target.
-  PaneApp/                    // executableTarget: 5-line main.swift -> PaneMac.run(). Lets `swift run PaneApp` work for quick dev.
+  TransomMac/                    // depends: TransomEngine, TransomPrivate, Sparkle, KeyboardShortcuts. AppKit + AX + SCK + taps + overlays.
+                              //   `AXWindowSystem: WindowSystem`. This is AeroSpace's "AppBundle" library target.
+  TransomApp/                    // executableTarget: 5-line main.swift -> TransomMac.run(). Lets `swift run TransomApp` work for quick dev.
 Tests/
-  PaneModelTests/             // Swift Testing
-  PaneEngineTests/            // Swift Testing, with FakeWindowSystem
+  TransomModelTests/             // Swift Testing
+  TransomEngineTests/            // Swift Testing, with FakeWindowSystem
 xcode/
-  project.yml                 // XcodeGen: one `application` target "Pane" depending on local package product PaneMac
-  Pane.entitlements           // hardened runtime; NO app-sandbox
-  Info.plist keys via INFOPLIST_KEY_* (LSUIElement=YES, CFBundleURLTypes for pane://, SUFeedURL, SUPublicEDKey)
+  project.yml                 // XcodeGen: one `application` target "Transom" depending on local package product TransomMac
+  Transom.entitlements           // hardened runtime; NO app-sandbox
+  Info.plist keys via INFOPLIST_KEY_* (LSUIElement=YES, CFBundleURLTypes for transom://, SUFeedURL, SUPublicEDKey)
 scripts/ generate.sh, build-release.sh, notarize.sh, bump-cask.sh
 ```
 
@@ -93,12 +93,12 @@ scripts/ generate.sh, build-release.sh, notarize.sh, bump-cask.sh
 
 | Target | Settings | Why |
 |---|---|---|
-| PaneModel | Swift 6 mode, `.enableUpcomingFeature("NonisolatedNonsendingByDefault")`, `.enableUpcomingFeature("ExistentialAny")` | Pure value types are `Sendable` for free. Leave them nonisolated so tests and the engine can use them from anywhere. |
-| PaneEngine | the above plus `.defaultIsolation(MainActor.self)` | The engine is driven by UI events and display-link ticks on main. MainActor by default removes most Sendable noise. Mark pure helpers `nonisolated`. |
-| PaneMac / PaneApp | `.defaultIsolation(MainActor.self)`, `NonisolatedNonsendingByDefault`, `InferIsolatedConformances` | AppKit is MainActor. C callbacks (AXObserver, CGEventTap, MT contact frames) are `@convention(c)` and arrive on their own run-loop threads, so bridge them explicitly with `Unmanaged` refcon plus `MainActor.assumeIsolated` or a hop. |
-| PanePrivate | Swift 6 mode, nonisolated | Function-pointer tables are immutable `static let`s. |
+| TransomModel | Swift 6 mode, `.enableUpcomingFeature("NonisolatedNonsendingByDefault")`, `.enableUpcomingFeature("ExistentialAny")` | Pure value types are `Sendable` for free. Leave them nonisolated so tests and the engine can use them from anywhere. |
+| TransomEngine | the above plus `.defaultIsolation(MainActor.self)` | The engine is driven by UI events and display-link ticks on main. MainActor by default removes most Sendable noise. Mark pure helpers `nonisolated`. |
+| TransomMac / TransomApp | `.defaultIsolation(MainActor.self)`, `NonisolatedNonsendingByDefault`, `InferIsolatedConformances` | AppKit is MainActor. C callbacks (AXObserver, CGEventTap, MT contact frames) are `@convention(c)` and arrive on their own run-loop threads, so bridge them explicitly with `Unmanaged` refcon plus `MainActor.assumeIsolated` or a hop. |
+| TransomPrivate | Swift 6 mode, nonisolated | Function-pointer tables are immutable `static let`s. |
 
-**Enforce "Model/Engine never import AppKit"** with a CI grep (`! grep -rE '^import (AppKit|Cocoa|SwiftUI)' Sources/PaneModel Sources/PaneEngine`). SPM cannot forbid an SDK import on its own. (HIGH)
+**Enforce "Model/Engine never import AppKit"** with a CI grep (`! grep -rE '^import (AppKit|Cocoa|SwiftUI)' Sources/TransomModel Sources/TransomEngine`). SPM cannot forbid an SDK import on its own. (HIGH)
 
 ---
 
@@ -119,7 +119,7 @@ scripts/ generate.sh, build-release.sh, notarize.sh, bump-cask.sh
 
 ## Input: Hotkeys, Event Taps, Gestures
 
-- **Global hotkeys** come from KeyboardShortcuts 3.1.0 (Carbon `RegisterEventHotKey` underneath). Note: **macOS 15.0–15.1 refused Option-only and Option+Shift-only hotkeys**, as an anti-keylogger measure. Apple reverted this in **15.2**. Pane's default ⌥1–9 therefore works on 14.x and 15.2+, but **not on 15.0/15.1**. Fall back to ⌃⌥1–9 when registration fails. (MEDIUM: Apple Dev Forums thread + Eternal Storms blog)
+- **Global hotkeys** come from KeyboardShortcuts 3.1.0 (Carbon `RegisterEventHotKey` underneath). Note: **macOS 15.0–15.1 refused Option-only and Option+Shift-only hotkeys**, as an anti-keylogger measure. Apple reverted this in **15.2**. Transom's default ⌥1–9 therefore works on 14.x and 15.2+, but **not on 15.0/15.1**. Fall back to ⌃⌥1–9 when registration fails. (MEDIUM: Apple Dev Forums thread + Eternal Storms blog)
 - **Event tap:** one active `CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, ...)` on a dedicated thread with its own `CFRunLoop`. Mask: mouse down/drag/up, flagsChanged, keyDown (for Mission Control keys), scrollWheel. **Always** handle `.tapDisabledByTimeout` / `.tapDisabledByUserInput` by re-enabling. Keep the callback under ~1 ms and do no AX calls inside it. (HIGH)
 - **Trackpad pinch/pan:** follow the reference app and use MultitouchSupport through our own shim. Whether a CGEventTap can reliably *see and consume* system magnify/gesture events (CGEvent types 29/30) over other apps on macOS 14–27 is **unverified** (LOW). Phase 5 needs a one-day spike to compare both paths before committing.
 
@@ -141,18 +141,18 @@ scripts/ generate.sh, build-release.sh, notarize.sh, bump-cask.sh
 
 | Build | Identity | Why |
 |---|---|---|
-| Local dev | A **stable** identity: an Apple Development cert, or a self-signed cert like AeroSpace's `aerospace-codesign-certificate` | TCC (Accessibility, Screen Recording) grants are keyed to the code signature's designated requirement. Ad-hoc signing (`-`) changes it on every rebuild, so permissions silently reset. This is the #1 dev-loop time sink for WMs. Use a separate debug bundle ID (`…pane.debug`) so dev and release grants don't collide. |
+| Local dev | A **stable** identity: an Apple Development cert, or a self-signed cert like AeroSpace's `aerospace-codesign-certificate` | TCC (Accessibility, Screen Recording) grants are keyed to the code signature's designated requirement. Ad-hoc signing (`-`) changes it on every rebuild, so permissions silently reset. This is the #1 dev-loop time sink for WMs. Use a separate debug bundle ID (`…transom.debug`) so dev and release grants don't collide. |
 | Release | **Developer ID Application** + hardened runtime + notarised + stapled | Required by Homebrew (below) and by Gatekeeper for downloaded apps. Costs USD 99/yr. AeroSpace skips this and strips quarantine in its own tap, a route Homebrew is closing. |
 
 **Entitlements:** hardened runtime on, `com.apple.security.app-sandbox` absent or false (AX does not work sandboxed), no other entitlements expected. (HIGH)
 
-**Release pipeline:** `swift test` → `xcodegen generate` → `xcodebuild -scheme Pane -configuration Release ARCHS="arm64 x86_64"` (universal: PROJECT.md needs Intel) → `codesign --verify --deep --strict` → `ditto -c -k --keepParent Pane.app Pane-x.y.z.zip` → `notarytool submit --wait` → `stapler staple Pane.app` → re-zip → `generate_appcast` → GitHub Release + appcast on GitHub Pages → bump cask.
+**Release pipeline:** `swift test` → `xcodegen generate` → `xcodebuild -scheme Transom -configuration Release ARCHS="arm64 x86_64"` (universal: PROJECT.md needs Intel) → `codesign --verify --deep --strict` → `ditto -c -k --keepParent Transom.app Transom-x.y.z.zip` → `notarytool submit --wait` → `stapler staple Transom.app` → re-zip → `generate_appcast` → GitHub Release + appcast on GitHub Pages → bump cask.
 
-**Sparkle wiring:** add the `https://github.com/sparkle-project/Sparkle` package to `project.yml` with `from: 2.10.0` and link it to `PaneMac` through Package.swift. Instantiate `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate:, userDriverDelegate:)` in code (no XIB). Set Info.plist `SUFeedURL` (https) and `SUPublicEDKey`, and consider `SURequireSignedFeed`. We are not sandboxed, so the XPC services can be stripped. Ad-hoc-signed debug builds may fail to load Sparkle under library validation, so use the stable dev identity. (HIGH: Sparkle docs + 2.10 release)
+**Sparkle wiring:** add the `https://github.com/sparkle-project/Sparkle` package to `project.yml` with `from: 2.10.0` and link it to `TransomMac` through Package.swift. Instantiate `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate:, userDriverDelegate:)` in code (no XIB). Set Info.plist `SUFeedURL` (https) and `SUPublicEDKey`, and consider `SURequireSignedFeed`. We are not sandboxed, so the XPC services can be stripped. Ad-hoc-signed debug builds may fail to load Sparkle under library validation, so use the stable dev identity. (HIGH: Sparkle docs + 2.10 release)
 
 **Homebrew:**
 - Homebrew 5.0 deprecated `--no-quarantine`. The policy (Acceptable Casks): *"apps … that Gatekeeper can assess must pass Homebrew's Gatekeeper checks"* and *"must not require … Gatekeeper to be disabled or bypassed."* Casks that failed Gatekeeper were scheduled to lose support on 2026-09-01. (HIGH for the policy text, from docs.brew.sh; MEDIUM for the date, from secondary sources)
-- `homebrew/cask` also applies notability thresholds that a brand-new repo won't meet. **Ship first via our own tap** (`brew install <org>/tap/pane`), then submit upstream. Model the cask on Rectangle's official one: `auto_updates true` (Sparkle owns updates), `depends_on macos: :sonoma`, `uninstall quit:` / `login_item:`, `zap trash:`, and a `livecheck` with `strategy :sparkle`. (HIGH: read from homebrew-cask today)
+- `homebrew/cask` also applies notability thresholds that a brand-new repo won't meet. **Ship first via our own tap** (`brew install <org>/tap/transom`), then submit upstream. Model the cask on Rectangle's official one: `auto_updates true` (Sparkle owns updates), `depends_on macos: :sonoma`, `uninstall quit:` / `login_item:`, `zap trash:`, and a `livecheck` with `strategy :sparkle`. (HIGH: read from homebrew-cask today)
 
 ---
 
@@ -166,7 +166,7 @@ scripts/ generate.sh, build-release.sh, notarize.sh, bump-cask.sh
 | **Loop** 1.4.2 | **GPL-3.0** (do not copy) | Committed `.xcodeproj`, deployment 13.0 | XCTest | own | **own updater** (ZIPFoundation + helper), not Sparkle | `dlopen`/`dlsym` SkyLight loader with optional typed function pointers | homebrew/cask zip |
 | **yabai** 7.1.25 | MIT | C, Makefile | none | skhd (separate) | brew | SkyLight via headers; SIP-off features | Own tap |
 
-Takeaways: AeroSpace's **SPM + XcodeGen** structure fits Pane's layering best. Loop's **dlsym loader** is the best private-API isolation pattern. Rectangle and Amethyst show the **notarised + Sparkle + homebrew/cask** distribution path. Nobody uses Swift Testing yet, simply because their test suites predate it. (HIGH)
+Takeaways: AeroSpace's **SPM + XcodeGen** structure fits Transom's layering best. Loop's **dlsym loader** is the best private-API isolation pattern. Rectangle and Amethyst show the **notarised + Sparkle + homebrew/cask** distribution path. Nobody uses Swift Testing yet, simply because their test suites predate it. (HIGH)
 
 ---
 
@@ -200,10 +200,10 @@ swift format lint --strict -r Sources Tests
 |---|---|---|
 | SPM + XcodeGen | **Plain committed `.xcodeproj`** with Xcode 16+ synchronized folders (Loop, Rectangle, Amethyst) | If contributors mostly work in Xcode and nobody minds `.pbxproj` diffs. Synced folders make it far less painful than before. Code should still live in SPM targets. |
 | SPM + XcodeGen | **Tuist 4.213** | When a multi-app or multi-extension workspace needs caching and graph tooling. That is overkill for one app target plus a local package, and it adds a `mise`-managed CLI and Swift manifests. |
-| SPM + XcodeGen | **Pure SPM with a hand-rolled bundle script** (`swift build` → copy into `Pane.app/Contents/MacOS`, write Info.plist, embed Sparkle.framework, fix rpaths, `codesign`) or swift-bundler | Only if Xcode must be avoided entirely. You'd re-implement framework embedding, asset catalogs (`actool`) and entitlements by hand. AeroSpace explicitly says "don't use this build for release". |
+| SPM + XcodeGen | **Pure SPM with a hand-rolled bundle script** (`swift build` → copy into `Transom.app/Contents/MacOS`, write Info.plist, embed Sparkle.framework, fix rpaths, `codesign`) or swift-bundler | Only if Xcode must be avoided entirely. You'd re-implement framework embedding, asset catalogs (`actool`) and entitlements by hand. AeroSpace explicitly says "don't use this build for release". |
 | Swift Testing | XCTest | Only for `measure {}` performance baselines (Swift Testing has no perf-metric API) or for UI tests. Swift 6.4 adds XCTest↔Swift Testing interop, so both can coexist in one target. |
 | KeyboardShortcuts 3.1.0 | HotKey 0.2.1 (soffes; AeroSpace) | If hotkeys are only config-file defined with no recorder UI. Last push 2024-12, effectively frozen. |
-| KeyboardShortcuts | Hotkeys handled in our CGEventTap | For chords that Carbon can't express (modifier-only, or keys we must *suppress* such as Mission Control F3/⌃↑). Pane needs the tap anyway for those, so keep Carbon for normal rebindable shortcuts. |
+| KeyboardShortcuts | Hotkeys handled in our CGEventTap | For chords that Carbon can't express (modifier-only, or keys we must *suppress* such as Mission Control F3/⌃↑). Transom needs the tap anyway for those, so keep Carbon for normal rebindable shortcuts. |
 | Own AX wrapper | AXSwift 0.3.2 (tmandry) | Never for new code. Last release 2021, no Swift 6 concurrency, no messaging-timeout ergonomics. |
 | Own AX wrapper | Silica (ianyh) | Never. It's shaped around Amethyst's needs and its last tag is v0.3.7. |
 | Own MT shim | OpenMultitouchSupport 3.0.x | If the shim proves fiddly: 3.0.x supported macOS 13+ (4.0 needs 15+). It's still a binary XCFramework, so pin the checksum. |
@@ -218,7 +218,7 @@ swift format lint --strict -r Sources Tests
 | Avoid | Why | Use Instead |
 |---|---|---|
 | `CGWindowListCreateImage` / `CGWindowListCreateImageFromArray` | Deprecated in 14, **unavailable** at deployment target ≥15 (verified compile error), and it triggers extra "deprecated capture" privacy prompts on 15.1+ | `SCScreenshotManager` |
-| Link-time private symbols (`@_silgen_name`, C header declarations, `-framework SkyLight`) | If Apple removes a symbol, dyld fails at launch and the whole app is dead | `dlopen` + `dlsym` into optional function pointers in `PanePrivate` |
+| Link-time private symbols (`@_silgen_name`, C header declarations, `-framework SkyLight`) | If Apple removes a symbol, dyld fails at launch and the whole app is dead | `dlopen` + `dlsym` into optional function pointers in `TransomPrivate` |
 | SwiftUI `App` + `Settings {}` scene + `MenuBarExtra` as the app shell | Agent (`LSUIElement`) apps can't reliably bring a Settings scene forward. `openSettings` and activation policy juggling are fragile across 14–27. MenuBarExtra lacks NSMenu control. | AppKit `NSApplication` + `NSStatusItem` + `NSHostingController` windows |
 | App Sandbox | The AX API does not work sandboxed, and neither does dlopen of private frameworks | Hardened runtime, non-sandboxed |
 | `SMLoginItemSetEnabled`, helper launcher apps, `LaunchAtLogin` (legacy), `LSSharedFileList` (Amethyst's LoginServiceKit) | Deprecated since macOS 13 | `SMAppService.mainApp` |
@@ -226,7 +226,7 @@ swift format lint --strict -r Sources Tests
 | OpenMultitouchSupport 4.x as a dependency | Requires macOS 15 (breaks our 14 floor), and it is a closed binary blob wrapping a private API | Own dlsym shim |
 | Ad-hoc signing for day-to-day dev | It resets Accessibility/Screen Recording grants on every rebuild | Stable dev cert + separate debug bundle ID |
 | Running AX calls inside the event-tap callback or blocking main on slow apps | The tap gets disabled by timeout, and the UI hangs on Electron/Java apps | Per-app AX work off main with `AXUIElementSetMessagingTimeout` (~0.25–1 s), results marshalled to MainActor |
-| Copying Loop code | GPL-3.0 is incompatible with Pane's MIT license | Read it for patterns and reimplement |
+| Copying Loop code | GPL-3.0 is incompatible with Transom's MIT license | Read it for patterns and reimplement |
 | CocoaPods / Carthage | Sparkle 2.10 dropped CocoaPods; the ecosystem is SPM-only | SPM |
 
 ---
@@ -277,5 +277,5 @@ swift format lint --strict -r Sources Tests
 - CGEventTap visibility of system gesture events: no conclusive source found (LOW). Flagged for a phase-5 spike.
 
 ---
-*Stack research for: macOS zoomable nested-tiling window manager (Pane)*
+*Stack research for: macOS zoomable nested-tiling window manager (Transom)*
 *Researched: 2026-10-23*

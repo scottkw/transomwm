@@ -1,0 +1,20 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-26
+    # Live AX suites are opt-in (TRANSOM_LIVE=1), so even an AX-trusted runner skips the fixture suite.
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift --version
+      - run: scripts/check-no-appkit.sh
+      - run: swift build
+      - run: swift test
+      # Release compiles out assertValid(), so the edits' invariant behaviour must be tested there too.
+      - run: swift build -c release
+      - run: swift test -c release -Xswiftc -enable-testing

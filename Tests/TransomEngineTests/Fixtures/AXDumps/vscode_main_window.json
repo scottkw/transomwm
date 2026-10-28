@@ -1,0 +1,60 @@
+{
+  "app" : {
+    "activationPolicy" : "regular",
+    "bundleID" : "com.microsoft.VSCode",
+    "family" : "electron",
+    "hidden" : false
+  },
+  "capturedOn" : {
+    "appVersion" : "1.143.1",
+    "date" : "2026-10-24",
+    "macOS" : "27.0.1"
+  },
+  "case" : "vscode_main_window",
+  "expected" : {
+    "confirmedBy" : "developer",
+    "kind" : "dockable"
+  },
+  "schemaVersion" : 1,
+  "title" : {
+    "length" : 10,
+    "redacted" : true
+  },
+  "window" : {
+    "cg" : {
+      "alpha" : 1,
+      "layer" : 0,
+      "onScreen" : true
+    },
+    "close" : {
+      "enabled" : true,
+      "present" : true
+    },
+    "frame" : {
+      "height" : 923,
+      "width" : 1470,
+      "x" : 0,
+      "y" : 38
+    },
+    "fullScreen" : false,
+    "fullScreenButton" : {
+      "enabled" : true,
+      "present" : true
+    },
+    "main" : true,
+    "minimize" : {
+      "enabled" : true,
+      "present" : true
+    },
+    "minimized" : false,
+    "modal" : false,
+    "role" : "AXWindow",
+    "schemaVersion" : 1,
+    "sheetAttached" : false,
+    "subrole" : "AXStandardWindow",
+    "zoom" : {
+      "enabled" : true,
+      "present" : true
+    }
+  }
+}

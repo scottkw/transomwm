@@ -237,7 +237,7 @@ When the camera settles, Pane resizes many real windows over AX. Each resize mak
 - Per-window snapshot cache: capture at the size actually displayed (`SCStreamConfiguration` width/height scaled to the on-screen thumbnail), refresh on content-change signals, and **capture before parking or shrinking**. A parked window's snapshot would show the parked state.
 - Use one-shot `SCScreenshotManager` (macOS 14+) captures, not long-running `SCStream`s, outside active zoom. Running streams show the system "sharing your screen" indicator (AltTab #2606) and keep `replayd` busy.
 - Put a budget on captures per second and on cache bytes. Evict least-recently-used entries. Track `WindowServer` RSS in a long-running soak test.
-- Make `redrawWait` adaptive per app: measure how long each app takes after a resize before its next frame looks stable.
+- Make `redraw-settle delay` adaptive per app: measure how long each app takes after a resize before its next frame looks stable.
 
 **Warning signs:**
 Settle takes more than 500 ms with 15+ windows. Terminal scrollback rewrapped after zooming. WindowServer RSS above 2 GB after an 8-hour soak.
@@ -478,7 +478,7 @@ Offline first launch fails Gatekeeper, or updates become a supply-chain risk. **
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Synchronous AX calls on the main actor | Simple code, fast prototype | One hung app freezes everything. AeroSpace needed a core rewrite (#131) | Only in a throwaway Phase 2 spike. Never in a merged `MacWindowSystem` |
+| Synchronous AX calls on the main actor | Simple code, fast prototype | One hung app freezes everything. AeroSpace needed a core rewrite (#131) | Only in a throwaway Phase 2 spike. Never in a merged `AXWindowSystem` |
 | Removing windows from the tree on `kAXUIElementDestroyedNotification` alone | Easy lifecycle | Ghost tiles, lost layouts on lock/Spaces/slow apps | Never |
 | Trusting requested frame == actual frame | Simpler solver | Overlaps, fight loops, wrong min sizes | Never. Read back from Phase 2 |
 | Hard-coding app quirks inline | Fast fixes | Untestable heuristics drift apart | Only if each quirk comes with an AX-dump test case |

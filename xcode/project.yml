@@ -1,0 +1,52 @@
+# XcodeGen spec for the signed app bundle (D-03, D-04, D-05). All code lives in the SwiftPM package;
+# this only wraps Sources/TransomApp + the TransomMac product. Generate with scripts/generate.sh.
+name: Transom
+packages:
+  Transom:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    GENERATE_INFOPLIST_FILE: YES
+    # Merged into the generated Info.plist: only CFBundleURLTypes, with the per-configuration TRANSOM_URL_SCHEME.
+    INFOPLIST_FILE: Transom-Info.plist
+    INFOPLIST_KEY_LSUIElement: YES
+    MARKETING_VERSION: "0.3.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Developer ID Application"
+    DEVELOPMENT_TEAM: S2K7P43927
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  Transom:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - ../Sources/TransomApp
+    dependencies:
+      - package: Transom
+        product: TransomMac
+    entitlements:
+      # XcodeGen rewrites this file from `properties` on every generate. AX needs no sandbox.
+      path: Transom.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    scheme: {}
+    settings:
+      configs:
+        Debug:
+          PRODUCT_NAME: "Transom Debug"
+          PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.transom.debug
+          # Debug registers its own scheme so LaunchServices never routes a URL to the wrong build (A8).
+          TRANSOM_URL_SCHEME: transom-debug
+        Release:
+          PRODUCT_NAME: Transom
+          PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.transom
+          TRANSOM_URL_SCHEME: transom
+          SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+          # No debugger-attach (get-task-allow) entitlement in Release (T-02-05).
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          # Notarisation needs a secure timestamp; Debug stays fast and offline.
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
