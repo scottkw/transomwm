@@ -109,4 +109,100 @@ private func listed(_ fixture: FixtureProcess, _ index: Int) async throws -> Rec
         let settleOut = try #require(arrange.zoomController?.lastSettle)
         print("zoom settle home: \(settleOut.ms) ms, \(settleOut.windows) windows")
     }
+
+    /// ZOOM-07 phase gate (04-08): 15 docked fixture windows, 10 rounds of zoom to a 3-window node and back home. Every
+    /// window ends within 2 pt of its target (parked ones stranded) and the p95 of the 20 settles is within 500 ms. A
+    /// settle is the write path only, from the first AX write to the last read-back (04-SPIKE verdict condition 4):
+    /// `lastSettle`, with the capture budget, the animation and the 50 ms redraw delay excluded.
+    @Test(.timeLimit(.minutes(3)))
+    func fifteenWindowsSettleWithinBudget() async throws {
+        let count = 15
+        let fixture = try await FixtureProcess.launch(Array(repeating: "standard", count: count))
+        defer { fixture.terminate() }
+        let fixturePID = fixture.pid
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        await system.start()
+        let arrange = ArrangeController(system: system, zoomEnabled: true)
+        defer { withExtendedLifetime(arrange) {} }  // its events loop ends with it
+        await arrange.start()
+        try #require(arrange.arranger.zoomEnabled)
+
+        var refs: [TransomModel.WindowRef] = []
+        for window in fixture.windows.sorted(by: { $0.index < $1.index }) {
+            func find() -> TransomModel.WindowRef? {
+                arrange.arranger.windows.values.first { $0.window.pid == fixturePID && $0.window.windowID == window.id }?.window
+            }
+            _ = await waitUntil(timeout: .seconds(3)) { find().map { arrange.arranger.deskKey(of: $0) != nil } ?? false }
+            refs.append(try #require(find(), "window \(window.id) never reached a desk"))
+        }
+        let key = try #require(arrange.arranger.deskKey(of: refs[0]))
+        let display = try #require(Displays.current().first { $0.uuid == key.displayUUID })
+        await arrange.dispatch(.arrangeAll, focused: refs[0])
+        try #require(refs.allSatisfy { arrange.arranger.world[key]?.tree.state(of: $0) == .present }, "Arrange All did not dock all 15")
+
+        func frames() async -> [Rect] {
+            _ = try? await fixture.send("list")
+            let listed = fixture.windows.sorted { $0.index < $1.index }.map(\.frame)
+            return listed.count == count ? listed : []
+        }
+        func visible() -> Rect { arrange.arranger.displays.first { $0.uuid == display.uuid }?.visibleFrame ?? display.visibleFrame }
+        func near(_ a: Rect, _ b: Rect) -> Bool {
+            abs(a.x - b.x) <= 2 && abs(a.y - b.y) <= 2 && abs(a.width - b.width) <= 2 && abs(a.height - b.height) <= 2
+        }
+        /// Each window's target in `view`: its planned frame, or nil when the view parks it.
+        func targets(_ view: ViewTarget) throws -> [Rect?] {
+            let desk = try #require(arrange.arranger.world[key])
+            let plan = try ViewPlanner.plan(desk: desk, view: view, area: visible(), gap: 8, mins: [:])
+            return refs.map { plan.frames[$0] }
+        }
+        func misses(_ view: ViewTarget) async throws -> [String] {
+            let wanted = try targets(view), actual = await frames()
+            guard !actual.isEmpty else { return ["no list"] }
+            return refs.indices.compactMap { i in
+                if let target = wanted[i] { return near(actual[i], target) ? nil : "\(i): \(actual[i]) vs \(target)" }
+                return Recovery.isStranded(actual[i], displays: [display]) ? nil : "\(i): \(actual[i]) not parked"
+            }
+        }
+        var last: [String] = []
+        let tiled = await waitUntil(timeout: .seconds(5)) {
+            last = (try? await misses(.home)) ?? ["plan failed"]
+            return last.isEmpty
+        }
+        try #require(tiled, "the 15 windows never reached their home tiles: \(last)")
+
+        // The split holding exactly 3 windows (Arrange All's layout has one); else the smallest holding 2 or more.
+        let tree = try #require(arrange.arranger.world[key]?.tree)
+        let splits = tree.nodes.compactMap { id, node -> (NodeID, Int)? in
+            guard case .split = node, let windows = try? tree.subtree(at: id).windows.count else { return nil }
+            return (id, windows)
+        }
+        let node = try #require(splits.first { $0.1 == 3 } ?? splits.filter { $0.1 >= 2 }.min { $0.1 < $1.1 }, "no split to zoom to")
+        print("zooming to \(node.0) holding \(node.1) windows")
+
+        var settles: [Int] = []
+        for round in 0..<10 {
+            for view in [ViewTarget.node(node.0), .home] {
+                await arrange.zoom(to: view, displayUUID: display.uuid)
+                try #require(arrange.zoomController?.isIdle == false, "round \(round) \(view): the move never started")
+                let revealed = await waitUntil(timeout: .seconds(5)) { arrange.zoomController?.isIdle == true }
+                try #require(revealed, "round \(round) \(view): the stage never revealed")
+                let settle = try #require(arrange.zoomController?.lastSettle)
+                settles.append(settle.ms)
+                let placed = await waitUntil(timeout: .seconds(1)) {
+                    last = (try? await misses(view)) ?? ["plan failed"]
+                    return last.isEmpty
+                }
+                #expect(placed, "round \(round) \(view): windows off target: \(last)")
+                print("settle round \(round) \(view == .home ? "home" : "in"): \(settle.ms) ms, \(settle.windows) writes")
+            }
+        }
+        let sorted = settles.sorted()
+        let p50 = sorted[sorted.count / 2], p95 = sorted[Int((Double(sorted.count) * 0.95).rounded(.up)) - 1]
+        print("settles \(settles)")
+        print("p50 \(p50) ms")
+        print("p95 \(p95) ms")
+        #expect(settles.count == 20)
+        #expect(p95 <= 500, "ZOOM-07: p95 \(p95) ms over the 500 ms write-path budget")
+    }
 }
+
