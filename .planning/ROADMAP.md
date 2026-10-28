@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Layout Model** - Headless PaneModel: nested split tree, Desktop layer, tab groups, desks, lifecycle states, JSON, undo (completed 2026-10-24)
 - [x] **Phase 2: Window Control** - Accessibility permission, non-blocking window tracking and move/resize, classifier, exclusions, private-API fallback (completed 2026-10-27)
 - [x] **Phase 3: Tiling MVP** - Drag-to-dock nested tiling, reflow, gaps, commands, crash-safe restore; first usable signed release (completed 2026-10-27)
-- [ ] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle
+- [x] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle (completed 2026-10-28)
 - [ ] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop
 - [ ] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts
 - [ ] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons
@@ -217,7 +217,7 @@ Plans:
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
   6. User can move the view to a neighbouring area, frame the focused window or the Desktop on its own and toggle back (including by double-click), cancel a rectangle zoom with Esc, and tiles too small for their window show as collapsed app-colour blocks that zoom in on double-click
 
-**Plans**: 8/8 plans executed
+**Plans**: 8/8 plans complete
 
 Plans:
 **Wave 1**
@@ -343,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
-| 4. Zoom Camera | 8/8 | In Progress | - |
+| 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |

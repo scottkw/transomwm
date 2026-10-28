@@ -1,85 +1,55 @@
 ---
 phase: 04-zoom-camera
-verified: 2026-10-28T18:20:00Z
-status: human_needed
-score: 11/18 must-haves verified
-covered_files: [".planning/phases/04-zoom-camera/04-01-PLAN.md", ".planning/phases/04-zoom-camera/04-01-SUMMARY.md", ".planning/phases/04-zoom-camera/04-02-PLAN.md", ".planning/phases/04-zoom-camera/04-02-SUMMARY.md", ".planning/phases/04-zoom-camera/04-03-PLAN.md", ".planning/phases/04-zoom-camera/04-03-SUMMARY.md", ".planning/phases/04-zoom-camera/04-04-PLAN.md", ".planning/phases/04-zoom-camera/04-04-SUMMARY.md", ".planning/phases/04-zoom-camera/04-05-PLAN.md", ".planning/phases/04-zoom-camera/04-05-SUMMARY.md", ".planning/phases/04-zoom-camera/04-06-PLAN.md", ".planning/phases/04-zoom-camera/04-06-SUMMARY.md", ".planning/phases/04-zoom-camera/04-07-PLAN.md", ".planning/phases/04-zoom-camera/04-07-SUMMARY.md", ".planning/phases/04-zoom-camera/04-08-PLAN.md", ".planning/phases/04-zoom-camera/04-08-SUMMARY.md", "Package.swift", "Sources/TransomEngine/Arranger+Camera.swift", "Sources/TransomEngine/Arranger+Commands.swift", "Sources/TransomEngine/Arranger.swift", "Sources/TransomEngine/Command.swift", "Sources/TransomEngine/DragSession.swift", "Sources/TransomEngine/Navigator.swift", "Sources/TransomEngine/Recovery.swift", "Sources/TransomEngine/SettleTracker.swift", "Sources/TransomEngine/TransomURL.swift", "Sources/TransomEngine/ViewPlanner.swift", "Sources/TransomMac/ArrangeController.swift", "Sources/TransomMac/Displays.swift", "Sources/TransomMac/Input/Hotkeys.swift", "Sources/TransomMac/Input/InputTap.swift", "Sources/TransomMac/Input/ZoomTapRules.swift", "Sources/TransomMac/Overlay/PreviewPanel.swift", "Sources/TransomMac/Overlay/PreviewStyle.swift", "Sources/TransomMac/Overlay/Toast.swift", "Sources/TransomMac/Shell/CommandMenu.swift", "Sources/TransomMac/Shell/MenuCopy.swift", "Sources/TransomMac/Shell/StatusItemController.swift", "Sources/TransomMac/Shell/ZoomCopy.swift", "Sources/TransomMac/TransomMacApp.swift", "Sources/TransomMac/Zoom/AppColor.swift", "Sources/TransomMac/Zoom/CollapsedPanels.swift", "Sources/TransomMac/Zoom/ShortcutsWindowController.swift", "Sources/TransomMac/Zoom/SnapshotCapture.swift", "Sources/TransomMac/Zoom/StagePanel.swift", "Sources/TransomMac/Zoom/TileLayer.swift", "Sources/TransomMac/Zoom/ZoomController.swift", "Sources/TransomMac/Zoom/ZoomInput.swift", "Sources/transom-zoom-spike/main.swift", "Tests/TransomEngineTests/ArrangerCameraTests.swift", "Tests/TransomEngineTests/ArrangerCollapseTests.swift", "Tests/TransomEngineTests/NavigatorTests.swift", "Tests/TransomEngineTests/RecoveryTests.swift", "Tests/TransomEngineTests/SettleTrackerTests.swift", "Tests/TransomEngineTests/TransomURLTests.swift", "Tests/TransomEngineTests/ViewPlannerTests.swift", "Tests/TransomMacIntegrationTests/QuitRestoreIntegrationTests.swift", "Tests/TransomMacIntegrationTests/RecoveryIntegrationTests.swift", "Tests/TransomMacIntegrationTests/SnapshotCaptureIntegrationTests.swift", "Tests/TransomMacIntegrationTests/ZoomSettleIntegrationTests.swift", "Tests/TransomMacTests/AppColorTests.swift", "Tests/TransomMacTests/CommandMenuTests.swift", "Tests/TransomMacTests/HotkeyTableTests.swift", "Tests/TransomMacTests/MenuCopyTests.swift", "Tests/TransomMacTests/NoScreenCaptureTests.swift", "Tests/TransomMacTests/PreviewStyleTests.swift", "Tests/TransomMacTests/ShortcutsModelTests.swift", "Tests/TransomMacTests/ZoomCopyTests.swift", "Tests/TransomMacTests/ZoomOffTests.swift", "Tests/TransomMacTests/ZoomTapRulesTests.swift", "scripts/vm-spike.sh"]
-covered_digest: "v4:sha256:415c7f690113a059615e4df62a6e75700be3db85817dbf0972b9b2adbbfac7d1"
-behavior_unverified: 7
+verified: 2026-10-28T21:40:00Z
+status: passed
+score: 18/18 must-haves verified
+covered_files: [".planning/phases/04-zoom-camera/04-01-PLAN.md", ".planning/phases/04-zoom-camera/04-01-SUMMARY.md", ".planning/phases/04-zoom-camera/04-02-PLAN.md", ".planning/phases/04-zoom-camera/04-02-SUMMARY.md", ".planning/phases/04-zoom-camera/04-03-PLAN.md", ".planning/phases/04-zoom-camera/04-03-SUMMARY.md", ".planning/phases/04-zoom-camera/04-04-PLAN.md", ".planning/phases/04-zoom-camera/04-04-SUMMARY.md", ".planning/phases/04-zoom-camera/04-05-PLAN.md", ".planning/phases/04-zoom-camera/04-05-SUMMARY.md", ".planning/phases/04-zoom-camera/04-06-PLAN.md", ".planning/phases/04-zoom-camera/04-06-SUMMARY.md", ".planning/phases/04-zoom-camera/04-07-PLAN.md", ".planning/phases/04-zoom-camera/04-07-SUMMARY.md", ".planning/phases/04-zoom-camera/04-08-PLAN.md", ".planning/phases/04-zoom-camera/04-08-SUMMARY.md", "Package.swift", "Sources/TransomEngine/Arranger+Camera.swift", "Sources/TransomEngine/Arranger+Commands.swift", "Sources/TransomEngine/Arranger.swift", "Sources/TransomEngine/Command.swift", "Sources/TransomEngine/DragSession.swift", "Sources/TransomEngine/Navigator.swift", "Sources/TransomEngine/Recovery.swift", "Sources/TransomEngine/SettleTracker.swift", "Sources/TransomEngine/TransomURL.swift", "Sources/TransomEngine/ViewPlanner.swift", "Sources/TransomMac/ArrangeController.swift", "Sources/TransomMac/Displays.swift", "Sources/TransomMac/Input/Hotkeys.swift", "Sources/TransomMac/Input/InputTap.swift", "Sources/TransomMac/Input/ZoomTapRules.swift", "Sources/TransomMac/Overlay/PreviewPanel.swift", "Sources/TransomMac/Overlay/PreviewStyle.swift", "Sources/TransomMac/Overlay/Toast.swift", "Sources/TransomMac/Shell/CommandMenu.swift", "Sources/TransomMac/Shell/MenuCopy.swift", "Sources/TransomMac/Shell/StatusItemController.swift", "Sources/TransomMac/Shell/ZoomCopy.swift", "Sources/TransomMac/TransomMacApp.swift", "Sources/TransomMac/Zoom/AppColor.swift", "Sources/TransomMac/Zoom/CollapsedPanels.swift", "Sources/TransomMac/Zoom/ShortcutsWindowController.swift", "Sources/TransomMac/Zoom/SnapshotCapture.swift", "Sources/TransomMac/Zoom/StagePanel.swift", "Sources/TransomMac/Zoom/TileLayer.swift", "Sources/TransomMac/Zoom/ZoomController.swift", "Sources/TransomMac/Zoom/ZoomInput.swift", "Sources/transom-zoom-spike/main.swift", "Tests/TransomEngineTests/ArrangerCameraTests.swift", "Tests/TransomEngineTests/ArrangerCollapseTests.swift", "Tests/TransomEngineTests/NavigatorTests.swift", "Tests/TransomEngineTests/RecoveryTests.swift", "Tests/TransomEngineTests/SettleTrackerTests.swift", "Tests/TransomEngineTests/TransomURLTests.swift", "Tests/TransomEngineTests/ViewPlannerTests.swift", "Tests/TransomMacIntegrationTests/QuitRestoreIntegrationTests.swift", "Tests/TransomMacIntegrationTests/RecoveryIntegrationTests.swift", "Tests/TransomMacIntegrationTests/SnapshotCaptureIntegrationTests.swift", "Tests/TransomMacIntegrationTests/ZoomSettleIntegrationTests.swift", "Tests/TransomMacTests/AppColorTests.swift", "Tests/TransomMacTests/CommandMenuTests.swift", "Tests/TransomMacTests/HotkeyTableTests.swift", "Tests/TransomMacTests/MenuCopyTests.swift", "Tests/TransomMacTests/NoScreenCaptureTests.swift", "Tests/TransomMacTests/PreviewStyleTests.swift", "Tests/TransomMacTests/ShortcutsModelTests.swift", "Tests/TransomMacTests/TileLayerTests.swift", "Tests/TransomMacTests/ZoomCopyTests.swift", "Tests/TransomMacTests/ZoomOffTests.swift", "Tests/TransomMacTests/ZoomTapRulesTests.swift", "scripts/vm-spike.sh"]
+covered_digest: "v4:sha256:4ea5297af557febf20f83c983d337fec0cc0eb65425ed86eba0e19dfa7ae231a"
+behavior_unverified: 0
 overrides_applied: 0
-behavior_unverified_items:
-  - truth: "ZOOM-03: User can ⌘⇧-drag a rectangle to zoom to the windows it frames"
-    test: "In the VM with zoom on, hold ⌘⇧ and drag a band across two tiles; release"
-    expected: "Band (8% labelColor fill) and accent target preview draw after 4 pt; the drag reaches no app; the camera moves to the lowest common ancestor of the tiles whose centres are inside; a band over nothing does nothing and does not beep"
-    why_human: "ZoomTapRules, Navigator.rectTarget and ZoomInput are unit-tested, but the real event tap, consumption of drags and the band drawing have only run headless"
-  - truth: "ZOOM-06: Clicking a window in a zoomed view zooms in to it and focuses it"
-    test: "Zoom Out to All Windows (⌃⌥⌘O) with 3+ windows; after the reveal, plain-click one window; also click a stage tile mid-move"
-    expected: "The click is consumed, the camera zooms to that window's leaf and the window is focused after the settle; any other click passes and ends pick mode"
-    why_human: "Pick mode lives in the shell (tap state, global monitor, Esc hotkey); only the pure rules are tested. Also check WR-02: no stray windowFocused right after the reveal ends pick mode at once"
-  - truth: "ZOOM-08: Zoom hotkeys are rebindable"
-    test: "Open Shortcuts…, rebind Zoom Out to All Windows, press the new chord; try a chord another Transom command uses; Restore Defaults"
-    expected: "44 Recorder rows; the new chord works and shows in the menu; the duplicate is refused with the in-Transom message; Restore Defaults confirms and resets"
-    why_human: "ShortcutsModel is tested (44 unique names, duplicate message) but the SwiftUI Recorder window has not run"
-  - truth: "ZOOM-10 (pointer half): double-clicking a docked window's title bar frames it and toggles back"
-    test: "Double-click a docked window's title bar twice; then turn the Shortcuts window's Mouse toggle off and double-click again"
-    expected: "First double-click frames the window, second goes back; with the toggle off macOS's own double-click action runs (note IN-05: the toggle takes effect only after the next republish)"
-    why_human: "Title-band rule is unit-tested; the tap path and the CG window-list read only ran headless"
-  - truth: "ZOOM-11 (pointer half): double-clicking the Desktop frames it and toggles back"
-    test: "Double-click bare wallpaper inside the Desktop tile, then double-click a desktop icon"
-    expected: "Wallpaper double-click frames the Desktop (and toggles back); an icon double-click only opens the icon (RESEARCH A4 roles)"
-    why_human: "Depends on Finder's AX hit-test roles, unverified on a real desktop"
-  - truth: "ZOOM-12: Esc cancels a ⌘⇧-drag rectangle zoom in progress"
-    test: "Start a ⌘⇧ band, press Esc (also with ⌘⇧ still held), release"
-    expected: "Band fades in 80 ms, 'Zoom canceled' announced, no move, the release reaches no app, and the Esc hotkeys are gone afterwards (Esc works normally in apps); ⌥⌘Esc still opens Force Quit"
-    why_human: "Temporary KeyboardShortcuts Esc streams are registered at runtime; registration and teardown have not run outside headless tests"
-  - truth: "ZOOM-13 (shell half): collapsed blocks show at rest and double-click zooms in to them"
-    test: "With zoom on, drop a window with a large minimum into a tile too small for it; hover and double-click the block; try VoiceOver press"
-    expected: "Drop preview reads 'Collapsed until you zoom in'; an app-colour block with icon covers the tile; hover ring + pointing hand; double-click zooms to the leaf and focuses it; VoiceOver label '“App”, collapsed: title'"
-    why_human: "Engine collapse is fully tested; CollapsedPanels (NSPanel pool, hover, double-click, accessibility) has only run headless"
-human_verification:
-  - test: "Run the 7 behavior_unverified items above in the Tart VM (Claude-driven, TRANSOM_STAGE_CAPTURABLE=1)"
-    expected: "Each behaves as described in behavior_unverified_items"
-    why_human: "Pointer, event-tap and UI behaviour tested only headless (04-08 UAT list)"
-  - test: "Zoom in, kill -9 Transom Debug, relaunch"
-    expected: "No window parked; N2 shows"
-    why_human: "UI-SPEC backstop; only the engine paths and a scripted crash relaunch were automated"
-  - test: "⌘⇧-click a Safari link"
-    expected: "Opens in a new tab (the re-posted press reaches Safari)"
-    why_human: "Synthesised event re-post can only be judged against a real app"
-  - test: "fn⌃⌥⌘← / → / ↑ / ↓ while zoomed into a node"
-    expected: "View pans; macOS window tiling does not also act"
-    why_human: "System shortcut interplay"
-  - test: "Turn on Reduce Motion, zoom in and out"
-    expected: "Crossfade; no tile moves or scales"
-    why_human: "Visual"
-  - test: "Deny Screen Recording; zoom with Notes, Terminal and a saturated-icon app in light and dark mode"
-    expected: "Fallback tiles legible (icon + title capsule); explainer shows once after the first reveal, never again"
-    why_human: "Visual legibility; one-time alert flow"
-  - test: "Open a status-item menu during a camera move"
-    expected: "Menu stays above the stage"
-    why_human: "Window-level interplay (spike G5 used a harness, not the product)"
-  - test: "Shell-only review fixes: WR-02 (pick mode ends on focus change), WR-03 (first move after launch gets snapshots on the second move at latest), WR-04 (Turn Off Zoom during a post-reveal refresh makes no more ScreenCaptureKit calls), WR-06 (Turn Off Zoom waits for the home move's own reveal)"
-    expected: "Each behaves as 04-REVIEW-FIX.md describes"
-    why_human: "No headless test reaches these shell paths"
-  - test: "Review the 6 flagged prohibitions (see report: Prohibitions)"
-    expected: "Human confirms each MUST NOT holds; the verifier's verdicts are non-authoritative"
-    why_human: "Judgment-tier prohibitions, status unresolved/flagged in the plans; unverified-prohibition, human review recommended"
+re_verification:
+  previous_status: human_needed
+  previous_score: 11/18
+  gaps_closed:
+    - "ZOOM-03: ⌘⇧-drag rectangle zoom (UAT 1, 13-band.png)"
+    - "ZOOM-06: click a window in a zoomed view to zoom in and focus it (UAT 2, 10-hover.png)"
+    - "ZOOM-08: zoom hotkeys are rebindable (UAT 3, 19/21/22-*.png)"
+    - "ZOOM-10 pointer half: title-bar double-click frames and toggles back (UAT 4, 24-titlebar-frame.png)"
+    - "ZOOM-11 pointer half: Desktop double-click frames and toggles back; an icon double-click only opens the icon (UAT 4, 25/26-*.png)"
+    - "ZOOM-12: Esc cancels a rectangle zoom and leaves no Esc hotkey behind (UAT 1, 15-esc.png, 16-forcequit.png)"
+    - "ZOOM-13 shell half: collapsed blocks show at rest and zoom in on double-click (UAT 5, 32/33/34-*.png)"
+    - "IN-01: frame toggles of the root node commit .home (9ccd9d6, NavigatorTests.frameDesktopOnAnEmptyDeskStaysHome)"
+    - "G-04-10: fallback tile titles legible in dark mode (2f0823c, TileLayerTests.aDarkTitleStaysLightTextWhenDrawnLater, UAT 10, 45-dark-fixed-crop.png)"
+    - "G-04-12: pick mode ends when another app activates (fab166d, UAT 12 re-test, 62-after-cmdtab.png)"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 4: Zoom Camera Verification Report
 
 **Phase Goal:** As a Mac user, I want to zoom out to see every window and zoom back in to any of them, so that I can find and focus any window fast.
-**Verified:** 2026-10-28T18:20:00Z
-**Status:** human_needed
-**Re-verification:** No (initial verification)
+**Verified:** 2026-10-28T21:40:00Z
+**Status:** passed
+**Re-verification:** Yes. This follows the VM UAT (04-UAT.md, complete, 16/16) and the fix commits 9ccd9d6 (IN-01), 2f0823c (G-04-10, dark-mode tile title) and fab166d (G-04-12), plus UAT commits ee2181b and 0bbfea6.
+
+## What changed since the previous report
+
+| Commit | Change | Checked how | Verdict |
+|---|---|---|---|
+| 9ccd9d6 | `cameraStep(.frameWindow/.frameDesktop)` now calls `toggle(Navigator.target(id, in: desk.tree))`, so framing the root node gives `.home` (Navigator.swift:291, 294) | Diff read. `Navigator.target` maps `id == tree.root` to `.home` (Navigator.swift:40). New test `frameDesktopOnAnEmptyDeskStaysHome` removes all windows so the Desktop is the root, then checks every move targets `.home` and the view stays `.home`. It passed in the full run. Without the fix the target would be `.node(.desktop)` and the test would fail | ✓ correct, tested |
+| 2f0823c | `TileLayer.text` resolves `labelColor` to a CGColor when the image is made, not when CA draws it lazily | Diff read. The new `TileLayerTests.aDarkTitleStaysLightTextWhenDrawnLater` makes the image under `.darkAqua` and draws it under `.aqua`, then checks the brightest pixel is above 0.8. With the old lazy resolve, the colour would be black under `.aqua`, so the test would fail. It passed in the full run. VM: 45-dark-fixed-crop.png (inspected) shows white "TransomFixtureApp" on the dark capsule | ✓ correct, tested |
+| fab166d | The `didActivateApplicationNotification` observer (installed once in `startWatchdog`, which `startTap` calls) now calls `zoomInput.endPick(reason: "app activated")` for any app other than Transom itself | Diff read. `endPick` returns early when `pick == nil` (ZoomInput.swift:205), so firing on unrelated activations is harmless. The own-pid guard keeps the status menu from ending pick mode. No headless test reaches this shell path. VM UAT 12 re-test on fab166d: `pick mode on` 21:04:39.249, then ⌘-Tab gives `pick mode off: app activated` 21:04:41.998, and Esc then closed Spotlight. Pick mode lasting 2.7 s before the ⌘-Tab also shows the new exit does not fire right after the reveal | ✓ correct, VM-verified |
+| ee2181b, 0bbfea6 | 04-UAT.md only | Read in full; screenshots spot-checked (see below) | evidence |
 
 ## User Flow Coverage (MVP mode)
 
-| Step | Expected | Evidence in codebase | Status |
+The user-story guard passes: "As a Mac user, I want to …, so that I can find and focus any window fast."
+
+| Step | Expected | Evidence | Status |
 |---|---|---|---|
-| Zoom out to see every window | ⌃⌥⌘O / menu / `transom://zoom-out` moves the camera home; stage animates, windows settle once | `Navigator.cameraStep(.zoomOutAll)` → `Arranger.zoomTo` → `.cameraMove` → `ZoomController.run` → `.cameraSettle` → `planShown`; NavigatorTests, ArrangerCameraTests; live ZoomSettleIntegrationTests (VM, 04-08) | ✓ |
-| Zoom back in to any window | Step in, frame window, rect zoom, pick click, collapsed-block double-click | Engine paths all tested; pointer paths (rect, pick, double-clicks) wired but headless-only | ⚠️ partial: keyboard/URL verified, pointer needs VM UAT |
-| Find and focus fast (outcome) | Window is focused after the move, settle ≤ 500 ms write path | `PendingMove.focus` → `.perform([.focus])` after settle writes (`zoomToWithFocusFocusesAfterTheWrites`); spike G1 p95 205.1 / 93.1 ms recomputed from raw data | ✓ engine / ⚠️ click-to-focus in UAT |
+| Zoom out to see every window | ⌃⌥⌘O / menu / `transom://zoom-out` moves the camera home; the stage animates and windows settle once | Engine tests (NavigatorTests, ArrangerCameraTests); VM UAT 2 (`pick mode on` after a Zoom Out reveal), UAT 13 (snapshots on every tile from the second move on), live ZoomSettleIntegrationTests (04-08) | ✓ |
+| Zoom back in to any window | Step in, frame window, rectangle zoom, pick click, collapsed-block double-click | Keyboard and URL paths tested headless; pointer paths observed in the VM (UAT 1, 2, 4, 5) | ✓ |
+| Find and focus fast (outcome) | The chosen window is framed and focused after the move; write path ≤ 500 ms for 15 windows | `zoomToWithFocusFocusesAfterTheWrites`; UAT 2 `pick → window 5500` → `home → node(n11)`, `frontmost index=0`; UAT 5 `frontmost index=3`; spike G1 p95 205.1 / 93.1 ms (re-parsed from raw data in the previous report) | ✓ |
 
 ## Goal Achievement
 
@@ -87,95 +57,83 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | SC1 / ZOOM-01: zoom out to see every window on the display | ✓ VERIFIED | `ViewPlanner.plan(.home)` = `Planner.plan` (`homeViewEqualsThePhase3Plan`); `zoomOutAllFromANodeTargetsHome`, `zoomOutAllAtHomeIsRefused`; stage shell `ZoomController` (capture → show → animate → settle → `SettleTracker` → reveal) wired from `ArrangeController.run(.cameraMove)` |
-| 2 | SC1 / ZOOM-02: step in or out one level | ✓ VERIFIED | `Navigator.stepOut/stepIn` (focus → pointer → largest child); 5 NavigatorTests incl. refusal on a single leaf |
-| 3 | SC1 / ZOOM-03: ⌘⇧-drag a rectangle to zoom to the windows it frames | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | `ZoomTapRules.decide` (band consume), `InputTap` mask includes `leftMouseDragged`, `ZoomInput.bandEvent` → `Navigator.rectTarget` → `controller.zoom(to:)`; rules and rectTarget unit-tested; real tap path headless only |
-| 4 | SC2 / ZOOM-04: back and forward through previous views | ✓ VERIFIED | `CameraHistory` (50 entries, per display, pushed only at settle in `recordHistory`); 9 CameraHistoryTests + retarget-pushes-once |
-| 5 | SC2 / ZOOM-06: clicking a window in a zoomed view zooms in and focuses it | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Pick mode in `ZoomInput.revealed/pickClick`, stage tile click → `stageClick`; `zoom(to:focus:)` focus after settle is tested; pointer path headless only |
-| 6 | SC3 / ZOOM-05: live snapshots when granted, app colour + icon when not; denial never breaks zoom | ✓ VERIFIED | `ZoomController.run`: `granted ? captureStart : [:]`; each tile picks capture → cache → `fallback` (AppColor + icon + title); 128 MB `SnapshotCache` (spike condition 2 applied); explainer once (`explainerShownKey` saved at show); `SnapshotCaptureIntegrationTests` live in VM per 04-08; ScreenCaptureKit only in `SnapshotCapture.swift` (`NoScreenCaptureTests` pass) |
-| 7 | SC4 / ZOOM-07: 15 real windows at new sizes within 500 ms (write path), no stale-layout flash | ✓ VERIFIED | Raw `.build/spike/settle-20261028-000855/out.jsonl` re-parsed: 15 windows, 20 runs each way, in p50/p95/max 64.8/205.1/280.3 ms, out 58.0/93.1/110.3 ms, 0 missing read-backs; G2 0 mismatches / 0 unstranded in 40 moves. Product: `SettleTracker` holds the stage until every write + 50 ms (cap 1500); 04-08 reveal-timer bug fixed (stored timer, `ZoomController.armReveal`); `fifteenWindowsSettleWithinBudget` asserts p95 in VM |
-| 8 | SC4: parked windows come back on quit, after a crash and via Restore All Windows | ✓ VERIFIED | `Recovery.terminationPlan(homeTiles:)` + `ArrangeController.restoreForTermination`; `restoreAll` → `goHome()` + clears collapsible (CR-01); `setZoomEnabled(false)` rescues while paused (CR-02); tests `aParkedDockedWindowGoesBackToItsHomeTile`, `restoreAllReturnsEveryCameraHome`, `restoreAllBringsACollapsedWindowBackOnScreen`, `turningZoomOffWhilePausedLeavesNoWindowParked`, `aRecoveryLaunch…`, `aCrashLoopLaunch…`; live Quit/Recovery integration in VM per 04-08. kill -9 stays a UAT backstop |
-| 9 | SC5 / ZOOM-08: user can rebind every zoom hotkey | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | 11 names in `Hotkeys.entries`; `ShortcutsWindowController` with 44 `KeyboardShortcuts.Recorder` rows, duplicate validation, Restore Defaults; opened from the status menu; model tests pass; UI not run |
-| 10 | SC5: turning zoom off leaves Phase 3 tiling fully working | ✓ VERIFIED | Engine default `camera.enabled = false`; full suite 1165/1165 passes; only phase-4 test-expectation change is the intended 33→44 hotkey table; with zoom off: no `ZoomController` (`zoom()` reached only when `zoomEnabled`), status menu calls `isGranted()` only `if on`, hotkeys disabled at launch (`TransomMacApp` line 94); `ZoomOffTests` (weak, see IN-09) |
-| 11 | SC6 / ZOOM-09: move the view to a neighbouring area by hotkey and URL | ✓ VERIFIED | `Navigator.pan` (same depth, longest shared edge, recency, NodeID); 4 pan tests; hotkeys Home/End/PgUp/PgDn; URLs `pan-left/right/up/down` in `TransomURL` (TransomURLTests) |
-| 12 | SC6 / ZOOM-10 (hotkey, URL): frame the focused window and toggle back | ✓ VERIFIED | `cameraStep(.frameWindow)` → `toggle(.node(leaf))`; `frameWindowFramesTheFocusedLeafAndTogglesBack`, pending-target and refusal tests; ⌃⌥⌘M and `transom://frame-window` |
-| 13 | SC6 / ZOOM-10 (title-bar double-click) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | `ZoomTapRules` title-band rule tested; `ZoomInput.titleBarDoubleClick` → `controller.camera(.frameWindow)`; headless only |
-| 14 | SC6 / ZOOM-11 (hotkey, URL): frame the Desktop and toggle back | ✓ VERIFIED | `cameraStep(.frameDesktop)`, `frameDesktopTogglesAndIsRefusedWhileHidden`; ⌃⌥⌘G and `transom://frame-desktop` |
-| 15 | SC6 / ZOOM-11 (Desktop double-click) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | `ZoomInput.desktopDoubleClick` (wallpaper check + Finder AX hit test off the tap); RESEARCH A4 unverified |
-| 16 | SC6 / ZOOM-12: Esc cancels a ⌘⇧-drag rectangle zoom | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | `cancelBand`, Esc streams for [], ⇧, ⌘, ⌘⇧ only (no ⌥, so never ⌥⌘Esc), torn down in `endBand`; `anEscCanceledBandStillTakesTheRestOfItsPressThenLetsGo`; runtime registration not exercised |
-| 17 | SC6 / ZOOM-13 (engine): tiles too small for their window collapse instead of being refused (zoom on) | ✓ VERIFIED | `ViewPlanner.collapsing` two-pass, `Arranger.collapse/accept`, `TileMove.Kind.collapsed`, `.collapsedBlocks` effect; boundary/precision probes; CONTEXT E refusals kept (`growShrinkRotateFlipBalanceStillRefuseWithZoomOn`, `anOSCausedLossOfRoomStillFloats`); WR-01 pruning tested |
-| 18 | SC6 / ZOOM-13 (shell): collapsed app-colour blocks zoom in on double-click | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | `CollapsedPanels` (pool, `.floating`, `clickCount == 2`, `accessibilityPerformPress`) → `ArrangeController.openBlock` → `ZoomInput.zoom(toLeafOf:)`; headless only |
+| 1 | SC1 / ZOOM-01: zoom out to see every window on the display | ✓ VERIFIED | Unchanged from the previous report (ViewPlanner home = Phase 3 plan; `zoomOutAll*` tests); regression: suites pass |
+| 2 | SC1 / ZOOM-02: step in or out one level | ✓ VERIFIED | Unchanged; NavigatorTests pass |
+| 3 | SC1 / ZOOM-03: ⌘⇧-drag a rectangle to zoom to the windows it frames | ✓ VERIFIED | Was PRESENT_BEHAVIOR_UNVERIFIED. UAT 1: log `rect zoom → n12` then `home → node(n12)`; 13-band.png (inspected) shows the band over TextEdit and Fixture 0 with the target preview over the bottom row; a band that misses every tile centre logged `rect zoom: no target` and made no move |
+| 4 | SC2 / ZOOM-04: back and forward through previous views | ✓ VERIFIED | Unchanged; CameraHistoryTests pass |
+| 5 | SC2 / ZOOM-06: clicking a window in a zoomed view zooms in and focuses it | ✓ VERIFIED | Was PRESENT_BEHAVIOR_UNVERIFIED. UAT 2: `pick mode on` → `pick mode off: picked` → `pick → window 5500` → `home → node(n11)`, Fixture 0 framed at 8,33 1008x673, `frontmost index=0`; hover ring in 10-hover.png; mid-move tile click `retarget node(n14) → node(n13) during moving`, Fixture 1 focused. WR-02/G-04-12: UAT 12 re-test on fab166d |
+| 6 | SC3 / ZOOM-05: snapshots when granted, app colour + icon when not; denial never breaks zoom | ✓ VERIFIED | Previously verified; now also observed both ways. Denied: UAT 10 fallback tiles legible in light (42-motion-mid.png) and dark after 2f0823c (45-dark-fixed-crop.png, inspected); the explainer showed once in 40 min across relaunches and a crash. Granted: UAT 13 `3 tiles, 3 snapshots, 0 fallback`; 61-rm-second-a.png (inspected) shows real "Alpha one" content in the stage |
+| 7 | SC4 / ZOOM-07: 15 windows at new sizes within 500 ms (write path), no stale-layout flash | ✓ VERIFIED | Unchanged (raw spike data re-parsed in the previous report; product SettleTracker) |
+| 8 | SC4: parked windows come back on quit, after a crash and via Restore All Windows | ✓ VERIFIED | Previously verified by tests. Now also observed in the VM: UAT 6 kill -9 while zoomed with 3 windows parked, relaunch gave `crashRecovered(unplaced: 0)` and every window on screen (35-after-crash.png, inspected: N2 toast shows); UAT 16 quit `quit restore: 6 of 6 windows`, Restore All `restored(count: 3)` |
+| 9 | SC5 / ZOOM-08: user can rebind every zoom hotkey | ✓ VERIFIED | Was PRESENT_BEHAVIOR_UNVERIFIED. UAT 3: Zoom Out rebound to ⌃⌥⌘9 (defaults `carbonKeyCode 25`), ⌃⌥⌘O went dead and ⌃⌥⌘9 zoomed; duplicate ⌃⌥⌘Z refused with "This shortcut is already used by “Undo Layout Change” in Transom." (21-duplicate.png, inspected; the 11 Zoom rows are visible); Restore Defaults confirmed and reset to keyCode 31. The 44-row count comes from ShortcutsModelTests, not AX |
+| 10 | SC5: turning zoom off leaves Phase 3 tiling fully working | ✓ VERIFIED | Full suite passes (below); UAT 15 Turn Off Zoom left every window at its home tile; UAT 14 zero ScreenCaptureKit lines after zoom off. IN-09 (weak ZoomOffTests) remains an info-level test-quality note |
+| 11 | SC6 / ZOOM-09: move the view to a neighbouring area by hotkey and URL | ✓ VERIFIED | Unchanged tests; UAT 8 fn⌃⌥⌘ arrows pan (`node(n15) → node(n11)`, `→ node(n0)`, `→ node(n15)`, right refused) and macOS tiling did not act |
+| 12 | SC6 / ZOOM-10 (hotkey, URL) | ✓ VERIFIED | Unchanged; now routed through `Navigator.target` (9ccd9d6) |
+| 13 | SC6 / ZOOM-10 (title-bar double-click) | ✓ VERIFIED | Was PRESENT_BEHAVIOR_UNVERIFIED. UAT 4: `title bar double-click → frame window 5482` → `home → node(n9)` (24-titlebar-frame.png); the second double-click gave `node(n9) → home`; macOS's own title-bar action did not run |
+| 14 | SC6 / ZOOM-11 (hotkey, URL) | ✓ VERIFIED | Unchanged plus `frameDesktopOnAnEmptyDeskStaysHome` (IN-01) |
+| 15 | SC6 / ZOOM-11 (Desktop double-click) | ✓ VERIFIED | Was PRESENT_BEHAVIOR_UNVERIFIED. UAT 4: wallpaper hit `AXGroup` → `frame desktop` → `home → node(n0)` (25-desktop-frame.png), then back home; icon hit `AXImage`, no camera move, file opened (26-icon-dblclick.png). RESEARCH A4 confirmed on macOS 15.7 |
+| 16 | SC6 / ZOOM-12: Esc cancels a ⌘⇧-drag rectangle zoom | ✓ VERIFIED | Was PRESENT_BEHAVIOR_UNVERIFIED. UAT 1: `rect zoom canceled (Esc)` with ⌘⇧ held and with plain Esc; no move (15-esc.png); Esc then closed Spotlight (no lingering hotkey); ⌥⌘Esc opened Force Quit (16-forcequit.png) |
+| 17 | SC6 / ZOOM-13 (engine): oversized tiles collapse instead of being refused with zoom on | ✓ VERIFIED | Unchanged; ArrangerCollapseTests pass |
+| 18 | SC6 / ZOOM-13 (shell): collapsed app-colour blocks zoom in on double-click | ✓ VERIFIED | Was PRESENT_BEHAVIOR_UNVERIFIED. UAT 5: drop preview "Collapsed until you zoom in" (32-collapse-preview2.png); block with app icon and hover ring (33-collapsed-block2.png, inspected: dark block with Terminal-style icon and accent ring at top right); double-click `home → node(n17)`, Fixture 3 focused (34-block-zoomed.png); AX `AXButton desc=“TransomFixtureApp”, collapsed: Fixture 3`, AXPress zooms too. First-drop-floats residual accepted by the user (below) |
 
-**Score:** 11/18 truths verified (7 present, behavior-unverified)
+**Score:** 18/18 truths verified (0 present, behavior-unverified)
 
-The 04-01..04-08 plan truths are covered by the rows above. Plan backstops (`verification: backstop`): settle/no-flash (G1/G2) is backed by directly observed raw data; G3 soak PASS; G4 strict-FAIL on 2/82 crossfade runs was accepted by the user as VM noise (04-SPIKE verdict condition 1, 2026-10-28); G5/G6 reported; the remaining backstops (kill -9, fallback legibility, Reduce Motion, ⌘⇧-click re-post, fn-arrows, desktop icon, menu above stage) are in Human Verification.
+The seven truths that were PRESENT_BEHAVIOR_UNVERIFIED are promoted on directly observed VM behaviour: guest logs from `log stream --level debug` plus screenshots, on builds 9ccd9d6, 2f0823c and fab166d (test 12 and the re-tests). I opened 13-band, 21-duplicate, 33-collapsed-block2, 35-after-crash, 45-dark-fixed-crop and 61-rm-second-a, and each matches its UAT description. The log lines are quoted from 04-UAT.md. The raw guest logs are not kept under `.build/uat-04/`, so they could not be re-read.
+
+### Accepted Residuals (not gaps)
+
+| # | Residual | Basis | Why it does not block |
+|---|---|---|---|
+| 1 | IN-01 leftover: with one window and the Desktop hidden, Frame Focused Window commits `.node(leaf)`. The root is a split that includes the hidden Desktop, so `Navigator.target` does not normalise it. The view looks like home, but the status reads "zoomed in" | User judgement recorded in 04-UAT.md "User Judgements", 2026-10-28: accepted as cosmetic | Windows are on screen. Quit and crash use `homeTiles`, so nothing is left parked |
+| 2 | First oversized drop floats: the first drop of a window whose minimum is not yet learned floats with N1 instead of collapsing; the second drop collapses | User judgement in 04-UAT.md, 2026-10-28: accepted as-is. Follows CONTEXT E (an OS-caused loss of room floats). Logged under Deferred Follow-Ups | The window stays on screen and reachable. The truth holds once the minimum is known |
+| 3 | WR-04 in-flight case: Turn Off Zoom while a post-reveal refresh is actually inside ScreenCaptureKit | Verified by code reading only. UAT 14 could only trigger zoom off about 340 ms after the refresh ended. In code, `SnapshotCapture` is `@MainActor`; `close()` sets `closed` (line 91), and `refreshShareable` (45), `capture` (53, and again after the await at 75) and `refresh` (105) all check it before any SCK call or cache insert. `captureAll` starts every capture through `capture()`, so after close it can start no new ScreenCaptureKit call. At most one `captureImage` already dispatched finishes, and its result is dropped. `ZoomController.purge()` calls `close()` (ZoomController.swift:252) | The design is correct on reading, and the observable half passed in UAT 14 |
+| 4 | IN-02..IN-09 info items (table below) | Review info scope, outside the fix scope | Cosmetic or test-quality only |
 
 ### Required Artifacts
 
-`gsd-tools verify.artifacts`: 30/30 across 8 plans, no stub or missing pattern.
+`verify.artifacts`: 30/30 across 8 plans in the previous run. The three fix commits changed only Navigator.swift, TileLayer.swift and ArrangeController.swift, plus two test files, and each change was read above. No artifact was removed.
 
 | Artifact | Status | Details |
 |---|---|---|
-| `Sources/TransomEngine/ViewPlanner.swift` | ✓ VERIFIED | ViewTarget, subtree, collapse pass; used by planShown, zoomTo, homeTiles |
-| `Sources/TransomEngine/Arranger+Camera.swift` | ✓ VERIFIED | CameraState/Move, zoomTo, cameraSettle, homeTiles, goHome, forgetMoves |
-| `Sources/TransomEngine/Navigator.swift` | ✓ VERIFIED | all 11 commands, refusals, history, rectTarget, widen |
-| `Sources/TransomEngine/SettleTracker.swift` | ✓ VERIFIED | used by ZoomController |
-| `Sources/TransomEngine/Recovery.swift` | ✓ VERIFIED | homeTiles parameter, called from restoreForTermination |
-| `Sources/TransomMac/Zoom/ZoomController.swift` | ✓ VERIFIED | created lazily only on a zoom-on camera move |
-| `Sources/TransomMac/Zoom/SnapshotCapture.swift` | ✓ VERIFIED | sole ScreenCaptureKit file; close() flag (WR-04); re-read on unknown window (WR-03) |
-| `Sources/TransomMac/Zoom/StagePanel.swift`, `TileLayer.swift`, `AppColor.swift` | ✓ VERIFIED | used by ZoomController |
-| `Sources/TransomMac/Zoom/ZoomInput.swift`, `Input/ZoomTapRules.swift` | ✓ VERIFIED (wired) | behaviour UAT pending |
-| `Sources/TransomMac/Zoom/CollapsedPanels.swift` | ✓ VERIFIED (wired) | behaviour UAT pending |
-| `Sources/TransomMac/Zoom/ShortcutsWindowController.swift` | ✓ VERIFIED (wired) | behaviour UAT pending |
-| `Sources/transom-zoom-spike/main.swift`, `scripts/vm-spike.sh`, `04-SPIKE.md` | ✓ VERIFIED | raw output present under `.build/spike/` |
+| Engine: ViewPlanner, Arranger+Camera, Navigator, SettleTracker, Recovery | ✓ VERIFIED | Navigator edited by 9ccd9d6 |
+| `Sources/TransomMac/Zoom/ZoomController.swift`, `SnapshotCapture.swift`, `StagePanel.swift`, `AppColor.swift` | ✓ VERIFIED | Behaviour observed in UAT 9, 10, 13, 14 |
+| `Sources/TransomMac/Zoom/TileLayer.swift` | ✓ VERIFIED | 2f0823c; `text` is now internal for its test |
+| `Sources/TransomMac/Zoom/ZoomInput.swift`, `Input/ZoomTapRules.swift` | ✓ VERIFIED | UAT 1, 2, 4, 12 |
+| `Sources/TransomMac/Zoom/CollapsedPanels.swift` | ✓ VERIFIED | UAT 5 |
+| `Sources/TransomMac/Zoom/ShortcutsWindowController.swift` | ✓ VERIFIED | UAT 3 |
+| `Sources/TransomMac/ArrangeController.swift` | ✓ VERIFIED | fab166d activation exit; UAT 12, 15 |
+| `Tests/TransomMacTests/TileLayerTests.swift` | ✓ VERIFIED (new) | passes |
 
 ### Key Link Verification
 
-`verify.key-links` could not parse 23 of 25 `from:` fields (they carry a symbol after the path, a plan-format issue). Each was checked by hand:
+All 18 links from the previous report still hold. They were re-checked for the edited files:
 
 | From | To | Status |
 |---|---|---|
-| `Arranger.process(.camera)` (Arranger.swift:356) | `Arranger.camera(_:displayUUID:focused:pointer:)` | ✓ WIRED |
-| `cameraSettle` | `planShown()`; `recordHistory` → `camera.histories` | ✓ WIRED |
-| `planShown` | `ViewPlanner.plan` (zoom on), `.save(.now)` before `.perform`, parks first | ✓ WIRED |
-| `windowFocused` / `windowCreated` (Arranger.swift:634/638) | `widen(toShow:)` | ✓ WIRED |
-| `ArrangeController.run(.cameraMove)` | `zoom().run` → `settle` → `.cameraSettle` → `beginSettle` | ✓ WIRED |
-| event loop `frameApplied` | `ZoomController.frameApplied` → `SettleTracker.applied` | ✓ WIRED |
-| `TransomMacApp` | `ArrangeController(zoomEnabled:)` from preference (default true) | ✓ WIRED |
-| `Hotkeys.entries` (`onKeyDown`) | `dispatch(.camera)` → `dispatchCamera` (pointer display) | ✓ WIRED |
-| Status menu Turn Off Zoom | `setZoomEnabled(false)` → home moves → `finishZoomOff` (move-ID matched, WR-06) | ✓ WIRED |
-| Shortcuts rows | `Hotkeys.entries` names | ✓ WIRED |
-| `InputTap` callback | `ZoomTapRules.decide` on lock-copied state | ✓ WIRED |
-| band release | `Navigator.rectTarget` → `controller.zoom(to:)` | ✓ WIRED |
-| `ZoomController.onRevealed` | `ZoomInput.revealed` (pick mode), `revealed` (zoom off) | ✓ WIRED |
-| drop / Dock / Move | `collapse` → `camera.collapsible` → `ViewPlanner.plan(collapsible:)` | ✓ WIRED |
-| `planShown` | `.collapsedBlocks` → `CollapsedPanels.show` | ✓ WIRED |
-| `CollapsedPanels` double-click | `openBlock` → `zoom(toLeafOf:)` → `zoom(to:focus:)` | ✓ WIRED |
-| `restoreForTermination` | `terminationPlan(homeTiles: arranger.homeTiles())` | ✓ WIRED |
-| `restoreAll` | `goHome()` | ✓ WIRED |
+| `cameraStep(.frameWindow/.frameDesktop)` | `toggle(Navigator.target(...))` → `.home` for the root | ✓ WIRED (Navigator.swift:291, 294) |
+| `NSWorkspace.didActivateApplicationNotification` (ArrangeController.swift:226) | `zoomInput.endPick(reason: "app activated")` | ✓ WIRED (observer installed by `startWatchdog`, which `startTap` calls at line 190) |
+| `TileLayer` fallback content | `TileLayer.text` with the colour resolved at creation | ✓ WIRED |
+| `ZoomController.purge` | `SnapshotCapture.close` | ✓ WIRED |
 
 ### Data-Flow Trace (Level 4)
 
-| Artifact | Data | Source | Real data | Status |
-|---|---|---|---|---|
-| Stage tiles | start/end rects | `CameraMove.tiles` from two `ViewPlanner` plans of the live desk | yes | ✓ FLOWING |
-| Tile content | CGImage | `SnapshotCapture.captureAll` / cache, else AppColor of the running app's icon | yes | ✓ FLOWING |
-| Reveal timing | pending writes | settle's `.perform` commands → `frameApplied` read-backs | yes | ✓ FLOWING |
-| Debug lines | lastSettle, cacheStats | ZoomController state | yes | ✓ FLOWING |
+Unchanged from the previous report. Tile content is real in both modes: snapshots when granted (UAT 13: `3 snapshots, 0 fallback`) and AppColor + icon when not (UAT 10).
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Full headless suite (run once) | `swift test` (TRANSOM_LIVE unset) | 193 + 261 + 49 + 662 = 1165 passed, exit 0; FreezeTest flake did not fire | ✓ PASS |
-| All 18 phase-4 suites ran | grep of the saved log | ViewPlanner, ArrangerCamera, Navigator, CameraHistory, SettleTracker, ArrangerCollapse, Recovery, TransomURL, ZoomTapRules, ShortcutsModel, HotkeyTable, CommandMenu, ZoomOff, AppColor, ZoomCopy, PreviewStyle, NoScreenCapture, SnapshotCache all passed | ✓ PASS |
-| ZOOM-07 numbers | re-parse raw `out.jsonl` | p95 205.1 / 93.1 ms, 15 windows, 0 missing, 0 G2 mismatches | ✓ PASS |
-| No expectation weakened | `git diff 6c6e542..HEAD -- Tests/ \| grep '^-.*#expect'` | 2 lines, both the intended 33 → 44 hotkey-table change | ✓ PASS |
-| Live VM suites | not run (host rule) | evidence only in 04-04/04-08 SUMMARYs | ? SKIP |
+| Full headless suite (run once, host) | `env -u TRANSOM_LIVE swift test` | 193 + 262 + 49 + 663 = 1167 tests; 1166 passed; 1 failure, `FreezeTestTests.itResumesByItself` (the known load flake: ran 13.4 s, 3 expectation misses). TransomMacTests grew from 261 to 262 (TileLayerTests) and TransomEngineTests from 662 to 663 (IN-01 test) | ✓ PASS (known flake) |
+| Flake confirmation | `swift test --filter FreezeTestTests/itResumesByItself` | passed in 0.066 s | ✓ PASS |
+| IN-01 regression test | from the full-run log | `frameDesktopOnAnEmptyDeskStaysHome()` passed | ✓ PASS |
+| G-04-10 regression test | from the full-run log | `aDarkTitleStaysLightTextWhenDrawnLater()` passed | ✓ PASS |
+| Live / VM suites | not run on the host (project rule) | VM evidence in 04-UAT.md and 04-08-SUMMARY | ? SKIP (covered by UAT) |
+
+FreezeTest belongs to an earlier phase's code, and no phase-4 commit touches it.
 
 ### Probe Execution
 
-No `scripts/*/tests/probe-*.sh` exist and no plan declares a probe. Step 7c: not applicable.
+No `scripts/*/tests/probe-*.sh` exists and no plan declares a probe, so this step does not apply.
 
 ### Requirements Coverage
 
@@ -183,75 +141,72 @@ No `scripts/*/tests/probe-*.sh` exist and no plan declares a probe. Step 7c: not
 |---|---|---|---|
 | ZOOM-01 | 02, 03, 04, 05, 08 | ✓ SATISFIED | truth 1 |
 | ZOOM-02 | 02, 03, 04, 05 | ✓ SATISFIED | truth 2 |
-| ZOOM-03 | 03, 06 | ? NEEDS HUMAN | truth 3 |
+| ZOOM-03 | 03, 06 | ✓ SATISFIED | truth 3, UAT 1 |
 | ZOOM-04 | 03, 05 | ✓ SATISFIED | truth 4 |
-| ZOOM-05 | 01, 04, 08 | ✓ SATISFIED (visual backstop in UAT) | truth 6 |
-| ZOOM-06 | 03, 06 | ? NEEDS HUMAN | truth 5 |
+| ZOOM-05 | 01, 04, 08 | ✓ SATISFIED | truth 6, UAT 10, 13 |
+| ZOOM-06 | 03, 06 | ✓ SATISFIED | truth 5, UAT 2, 12 |
 | ZOOM-07 | 01, 02, 04, 08 | ✓ SATISFIED (write-path definition, user decision) | truth 7 |
-| ZOOM-08 | 05 | ? NEEDS HUMAN | truth 9 |
-| ZOOM-09 | 03, 05 | ✓ SATISFIED | truth 11 |
-| ZOOM-10 | 03, 05, 06 | partial: hotkey/URL ✓, double-click ? | truths 12, 13 |
-| ZOOM-11 | 03, 05, 06 | partial: hotkey/URL ✓, double-click ? | truths 14, 15 |
-| ZOOM-12 | 06 | ? NEEDS HUMAN | truth 16 |
-| ZOOM-13 | 02, 07 | partial: engine ✓, panels ? | truths 17, 18 |
+| ZOOM-08 | 05 | ✓ SATISFIED | truth 9, UAT 3 |
+| ZOOM-09 | 03, 05 | ✓ SATISFIED | truth 11, UAT 8 |
+| ZOOM-10 | 03, 05, 06 | ✓ SATISFIED | truths 12, 13, UAT 4 |
+| ZOOM-11 | 03, 05, 06 | ✓ SATISFIED | truths 14, 15, UAT 4 |
+| ZOOM-12 | 06 | ✓ SATISFIED | truth 16, UAT 1 |
+| ZOOM-13 | 02, 07 | ✓ SATISFIED (first-drop residual accepted) | truths 17, 18, UAT 5 |
 
-All 13 IDs appear in at least one plan's `requirements:`; no orphaned IDs. REQUIREMENTS.md already marks ZOOM-03, 06, 08, 10, 11, 12, 13 as Pending, which matches this report; tick them after VM UAT.
+No IDs are orphaned. REQUIREMENTS.md still shows ZOOM-03, 06, 08, 10, 11, 12 and 13 as `[ ]` / Pending. Per instructions this verifier did not edit it; the orchestrator should tick them.
 
-### CONTEXT decisions honoured
+### UI-SPEC backstops (from the previous human_verification list)
 
-- D-A: camera targets are NodeIDs, parks at own size via `parkedFrame`, home = Phase 3 plan, 250 ms overlay only, one write per changed window at settle. Yes.
-- D-B: one-shot `SCScreenshotManager`, no SCStream, single file, permission asked after the first reveal and never at onboarding. Yes.
-- D-C: ⌃⌥⌘ O , . [ ] M G plus Home/End/PgUp/PgDn; Shortcuts window; band via InputTap; URLs for every action. Yes.
-- D-D: spike first, save before park, zoom off creates no overlay and touches no ScreenCaptureKit, 50-entry history per display, pointer display. Yes.
-- E: widen-on-focus and new window; only drops and keyboard Dock/Move collapse. Yes (tested).
-- Spike conditions: (2) cache mandatory, done; (3) UI-SPEC wording updated (line 150, 232); (4) ZOOM-07 write-path wording in REQUIREMENTS.md and the live test. Yes.
-
-### Prohibitions (judgment tier, flagged; non-authoritative verifier verdicts)
-
-| Plan | MUST NOT | Verifier verdict (non-authoritative) |
+| Item | UAT | Result |
 |---|---|---|
-| 04-01 ZOOM-05 | write snapshots to disk / log image data | Holds in product code. The spike's only PNG writer (`writePNG`) writes frames decoded from the guest screen recording, which the statement allows |
-| 04-04 ZOOM-05 | ask for Screen Recording more than once on its own | Holds: explainer flag saved before the alert shows; preflight only at move start; later requests only from the menu (IN-06: the first menu use may show the prompt and the Settings pane together) |
-| 04-04 ZOOM-05 | persist, log or share snapshots; purge on zoom off / close | Holds: memory LRU, `close()` purges. IN-04: a closed native-tab window's entry is pruned at the next refresh, not at close |
-| 04-06 ZOOM-12 | consume beyond one press-release, leave Esc registered, register ⌥⌘Esc | Holds in code: every mouse-down resets `swallow`; band Esc tasks cancelled in `endBand`; pick Esc ends with pick mode (and on focus change, WR-02); no ⌥ modifier anywhere |
-| 04-06 ZOOM-03 | synthesise input other than the exact re-post | Holds: `ZoomInput.repost` is the only `CGEvent.post` in Sources outside the spike |
-| 04-08 ZOOM-07 | leave any window parked/off screen after quit, crash, crash loop, Restore All, Turn Off Zoom | Holds for shown desks after CR-01/CR-02. Residual: a zoomed desk on a non-shown Space is restored at quit only if AX reaches it; crash-loop centres parked windows until Resume (on screen) |
+| kill -9 while zoomed, relaunch: nothing parked, N2 shows | 6 | pass (35-after-crash.png) |
+| ⌘⇧-click on a Safari link opens a new tab | 7 | pass (40-safari-newtab.png) |
+| fn-arrow pans without macOS tiling | 8 | pass |
+| Reduce Motion crossfade | 9 | pass on re-test with the real System Settings switch (61-rm-second-a/b.png) |
+| Fallback legibility light and dark, explainer once | 10 | pass after 2f0823c |
+| Status menu stays above the stage | 11 | pass (46-menu-over-stage.png, menu at CG layer 101) |
+| WR-02 / G-04-12, WR-03, WR-04, WR-06 | 12, 13, 14, 15 | pass (WR-04 in-flight is code-read, residual 3) |
+
+### Prohibitions (judgment tier)
+
+These were resolved in the end-of-phase UAT checkpoint (04-UAT.md test 16, pass, in the UAT the user accepted as complete). The verdicts come from Claude's observation in the VM plus code inspection; this verifier re-checked the code-inspection parts.
+
+| Plan | MUST NOT | Resolution |
+|---|---|---|
+| 04-01 ZOOM-05 | write snapshots to disk / log image data | Holds. In the guest, App Support holds only layout.json and min-size-hints.json, nothing is under Caches, and no log line carries image data |
+| 04-04 ZOOM-05 | ask for Screen Recording more than once on its own | Holds. The explainer showed once across 40 min, relaunches and a kill -9. `CGRequestScreenCaptureAccess` appears only in `SnapshotCapture.request()`. Note: macOS 15 showed its own "requesting to bypass the system private window picker" prompt on the first capture after the grant (61-rm-second-a.png). That prompt comes from the OS, not from a Transom request (see Info) |
+| 04-04 ZOOM-05 | persist, log or share snapshots; purge on zoom off | Holds by code inspection (memory LRU; `close()` purges and blocks re-entry, residual 3); UAT 14: no SCK activity after zoom off |
+| 04-06 ZOOM-12 | consume more than one press-release, leave Esc registered, register ⌥⌘Esc | Holds. UAT 1 and 2. The "Esc lingers after an app switch" exception in test 16's text came from the first run and is superseded by the UAT 12 re-test on fab166d |
+| 04-06 ZOOM-03 | synthesise input other than the exact re-post | Holds. `ZoomInput.repost` is the only post site outside the spike; UAT 7 |
+| 04-08 ZOOM-07 | leave any window parked after quit, crash, Restore All or Turn Off Zoom | Holds for all four in UAT 6, 15, 16. A crash loop was not exercised; it is covered by `aCrashLoopLaunch…` tests |
 
 ### Anti-Patterns Found
 
-No TBD / FIXME / XXX / TODO / HACK / placeholder markers in the 55 changed files.
+The files changed by the fix commits contain no TBD, FIXME, XXX, TODO or HACK markers.
 
 | File | Line | Pattern | Severity | Impact |
 |---|---|---|---|---|
-| `Sources/TransomEngine/Navigator.swift` | 291, 294 | IN-01 (open): `toggle(.node(leaf))` / `.node(.desktop)` skip `Navigator.target`, so a root leaf commits `.node(root)` | ⚠️ Warning | Looks like home but the status reads "zoomed in" and quit plans that desk; one-line fix |
-| `Tests/TransomMacTests/ZoomOffTests.swift` | 12-25 | IN-09 (open): controller never started, status menu not built, absolute `touches == 0` | ⚠️ Warning | Guard is weaker than claimed; code inspection covers the gap for now |
-| `Sources/TransomMac/Zoom/ZoomInput.swift` | 69 | IN-05: double-click preference read only in `publish()` | ℹ️ Info | Toggle lags until the next republish |
-| `Sources/TransomMac/Shell/StatusItemController.swift` | 160-166 | IN-06 | ℹ️ Info | First use may show prompt and Settings together |
-| `Sources/TransomMac/Zoom/StagePanel.swift` | 78-94 | IN-07: observer leak, synchronous wallpaper decode | ℹ️ Info | Cost on the first move / after display changes |
-| `Sources/TransomMac/Zoom/CollapsedPanels.swift` | 196 | IN-08: `.floating` above excluded windows | ℹ️ Info | Block can take clicks from an excluded window over its tile |
-| `Sources/TransomMac/Zoom/SnapshotCapture.swift` | 64-74, 125-128 | IN-02: timeout tasks never cancelled | ℹ️ Info | Harmless noise |
-| `Sources/TransomMac/Zoom/AppColor.swift` | 35-40 | IN-03: grey cached forever on a nil icon | ℹ️ Info | Cosmetic |
-| `.planning/phases/04-zoom-camera/04-SPIKE.md` | G2 visual | The recorded 'in' reveals (`g2-1`, `g2-3` after24) show a TextEdit `note.txt` window over the Terminal tile. It appears to be an unmanaged window left over from an earlier run (the managed one is `note-15934.txt`) | ℹ️ Info | The claim that no frame shows a window at its old rect is literally inaccurate; this is a harness environment artefact, not a product defect |
+| `Sources/TransomEngine/Navigator.swift` | 291 | IN-01 leftover (single window, hidden Desktop) | ℹ️ Info (accepted by the user) | Cosmetic status text |
+| `Tests/TransomMacTests/ZoomOffTests.swift` | 12-25 | IN-09: controller never started, absolute `touches == 0` | ℹ️ Info | Guard weaker than claimed; UAT 14/15 cover the behaviour |
+| `Sources/TransomMac/Zoom/ZoomInput.swift` | 69 | IN-05: double-click preference read only in `publish()`; the Mouse toggle was not exercised in UAT | ℹ️ Info | Toggle lags until the next republish |
+| `Sources/TransomMac/Shell/StatusItemController.swift` | 160-166 | IN-06 | ℹ️ Info | First menu use may show the prompt and Settings together |
+| `Sources/TransomMac/Zoom/StagePanel.swift` | 78-94 | IN-07 | ℹ️ Info | First-move cost |
+| `Sources/TransomMac/Zoom/CollapsedPanels.swift` | 196 | IN-08 | ℹ️ Info | A block can take clicks from an excluded window |
+| `Sources/TransomMac/Zoom/SnapshotCapture.swift` | 64-74 | IN-02 | ℹ️ Info | Uncancelled timeout tasks |
+| `Sources/TransomMac/Zoom/AppColor.swift` | 35-40 | IN-03 | ℹ️ Info | Grey cached on a nil icon |
+| `Sources/TransomMac/Zoom/SnapshotCapture.swift` | (cache) | IN-04: a closed native-tab window's entry is pruned at the next refresh | ℹ️ Info | Memory only |
+| (OS) | — | The macOS 15 "bypass the system private window picker" consent appears on the first capture after a grant and re-appears periodically | ℹ️ Info | Cannot be suppressed; onboarding copy should mention it (STACK note) |
+| (VM harness) | — | Guest display sleep leaves `CGMainDisplayID() == 0` and offsets `NSScreen` frames (UAT Deferred Follow-Ups) | ℹ️ Info | Seen only in the VM; worth a check on real hardware |
 
 ### Human Verification Required
 
-Run in the Tart VM only (Claude-driven, `TRANSOM_STAGE_CAPTURABLE=1`), never on the host:
-
-1. **Rectangle zoom (ZOOM-03) and Esc cancel (ZOOM-12):** see behavior_unverified_items.
-2. **Pick-mode click and stage-tile click (ZOOM-06):** includes the WR-02 check.
-3. **Shortcuts window (ZOOM-08):** rebind, duplicate refusal, Restore Defaults.
-4. **Title-bar double-click (ZOOM-10) and Desktop double-click vs icon (ZOOM-11).**
-5. **Collapsed blocks (ZOOM-13):** drop preview, block, hover, double-click, VoiceOver.
-6. **kill -9 while zoomed:** no window parked, N2 shows.
-7. **⌘⇧-click re-post in Safari; fn-arrow pans; Reduce Motion crossfade; fallback legibility light/dark with Screen Recording denied; menu above the stage.**
-8. **Shell-only review fixes WR-02, WR-03, WR-04, WR-06.**
-9. **Review the six flagged prohibitions above** (04-01: 1, 04-04: 2, 04-06: 2, 04-08: 1).
+None. Every item from the previous report was run in the Tart VM (04-UAT.md, 16/16) and is mapped above.
 
 ### Gaps Summary
 
-There are no blocking gaps. The engine and the keyboard, URL and menu paths that deliver the goal are present, wired and tested: zoom out, step, history, pan, frame toggles, collapse, the settle protocol and parking safety. The ZOOM-07 budget was confirmed by re-parsing the spike's raw data rather than trusting the SUMMARY. Both code-review blockers (CR-01, CR-02) are fixed, each with a regression test. What remains is the pointer, event-tap and UI behaviour that has only run headless (ZOOM-03, 06, 08, the double-click halves of 10 and 11, 12, and the panel half of 13), plus the UI-SPEC visual backstops. That work needs VM UAT before the phase can be called passed. IN-01 is a small open defect worth fixing before ship.
+There are no gaps. All 18 truths are verified. The seven pointer, event-tap and panel truths that had only run headless were observed in the VM, with logs and screenshots for each. The three fix commits are correct. IN-01 and G-04-10 each have a regression test, and both passed in the single full headless run (1166/1167, with the one failure the known FreezeTest load flake, which passes on its own). G-04-12 is shell-only and was confirmed in the VM re-test. Four residuals are recorded and none blocks: two were accepted by the user in 04-UAT.md, WR-04's in-flight case was checked by code reading, and the rest are info items. The phase goal is achieved: the user can zoom out to every window, zoom back in to any of them by keyboard, URL, rectangle, click or double-click, and the chosen window ends up framed and focused.
 
 ---
 
-_Verified: 2026-10-28T18:20:00Z_
+_Verified: 2026-10-28T21:40:00Z_
 _Verifier: Claude (gsd-verifier)_
