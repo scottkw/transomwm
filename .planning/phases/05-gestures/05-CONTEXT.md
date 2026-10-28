@@ -52,6 +52,13 @@ Out of scope:
   - Agents never open windows, start event taps or open multitouch devices on the host.
 - **D-09:** The phase-research spike (ROADMAP) compares MultitouchSupport raw touches with event-tap magnify/gesture events (CGEvent types 29/30). It covers visibility over other apps, the ability to consume, the MT callback struct layout and the macOS 27 `int32_t` return. Its live half is a user-run harness on the host trackpad: one small CLI that prints measurements, with no windows and no layout changes. Its results gate the rest of the phase, like the Phase 4 spike.
 
+### E. Post-research decisions (2026-10-28)
+- **E-01:** Whether MultitouchSupport ships at all is decided at the spike gate, from measured data. Default: a tap-only product, with the MT shim kept in the spike target. The user picks at the gate.
+- **E-02:** One layout level per gesture. A long pinch is clamped (rubber band past one level); pinch again to go further.
+- **E-03:** A gesture that starts during a camera move or settle continues from the current tile positions and retargets, like a mid-move tile click in Phase 4.
+- **E-04:** Trackpad only. Two-finger pan comes from trackpads, filtered by sender. Mouse wheels and Magic Mouse scroll always pass through untouched. Pinch is trackpad-only by nature.
+- **E-05:** A gesture with ⌃ or ⌘ also held passes through (Accessibility scroll-to-zoom uses ⌃). Confirm at user UAT.
+
 ### Claude's Discretion
 - MultitouchSupport shim internals in `Sources/TransomPrivate/` (own dlsym shim modelled on OpenMultitouchSupport headers; never depend on OpenMultitouchSupport 4.x).
 - Which path is primary and which is fallback, decided from the spike data. If neither works, gestures turn off with a Debug-menu status line, and hotkeys, URLs and menu still drive zoom.

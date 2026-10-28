@@ -668,16 +668,21 @@ func follow(progress p: Double) {
 | A11 | A gesture during a move or settle can begin follow from presentation rects using the pending target | Pattern 4.4 | Fallback: consume and drop (feels laggy on double pinch) |
 | A12 | Magic Mouse ⌥-scroll panning is acceptable | Pitfall 10, Open Q4 | Filter by sender ID if not |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Ship MT at all if the tap passes everything?**
    - What we know: the tap is required for consumption in every case. MT only adds pinch with system pinch-zoom off, insurance, and maybe latency.
    - Unclear: whether the user values those enough to carry a private framework and canary. ROADMAP's scope note lists "Own MultitouchSupport shim … magnify-event fallback", which reads as MT-primary.
    - Recommendation: build the shim in the spike target either way, and present the decision matrix at the spike gate. Default: tap-only product, MT kept in the spike for future macOS changes.
+   - RESOLVED (CONTEXT E-01): decided at the spike gate from measured data; default tap-only, MT kept in the spike target.
 2. **Multi-level pinch?** D-01 says "nearest layout level". Recommend one level per gesture for v1: `|p|` clamped to ±1.25 with rubber band past 1. Chaining (rebase at p = 1 onto the next parent/child preview) is a contained follow-up if UAT asks.
+   - RESOLVED (CONTEXT E-02): one level per gesture.
 3. **Gestures during a move or settle:** recommend follow from presentation rects (A11). Fall back to consume-and-drop if it gets complicated. The planner should give it its own task with a VM test.
+   - RESOLVED (CONTEXT E-03): continue from current presentation rects and retarget.
 4. **Magic Mouse:** pan with ⌥ (simplest), or filter to trackpads by sender registry ID? Recommend allow, and revisit at UAT.
+   - RESOLVED (CONTEXT E-04): trackpad only; filter by sender; mouse and Magic Mouse scroll pass through untouched.
 5. **Accessibility zoom modifier conflict:** macOS's "Use scroll gesture with modifier keys to zoom" defaults to ⌃, not ⌥ [ASSUMED]. The rule passes when ⌃/⌘ are also held. Confirm at UAT.
+   - RESOLVED (CONTEXT E-05): pass through when ⌃/⌘ also held; confirm at user UAT.
 
 ## Environment Availability
 
