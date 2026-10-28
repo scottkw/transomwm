@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Zoom Camera
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-10-28T15:30:03.647Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-10-28T15:48:03.799Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 4 execution started
-state_head: 9fd5bd09a089780e50ea040aae9ebd9ef464dda1
+state_head: f7dd57df082f190c56eb91155026bfdd8080e6bc
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 59
-  completed_plans: 56
+  completed_plans: 57
   percent: 33
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 4 (Zoom Camera) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-10-27 — Phase 4 execution started
 
@@ -107,6 +107,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 4 P03 | 92 min | 3 tasks | 8 files |
 | Phase 4 P04 | 29 min | 3 tasks | 16 files |
 | Phase 04 P05 | 9min | 3 tasks | 13 files |
+| Phase 04 P06 | 14 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -270,6 +271,10 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-05: zoom hotkeys are disabled at launch in TransomMacApp (not in start()) and menuDidClose keeps them off while zoom is off
 - [Phase 04]: 04-05: Turn Off Zoom waits only for displays whose move home started, with a 3 s fallback; ArrangeController owns ZoomController.onRevealed
 - [Phase 04]: 04-05: ZOOM-08/09/10/11/01/02/04 deferred to phase end (shared IDs with 04-06..04-08)
+- [Phase 04]: 04-06: every mouse-down re-decides the zoom swallow, so a lost mouse-up never traps the next click
+- [Phase 04]: 04-06: pick clicks and title-bar double-clicks are taken only unmodified and only on the tile's own topmost window
+- [Phase 04]: 04-06: pick mode is keyed to the zoom-out move id; collapsed blocks become pickable in 04-07
+- [Phase 04]: 04-06: Desktop double-click decided on main after the event; unknown Finder AX roles count as icons (A4 unverified)
 
 ### Quick Tasks Completed
 
@@ -310,8 +315,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T15:29:52.314Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-10-28T15:48:03.440Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None
 
 ## Deferred Verification
