@@ -165,7 +165,7 @@ import os
     private func captureStart(_ move: CameraMove) async -> [UInt32: CGImage] {
         let scale = Displays.screen(uuid: move.displayUUID)?.backingScaleFactor ?? 2
         let requests = move.tiles.compactMap { tile -> (CGWindowID, CGSize)? in
-            guard tile.kind != .entering, let id = cgWindow(tile.window) else { return nil }
+            guard tile.kind != .entering, tile.kind != .collapsed, let id = cgWindow(tile.window) else { return nil }
             let native = windowInfo(tile.window.identity)?.frame.size ?? tile.start.size
             let width = min(max(tile.start.width, tile.end.width), native.width)
             let height = min(max(tile.start.height, tile.end.height), native.height)
@@ -209,8 +209,8 @@ import os
         let elapsed = capped ? SettleTracker.cap : (current.lastReturn ?? started) - started
         let ms = Int(elapsed / .milliseconds(1))
         let counts = current.counts
-        // shortcut: collapsed is 0 until 04-07 feeds the collapsible set; then count this settle's collapsed blocks.
-        logger.info("settle \(ms, privacy: .public) ms: \(counts.frames, privacy: .public) writes, \(counts.parked, privacy: .public) parked, \(counts.unparked, privacy: .public) unparked, 0 collapsed")
+        let collapsed = current.move.tiles.filter { $0.kind == .collapsed }.count
+        logger.info("settle \(ms, privacy: .public) ms: \(counts.frames, privacy: .public) writes, \(counts.parked, privacy: .public) parked, \(counts.unparked, privacy: .public) unparked, \(collapsed, privacy: .public) collapsed")
         if capped, let slowest = current.waiting.first {
             logger.notice("settle cap 1500 ms reached; slowest \(slowest.bundleID, privacy: .public) \(ms, privacy: .public) ms")
         }
@@ -228,10 +228,11 @@ import os
     private func finishReveal(_ uuid: String, _ move: CameraMove) {
         let queued = active[uuid]?.queued
         active[uuid] = nil
-        let shown = move.tiles.filter { $0.kind != .leaving }
-        // shortcut: collapsed is 0 until 04-07 feeds the collapsible set; then pass the view's collapsed count.
+        let shown = move.tiles.filter { $0.kind != .leaving && $0.kind != .collapsed }
+        let collapsed = move.tiles.filter { $0.kind == .collapsed }.count
         announce(
-            ZoomCopy.revealAnnouncement(view: move.to, appName: shown.count == 1 ? appName(shown[0].window) : nil, windowCount: shown.count, collapsed: 0))
+            ZoomCopy.revealAnnouncement(
+                view: move.to, appName: shown.count == 1 ? appName(shown[0].window) : nil, windowCount: shown.count, collapsed: collapsed))
         if granted == true { refresh(shown, on: uuid) }
         onRevealed?(uuid, move)
         if let queued {
@@ -341,8 +342,14 @@ import os
             let image = cg.flatMap { images[$0] ?? capture.cached($0) }
             return StageTile(
                 id: cg ?? tile.window.windowID, start: appKit(tile.start), end: appKit(tile.end),
-                content: image.map { .snapshot($0) } ?? fallback(tile.window))
+                content: tile.kind == .collapsed ? collapsedBlock(tile.window) : image.map { .snapshot($0) } ?? fallback(tile.window))
         }
+    }
+
+    /// A collapsed window's block: app colour and icon, no title.
+    private func collapsedBlock(_ window: TransomModel.WindowRef) -> TileLayer.Content {
+        let app = NSRunningApplication(processIdentifier: window.pid)
+        return .collapsed(color: AppColor.color(forBundleID: window.bundleID, icon: app?.icon), icon: app?.icon)
     }
 
     /// App colour, app icon, and the AX title (the app name when it has none).

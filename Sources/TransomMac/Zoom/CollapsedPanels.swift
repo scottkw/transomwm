@@ -32,6 +32,30 @@ final class CollapsedBlockView: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError("not used") }
 
+    // MARK: Accessibility (UI-SPEC Accessibility): a button that zooms in when pressed.
+
+    nonisolated static let help = "Double-click to zoom in"
+
+    /// "“{App}”, collapsed: {title}", the app name only when the title is empty; long app names truncated.
+    nonisolated static func label(appName: String, title: String) -> String {
+        let app = "\u{201C}\(MenuCopy.truncatedAppName(appName))\u{201D}, collapsed"
+        return title.isEmpty ? app : "\(app): \(title)"
+    }
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityHelp() -> String? { Self.help }
+
+    override func accessibilityLabel() -> String? {
+        let name = NSRunningApplication(processIdentifier: block.window.pid)?.localizedName ?? block.window.bundleID
+        return Self.label(appName: name, title: block.window.titleHint)
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onDoubleClick?(block.window)
+        return true
+    }
+
     override var wantsUpdateLayer: Bool { true }
 
     /// Re-resolved in the current appearance, so dark mode, the accent and Increase Contrast follow.

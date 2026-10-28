@@ -9,6 +9,8 @@ nonisolated final class TileLayer: CALayer {
     enum Content {
         case snapshot(CGImage)
         case fallback(color: NSColor, icon: NSImage?, title: String)
+        /// A collapsed window (UI-SPEC Surface 3, drawn on the stage): no title.
+        case collapsed(color: NSColor, icon: NSImage?)
     }
 
     static let cornerRadius: CGFloat = 12
@@ -42,6 +44,19 @@ nonisolated final class TileLayer: CALayer {
             cornerRadius = Self.cornerRadius
             borderWidth = 1
             layoutFallback(icon: icon, title: title, endSize: endSize, scale: scale)
+        case .collapsed(let color, let icon):
+            let shorter = min(endSize.width, endSize.height)
+            backgroundColor = color.cgColor
+            cornerRadius = min(Self.cornerRadius, shorter / 2)
+            borderWidth = 1
+            let side = min(32, shorter - 8)
+            if let icon, side >= Self.minIcon {
+                iconLayer.frame = CGRect(x: -side / 2, y: -side / 2, width: side, height: side)
+                iconLayer.contents = icon.layerContents(forContentsScale: scale)
+                iconLayer.contentsScale = scale
+                iconLayer.contentsGravity = .resizeAspect
+                addSublayer(iconLayer)
+            }
         }
         resolveColors(appearance)
     }
@@ -80,7 +95,7 @@ nonisolated final class TileLayer: CALayer {
 
     /// The border and capsule colours in `appearance` (light/dark, accent and contrast changes).
     func resolveColors(_ appearance: NSAppearance) {
-        guard case .fallback = content else { return }
+        if case .snapshot? = content { return }
         appearance.performAsCurrentDrawingAppearance {
             borderColor = NSColor.separatorColor.cgColor
             capsule.backgroundColor = NSColor.windowBackgroundColor.cgColor
