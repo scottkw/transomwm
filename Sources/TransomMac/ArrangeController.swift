@@ -152,6 +152,8 @@ import os
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
                 if case .spaceChanged = event { self.zoomInput.endPick(reason: "space changed") }
+                // Back at the keyboard (⌘-Tab, a Dock click): pick mode's Esc hotkey must not keep Esc from that app (WR-02).
+                if case .windowFocused = event { self.zoomInput.endPick(reason: "focus changed") }
                 if case .displaysChanged = event {
                     self.zoomInput.endPick(reason: "displays changed")
                     self.zoomController?.displaysChanged()
