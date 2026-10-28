@@ -24,6 +24,15 @@ public enum ArrangerInput: Sendable {
     case gapDrag(GapHandle, delta: Double, ended: Bool)
     /// How this launch treats the saved layout (D-17, D-18); fed before `.restore`.
     case launch(LaunchMode)
+    /// Zoom on or off (D-D); off by default, which is exactly Phase 3.
+    case zoomEnabled(Bool)
+    /// Move that display's camera to `ViewTarget` (D-A): answered with one `.cameraMove`, no writes. `focus` is focused
+    /// right after the settle's writes (a click on a window, ZOOM-06).
+    case zoomTo(ViewTarget, displayUUID: String, focus: WindowRef? = nil)
+    /// The stage finished move `moveID` on that display: the view is committed and written now.
+    case cameraSettle(displayUUID: String, moveID: UInt64)
+    /// A camera command on that display (the pointer's), with the focused window and the pointer Step In reads.
+    case camera(CameraCommand, displayUUID: String, focused: WindowRef?, pointer: Point?)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -79,6 +88,10 @@ public enum ArrangerEffect: Equatable, Sendable {
     case flashBlocked(Rect, displayUUID: String)
     /// The gap handles to show on that display; empty hides them (UI-SPEC Surface 3).
     case gapHandles([GapHandle], displayUUID: String)
+    /// Animate this camera move, then feed `.cameraSettle` with its ID (RESEARCH Pattern 4).
+    case cameraMove(CameraMove)
+    /// The collapsed blocks to show on that display; empty hides them (UI-SPEC Surface 3, ZOOM-13).
+    case collapsedBlocks([CollapsedBlock], displayUUID: String)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -122,7 +135,7 @@ public struct Arranger: Sendable {
     /// again, so an app echoing frames cannot cause a write storm (T-03-08).
     private var lastRequested: [WindowIdentity: Rect] = [:]
     /// Locked or asleep: nothing is written until the session resumes, then every visible desk is re-planned.
-    private var sessionPaused = false
+    var sessionPaused = false
     /// The Spaces-off fallback (A7) is reported once per session.
     private var reportedSpacesOff = false
     /// Each window's last read-back (`frameApplied`): a move or resize within 2 pt of it is Transom's own write coming
@@ -152,6 +165,8 @@ public struct Arranger: Sendable {
     private var shownHandles: [String: [GapHandle]] = [:]
     /// The gap being dragged and its points since the press, applied by every replan until mouse-up (G-03-3 H2).
     private var liveGap: (handle: GapHandle, delta: Double)?
+    /// The zoom camera (Arranger+Camera.swift).
+    var camera = CameraState()
 
     private enum DragPlanKey: Hashable {
         case desk(DeskKey)
@@ -202,6 +217,7 @@ public struct Arranger: Sendable {
                 if display.currentSpaceID == nil { display.currentSpaceID = previous.first { $0.uuid == display.uuid }?.currentSpaceID }
                 return display
             }
+            forgetMoves(onDisplaysOtherThan: Set(displays.map(\.uuid)))
             sessionPaused = inventory.sessionPaused
             let dormant = Set(dormantWindows.map(\.identity))
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
@@ -257,6 +273,8 @@ public struct Arranger: Sendable {
             guard pendingRestore == nil else { return [] }
             return handle(event, now: now)
         case .command(let command, let focused):
+            // Never guess a display (T-04-12): camera commands arrive as `.camera`.
+            if case .camera = command { return [.fault("camera command without a display")] }
             guard isAvailable(command, focused: focused) else { return [.beep] }
             do throws(LayoutError) {
                 switch (command, focused) {
@@ -279,6 +297,7 @@ public struct Arranger: Sendable {
                 case (.togglePause, _): return togglePause()
                 case (.restoreAll, _): return try restoreAll()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
+                case (.camera, _): return [.fault("camera command without a display")]  // answered above
                 case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
                     (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
                     return [.beep]
@@ -328,6 +347,14 @@ public struct Arranger: Sendable {
             guard mode == .crashLoop else { return [] }
             pauseReasons.insert(.crashLoop)
             return hideHandles()
+        case .zoomEnabled(let on):
+            return setZoomEnabled(on)
+        case .zoomTo(let target, let uuid, let focus):
+            return zoomTo(target, displayUUID: uuid, focus: focus)
+        case .cameraSettle(let uuid, let moveID):
+            return cameraSettle(displayUUID: uuid, moveID: moveID)
+        case .camera(let command, let uuid, let focused, let pointer):
+            return camera(command, displayUUID: uuid, focused: focused, pointer: pointer)
         }
     }
 
@@ -411,11 +438,13 @@ public struct Arranger: Sendable {
     /// Moves every stranded window Transom may move (tracked, dockable, present, not excluded) back on screen: its home
     /// frame clamped on screen, else centred on its display, shrunk to fit (`Recovery.destination`). Its display is the
     /// one its desk in `desks` is on, else the one it is nearest. Runs while paused (UI-SPEC N3, SAFE-03). Returns the
-    /// moves in identity order; the caller sends them before any layout work.
-    mutating func rescueStranded(desks: World) -> [WindowCommand] {
+    /// moves in identity order; the caller sends them before any layout work. `spared` windows stay where they are.
+    mutating func rescueStranded(desks: World, sparing spared: Set<WindowIdentity> = []) -> [WindowCommand] {
         var moves: [WindowCommand] = []
         for info in windows.values.sorted(by: { $0.window.identity < $1.window.identity })
-        where info.kind == .dockable && !info.isExcluded && info.state == .present && Recovery.isStranded(info.frame, displays: displays) {
+        where info.kind == .dockable && !info.isExcluded && info.state == .present && !spared.contains(info.window.identity)
+            && Recovery.isStranded(info.frame, displays: displays)
+        {
             let id = info.window.identity
             let uuid = desks.desks.first { $0.value.contains(info.window) }?.key.displayUUID ?? info.displayUUID
             guard let display = displays.first(where: { $0.uuid == uuid }) ?? displays.first else { continue }
@@ -492,6 +521,8 @@ public struct Arranger: Sendable {
             return targetKey(focused).flatMap(display(for:)) != nil
         case .togglePause, .toggleExcludeFrontmost, .restoreAll:
             return true  // answered above
+        case .camera(let command):
+            return cameraAvailable(command, context: context)
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }
@@ -599,9 +630,12 @@ public struct Arranger: Sendable {
         } catch {
             return [.fault("ignored an event: \(error)")]
         }
-        guard case .windowCreated(let info) = event else { return faults + hidden + replan() }
+        // CONTEXT E: focus outside the view widens the camera.
+        let widened = if case .windowFocused(let window) = event { widen(toShow: window, new: false) } else { [ArrangerEffect]() }
+        guard case .windowCreated(let info) = event else { return faults + hidden + widened + replan() }
         do throws(LayoutError) {
-            return try faults + takeFinderWindow(info, now: now) + replan()
+            let taken = try takeFinderWindow(info, now: now)
+            return faults + taken + widen(toShow: info.window, new: true) + replan()
         } catch {
             return faults + [.fault("could not dock the new Finder window: \(error)")] + replan()
         }
@@ -669,6 +703,8 @@ public struct Arranger: Sendable {
         wantedFrames[window.identity] = nil
         undockedWanted[window.identity] = nil
         floaterFloors[window.identity] = nil
+        camera.collapsible.remove(window.identity)
+        camera.unparkedNew.remove(window.identity)
         focusOrder.removeAll { $0 == window.identity }
     }
 
@@ -687,6 +723,8 @@ public struct Arranger: Sendable {
             return follow(now: now)
         }
         guard let key = deskKey(of: window), let desk = world[key] else { return [] }
+        // A parked sliver is off its tile on purpose: neither recorded nor corrected (RESEARCH Pitfall 1).
+        guard !parkRequested.contains(window.identity) else { return [] }
         let floating = desk.desktop.contains(window)
         // A parked window keeps its Desktop frame: the move is the park, and showing the Desktop brings it back there.
         if floating, desk.tree.isDesktopHidden == true { return [] }
@@ -763,7 +801,7 @@ public struct Arranger: Sendable {
 
     /// Forgets the tile last sent, so the re-plan writes it again.
     private mutating func correct(_ ids: Set<WindowIdentity>, now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        for id in ids {
+        for id in ids where !parkRequested.contains(id) {
             lastCorrection[id] = now
             lastRequested[id] = nil
         }
@@ -817,6 +855,7 @@ public struct Arranger: Sendable {
     private mutating func rehome(_ info: WindowInfo) throws(LayoutError) {
         guard info.state == .present, let from = deskKey(of: info.window), let desk = world[from], desk.state(of: info.window) == .present,
             !(desk.tree.isDesktopHidden == true && desk.desktop.contains(info.window)),  // parked: off its display on purpose
+            !parkRequested.contains(info.window.identity),  // camera-parked too (RESEARCH Pitfall 1)
             let to = home(of: info), to != from
         else { return }
         let spaces = info.spaces ?? []
@@ -853,14 +892,20 @@ public struct Arranger: Sendable {
             try desk.tree.applyDrop(target, window: window, ids: &ids)
         }
         guard let docked = candidate[key] else { return [.beep] }
-        guard try Planner.plan(desk: docked, area: area, gap: gap, mins: mins).unfit.isEmpty else {
-            // Keyboard parity (UI-SPEC Surface 2): the blocked preview flashes at the frame it would have had.
-            let frame = try Planner.plan(desk: docked, area: area, gap: gap, mins: [:]).frames[window]
-            return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
+        var collapsed: Collapse?
+        if try !Planner.plan(desk: docked, area: area, gap: gap, mins: mins).unfit.isEmpty {
+            // Zoom on: accepted, the windows without room collapse (D-A).
+            collapsed = try collapse(docked, area: area)
+            guard collapsed != nil else {
+                // Keyboard parity (UI-SPEC Surface 2): the blocked preview flashes at the frame it would have had.
+                let frame = try Planner.plan(desk: docked, area: area, gap: gap, mins: [:]).frames[window]
+                return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
+            }
         }
         world = candidate
         history = candidateHistory
-        return replan()
+        let note = accept(collapsed, moving: window)
+        return replan() + note
     }
 
     /// Undocks a window to the Desktop (TILE-09); the green button floats through here too. It goes to its pre-dock
@@ -1214,6 +1259,12 @@ public struct Arranger: Sendable {
                 return Decision(preview: .dock(frame), action: .dock(key, target), display: uuid)
             }
             let loose = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]).frames[window]
+            // D-A: with zoom on the drop is accepted and the windows without room collapse.
+            if let collapsed = try collapse(desk, area: display.visibleFrame) {
+                let copy = Self.collapseCopy(collapsed.newly, moving: window)
+                let preview = loose.map { rect in copy.map { PreviewState.collapsed(rect, label: $0.label) } ?? .dock(rect) }
+                return Decision(preview: preview, action: .dock(key, target), display: uuid)
+            }
             return Decision(preview: loose.map(PreviewState.blocked), action: .refuse(Self.noRoom), display: uuid)
         } catch {
             return miss  // the target went stale since the hit test
@@ -1282,13 +1333,19 @@ public struct Arranger: Sendable {
 
     private mutating func commitDock(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> [ArrangerEffect] {
         let candidate = try dropping(window, on: key, at: target)
-        guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key],
-            try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty
-        else { return [.announce(Self.noRoom)] + (try missed(window)) }
+        guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key] else {
+            return [.announce(Self.noRoom)] + (try missed(window))
+        }
+        var collapsed: Collapse?
+        if try !Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty {
+            guard let collapse = try collapse(desk, area: area) else { return [.announce(Self.noRoom)] + (try missed(window)) }
+            collapsed = collapse
+        }
         world = candidate.world
         history = candidate.history
         lastRequested[window.identity] = nil
-        return replan()
+        let note = accept(collapsed, moving: window)
+        return replan() + note
     }
 
     /// ⌘-drop: the two docked windows exchange tiles, one undo step (TILE-11).
@@ -1498,7 +1555,7 @@ public struct Arranger: Sendable {
     /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked
     /// windows left without room float first, and are named in one notice (D-26). A hidden Desktop's floating windows
     /// are parked once each, first in the perform, and only after an immediate save holding their home frames (D-16).
-    private mutating func planShown() -> [ArrangerEffect] {
+    mutating func planShown() -> [ArrangerEffect] {
         guard !sessionPaused, pauseReasons.isEmpty else { return [] }
         var parks: [WindowCommand] = []
         var parkedNow: Set<WindowIdentity> = []
@@ -1507,26 +1564,47 @@ public struct Arranger: Sendable {
         var planned: Set<WindowIdentity> = []
         var lost: [WindowRef] = []
         var handles: [String: [GapHandle]] = [:]
+        var blocks: [String: [CollapsedBlock]] = [:]
+        var fitAtHome: Set<WindowIdentity> = []
         let mins = minimums
         for display in displays {
             let key = Self.key(display)
             guard world[key] != nil else { continue }
-            let plan: FramePlan
+            var plan: FramePlan
+            // Lost room at home is an OS fact and still floats (CONTEXT E); a zoomed display then plans its view.
+            let view = effectiveView(for: key, notes: &faults)
             do throws(LayoutError) {
                 let floated: [WindowRef]
                 (plan, floated) = try planFloatingLostRoom(key, area: display.visibleFrame, mins: mins)
                 lost += floated
+                // With zoom on every view, home included, is planned with the collapse pass (ZOOM-13).
+                if camera.enabled, let desk = world[key] {
+                    let viewPlan = try ViewPlanner.plan(
+                        desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                        collapsible: camera.collapsible)
+                    (plan.frames, plan.parks, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.resolution)
+                    blocks[display.uuid] = viewPlan.collapsed.map { CollapsedBlock(window: $0.key, rect: $0.value) }
+                        .sorted { $0.window.identity < $1.window.identity }
+                    let home = view == .home ? viewPlan : try ViewPlanner.plan(
+                        desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                        collapsible: camera.collapsible)
+                    fitAtHome.formUnion(home.frames.keys.map(\.identity))
+                }
             } catch {
                 faults.append(.fault("could not plan \(key): \(error)"))
                 continue
             }
             guard let desk = world[key] else { continue }
-            if drag?.kind != .move { handles[display.uuid] = GapHandles.handles(tree: desk.tree, resolution: plan.resolution, gap: gap) }
+            // A gap drag edits home weights, so a zoomed display shows no handles.
+            if drag?.kind != .move {
+                handles[display.uuid] = view == .home ? GapHandles.handles(tree: desk.tree, resolution: plan.resolution, gap: gap) : []
+            }
             // Transom never moves an excluded app's window: no clamp, no park (D-29). An untracked (dormant, G-03-8) window
             // gets nothing either: the window system would drop the command, and its windowCreated replans it.
             var desired = plan.frames.filter { windows[$0.key.identity]?.isExcluded == false }
             let desktopHidden = desk.tree.isDesktopHidden == true
-            for window in plan.parks where windows[window.identity]?.isExcluded == false {
+            // A just-created window outside the view stays where it opened until its widen move settles (Pitfall 3).
+            for window in plan.parks where windows[window.identity]?.isExcluded == false && !camera.unparkedNew.contains(window.identity) {
                 parkedNow.insert(window.identity)
                 guard parkRequested.insert(window.identity).inserted else { continue }
                 if homeFrames[window.identity] == nil, windows[window.identity]?.isExcluded != true {
@@ -1537,7 +1615,7 @@ public struct Arranger: Sendable {
             // A floating window not where the model has it (after Float, Undo or Show Desktop) is moved there.
             for floating in desk.desktop.windows
             where !desktopHidden && floating.state == .present && desired[floating.window] == nil
-                && windows[floating.window.identity]?.isExcluded != true
+                && windows[floating.window.identity]?.isExcluded != true && !parkedNow.contains(floating.window.identity)
             {
                 if let actual = windows[floating.window.identity]?.frame, !Self.near(actual, floating.frame) {
                     desired[floating.window] = floating.frame
@@ -1563,9 +1641,25 @@ public struct Arranger: Sendable {
             windows[id].map { info in world.desks.values.contains { $0.tree.state(of: info.window) != nil } } ?? false
         }
         parkRequested = parkRequested.filter { parkedNow.contains($0) || hidden.contains($0) }
+        // Collapsible only while collapsed: one that fits its home tile again, or left every tree, gets CONTEXT E's
+        // refusals and lost-room float again (WR-01). A desk not shown keeps its windows' membership.
+        camera.collapsible = camera.collapsible.filter { id in
+            !fitAtHome.contains(id) && world.desks.values.contains { $0.tree.state(of: WindowRef(identity: id)) != nil }
+        }
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
-            + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles)
+            + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles) + showBlocks(blocks)
+    }
+
+    /// Sends each display's collapsed blocks that changed; a display with none (or gone) gets an empty list.
+    mutating func showBlocks(_ blocks: [String: [CollapsedBlock]]) -> [ArrangerEffect] {
+        let uuids = Set(blocks.keys).union(camera.shownBlocks.keys).sorted()
+        return uuids.compactMap { uuid in
+            let next = blocks[uuid] ?? []
+            guard next != camera.shownBlocks[uuid] ?? [] else { return nil }
+            camera.shownBlocks[uuid] = next.isEmpty ? nil : next
+            return .collapsedBlocks(next, displayUUID: uuid)
+        }
     }
 
     /// Sends each display's handles that changed; a display with none planned (or gone) gets an empty list.
@@ -1644,8 +1738,17 @@ public struct Arranger: Sendable {
         return (plan, lost)
     }
 
-    /// Excluded windows have none: they never dock, and the Desktop tile is not sized for them.
+    /// The minimums every Phase 3 plan and dry run uses: `learnedMinimums`, with 1x1 for a collapsible window, which
+    /// may get less than it needs at home and so is never unfit there (ZOOM-13). Zoom off: the set is empty.
     var minimums: [WindowRef: Size] {
+        var mins = learnedMinimums
+        for window in mins.keys where camera.collapsible.contains(window.identity) { mins[window] = Size(width: 1, height: 1) }
+        return mins
+    }
+
+    /// Excluded windows have none: they never dock, and the Desktop tile is not sized for them. ViewPlanner gets these,
+    /// so it can tell which collapsible windows are collapsed.
+    var learnedMinimums: [WindowRef: Size] {
         Dictionary(
             windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }, uniquingKeysWith: { $1 })
     }
@@ -1655,7 +1758,7 @@ public struct Arranger: Sendable {
     }
 
     /// The desk shown on `display` right now.
-    private static func key(_ display: DisplayInfo) -> DeskKey {
+    static func key(_ display: DisplayInfo) -> DeskKey {
         DeskKey(displayUUID: display.uuid, spaceID: display.currentSpaceID)
     }
 

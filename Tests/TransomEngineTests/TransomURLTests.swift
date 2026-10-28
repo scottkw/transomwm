@@ -16,6 +16,22 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse("transom-debug://restore", scheme: "transom-debug") == .restoreAll)
     }
 
+    /// 04 UI-SPEC Hotkeys and URLs: every navigation action has a URL.
+    @Test(arguments: [
+        ("zoom-out", CameraCommand.zoomOutAll), ("step-out", .stepOut), ("step-in", .stepIn), ("back", .back), ("forward", .forward),
+        ("pan-left", .pan(.left)), ("pan-right", .pan(.right)), ("pan-up", .pan(.top)), ("pan-down", .pan(.bottom)),
+        ("frame-window", .frameWindow), ("frame-desktop", .frameDesktop),
+    ])
+    func theZoomCommandsParse(host: String, command: CameraCommand) {
+        #expect(parse("transom://\(host)") == .camera(command))
+        #expect(parse("transom://\(host)/") == .camera(command))
+    }
+
+    @Test(arguments: ["transom://ZOOM-OUT", "transom://zoom-out?x=1", "transom://zoom-out/extra", "transom://zoom-out#f", "transom://zoom-in"])
+    func malformedZoomURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
     @Test(arguments: [
         "transom://Restore", "transom://restore?x=1", "transom://restore?", "transom://restore#a", "transom://user@restore",
         "transom://user:secret@restore", "transom://restore:80", "transom://restore/extra", "transom://zoom", "transom-debug://restore",

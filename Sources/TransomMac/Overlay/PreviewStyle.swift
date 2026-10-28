@@ -28,6 +28,8 @@ nonisolated enum PreviewStyle {
 
     static let swapLabel = "Swap"
     static let blockedLabel = "Not enough room"
+    /// The Collapsed state's glyph (UI-SPEC Surface 7), drawn by PreviewPanel's label like every preview glyph.
+    static let collapsedGlyph = "arrow.down.right.and.arrow.up.left"
     static let dash: [Double] = [8, 4]
 
     /// The layers for `state`, back to front. Increase Contrast multiplies every fill alpha by 1.5 and makes every
@@ -54,14 +56,42 @@ nonisolated enum PreviewStyle {
                 [ghost(rect, label: text.map { Label(text: $0, glyph: nil, glyphRole: .label) })]
             case .clamp(let rect):
                 [ghost(rect, label: nil)]
+            case .collapsed(let rect, let text):
+                [
+                    LayerStyle(
+                        rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85,
+                        label: Label(text: text, glyph: collapsedGlyph, glyphRole: .label))
+                ]
             }
-        guard increaseContrast else { return layers }
-        return layers.map { layer in
-            var layer = layer
-            layer.fillAlpha *= 1.5
-            layer.borderAlpha = 1
-            return layer
-        }
+        return increaseContrast ? layers.map(contrasted) : layers
+    }
+
+    /// The ⌘⇧-drag marquee (UI-SPEC Surface 4): a neutral tint, thin solid border, square corners.
+    static func band(_ rect: Rect, increaseContrast: Bool) -> LayerStyle {
+        let style = LayerStyle(rect: rect, fill: .label, fillAlpha: 0.08, border: .label, borderAlpha: 0.50, borderWidth: 1, cornerRadius: 0)
+        return increaseContrast ? contrasted(style) : style
+    }
+
+    /// The area a ⌘⇧-drag would frame: the dock preview's look.
+    static func rectTarget(_ rect: Rect, increaseContrast: Bool) -> LayerStyle {
+        let style = LayerStyle(rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85)
+        return increaseContrast ? contrasted(style) : style
+    }
+
+    /// Pick mode's hover ring (Surface 5): border only, drawn inside the tile with the tile's radius.
+    static func pickRing(_ rect: Rect, radius: Double, increaseContrast: Bool) -> LayerStyle {
+        // Inset by half the 2 pt border, so the stroke lies inside the tile.
+        let inside = Rect(x: rect.x + 1, y: rect.y + 1, width: max(rect.width - 2, 0), height: max(rect.height - 2, 0))
+        let style = LayerStyle(rect: inside, fill: .accent, fillAlpha: 0, border: .accent, borderAlpha: 0.85, cornerRadius: radius)
+        return increaseContrast ? contrasted(style) : style
+    }
+
+    /// Increase Contrast: every fill alpha × 1.5, every border opaque.
+    private static func contrasted(_ layer: LayerStyle) -> LayerStyle {
+        var layer = layer
+        layer.fillAlpha *= 1.5
+        layer.borderAlpha = 1
+        return layer
     }
 
     /// The label shows only with 16 pt of clearance on every side (UI-SPEC overlay label).

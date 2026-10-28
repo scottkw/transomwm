@@ -57,7 +57,9 @@ public enum TransomMacApp {
         // The layout survives a quit and relaunch (SAFE-06); the store loads when tracking starts.
         let layoutStore = LayoutStore(directory: MinimumHintsStore.defaultDirectory)
         let gaps = GapPreference()
-        let arrangeController = ArrangeController(system: system, store: layoutStore, exclusions: exclusions, gap: gaps.value)
+        let arrangeController = ArrangeController(
+            system: system, store: layoutStore, exclusions: exclusions, gap: gaps.value,
+            zoomEnabled: UserDefaults.standard.object(forKey: ZoomController.enabledKey) as? Bool ?? true)
         gaps.onChange = { gap in Task { await arrangeController.setGap(gap) } }
         arrangeController.isReady = { permissionController.state.phase == .ready }
         // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).
@@ -89,6 +91,8 @@ public enum TransomMacApp {
         accessSubscription = permissionController.$state.map { $0.phase == .ready }.removeDuplicates().dropFirst()
             .sink { ready in arrangeController.accessChanged(ready: ready) }
         Hotkeys.register(dispatch)
+        Hotkeys.setZoomHotkeys(enabled: arrangeController.isZoomEnabled)  // zoom off: the chords reach apps (D-D)
+        Hotkeys.logSystemConflicts()
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
         // A quit first returns parked and off-screen windows, then records cleanExit in layout.json (SAFE-01).

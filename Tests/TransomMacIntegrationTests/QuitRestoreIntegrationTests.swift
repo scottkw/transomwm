@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TransomEngine
 @testable import TransomMac
@@ -72,6 +73,57 @@ private func listedFrame(_ fixture: FixtureProcess, _ index: Int) async throws -
         #expect(near(back, home), "window 1 is at \(back), not its home frame \(home)")
         let docked = try #require(try await listedFrame(fixture, 0))
         #expect(near(docked, dockedFrame), "the docked window moved from \(dockedFrame) to \(docked)")
+    }
+
+    /// D-D, 04-08: three docked windows, zoomed to window 0 (the other two parked). The quit restore puts every one back
+    /// in its home tile, and none is left stranded.
+    @Test(.timeLimit(.minutes(1)))
+    func quitWhileZoomedRestoresHomeTiles() async throws {
+        _ = NSApplication.shared  // the stage needs the window server connection (ZoomSettleIntegrationTests)
+        let fixture = try await FixtureProcess.launch(["standard", "standard", "standard"])
+        defer { fixture.terminate() }
+        let (system, refs) = try await tracking([fixture])
+        try #require(refs.count == 3)
+        var arrange: ArrangeController? = ArrangeController(system: system, zoomEnabled: true)
+        await arrange?.start()
+        let controller = try #require(arrange)
+        let onDesk = await waitUntil(timeout: .seconds(3)) { refs.allSatisfy { controller.arranger.deskKey(of: $0) != nil } }
+        try #require(onDesk, "the fixture windows never reached a desk")
+        await controller.dispatch(.arrangeAll, focused: refs[0])
+        let key = try #require(controller.arranger.deskKey(of: refs[0]))
+        try #require(refs.allSatisfy { controller.arranger.world[key]?.tree.state(of: $0) == .present }, "Arrange All did not dock all three")
+        let display = try #require(Displays.current().first { $0.uuid == key.displayUUID })
+        var tiles: [Rect] = []
+        let tiled = await waitUntil(timeout: .seconds(3)) {
+            tiles = []
+            for index in refs.indices { if let frame = try? await listedFrame(fixture, index) { tiles.append(frame) } }
+            return tiles.count == 3 && refs.indices.allSatisfy { i in refs.indices.allSatisfy { j in i == j || !tiles[i].overlaps(tiles[j]) } }
+                && tiles.allSatisfy { !Recovery.isStranded($0, displays: [display]) }
+        }
+        try #require(tiled, "the windows never tiled: \(tiles)")
+        try await Task.sleep(for: .milliseconds(300))  // the last clamps land
+        tiles = []
+        for index in refs.indices { tiles.append(try #require(try await listedFrame(fixture, index))) }
+
+        let leaf = try #require(controller.arranger.leafNode(of: refs[0]))
+        await controller.zoom(to: .node(leaf), displayUUID: display.uuid)
+        var zoomed: [Rect] = []
+        let parked = await waitUntil(timeout: .seconds(3)) {
+            zoomed = []
+            for index in refs.indices { if let frame = try? await listedFrame(fixture, index) { zoomed.append(frame) } }
+            return zoomed.count == 3 && !near(zoomed[0], tiles[0]) && zoomed.dropFirst().allSatisfy { Recovery.isStranded($0, displays: [display]) }
+        }
+        try #require(parked, "zooming in did not park windows 1 and 2: \(zoomed)")
+        _ = await waitUntil(timeout: .seconds(3)) { controller.zoomController?.isIdle == true }
+
+        let restored = controller.restoreForTermination(limit: .seconds(2))
+        arrange = nil  // Transom exits after the restore: nothing may react to the move
+        #expect(restored == 3)
+        for index in refs.indices {
+            let back = try #require(try await listedFrame(fixture, index))
+            #expect(near(back, tiles[index]), "window \(index) is at \(back), not its home tile \(tiles[index])")
+            #expect(!Recovery.isStranded(back, displays: [display]), "window \(index) is stranded at \(back)")
+        }
     }
 
     /// Pitfall 14, T-03-42: with a second app stopped and one of its windows in the plan, the restore still returns

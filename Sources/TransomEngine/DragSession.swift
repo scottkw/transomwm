@@ -42,6 +42,23 @@ public enum PreviewState: Equatable, Sendable {
     case snapBack(Rect, label: String?)
     /// Where a floating window lands, clamped inside the Desktop tile.
     case clamp(Rect)
+    /// Zoom on: the drop is accepted and windows collapse (ZOOM-13). The frame the window would get if minimum sizes
+    /// were ignored, labelled with who collapses (`CollapseCopy`).
+    case collapsed(Rect, label: String)
+}
+
+/// UI-SPEC Surface 7: the Collapsed preview's labels and the announcements of an accepted drop or keyboard dock.
+public enum CollapseCopy {
+    public static let draggedLabel = "Collapsed until you zoom in"
+
+    public static func othersLabel(_ count: Int) -> String {
+        count == 1 ? "1 window collapses" : "\(count) windows collapse"
+    }
+
+    public static func dockedAnnouncement(dragged: Bool, others: Int) -> String {
+        if dragged { return "Docked. Zoom in to see it." }
+        return others == 1 ? "Docked. 1 window collapsed." : "Docked. \(others) windows collapsed."
+    }
 }
 
 /// What a release does once a hover has been held for the dwell.

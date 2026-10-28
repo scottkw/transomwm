@@ -93,6 +93,11 @@ private struct ToastView: View {
         postAnnouncement(text)
     }
 
+    /// Re-orders a visible toast above a panel at the same level that just ordered in (the camera stage).
+    func bringFront() {
+        if panel.isVisible { panel.orderFrontRegardless() }
+    }
+
     /// Fades out over 240 ms, then orders the panel out.
     func hide() {
         let shown = generation

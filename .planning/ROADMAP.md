@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Layout Model** - Headless PaneModel: nested split tree, Desktop layer, tab groups, desks, lifecycle states, JSON, undo (completed 2026-10-24)
 - [x] **Phase 2: Window Control** - Accessibility permission, non-blocking window tracking and move/resize, classifier, exclusions, private-API fallback (completed 2026-10-27)
 - [x] **Phase 3: Tiling MVP** - Drag-to-dock nested tiling, reflow, gaps, commands, crash-safe restore; first usable signed release (completed 2026-10-27)
-- [ ] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle
+- [x] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle (completed 2026-10-28)
 - [ ] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop
 - [ ] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts
 - [ ] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons
@@ -217,7 +217,30 @@ Plans:
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
   6. User can move the view to a neighbouring area, frame the focused window or the Desktop on its own and toggle back (including by double-click), cancel a rectangle zoom with Esc, and tiles too small for their window show as collapsed app-colour blocks that zoom in on double-click
 
-**Plans**: TBD
+**Plans**: 8/8 plans complete
+
+Plans:
+**Wave 1**
+- [x] 04-01-PLAN.md — Feasibility spike: transom-zoom-spike harness, final SnapshotCapture.swift, gates G1–G8 in the Tart VM, go/no-go checkpoint
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 04-02-PLAN.md — Engine camera core: ViewPlanner, .cameraMove → .cameraSettle protocol, view-aware planShown, rehome exemption, SettleTracker (zoom off by default)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 04-03-PLAN.md — Engine navigation: step in/out, per-display history, pan, frame window/Desktop toggles, rect target, widen-on-focus
+- [x] 04-04-PLAN.md — Shell camera: ZoomController, stage tiles, app colour, snapshot cache, Reduce Motion, Screen Recording explainer
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 04-05-PLAN.md — 11 hotkeys, 11 URLs, Zoom menu section and toggle, Shortcuts window (44 recorder rows)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 04-06-PLAN.md — Pointer input: ⌘⇧-drag rectangle zoom, Esc cancel, pick mode, title-bar and Desktop double-click
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 04-07-PLAN.md — Collapsed blocks: zoom-on oversized drops, CollapsedPanels, Collapsed drop preview
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 04-08-PLAN.md — Safety and proof: home tiles on quit, Restore All, crash rescue, 15-window VM settle, phase UAT
 **UI hint**: yes
 **Research**: Needs phase research. Start with a feasibility spike with measurable criteria: settle latency with Electron-heavy windows, terminal re-wrap, represented-state UX, ScreenCaptureKit memory growth over hours (soak test), overlay window level versus menus, Core Animation performance with 100+ layers
 **Scope notes**: Only the snapshot overlay animates; real windows get one AX write when the camera settles (changed and visible targets only). Capture before parking; park by moving, not shrinking. Camera targets are `NodeID`s so history and saved views survive reflows.
@@ -320,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
-| 4. Zoom Camera | 0/TBD | Not started | - |
+| 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |

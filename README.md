@@ -1,6 +1,6 @@
 # Transom
 
-Transom is a free, open-source (MIT) window manager for macOS in which windows never overlap. You dock windows into nested, tiled spaces by dragging them, and Transom keeps them arranged as windows open, close and resize. The longer-term design adds a zoomable "desk": zoom out to see everything, zoom in to whatever you need.
+Transom is a free, open-source (MIT) window manager for macOS in which windows never overlap. You dock windows into nested, tiled spaces by dragging them, and Transom keeps them arranged as windows open, close and resize. Windows live on a zoomable "desk": zoom out to see everything, zoom in to whatever you need.
 
 The core promise is simple: windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, tiling must still work.
 
@@ -13,14 +13,14 @@ Transom was renamed from Pane on 2026-10-27.
 
 Transom is pre-release. There is no public download yet. A notarised 0.3.0 build (the version set in `scripts/release.sh`) has been made locally, but its public release is held.
 
-Phases 1-3 of the roadmap are complete, so tiling works today. Phase 4 (Zoom Camera) is next.
+Phases 1-4 of the roadmap are complete, so tiling and zoom work today. Phase 5 (Gestures) is next.
 
 | Phase | Name | Status |
 |---|---|---|
 | 1 | Layout Model | Complete |
 | 2 | Window Control | Complete |
 | 3 | Tiling MVP | Complete |
-| 4 | Zoom Camera | Planned |
+| 4 | Zoom Camera | Complete |
 | 5 | Gestures | Planned |
 | 6 | Overview, Spaces & Displays | Planned |
 | 7 | Tab Groups | Planned |
@@ -31,7 +31,7 @@ Known gap: testing so far has used a single display. The multi-display re-check 
 
 ## What works today
 
-Transom runs as a menu-bar app (no Dock icon). Everything below is in the code now, and none of it needs Screen Recording.
+Transom runs as a menu-bar app (no Dock icon). Everything below is in the code now. Only zoom's window snapshots use Screen Recording, and zoom works without it.
 
 | Feature | What it does |
 |---|---|
@@ -50,27 +50,41 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Per display and Space | There is one layout per display and Space. Fullscreen Spaces get no layout. |
 | macOS conflicts | Transom detects Stage Manager (and pauses arranging while it is on), macOS edge tiling, and click-wallpaper-to-reveal-desktop. It explains each conflict and offers to turn the feature off. Restore macOS Window Settings in the menu puts back the values Transom changed. |
 | Accessibility setup | A Set Up Transom window guides you through the Accessibility grant. If the grant goes stale (for example after a rebuild with a different signature), Transom detects it and explains the fix instead of looping on prompts. |
+| Zoom camera | Zoom out to see every window on a display, step in or out one level of the layout, go back and forward through up to 50 previous views per display, and pan to a neighbouring area. ⌘⇧-drag a rectangle to zoom to the windows it frames (Esc cancels). After zooming out, click a window to zoom in to it and focus it. Double-click a title bar to frame that window, or the bare wallpaper to frame the Desktop; do it again to toggle back. Only an overlay animates (about 250 ms, or a crossfade with Reduce Motion); real windows get one move each when the camera settles. Windows outside the view are moved off screen at their own size, never shrunk, and come back on quit, after a crash and with Restore All Windows. |
+| Window snapshots | With Screen Recording granted, the zoom overlay shows one-shot snapshots of each window. Without it, each window is drawn in its app's colour with its icon and title. Transom asks for Screen Recording the first time you zoom, never at setup. |
+| Collapsed blocks | With zoom on, a drop that doesn't fit the windows' minimum sizes is accepted: windows that lose room show as blocks in their app's colour until you zoom in. Double-click a block to zoom in to it. With zoom off, such a drop is refused as before. |
+| Zoom off | Turn Off Zoom (menu) brings every window home and disables zoom entirely: no overlay, no Screen Recording use, and tiling behaves exactly as without zoom. |
 | Slow apps | Each app's Accessibility calls run off the main thread with a timeout, so a frozen app cannot stall Transom or the arranging of other apps' windows. |
 
 ### Menu
 
-The status menu has three sections. Arrange holds the layout commands and the Gaps submenu. Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, and the state of the window-ID lookup, the Spaces lookup and the event tap.
+The status menu has four sections. Arrange holds the layout commands and the Gaps submenu. Zoom holds the zoom commands, Turn Off or Turn On Zoom, Allow Window Previews… (Screen Recording) and Shortcuts…, a window where you can rebind every hotkey. Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, the state of the window-ID lookup, the Spaces lookup and the event tap, and the zoom and snapshot state.
 
 ### URL commands
 
-Transom registers the `transom://` URL scheme with three commands. Each one runs at most once per second, and any other URL is rejected.
+Transom registers the `transom://` URL scheme. Each one runs at most once per second, and any other URL is rejected.
 
 ```sh
 open transom://restore          # Restore All Windows
 open transom://toggle-desktop   # hide or show the Desktop tile
 open transom://split-finder     # Split with New Finder Window
+open transom://zoom-out         # zoom out to all windows
+open transom://step-out         # zoom out one level
+open transom://step-in          # zoom in one level
+open transom://back             # previous view
+open transom://forward          # next view
+open transom://pan-left         # also pan-right, pan-up, pan-down
+open transom://frame-window     # frame the focused window, or toggle back
+open transom://frame-desktop    # frame the Desktop, or toggle back
 ```
+
+Zoom URLs act on the display under the pointer.
 
 Debug builds register `transom-debug://` instead.
 
 ### Hotkeys
 
-These are the default global hotkeys. They are fixed for now. A recorder to rebind them is planned for the Settings window (Phase 9).
+These are the default global hotkeys. Rebind any of them in the Shortcuts window (status menu ▸ Zoom ▸ Shortcuts…).
 
 | Hotkey | Command |
 |---|---|
@@ -107,6 +121,14 @@ These are the default global hotkeys. They are fixed for now. A recorder to rebi
 | `⌃⌥⌘P` | Pause or Resume Arranging |
 | `⌃⌥⌘E` | Don't Arrange the frontmost app (toggle) |
 | `⌃⌥⌘0` | Restore All Windows |
+| `⌃⌥⌘O` | Zoom Out to All Windows |
+| `⌃⌥⌘,` | Zoom Out One Level |
+| `⌃⌥⌘.` | Zoom In One Level |
+| `⌃⌥⌘[` | Back to the previous view |
+| `⌃⌥⌘]` | Forward to the next view |
+| `⌃⌥⌘Home` / `End` / `PgUp` / `PgDn` | Pan left / right / up / down (fn⌃⌥⌘ arrows on a laptop) |
+| `⌃⌥⌘M` | Frame the focused window, or toggle back |
+| `⌃⌥⌘G` | Frame the Desktop, or toggle back |
 
 ## Planned features
 
@@ -114,7 +136,6 @@ None of the following is in the code yet. Each line summarises the goal in `.pla
 
 | Phase | Feature | Status |
 |---|---|---|
-| 4 | Zoom Camera: zoom out to see every window on a display, step in or out one level of the layout, ⌘⇧-drag a rectangle to zoom to the windows it frames, go back and forward through previous views, and click a window to zoom to it and focus it. Zoomed views show window snapshots with Screen Recording, or app colour and icon without it. Turning zoom off leaves tiling fully working. | Planned |
 | 5 | Gestures: ⌥-pinch and ⌥-two-finger pan on the trackpad over any app, and pinch and pan on the bare desktop without ⌥. | Planned |
 | 6 | Overview, Spaces & Displays: an overview of every window on every display with a Spaces bar, an opt-in Mission Control takeover, and layouts kept per display and per Space across unplugging, sleep and docking. | Planned |
 | 7 | Tab Groups: drop a window on the middle of another to group them under one tab strip, with windows from any apps, docked or floating. | Planned |
@@ -127,7 +148,7 @@ None of the following is in the code yet. Each line summarises the goal in `.pla
 - Apple Silicon or Intel (release builds are universal)
 - The Accessibility permission, which Transom needs to move other apps' windows. The Set Up Transom window walks you through granting it.
 
-Screen Recording is not needed today. It will be needed only for window snapshots in the planned zoom (Phase 4). Without it, zoom is planned to fall back to app-colour and icon tiles.
+Screen Recording is optional. It is used only for window snapshots in the zoom overlay; without it, zoom draws app-colour and icon tiles. macOS 15 and later re-ask for Screen Recording about once a month.
 
 ## Building from source
 
@@ -163,7 +184,7 @@ Signing notes:
 |---|---|---|
 | `TransomModel` | library | The pure layout model: nested split tree with weights, the Desktop layer, tab groups, desks keyed by display and Space, resolving tiles to non-overlapping rects with minimum sizes, undo and versioned JSON. Foundation only. |
 | `TransomEngine` | library | Behaviour with no UI: the Arranger, the one `Command` enum every route dispatches, drag sessions, window tracking and classification, crash recovery, layout restore, the `transom://` parser and the `WindowSystem` protocol. |
-| `TransomMac` | library | The AppKit layer: Accessibility window system, event tap, hotkeys, status menu, overlays (drop preview, gap handles, toasts), permission flow, stores and conflict handling. |
+| `TransomMac` | library | The AppKit layer: Accessibility window system, event tap, hotkeys, status menu, overlays (drop preview, gap handles, toasts), the zoom stage and snapshot capture, the Shortcuts window, permission flow, stores and conflict handling. |
 | `TransomPrivate` | library | Every private API, each behind a fallback (see Private APIs). |
 | `TransomApp` | executable | The app entry point; it starts `TransomMac`. |
 | `TransomFixtureApp` | executable | A test fixture that opens real windows of every shape the integration tests need and reports their IDs and frames. |
@@ -175,6 +196,7 @@ Test targets: `TransomModelTests`, `TransomEngineTests`, `TransomMacTests` and `
 Two rules shape the layout:
 
 - `TransomModel` and `TransomEngine` never import AppKit, Cocoa, SwiftUI or another UI framework, so they can be tested headless. `scripts/check-no-appkit.sh` enforces this in CI, and `Tests/TransomModelTests/NoAppKitTests.swift` runs the same check inside `swift test`.
+- ScreenCaptureKit is used only in `Sources/TransomMac/Zoom/SnapshotCapture.swift`, and `NoScreenCaptureTests` enforces it, so tiling never depends on Screen Recording.
 - Each private API lives in its own file in `TransomPrivate`, is loaded at runtime rather than linked, and has a fallback, because any macOS update can break it.
 
 ## Testing
@@ -220,6 +242,9 @@ Preferences in Transom's user defaults:
 | `gap` | The gap between tiles |
 | `conflictNotNow` | macOS conflicts you chose not to be asked about again |
 | `windowManagerOriginals` | The original values of the macOS window settings Transom changed, for Restore macOS Window Settings |
+| `zoomEnabled` | Whether zoom is on (default on) |
+| `zoomPreviewExplainerShown` | Whether the one-time Screen Recording explainer has been shown |
+| `zoomTitleBarDoubleClick` | Whether title-bar double-click frames the window (on) or keeps macOS's own action |
 | `freezeTestPID` | Debug builds only: the app paused by the Debug menu's freeze test, so it is resumed after a crash |
 | `KeyboardShortcuts_<name>` | Hotkey bindings, stored by the KeyboardShortcuts library |
 
@@ -227,12 +252,12 @@ When you choose Turn Off for a macOS conflict, Transom writes only these boolean
 
 ## Privacy
 
-- Transom does not read window contents and does not capture the screen.
+- Without Screen Recording, Transom does not read window contents or capture the screen. With it granted and zoom on, Transom takes one-shot snapshots of on-screen windows only to draw the zoom overlay. Snapshots stay in memory (a 128 MB cache), are never written to disk, and use no continuous stream, so the macOS screen-sharing indicator never shows.
+- The zoom overlay itself is visible to system screen recordings on macOS 15.
 - It has no network code and sends nothing anywhere.
 - Through Accessibility it reads window metadata: each app's window list and, per window, role, subrole, modal, main, minimised and fullscreen state, identifier, title, position, size, title-bar buttons and child elements. To split with a new Finder window it presses Finder's menu item through Accessibility, with no Apple Events.
 - Window titles stay in memory. They help classify windows, match windows when the private window-ID lookup is off, and label rows in the Debug menu's Tracked Windows list. They are never written to disk.
 - Logs go to the macOS unified log under the `com.eightabyte.transom` subsystem.
-- The window snapshots planned for Phase 4 will be used only to draw the zoom overlay.
 
 ## Clean room
 

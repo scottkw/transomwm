@@ -19,18 +19,21 @@ extension Arranger {
         // A sibling's near edge is the window's own slot, so docking there changes nothing: it goes past the sibling.
         let side = desk.tree.parent(of: leaf) == desk.tree.parent(of: neighbour) ? edge : edge.opposite
         // The neighbour's NodeID survives the remove: only splits collapse.
-        return try commit(key, flashing: window) { desk, ids throws(LayoutError) in
+        return try commit(key, flashing: window, collapsible: true) { desk, ids throws(LayoutError) in
             try desk.tree.remove(window)
             try desk.tree.insert(window, at: side, of: neighbour, ids: &ids)
         }
     }
 
-    /// Restore All Windows (SAFE-03): every stranded window back on screen and every hidden Desktop tile holding windows
-    /// shown, one undo step per desk shown. Runs while paused; N6 counts the windows moved.
+    /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every
+    /// hidden Desktop tile holding windows shown, one undo step per desk shown. Runs while paused; N6 counts the windows
+    /// moved, camera-parked ones included. Collapsed windows come back too and float with N1, as with zoom off (CR-01).
     mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
+        goHome()
+        camera.collapsible = []  // else the replan parks them again in the same perform
         let moves = rescueStranded(desks: world)
         try showParkedDesktops(keeping: moves, undoable: true)
-        return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + [.notice(.restored(count: moves.count))]
+        return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + [.notice(.restored(count: moves.count))]
     }
 
     /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step.
@@ -178,9 +181,10 @@ extension Arranger {
 
     /// Applies `change` to `key`'s desk as one undo step, unless the result leaves a window without room: then it
     /// beeps, announces it and flashes the blocked preview at `window`'s would-be frame, changing nothing (D-26).
-    /// With `refusingNoChange`, an edit that leaves every rect where it was only beeps.
+    /// With `refusingNoChange`, an edit that leaves every rect where it was only beeps. With `collapsible` (Move Window,
+    /// CONTEXT E) and zoom on, an edit leaving windows without room is accepted and they collapse (D-A).
     private mutating func commit(
-        _ key: DeskKey, flashing window: WindowRef, refusingNoChange: Bool = false,
+        _ key: DeskKey, flashing window: WindowRef, refusingNoChange: Bool = false, collapsible: Bool = false,
         _ change: (inout Desk, inout IDSource) throws(LayoutError) -> Void
     ) throws(LayoutError) -> [ArrangerEffect] {
         guard let area = display(for: key)?.visibleFrame, let desk = world[key] else { return [.beep] }
@@ -188,7 +192,8 @@ extension Arranger {
         try candidate.edit(key, history: &candidateHistory, change)
         guard let edited = candidate[key] else { return [.beep] }
         let plan = try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums)
-        guard plan.unfit.isEmpty else {
+        let collapsed = plan.unfit.isEmpty || !collapsible ? nil : try collapse(edited, area: area)
+        guard plan.unfit.isEmpty || collapsed != nil else {
             let frame = try Planner.plan(desk: edited, area: area, gap: gap, mins: [:]).frames[window]
             return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
         }
@@ -197,7 +202,8 @@ extension Arranger {
         }
         world = candidate
         history = candidateHistory
-        return replan()
+        let note = accept(collapsed, moving: window)
+        return replan() + note
     }
 }
 

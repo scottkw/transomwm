@@ -1,0 +1,59 @@
+{
+  "fill": {
+    "solid": "srgb:0.07843,0.10196,0.14902,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "muntins.svg",
+          "name": "muntins",
+          "position": {
+            "scale": 1.0,
+            "translation-in-points": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "image-name": "fanlight.svg",
+          "name": "fanlight",
+          "position": {
+            "scale": 1.0,
+            "translation-in-points": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        {
+          "image-name": "panes.svg",
+          "name": "panes",
+          "position": {
+            "scale": 1.0,
+            "translation-in-points": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

@@ -59,15 +59,18 @@ public enum Recovery {
     }
 
     /// Where each window Transom may move goes when Transom quits (SAFE-01, D-15): a parked floating window (one with a home
-    /// frame) to that frame clamped onto the display it is on, and any other stranded window to its `destination` on its
-    /// own display. Docked windows on screen, excluded and never-dock windows, and windows not present are left out.
+    /// frame) to that frame clamped onto the display it is on; a docked window more than 2 pt off its home-view tile
+    /// (`homeTiles`: parked or zoomed by the camera, D-D) to that tile, on the display holding the tile's centre; and any
+    /// other stranded window to its `destination` on its own display. A docked window with no tile (collapsed) keeps the
+    /// stranded rule. Docked windows at their tile, excluded and never-dock windows, and windows not present are left out.
     public static func terminationPlan(
-        windows: [WindowInfo], homeFrames: [WindowIdentity: Rect], displays: [DisplayInfo], docked: Set<WindowIdentity>
+        windows: [WindowInfo], homeFrames: [WindowIdentity: Rect], displays: [DisplayInfo], docked: Set<WindowIdentity>,
+        homeTiles: [WindowIdentity: Rect] = [:]
     ) -> [WindowRef: Rect] {
         var plan: [WindowRef: Rect] = [:]
         for info in windows where info.kind == .dockable && !info.isExcluded && info.state == .present {
             let id = info.window.identity
-            let home = docked.contains(id) ? nil : homeFrames[id]
+            let home = docked.contains(id) ? homeTiles[id].flatMap { Planner.near(info.frame, $0, within: 2) ? nil : $0 } : homeFrames[id]
             // A park corner can show on a neighbouring display, so a home frame alone marks a parked window.
             guard home != nil || isStranded(info.frame, displays: displays) else { continue }
             let homeDisplay = home.flatMap { home in displays.first { $0.visibleFrame.contains(Point(x: home.midX, y: home.midY)) } }

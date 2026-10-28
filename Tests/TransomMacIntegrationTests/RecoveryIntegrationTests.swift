@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TransomEngine
 @testable import TransomMac
@@ -82,4 +83,84 @@ private func visibleFraction(_ rect: Rect, _ displays: [DisplayInfo]) -> Double 
         #expect(arrange.arranger.world[key]?.tree.state(of: docked) == .present, "the saved layout did not come back")
         #expect(arrange.arranger.world[key]?.desktop.contains(floating) == true, "window 1 no longer floats")
     }
+
+    /// D-D, 04-08: three docked windows zoomed to window 0 (1 and 2 parked), then Transom "crashes": the controller goes
+    /// with no quit restore and no clean exit. A fresh controller on the same store (a recovery launch, zoom on) has every
+    /// window back in its home tile within 3 s, none stranded.
+    @Test(.timeLimit(.minutes(1)))
+    func aRelaunchAfterACrashWhileZoomedBringsWindowsBack() async throws {
+        _ = NSApplication.shared  // the stage needs the window server connection (ZoomSettleIntegrationTests)
+        let directory = FileManager.default.temporaryDirectory.appending(path: "transom-recovery-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fixture = try await FixtureProcess.launch(["standard", "standard", "standard"])
+        defer { fixture.terminate() }
+        let fixturePID = fixture.pid
+        func listed() async -> [Rect] {
+            _ = try? await fixture.send("list")
+            return fixture.windows.sorted { $0.index < $1.index }.map(\.frame)
+        }
+        func near(_ a: Rect, _ b: Rect) -> Bool {
+            abs(a.x - b.x) <= 2 && abs(a.y - b.y) <= 2 && abs(a.width - b.width) <= 2 && abs(a.height - b.height) <= 2
+        }
+
+        var tiles: [Rect] = []
+        var display: DisplayInfo?
+        do {  // the session that crashes
+            let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+            await system.start()
+            var crashing: ArrangeController? = ArrangeController(system: system, store: LayoutStore(directory: directory), zoomEnabled: true)
+            await crashing?.start()
+            let arrange = try #require(crashing)
+            var refs: [TransomModel.WindowRef] = []
+            for window in fixture.windows.sorted(by: { $0.index < $1.index }) {
+                func find() -> TransomModel.WindowRef? {
+                    arrange.arranger.windows.values.first { $0.window.pid == fixturePID && $0.window.windowID == window.id }?.window
+                }
+                _ = await waitUntil(timeout: .seconds(3)) { find().map { arrange.arranger.deskKey(of: $0) != nil } ?? false }
+                refs.append(try #require(find(), "window \(window.id) never reached a desk"))
+            }
+            await arrange.dispatch(.arrangeAll, focused: refs[0])
+            let key = try #require(arrange.arranger.deskKey(of: refs[0]))
+            try #require(refs.allSatisfy { arrange.arranger.world[key]?.tree.state(of: $0) == .present }, "Arrange All did not dock all three")
+            let screen = try #require(Displays.current().first { $0.uuid == key.displayUUID })
+            display = screen
+            let tiled = await waitUntil(timeout: .seconds(3)) {
+                tiles = await listed()
+                return tiles.count == 3 && tiles.indices.allSatisfy { i in tiles.indices.allSatisfy { j in i == j || !tiles[i].overlaps(tiles[j]) } }
+                    && tiles.allSatisfy { !Recovery.isStranded($0, displays: [screen]) }
+            }
+            try #require(tiled, "the windows never tiled: \(tiles)")
+            try await Task.sleep(for: .milliseconds(300))  // the last clamps land
+            tiles = await listed()
+
+            let leaf = try #require(arrange.arranger.leafNode(of: refs[0]))
+            await arrange.zoom(to: .node(leaf), displayUUID: screen.uuid)
+            var zoomed: [Rect] = []
+            let parked = await waitUntil(timeout: .seconds(3)) {
+                zoomed = await listed()
+                return zoomed.count == 3 && zoomed.dropFirst().allSatisfy { Recovery.isStranded($0, displays: [screen]) }
+            }
+            try #require(parked, "zooming in did not park windows 1 and 2: \(zoomed)")
+            _ = await waitUntil(timeout: .seconds(3)) { arrange.zoomController?.isIdle == true }
+            crashing = nil  // the crash: no restoreForTermination, no writeCleanExit
+        }
+        let screen = try #require(display)
+        let store = LayoutStore(directory: directory)
+        store.load()
+        try #require(store.contents?.session.cleanExit == false, "the crashed session left a clean exit")
+
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        await system.start()
+        let relaunched = ArrangeController(system: system, store: LayoutStore(directory: directory), zoomEnabled: true)
+        defer { withExtendedLifetime(relaunched) {} }  // its events loop ends with it
+        await relaunched.start()
+        var last: [Rect] = []
+        let back = await waitUntil(timeout: .seconds(3)) {
+            last = await listed()
+            return last.count == 3 && last.indices.allSatisfy { near(last[$0], tiles[$0]) && !Recovery.isStranded(last[$0], displays: [screen]) }
+        }
+        #expect(back, "after the relaunch the windows are at \(last), not back in \(tiles)")
+        #expect(relaunched.arranger.view(on: screen.uuid) == .home)
+    }
 }
+

@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transom — a tiling window manager for macOS</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>Transom — windows that never overlap</title>
+<meta name="description" content="Transom is a free, open-source tiling window manager for macOS. Drag a window to an edge and it docks into a tile. Open, close or resize anything and the layout keeps itself in order.">
+<meta property="og:title" content="Transom — windows that never overlap">
+<meta property="og:description" content="A free, open-source tiling window manager for macOS. Drag to dock, nest tiles as deep as you like, and let Transom keep everything arranged.">
+<link rel="icon" href="/_blob/b1199f6a784e1094c3288d9ccf9430e2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F7F5;color:#0F1218;font-family:"Instrument Sans",-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#0F1218;text-decoration-color:rgba(15,18,24,.25);text-underline-offset:3px}
+a:hover{color:#2A50CC;text-decoration-color:#3461E8}
+::selection{background:#DCE5FD;color:#0F1218}
+summary::-webkit-details-marker{display:none}
+.t-mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.t-navlink{text-decoration:none;color:#5B6270}
+.t-navlink:hover{color:#0F1218}
+.t-btn{display:inline-block;background:#0F1218;color:#fff;text-decoration:none;font-weight:500;border-radius:10px}
+.t-btn:hover{background:#262B35;color:#fff}
+.t-btn-accent{display:inline-block;background:#3461E8;color:#fff;text-decoration:none;font-weight:500;border-radius:10px}
+.t-btn-accent:hover{background:#2A50CC;color:#fff}
+.t-btn-ghost{display:inline-block;border:1px solid #2C313B;color:#D5D9E0;text-decoration:none;border-radius:10px}
+.t-btn-ghost:hover{border-color:#4A5160;color:#fff}
+.t-key{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;background:#F1F1EE;border:1px solid #E2E2DD;border-radius:5px;padding:2px 7px;white-space:nowrap;color:#2B303A}
+.t-stage{position:relative;width:100%;aspect-ratio:16/10;border-radius:14px;overflow:hidden;background:#C9D2E2;box-shadow:0 0 0 1px rgba(15,18,24,.10),0 40px 80px -30px rgba(15,18,24,.35),0 12px 24px -16px rgba(15,18,24,.18);text-align:left}
+.t-menubar{position:absolute;left:0;right:0;top:0;height:26px;background:rgba(255,255,255,.7);display:flex;align-items:center;gap:14px;padding:0 12px;font-size:12px;font-weight:600;color:#1D1D1F;z-index:6}
+.t-area{position:absolute;left:0;right:0;top:26px;bottom:0}
+.t-win{position:absolute;background:#fff;border-radius:9px;overflow:hidden;box-shadow:0 0 0 1px rgba(15,18,24,.12),0 8px 20px -10px rgba(15,18,24,.35);display:flex;flex-direction:column}
+.t-titlebar{display:flex;align-items:center;gap:8px;height:22px;flex:none;padding:0 9px;border-bottom:1px solid #ECECEA;font-size:11px;font-weight:600;color:#3A3F49;background:#FAFAF9}
+.t-lights{display:flex;gap:5px}
+.t-lights i{display:block;width:8px;height:8px;border-radius:50%;background:#D7D7D3}
+.t-line{display:block;height:7px;border-radius:4px;background:#ECECE8}
+.t-a{left:1%;top:1.6%;width:48.6%;height:96.8%}
+.t-b{left:50.4%;top:1.6%;width:48.6%;height:96.8%;animation:tB 10s ease-in-out infinite}
+.t-c{left:28%;top:24%;width:36%;height:44%;z-index:4;box-shadow:0 0 0 1px rgba(15,18,24,.14),0 24px 48px -16px rgba(15,18,24,.45);animation:tC 10s ease-in-out infinite}
+.t-p{position:absolute;left:50.4%;top:50.6%;width:48.6%;height:47.8%;box-sizing:border-box;border-radius:9px;background:rgba(52,97,232,.16);border:2px solid #3461E8;opacity:0;z-index:3;animation:tP 10s ease-in-out infinite}
+.t-cur{position:absolute;width:16px;height:22px;z-index:5;animation:tK 10s ease-in-out infinite}
+@keyframes tB{0%,44%{height:96.8%}50%,86%{height:47.8%}92%,100%{height:96.8%}}
+@keyframes tC{0%,10%{left:28%;top:24%;width:36%;height:44%;opacity:1}40%,44%{left:58%;top:56%;width:36%;height:44%;opacity:1}50%,86%{left:50.4%;top:50.6%;width:48.6%;height:47.8%;opacity:1}90%{left:50.4%;top:50.6%;width:48.6%;height:47.8%;opacity:0}92%{left:28%;top:24%;width:36%;height:44%;opacity:0}98%,100%{left:28%;top:24%;width:36%;height:44%;opacity:1}}
+@keyframes tP{0%,26%{opacity:0}34%,45%{opacity:1}50%,100%{opacity:0}}
+@keyframes tK{0%{left:80%;top:84%}10%{left:44%;top:25%}40%,46%{left:74%;top:57%}62%,100%{left:88%;top:86%}}
+@media (prefers-reduced-motion:reduce){.t-b,.t-c,.t-p,.t-cur{animation:none}.t-b{height:47.8%}.t-c{left:50.4%;top:50.6%;width:48.6%;height:47.8%}.t-cur{display:none}}
+@media (max-width:760px){.t-navlinks{display:none!important}.t-gh{display:none!important}.t-titlebar{height:16px;font-size:9px;gap:5px;padding:0 6px}.t-lights i{width:6px;height:6px}.t-menubar{height:20px;font-size:10px}.t-area{top:20px}.t-body{display:none!important}}
+</style>
+</helmet>
+
+<div style="min-height: 100vh">
+
+<header style="position: sticky; top: 0; z-index: 10; background: rgba(247, 247, 245, 0.88); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid #E6E6E2">
+  <nav style="max-width: 1120px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 28px">
+    <a href="#top" style="display: flex; align-items: center; gap: 9px; text-decoration: none">
+      <img src="/_blob/e9a2d08c51a1ad2dede3ce9ddce59d1e" alt="" width="28" height="28" style="display: block; margin: -3px">
+      <span style="font-weight: 600; font-size: 16px; letter-spacing: -0.01em">Transom</span>
+    </a>
+    <div class="t-navlinks" style="display: flex; gap: 24px; font-size: 14px">
+      <a href="#how" class="t-navlink">How it works</a>
+      <a href="#features" class="t-navlink">Features</a>
+      <a href="#hotkeys" class="t-navlink">Hotkeys</a>
+      <a href="#privacy" class="t-navlink">Privacy</a>
+      <a href="#roadmap" class="t-navlink">Roadmap</a>
+    </div>
+    <div style="flex: 1"></div>
+    <a href="https://github.com/scottkw/transomwm" class="t-navlink t-gh" style="font-size: 14px">GitHub</a>
+    <a href="#get" class="t-btn" style="font-size: 14px; padding: 8px 14px; border-radius: 8px">Get Transom</a>
+  </nav>
+</header>
+
+<section id="top" style="position: relative; overflow: hidden; background-image: linear-gradient(rgba(15, 18, 24, 0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 18, 24, 0.035) 1px, transparent 1px); background-size: 64px 64px; background-position: center top">
+  <div style="position: absolute; inset: auto 0 0 0; height: 260px; background: linear-gradient(rgba(247, 247, 245, 0), #F7F7F5)"></div>
+  <div style="position: relative; max-width: 1120px; margin: 0 auto; padding: 88px 24px 72px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px">
+    <a href="#roadmap" style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4A505C; border: 1px solid #E2E2DD; background: #FFFFFF; padding: 5px 12px 5px 6px; border-radius: 999px; text-decoration: none">
+      <span style="background: #E9EFFE; color: #2A50CC; font-weight: 600; padding: 2px 8px; border-radius: 999px; font-size: 12px">Pre-release</span>
+      <span>Tiling works today. Zoom is next.</span>
+      <span style="color: #8A909C">→</span>
+    </a>
+    <h1 style="margin: 0; font-size: clamp(42px, 6.6vw, 76px); line-height: 1.02; letter-spacing: -0.045em; font-weight: 600; max-width: 12em; text-wrap: balance">{{ headline }}</h1>
+    <p style="margin: 0; font-size: clamp(17px, 1.6vw, 19px); line-height: 1.55; color: #5B6270; max-width: 33em; text-wrap: pretty">Transom is a free, open-source tiling window manager for macOS. Drag a window to an edge and it docks into a tile. Open, close or resize anything, and the layout keeps itself in order.</p>
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; margin-top: 4px">
+      <a href="#get" class="t-btn" style="font-size: 15px; padding: 12px 20px">Get Transom</a>
+      <a href="https://github.com/scottkw/transomwm" style="display: flex; align-items: center; gap: 6px; background: #FFFFFF; border: 1px solid #E2E2DD; font-size: 15px; padding: 11px 16px; border-radius: 10px; color: #2B303A; text-decoration: none">View the source</a>
+    </div>
+    <span class="t-mono" style="font-size: 12px; color: #636A77">Free · MIT licensed · macOS 14+ · Apple silicon &amp; Intel</span>
+
+    <div style="width: 100%; max-width: 920px; margin-top: 40px; display: flex; flex-direction: column; gap: 14px">
+      <div class="t-stage" role="img" aria-label="Animation: a floating Notes window is dragged to the lower right, a blue drop preview shows where it will land, and it docks beside Safari while Terminal shrinks to make room.">
+        <div class="t-menubar">
+          <img src="/_blob/b315590be1105f49eb2f00bffa2e694f" alt="" width="16" height="16" style="display: block">
+          <span style="font-weight: 700">Notes</span>
+          <span style="font-weight: 500; color: #4A4A4F">File</span>
+          <span style="font-weight: 500; color: #4A4A4F">Edit</span>
+          <span style="font-weight: 500; color: #4A4A4F">View</span>
+          <span style="flex: 1"></span>
+          <span style="font-weight: 500">Wed 9:41</span>
+        </div>
+        <div class="t-area">
+          <div class="t-win t-a">
+            <div class="t-titlebar"><span class="t-lights"><i></i><i></i><i></i></span><span>Safari</span></div>
+            <div class="t-body" style="flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+              <span style="display: block; height: 72px; border-radius: 8px; background: #E6EBF5"></span>
+              <span class="t-line" style="width: 70%; height: 10px; background: #DCDFE5"></span>
+              <span class="t-line" style="width: 92%"></span>
+              <span class="t-line" style="width: 86%"></span>
+              <span class="t-line" style="width: 64%"></span>
+              <span style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 6px"><span style="height: 44px; border-radius: 6px; background: #F1F1EE"></span><span style="height: 44px; border-radius: 6px; background: #F1F1EE"></span><span style="height: 44px; border-radius: 6px; background: #F1F1EE"></span></span>
+              <span class="t-line" style="width: 88%"></span>
+              <span class="t-line" style="width: 76%"></span>
+            </div>
+          </div>
+          <div class="t-win t-b" style="background: #15181F">
+            <div class="t-titlebar" style="background: #1C2029; border-bottom-color: #262B35; color: #AEB4BF"><span class="t-lights"><i style="background: #3A404B"></i><i style="background: #3A404B"></i><i style="background: #3A404B"></i></span><span>Terminal</span></div>
+            <div class="t-body t-mono" style="flex: 1; padding: 12px 14px; font-size: 11px; line-height: 1.7; color: #C9CED7; white-space: pre; overflow: hidden"><span style="color: #7E8794">~/dev/transomwm $</span> swift build
+Building for debugging...
+<span style="color: #8FB0FF">Build complete!</span>
+<span style="color: #7E8794">~/dev/transomwm $</span> swift test</div>
+          </div>
+          <div class="t-p"></div>
+          <div class="t-win t-c">
+            <div class="t-titlebar"><span class="t-lights"><i style="background: #F26B5B"></i><i style="background: #F6BE4F"></i><i style="background: #5BC560"></i></span><span>Notes</span></div>
+            <div class="t-body" style="flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 9px; background: #FFFDF6">
+              <span class="t-line" style="width: 48%; height: 10px; background: #E6E1CF"></span>
+              <span class="t-line" style="width: 90%; background: #F1EDDF"></span>
+              <span class="t-line" style="width: 80%; background: #F1EDDF"></span>
+              <span class="t-line" style="width: 86%; background: #F1EDDF"></span>
+              <span class="t-line" style="width: 58%; background: #F1EDDF"></span>
+            </div>
+          </div>
+          <svg class="t-cur" viewBox="0 0 16 22" aria-hidden="true"><path d="M0 0 L0 19 L5 14.5 L8.4 21.6 L11.6 20.1 L8.3 13.2 L14.6 13.2 Z" fill="#FFFFFF"/><path d="M1.6 3.6 L1.6 15.4 L5.4 12 L8.9 19.4 L10 18.9 L6.6 11.6 L11 11.6 Z" fill="#0F1218"/></svg>
+        </div>
+      </div>
+      <span class="t-mono" style="font-size: 12px; color: #636A77">Drag a window by its title bar. The blue preview is the exact frame it gets when you let go.</span>
+    </div>
+  </div>
+</section>
+
+<section style="border-top: 1px solid #E6E6E2; border-bottom: 1px solid #E6E6E2; background: #FFFFFF">
+  <div style="max-width: 1120px; margin: 0 auto; padding: 22px 24px; display: flex; align-items: center; gap: 12px 36px; flex-wrap: wrap; justify-content: center">
+    <span class="t-mono" style="font-size: 12px; color: #636A77; text-transform: uppercase; letter-spacing: 0.06em">No</span>
+    <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #3A3F49">Screen Recording</span>
+    <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #3A3F49">Network code</span>
+    <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #3A3F49">Config files</span>
+    <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #3A3F49">Dock icon</span>
+    <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: #3A3F49">Price tag</span>
+  </div>
+</section>
+
+<section id="how" style="max-width: 1120px; margin: 0 auto; padding: 112px 24px 0">
+  <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 48px; max-width: 660px">
+    <span class="t-mono" style="font-size: 13px; color: #2A50CC">How it works</span>
+    <h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -0.04em; font-weight: 600; text-wrap: balance">Tile by dragging. Transom keeps it tidy.</h2>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); border: 1px solid #E6E6E2; border-radius: 14px; background: #FFFFFF; overflow: hidden">
+    <div style="padding: 28px; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid #E6E6E2; border-bottom: 1px solid #E6E6E2; margin: 0 -1px -1px 0">
+      <span class="t-mono" style="font-size: 13px; color: #636A77">01</span>
+      <span class="t-key" style="align-self: flex-start; font-size: 13px; padding: 3px 8px">drag title bar</span>
+      <h3 style="margin: 4px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Drop a window on an edge</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Drag to a screen edge or to another window's edge. A preview shows the exact frame, and the window docks when you let go. A drop that can't fit the windows' minimum sizes is shown as blocked.</p>
+    </div>
+    <div style="padding: 28px; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid #E6E6E2; border-bottom: 1px solid #E6E6E2; margin: 0 -1px -1px 0">
+      <span class="t-mono" style="font-size: 13px; color: #636A77">02</span>
+      <span style="display: flex; gap: 6px"><span class="t-key" style="font-size: 13px; padding: 3px 8px">⇧ float</span><span class="t-key" style="font-size: 13px; padding: 3px 8px">⌘ swap</span></span>
+      <h3 style="margin: 4px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Nest as deep as you like</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Split any tile again, in any direction. Hold ⇧ to drop a window loose on the Desktop tile, or ⌘ over another tile to swap the two.</p>
+    </div>
+    <div style="padding: 28px; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid #E6E6E2; border-bottom: 1px solid #E6E6E2; margin: 0 -1px -1px 0">
+      <span class="t-mono" style="font-size: 13px; color: #636A77">03</span>
+      <span class="t-key" style="align-self: flex-start; font-size: 13px; padding: 3px 8px; background: #E9EFFE; color: #2A50CC; border-color: #C9D6FB">automatic</span>
+      <h3 style="margin: 4px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">It stays arranged</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Close or minimise a window and its neighbours fill the space. A minimised window comes back to its tile, and so does one leaving full screen.</p>
+    </div>
+  </div>
+</section>
+
+<section style="max-width: 1120px; margin: 0 auto; padding: 112px 24px 0">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 48px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <span class="t-mono" style="font-size: 13px; color: #2A50CC">Why Transom</span>
+      <h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -0.04em; font-weight: 600; text-wrap: balance">Between snapping and scripting.</h2>
+      <p style="margin: 0; font-size: 17px; line-height: 1.55; color: #5B6270; max-width: 28em; text-wrap: pretty">Snap tools put a window somewhere once and forget it. Keyboard tilers keep order but want a config file first. Transom keeps the order and lets your mouse set it up.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; border-top: 1px solid #E6E6E2">
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #3461E8"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">Layouts that remember</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">Tiles are a tree, not a one-off frame. Windows that open, close, minimise or go full screen are put back where they belong.</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #0F1218"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">Nothing to configure</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">Drag to build a layout, and use the 30-odd hotkeys when your hands are on the keyboard. Every layout edit can be undone.</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #0F1218"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">Floating when you want it</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">New windows open floating on the Desktop tile. Dock them when you're ready, or click the green button to toggle.</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #0F1218"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">Free, for good</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">MIT licensed, native Swift, no account and no upsell.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" style="max-width: 1120px; margin: 0 auto; padding: 112px 24px 0">
+  <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 48px; max-width: 660px">
+    <span class="t-mono" style="font-size: 13px; color: #2A50CC">Features</span>
+    <h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -0.04em; font-weight: 600; text-wrap: balance">Careful with your windows.</h2>
+    <p style="margin: 0; font-size: 17px; line-height: 1.55; color: #5B6270; text-wrap: pretty">A window manager moves every app you own, so Transom is built to fail safe.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px">
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Crash-safe restore</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Quit and every moved window goes back on screen. After a crash, the next launch rescues stranded windows first, then re-applies the layout.</p>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Layout restore</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Relaunch Transom while your apps keep running and each layout comes back with the same windows in the same tiles.</p>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Gaps</h3>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270">Drag the gap between two windows to resize both.</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <span style="font-size: 13px; border: 1px solid #E2E2DD; border-radius: 6px; padding: 5px 10px; color: #2B303A">None</span>
+        <span style="font-size: 13px; border: 1px solid #E2E2DD; border-radius: 6px; padding: 5px 10px; color: #2B303A">4</span>
+        <span style="font-size: 13px; border: 1px solid #C9D6FB; background: #E9EFFE; color: #2A50CC; border-radius: 6px; padding: 5px 10px">8 pt</span>
+        <span style="font-size: 13px; border: 1px solid #E2E2DD; border-radius: 6px; padding: 5px 10px; color: #2B303A">12</span>
+        <span style="font-size: 13px; border: 1px solid #E2E2DD; border-radius: 6px; padding: 5px 10px; color: #2B303A">16</span>
+        <span style="font-size: 13px; border: 1px solid #E2E2DD; border-radius: 6px; padding: 5px 10px; color: #2B303A">24</span>
+      </div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Plays well with macOS</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Transom spots Stage Manager, edge tiling and click-wallpaper-to-reveal-desktop, explains each conflict, and can put your original settings back.</p>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Exclusions and pause</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Mark any app Don't Arrange and Transom never moves it. Pause Arranging stops everything until you resume.</p>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">A frozen app can't stall it</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Each app's Accessibility calls run off the main thread with a timeout, so one hung app never holds up the rest.</p>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Per display and Space</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">Each display and each Space keeps its own layout. Full-screen Spaces are left alone.</p>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Scriptable</h3>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270">Drive it from Shortcuts, Raycast or a shell.</p>
+      </div>
+      <div class="t-mono" style="font-size: 12px; line-height: 1.9; color: #2B303A; background: #F4F4F1; border: 1px solid #E6E6E2; border-radius: 8px; padding: 8px 12px; overflow-x: auto; white-space: pre">open transom://restore
+open transom://toggle-desktop
+open transom://split-finder</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Guided setup</h3>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270; text-wrap: pretty">A setup window walks you through the Accessibility grant, and if the grant goes stale Transom tells you how to fix it instead of nagging.</p>
+    </div>
+  </div>
+</section>
+
+<section id="hotkeys" style="max-width: 1120px; margin: 0 auto; padding: 112px 24px 0">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 48px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <span class="t-mono" style="font-size: 13px; color: #2A50CC">Hotkeys</span>
+      <h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -0.04em; font-weight: 600; text-wrap: balance">Everything you can drag, you can type.</h2>
+      <p style="margin: 0; font-size: 17px; line-height: 1.55; color: #5B6270; max-width: 28em; text-wrap: pretty">Every command lives under <span class="t-key" style="font-size: 14px">⌃⌥⌘</span>. Add ⇧ to move instead of focus. Floating windows snap to halves, thirds and quarters.</p>
+      <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #5B6270">Rebinding arrives with the Settings window.</p>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; padding: 8px 24px">
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0"><span style="flex: 1; font-size: 14px; color: #2B303A">Dock / float window</span><span class="t-key">⌃⌥⌘D</span><span class="t-key">⌃⌥⌘F</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Focus neighbouring tile</span><span class="t-key">⌃⌥⌘ ←↑↓→</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Move window</span><span class="t-key">⌃⌥⌘⇧ ←↑↓→</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Swap with previous window</span><span class="t-key">⌃⌥⌘S</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Grow / shrink tile</span><span class="t-key">⌃⌥⌘=</span><span class="t-key">⌃⌥⌘-</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Balance / rotate / flip</span><span class="t-key">⌃⌥⌘B</span><span class="t-key">R</span><span class="t-key">X</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Arrange all / float all</span><span class="t-key">⌃⌥⌘⇧D</span><span class="t-key">⌃⌥⌘⇧F</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Undo layout change</span><span class="t-key">⌃⌥⌘Z</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Pause or resume arranging</span><span class="t-key">⌃⌥⌘P</span></div>
+      <div style="display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #F0F0EC"><span style="flex: 1; font-size: 14px; color: #2B303A">Restore all windows</span><span class="t-key">⌃⌥⌘0</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="privacy" style="max-width: 1120px; margin: 0 auto; padding: 112px 24px 0">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 48px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <span class="t-mono" style="font-size: 13px; color: #2A50CC">Privacy</span>
+      <h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -0.04em; font-weight: 600; text-wrap: balance">It moves windows. It doesn't look inside them.</h2>
+      <p style="margin: 0; font-size: 17px; line-height: 1.55; color: #5B6270; max-width: 28em; text-wrap: pretty">Transom needs one permission, Accessibility, and uses it only to read window positions and move them. The code is open, so you can check.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; border-top: 1px solid #E6E6E2">
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #3461E8"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">No screen capture</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">Transom never reads window contents and doesn't ask for Screen Recording.</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #0F1218"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">No network code at all</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">There is nothing in the app that can send data anywhere.</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #0F1218"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">Window titles stay in memory</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">The saved layout holds frames and app IDs, never titles, and only your account can read it.</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 28px 1fr; gap: 4px 14px; padding: 20px 0; border-bottom: 1px solid #E6E6E2">
+        <span style="width: 8px; height: 8px; margin-top: 8px; border-radius: 2px; background: #0F1218"></span>
+        <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 16px; font-weight: 600">Open source, MIT licensed</span><span style="font-size: 15px; line-height: 1.55; color: #5B6270">Native Swift. <a href="https://github.com/scottkw/transomwm">Read the source on GitHub</a>.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap" style="max-width: 1120px; margin: 0 auto; padding: 112px 24px 0">
+  <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 40px; max-width: 660px">
+    <span class="t-mono" style="font-size: 13px; color: #2A50CC">Roadmap</span>
+    <h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08; letter-spacing: -0.04em; font-weight: 600; text-wrap: balance">Tiling first. Then a desk you can zoom.</h2>
+    <p style="margin: 0; font-size: 17px; line-height: 1.55; color: #5B6270; text-wrap: pretty">The plan is a zoomable desk: zoom out to see everything, zoom in to whatever you need. Each phase ships on top of tiling that already works, and turning zoom off leaves tiling untouched.</p>
+  </div>
+  <div style="background: #FFFFFF; border: 1px solid #E6E6E2; border-radius: 14px; overflow: hidden">
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 18px 24px"><span class="t-mono" style="font-size: 13px; color: #636A77">1–3</span><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Layout model, window control, tiling</span><span style="font-size: 14px; line-height: 1.5; color: #5B6270">Everything on this page.</span></div><span style="font-size: 12px; font-weight: 600; background: #0F1218; color: #FFFFFF; border-radius: 999px; padding: 3px 10px">Done</span></div>
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 18px 24px; border-top: 1px solid #F0F0EC; background: #FAFBFF"><span class="t-mono" style="font-size: 13px; color: #2A50CC">4</span><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Zoom camera</span><span style="font-size: 14px; line-height: 1.5; color: #5B6270">Zoom out to every window on a display, step in a level, or drag a rectangle to zoom to what it frames.</span></div><span style="font-size: 12px; font-weight: 600; background: #E9EFFE; color: #2A50CC; border-radius: 999px; padding: 3px 10px">In progress</span></div>
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 18px 24px; border-top: 1px solid #F0F0EC"><span class="t-mono" style="font-size: 13px; color: #636A77">5</span><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Gestures</span><span style="font-size: 14px; line-height: 1.5; color: #5B6270">Pinch and pan on the trackpad over any app.</span></div><span style="font-size: 12px; font-weight: 500; border: 1px solid #E2E2DD; color: #5B6270; border-radius: 999px; padding: 2px 10px">Planned</span></div>
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 18px 24px; border-top: 1px solid #F0F0EC"><span class="t-mono" style="font-size: 13px; color: #636A77">6</span><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Overview, Spaces and displays</span><span style="font-size: 14px; line-height: 1.5; color: #5B6270">Every window on every display, and layouts that survive unplugging, sleep and docking.</span></div><span style="font-size: 12px; font-weight: 500; border: 1px solid #E2E2DD; color: #5B6270; border-radius: 999px; padding: 2px 10px">Planned</span></div>
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 18px 24px; border-top: 1px solid #F0F0EC"><span class="t-mono" style="font-size: 13px; color: #636A77">7</span><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Tab groups</span><span style="font-size: 14px; line-height: 1.5; color: #5B6270">Drop a window on another to group them under one tab strip, across apps.</span></div><span style="font-size: 12px; font-weight: 500; border: 1px solid #E2E2DD; color: #5B6270; border-radius: 999px; padding: 2px 10px">Planned</span></div>
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 18px 24px; border-top: 1px solid #F0F0EC"><span class="t-mono" style="font-size: 13px; color: #636A77">8</span><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Saved views and a CLI</span><span style="font-size: 14px; line-height: 1.5; color: #5B6270">Nine view slots, more URL commands, a transom command-line tool, and layouts kept across reboots.</span></div><span style="font-size: 12px; font-weight: 500; border: 1px solid #E2E2DD; color: #5B6270; border-radius: 999px; padding: 2px 10px">Planned</span></div>
+    <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 18px 24px; border-top: 1px solid #F0F0EC"><span class="t-mono" style="font-size: 13px; color: #636A77">9</span><div style="display: flex; flex-direction: column; gap: 3px"><span style="font-size: 16px; font-weight: 600">Polish and ship</span><span style="font-size: 14px; line-height: 1.5; color: #5B6270">Settings with hotkey rebinding, onboarding, launch at login, update checks and a Homebrew cask.</span></div><span style="font-size: 12px; font-weight: 500; border: 1px solid #E2E2DD; color: #5B6270; border-radius: 999px; padding: 2px 10px">Planned</span></div>
+  </div>
+</section>
+
+<section id="get" style="max-width: 1120px; margin: 0 auto; padding: 112px 24px 0">
+  <div style="background: #0F1218; color: #E6E8EC; border-radius: 20px; padding: clamp(28px, 5vw, 56px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 48px; align-items: center; position: relative; overflow: hidden">
+    <div style="position: absolute; right: -140px; bottom: -220px; width: 600px; height: 500px; background: radial-gradient(closest-side, rgba(52, 97, 232, 0.28), rgba(52, 97, 232, 0))"></div>
+    <div style="position: relative; display: flex; flex-direction: column; gap: 22px">
+      <img src="/_blob/e26eaa8016530e48713408939afa8ac0" alt="" width="76" height="76" style="margin: -8px">
+      <h2 style="margin: 0; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.05; letter-spacing: -0.04em; font-weight: 600; color: #FFFFFF">Transom is almost here.</h2>
+      <p style="margin: 0; font-size: 16px; line-height: 1.55; color: #A3A9B5; max-width: 30em">There's no public download yet. A signed, notarised build exists, and it goes public once testing wraps up. Watch the repository to hear when it lands, or build it yourself today.</p>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+        <a href="https://github.com/scottkw/transomwm/releases" class="t-btn-accent" style="font-size: 15px; padding: 12px 20px">Watch for releases</a>
+        <a href="https://github.com/scottkw/transomwm#building-from-source" class="t-btn-ghost" style="font-size: 15px; padding: 11px 18px">Build instructions</a>
+      </div>
+      <span class="t-mono" style="font-size: 12px; color: #8A909C">macOS 14 Sonoma or later · Apple silicon or Intel</span>
+    </div>
+    <div style="position: relative; display: flex; flex-direction: column; gap: 10px">
+      <span style="font-size: 13px; color: #A3A9B5">Build from source (Swift 6.2, Xcode 26)</span>
+      <div style="background: #161A22; border: 1px solid #262B35; border-radius: 12px; overflow: hidden">
+        <div style="display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid #262B35"><span style="width: 10px; height: 10px; border-radius: 50%; background: #2E333D"></span><span style="width: 10px; height: 10px; border-radius: 50%; background: #2E333D"></span><span style="width: 10px; height: 10px; border-radius: 50%; background: #2E333D"></span></div>
+        <pre class="t-mono" style="margin: 0; padding: 18px 20px; color: #E6E8EC; font-size: 13px; line-height: 1.8; overflow-x: auto; white-space: pre"><span style="color: #6F7684">$</span> git clone https://github.com/scottkw/transomwm
+<span style="color: #6F7684">$</span> cd transomwm
+<span style="color: #6F7684">$</span> swift build &amp;&amp; swift test
+<span style="color: #8FB0FF">Build complete!</span></pre>
+      </div>
+      <span style="font-size: 13px; line-height: 1.5; color: #8A909C">Running the signed app needs your own Developer ID team. The README explains the build scripts.</span>
+    </div>
+  </div>
+</section>
+
+<section style="max-width: 1120px; margin: 0 auto; padding: 24px 24px 0">
+  <details style="border: 1px solid #E6E6E2; border-radius: 14px; background: #FFFFFF">
+    <summary style="cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; padding: 18px 24px; font-size: 15px; font-weight: 500"><span style="flex: 1">Known limits in the pre-release</span><span class="t-mono" style="color: #636A77">+</span></summary>
+    <ul style="margin: 0; padding: 0 24px 20px 44px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.55; color: #5B6270">
+      <li>Testing so far has used a single display. Treat a second display as unverified.</li>
+      <li>Hotkeys are fixed until the Settings window arrives.</li>
+      <li>Zoom, gestures, overview and tab groups are on the roadmap, not in the app yet.</li>
+      <li>Transom needs the Accessibility permission to move other apps' windows.</li>
+    </ul>
+  </details>
+</section>
+
+<footer style="margin-top: 112px; border-top: 1px solid #E6E6E2">
+  <div style="max-width: 1120px; margin: 0 auto; padding: 36px 24px 48px; display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; font-size: 13px; line-height: 1.6; color: #636A77">
+    <div style="display: flex; align-items: center; gap: 8px; color: #0F1218">
+      <img src="/_blob/b1199f6a784e1094c3288d9ccf9430e2" alt="" width="22" height="22" style="display: block; margin: -2px">
+      <span style="font-weight: 600; font-size: 14px">Transom</span>
+    </div>
+    <p style="margin: 0; flex: 1; min-width: 280px; max-width: 46em; text-wrap: pretty">Transom is a clean-room project inspired by TrellisWM. It contains no code, text or assets from TrellisWM or any other window manager, and isn't affiliated with any of them or with Apple. macOS is a trademark of Apple Inc.</p>
+    <div style="display: flex; gap: 20px">
+      <a href="https://github.com/scottkw/transomwm" class="t-navlink">Source</a>
+      <a href="https://github.com/scottkw/transomwm/issues" class="t-navlink">Issues</a>
+      <a href="https://github.com/scottkw/transomwm/blob/main/LICENSE" class="t-navlink">License</a>
+    </div>
+  </div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"headline":{"editor":"enum","options":["overlap","dock","tidy"],"default":"overlap","tsType":"&#39;overlap&#39;|&#39;dock&#39;|&#39;tidy&#39;"},"$preview":{"width":1440,"height":6400}}'>
+class Component extends DCLogic {
+  headlines = {
+    overlap: 'Windows that never overlap.',
+    dock: 'Drag a window. It docks.',
+    tidy: 'Tiled windows that tidy themselves.',
+  };
+  renderVals() {
+    return {
+      headline: this.headlines[this.props.headline ?? 'overlap'] ?? this.headlines.overlap,
+    };
+  }
+}
+</script>
+</body>
+</html>

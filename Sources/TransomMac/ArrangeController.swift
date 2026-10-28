@@ -19,6 +19,7 @@ import os
     public private(set) var arranger: Arranger {
         didSet {
             publishGreenButtons()
+            zoomInput.publish()
             guard arranger.pauseReasons != reportedPause else { return }
             reportedPause = arranger.pauseReasons
             onPauseChanged?()
@@ -53,25 +54,50 @@ import os
     private var tapReader: Task<Void, Never>?
     private let dragPoller = DragFramePoller()
     /// The drop preview panels, one per display; made when tracking starts.
-    private var previews: PreviewPresenter?
+    private(set) var previews: PreviewPresenter?
     /// The gap handles (TILE-05). A panel is made only when a handle first shows.
     private let gapPanels = GapHandlePanels()
+    /// The collapsed blocks at rest (ZOOM-13). A panel is made only when a block first shows.
+    private let collapsedPanels = CollapsedPanels()
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
     private var activationObserver: NSObjectProtocol?
     private var loggedTapRefusal = false
 
-    public init(system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8) {
+    /// Whether zoom is on (the `zoomEnabled` preference; tests default to off, D-D). Turn Off / Turn On Zoom change it.
+    private var zoomEnabled: Bool
+    public var isZoomEnabled: Bool { zoomEnabled }
+    private let zoomInputLog = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
+    private let cameraLog = Logger(subsystem: "com.eightabyte.transom", category: "camera")
+    /// Fires after each reveal and when zoom turns off (the status item's "zoomed in" description).
+    public var onViewChanged: (() -> Void)?
+    /// Turn Off Zoom in progress: the displays whose move home has not revealed yet.
+    private var turningOff = false
+    private var awaitingHome: [String: UInt64] = [:]
+    private let zoomOffFallback = WakeTimer()
+    /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
+    private(set) var zoomController: ZoomController?
+    var hasZoomController: Bool { zoomController != nil }
+    /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
+    private lazy var zoomInput = ZoomInput(controller: self, tap: tap)
+
+    public init(
+        system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, zoomEnabled: Bool = false
+    ) {
         self.system = system
         self.store = store
         self.exclusions = exclusions
+        self.zoomEnabled = zoomEnabled
         arranger = Arranger(gap: gap)
         gapPanels.onDrag = { [weak self] handle, delta, ended in
             Task { [weak self] in
                 guard let self else { return }
                 await self.run(self.arranger.handle(.gapDrag(handle, delta: delta, ended: ended), now: .now))
             }
+        }
+        collapsedPanels.onDoubleClick = { [weak self] window, uuid in
+            Task { await self?.openBlock(window, displayUUID: uuid) }
         }
     }
 
@@ -118,11 +144,22 @@ import os
         }
         fedCompleteInventory = inventory.initialRefreshComplete
         await run(arranger.handle(.inventory(inventory), now: .now))
+        if zoomEnabled { await run(arranger.handle(.zoomEnabled(true), now: .now)) }
         onInventory?(inventory)
         Task { [weak self, system] in
             for await event in system.events {
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
+                if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
+                if case .spaceChanged = event { self.zoomInput.endPick(reason: "space changed") }
+                // Back at the keyboard (⌘-Tab, a Dock click): pick mode's Esc hotkey must not keep Esc from that app (WR-02).
+                if case .windowFocused = event { self.zoomInput.endPick(reason: "focus changed") }
+                if case .displaysChanged = event {
+                    self.zoomInput.endPick(reason: "displays changed")
+                    self.zoomController?.displaysChanged()
+                    self.zoomInput.publish()  // a move whose display went away never reveals
+                }
+                if case .windowDestroyed(let window) = event { self.zoomController?.windowClosed(window) }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
                 // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does
@@ -171,6 +208,7 @@ import os
     /// Takes the tap down (Accessibility left `.ready`, Pitfall 4). Hotkeys and the menu keep working.
     public func stopTap() {
         tap.stop()
+        zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
     }
@@ -187,8 +225,15 @@ import os
         }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.watchdogTick() }
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                // ⌘-Tab sends no focused-window change, so pick mode must also end here (G-04-12).
+                if app?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                    self?.zoomInput.endPick(reason: "app activated")
+                }
+                self?.watchdogTick()
+            }
         }
     }
 
@@ -201,6 +246,7 @@ import os
         guard !tap.isRunning else { return }
         logger.error("event tap refused by macOS; taken down, drags are not detected")
         loggedTapRefusal = true
+        zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
     }
@@ -210,6 +256,7 @@ import os
     public func accessChanged(ready: Bool) {
         tapAllowed = ready
         if ready { startTap() } else { stopTap() }
+        zoomInput.publish()
     }
 
     /// The green buttons the tap last got, so an unchanged set is not swapped in again.
@@ -233,12 +280,17 @@ import os
     }
 
     /// The tracked window showing CG window `id` (`visibleMemberID ?? windowID`).
-    private func trackedWindow(cgID id: UInt32) -> TransomModel.WindowRef? {
+    func trackedWindow(cgID id: UInt32) -> TransomModel.WindowRef? {
         arranger.windows.values.first { ($0.visibleMemberID ?? $0.window.windowID) == id }?.window
     }
 
     /// Feeds one tap event to the Arranger. The press window is resolved on mouse-down only.
     private func handle(_ event: TapEvent) async {
+        if case .zoom(let kind) = event.kind {
+            await zoomInput.tapEvent(kind, event)
+            return
+        }
+        if event.type == .leftMouseDown { zoomInput.pointerDown(event) }
         if case .greenButton(let id) = event.kind {
             guard let window = trackedWindow(cgID: id) else { return }
             await run(arranger.handle(.greenButton(window), now: .now))
@@ -346,7 +398,19 @@ import os
     /// The frontmost app's focused tracked window and the access state: what availability depends on.
     public func commandContext() -> CommandContext {
         let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        return CommandContext(focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady())
+        return CommandContext(
+            focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady(), displayUUID: pointerDisplay().uuid)
+    }
+
+    /// The pointer in top-left global points and the display under it: where every camera command acts (UI-SPEC: hotkeys,
+    /// menu items and URLs act on the pointer's display; the status menu opens on it).
+    func pointerDisplay() -> (point: Point, uuid: String?) {
+        let location = NSEvent.mouseLocation
+        let point = Point(x: location.x, y: Double(NSScreen.screens.first?.frame.height ?? 0) - location.y)
+        let displays = arranger.displays
+        let uuid = displays.first { $0.frame.contains(point) }?.uuid
+            ?? Coordinates.displayUUID(for: Rect(x: point.x, y: point.y, width: 0, height: 0), among: displays)
+        return (point, uuid)
     }
 
     /// The refusal sound; a seam for tests.
@@ -355,11 +419,16 @@ import os
     /// Every route (hotkey, menu item, URL) calls this. A command that cannot act beeps (UI-SPEC: no hotkey fails
     /// silently), except from a URL, whose user may not be at the keyboard (Pitfall 21).
     public func dispatch(_ command: Command, from source: CommandSource = .hotkey) async {
+        zoomInput.noteCommand()
         let refuse = source == .url ? {} : beep
         if command == .toggleExcludeFrontmost {
             // The store's onChange hands the list to the window system, whose windowChanged events float the windows.
             if let exclusions, Self.toggleExclusion(of: NSWorkspace.shared.frontmostApplication, in: exclusions) { return }
             refuse()
+            return
+        }
+        if case .camera(let camera) = command {
+            await dispatchCamera(camera, from: source)
             return
         }
         let context = commandContext()
@@ -369,6 +438,36 @@ import os
         }
         let effects = arranger.handle(.command(command, focused: context.focused), now: .now)
         await run(source == .url ? effects.filter { $0 != .beep } : effects)
+    }
+
+    /// A camera command on the pointer's display. A refusal beeps and announces (Surface 1), except from a URL, which
+    /// only logs; with zoom off a URL is ignored and logged (its hotkeys are disabled then, D-D).
+    private func dispatchCamera(_ camera: CameraCommand, from source: CommandSource) async {
+        guard zoomEnabled else {
+            if source == .url { zoomInputLog.info("url \(String(describing: camera), privacy: .public) ignored: zoom off") }
+            return
+        }
+        let context = commandContext()
+        let pointer = pointerDisplay()
+        var effects: [ArrangerEffect]
+        if let uuid = pointer.uuid, context.ready {
+            effects = arranger.handle(.camera(camera, displayUUID: uuid, focused: context.focused, pointer: pointer.point), now: .now)
+        } else if !context.ready {  // the engine never sees "not ready"; the shell refuses for it
+            let refusal = Navigator.Refusal.notReady
+            effects = [.beep, .announce(refusal.announcement), .info("refused \(camera): \(refusal)")]
+        } else {
+            effects = [.beep, .info("refused \(camera): no display under the pointer")]
+        }
+        if source == .url { effects.removeAll { if case .beep = $0 { true } else if case .announce = $0 { true } else { false } } }
+        if camera == .zoomOutAll || camera == .stepOut {
+            for case .cameraMove(let move) in effects { zoomInput.expectPick(moveID: move.id) }  // its reveal starts pick mode
+        }
+        await run(effects)
+    }
+
+    /// A camera command from pointer input, on a given display with a given window (title-bar and Desktop double-clicks).
+    func camera(_ camera: CameraCommand, displayUUID: String, focused: TransomModel.WindowRef?, pointer: Point) async {
+        await run(arranger.handle(.camera(camera, displayUUID: displayUUID, focused: focused, pointer: pointer), now: .now))
     }
 
     public func dispatch(_ command: Command, focused: TransomModel.WindowRef?) async {
@@ -428,8 +527,130 @@ import os
                 previews?.flashBlocked(rect, on: displayUUID)
             case .gapHandles(let handles, let displayUUID):
                 gapPanels.show(handles, on: displayUUID)
+            case .collapsedBlocks(let blocks, let displayUUID):
+                collapsedPanels.show(blocks, on: displayUUID)
+            case .cameraMove(let move):
+                guard zoomEnabled else {
+                    // Never expected: zoom off never enables the engine's camera. Settle at once so windows stay right.
+                    logger.fault("camera move \(move.id, privacy: .public) with zoom off; settling without a stage")
+                    await settle(displayUUID: move.displayUUID, moveID: move.id)
+                    continue
+                }
+                collapsedPanels.hide(on: move.displayUUID)  // the stage draws the blocks until the reveal
+                zoom().run(move) { [weak self] id in
+                    Task { await self?.settle(displayUUID: move.displayUUID, moveID: id) }
+                }
+                zoomInput.publish()  // no zoom presses taken until it reveals
             }
         }
+    }
+
+    private func zoom() -> ZoomController {
+        if let zoomController { return zoomController }
+        let zoom = ZoomController()
+        zoom.windowInfo = { [weak self] in self?.arranger.windows[$0] }
+        zoom.announce = { postAnnouncement($0) }
+        zoom.appName = { Self.appName($0) }
+        zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
+        zoom.onRevealed = { [weak self] uuid, move in
+            self?.collapsedPanels.fadeIn(on: uuid)
+            self?.revealed(uuid, moveID: move.id)
+            self?.zoomInput.revealed(displayUUID: uuid, move: move)
+        }
+        zoom.onTileClick = { [weak self] uuid, id in
+            Task { await self?.zoomInput.stageClick(cgID: id, displayUUID: uuid) }
+        }
+        zoom.bringNoticesFront = { [weak self] in
+            self?.toast.bringFront()
+            self?.previews?.bringFront()
+        }
+        zoomController = zoom
+        return zoom
+    }
+
+    /// Answers a finished stage move: the engine commits the view and plans the writes, and the stage learns which
+    /// read-backs to wait for before any write goes out.
+    private func settle(displayUUID: String, moveID: UInt64) async {
+        let effects = arranger.handle(.cameraSettle(displayUUID: displayUUID, moveID: moveID), now: .now)
+        let writes = effects.flatMap { effect -> [WindowCommand] in if case .perform(let commands) = effect { commands } else { [] } }
+        zoomController?.beginSettle(displayUUID: displayUUID, moveID: moveID, writes: writes)
+        await run(effects)
+    }
+
+    private func revealed(_ uuid: String, moveID: UInt64) {
+        zoomInput.publish()
+        onViewChanged?()
+        // Only the home move's own reveal counts: an older move revealing first must not end zoom early (WR-06).
+        guard awaitingHome[uuid] == moveID else { return }
+        awaitingHome[uuid] = nil
+        guard awaitingHome.isEmpty else { return }
+        Task { await finishZoomOff() }
+    }
+
+    /// Turn Off Zoom (D-D): every zoomed display moves home first, then, once those moves have revealed, the engine drops
+    /// the camera (collapsed windows float with N1), every zoom piece goes and the zoom hotkeys are disabled. Turn On Zoom
+    /// moves nothing. Either way the choice is saved as the `zoomEnabled` preference.
+    public func setZoomEnabled(_ on: Bool) async {
+        UserDefaults.standard.set(on, forKey: ZoomController.enabledKey)
+        guard on else {
+            guard zoomEnabled, !turningOff else { return }
+            turningOff = true
+            zoomInput.reset(reason: "zoom off")
+            for display in arranger.displays {
+                let effects = arranger.handle(.zoomTo(.home, displayUUID: display.uuid), now: .now)
+                for case .cameraMove(let move) in effects { awaitingHome[display.uuid] = move.id }
+                await run(effects)
+            }
+            guard awaitingHome.isEmpty else {
+                // A move that never reveals (its display went away) must not keep zoom on forever: settle cap + fades < 3 s.
+                zoomOffFallback.set(.now + .seconds(3)) { [weak self] in await self?.finishZoomOff() }
+                return
+            }
+            await finishZoomOff()
+            return
+        }
+        guard !zoomEnabled else { return }
+        zoomEnabled = true
+        zoomInput.publish()
+        await run(arranger.handle(.zoomEnabled(true), now: .now))
+        Hotkeys.setZoomHotkeys(enabled: true)
+        postAnnouncement(ZoomCopy.zoomOnAnnouncement)
+        cameraLog.info("zoom on")
+    }
+
+    private func finishZoomOff() async {
+        guard turningOff else { return }
+        turningOff = false
+        awaitingHome = [:]
+        zoomOffFallback.cancel()
+        zoomEnabled = false
+        zoomInput.publish()
+        let effects = arranger.handle(.zoomEnabled(false), now: .now)
+        let floated = effects.reduce(0) { count, effect in if case .notice(.lostRoom(let windows)) = effect { count + windows.count } else { count } }
+        await run(effects)
+        zoomController?.purge()
+        zoomController = nil
+        Hotkeys.setZoomHotkeys(enabled: false)
+        postAnnouncement(ZoomCopy.zoomOffAnnouncement)
+        cameraLog.info("zoom off (\(floated, privacy: .public) collapsed windows floated)")
+        onViewChanged?()
+    }
+
+    /// Zooms `displayUUID`'s camera to `target`, focusing `focus` after the settle (the shell entry point; pointer input
+    /// uses it).
+    public func zoom(to target: ViewTarget, displayUUID: String, focus: TransomModel.WindowRef? = nil) async {
+        await run(arranger.handle(.zoomTo(target, displayUUID: displayUUID, focus: focus), now: .now))
+    }
+
+    /// A collapsed block double-clicked (or pressed with VoiceOver): zoom to its leaf and focus it once it settles. While
+    /// paused: beep and say so (UI-SPEC Surface 3).
+    private func openBlock(_ window: TransomModel.WindowRef, displayUUID uuid: String) async {
+        guard arranger.pauseReasons.isEmpty else {
+            beep()
+            postAnnouncement(Navigator.Refusal.paused.announcement)
+            return
+        }
+        await zoomInput.zoom(toLeafOf: window, displayUUID: uuid)
     }
 
     /// Presses Finder's ⌘N menu item on Finder's AX thread (RESEARCH Pattern 14): no Apple Events, no Automation
@@ -459,13 +680,14 @@ import os
     }
 
     /// Before Transom exits (SAFE-01, D-15): every parked or off-screen window Transom may move goes back on screen, within
-    /// `limit` in total; docked windows stay where they are. Synchronous, so it never waits on MainActor work
-    /// (Pitfall 14). Returns how many writes finished.
+    /// `limit` in total; a docked window parked or zoomed by the camera goes back to its home-view tile (D-D). Synchronous,
+    /// so it never waits on MainActor work (Pitfall 14). Returns how many writes finished.
     @discardableResult
     public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
         let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) })
         let plan = Recovery.terminationPlan(
-            windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked)
+            windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked,
+            homeTiles: arranger.homeTiles())
         guard !plan.isEmpty else { return 0 }
         let (seconds, attoseconds) = limit.components
         let restored = system.restoreForTermination(plan, deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)

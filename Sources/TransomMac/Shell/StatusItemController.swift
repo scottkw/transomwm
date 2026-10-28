@@ -34,6 +34,7 @@ import os
     private var nudgePlanner = NudgePlanner()
     /// Installed apps' display names by bundle ID, so a menu rebuild does not ask Launch Services per row (02-UI-REVIEW).
     private var displayNames: [String: String] = [:]
+    private lazy var shortcutsWindow = ShortcutsWindowController()
 
     /// `showSetup` opens the "Set Up Transom" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
@@ -57,6 +58,7 @@ import os
                 self?.updateGlyph()
             }
         arrange.onPauseChanged = { [weak self] in self?.updateGlyph() }
+        arrange.onViewChanged = { [weak self] in self?.updateGlyph() }
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -73,7 +75,10 @@ import os
         addStatusItems(to: menu)
         addConflictItems(to: menu)
         menu.addItem(.separator())
-        addArrangeItems(to: menu)
+        let context = arrange.commandContext()
+        addArrangeItems(to: menu, context: context)
+        menu.addItem(.separator())
+        addZoomItems(to: menu, context: context)
         menu.addItem(.separator())
         menu.addItem(.sectionHeader(title: MenuCopy.safetySection))
         let pause = commands.item(for: .togglePause)
@@ -92,6 +97,9 @@ import os
             menu.addItem(debugMenuItem())
         }
         menu.addItem(.separator())
+        let shortcuts = NSMenuItem(title: ZoomCopy.shortcutsItem, action: #selector(openShortcuts), keyEquivalent: "")
+        shortcuts.target = self
+        menu.addItem(shortcuts)
         let quit = NSMenuItem(title: "Quit Transom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
@@ -104,12 +112,12 @@ import os
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        KeyboardShortcuts.enable(Hotkeys.entries.map(\.name))
+        let zoomOn = arrange.isZoomEnabled  // zoom off keeps the zoom chords disabled (D-D)
+        KeyboardShortcuts.enable(Hotkeys.entries.map(\.name).filter { zoomOn || !Hotkeys.zoomNames.contains($0) })
     }
 
-    /// Items 6–18: the Arrange section, enabled by the one availability rule.
-    private func addArrangeItems(to menu: NSMenu) {
-        let context = arrange.commandContext()
+    /// Items 6–18: the Arrange section, enabled by the one availability rule (which also greys the camera items).
+    private func addArrangeItems(to menu: NSMenu, context: CommandContext) {
         commands.update(focusedFloats: arrange.arranger.isFloating(context.focused)) { arrange.arranger.availability($0, context: context) }
         commands.item(for: .toggleDesktop).title = MenuCopy.desktopToggle(hidden: arrange.arranger.isDesktopHidden(focused: context.focused))
         menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
@@ -123,6 +131,38 @@ import os
         menu.addItem(commands.item(for: .floatAll))
         menu.addItem(commands.item(for: .toggleDesktop))
         menu.addItem(gapsMenuItem())
+    }
+
+    /// The Zoom section (Surface 6), on the pointer's display. Screen Recording is never checked while zoom is off.
+    private func addZoomItems(to menu: NSMenu, context: CommandContext) {
+        let on = arrange.isZoomEnabled
+        var previews: NSMenuItem?
+        if on, !SnapshotCapture.isGranted() {
+            let item = NSMenuItem(title: ZoomCopy.allowWindowPreviews, action: #selector(allowPreviews), keyEquivalent: "")
+            item.target = self
+            previews = item
+        }
+        let toggle = NSMenuItem(title: "", action: #selector(toggleZoom), keyEquivalent: "")
+        toggle.target = self
+        let arranger = arrange.arranger
+        let uuid = context.displayUUID
+        let section = commands.zoomSection(
+            enabled: on, framingWindow: uuid.map { arranger.isFramingFocused(displayUUID: $0, focused: context.focused) } ?? false,
+            framingDesktop: uuid.map(arranger.isFramingDesktop) ?? false, previews: previews, toggle: toggle)
+        for item in section { menu.addItem(item) }
+    }
+
+    @objc private func toggleZoom() {
+        Task { await arrange.setZoomEnabled(!arrange.isZoomEnabled) }
+    }
+
+    /// Surface 2 recovery path: user-initiated, so not a re-prompt loop. Once the user has decided, macOS shows no prompt
+    /// and Transom opens the Screen Recording pane instead.
+    @objc private func allowPreviews() {
+        guard !SnapshotCapture.request(),
+            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Gaps ▸, a radio list; enabled while paused, where the change waits for Resume (D-27).
@@ -145,18 +185,21 @@ import os
     }
 
     /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.
+    /// While the pointer display's view is not home it reads "Transom: zoomed in" (paused and not ready win).
     private func updateGlyph() {
         guard let button = statusItem.button else { return }
         let paused = ready && !arrange.arranger.pauseReasons.isEmpty
+        let zoomed = arrange.isZoomEnabled && arrange.pointerDisplay().uuid.map { arrange.arranger.view(on: $0) != .home } == true
         let (symbol, description) =
             !ready ? ("exclamationmark.triangle", "Transom: Accessibility access needed")
-            : paused ? ("rectangle.split.2x1", MenuCopy.pausedGlyphDescription) : ("rectangle.split.2x1", "Transom")
+            : paused ? ("rectangle.split.2x1", MenuCopy.pausedGlyphDescription)
+            : zoomed ? ("rectangle.split.2x1", ZoomCopy.zoomedInDescription) : ("rectangle.split.2x1", "Transom")
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
         image?.isTemplate = true
         button.image = image
         button.appearsDisabled = paused
-        button.toolTip = ready && !paused ? Self.bundleName(logger: logger) : description
+        button.toolTip = ready && !paused && !zoomed ? Self.bundleName(logger: logger) : description
     }
 
     private func addStatusItems(to menu: NSMenu) {
@@ -250,6 +293,10 @@ import os
         showSetup()
     }
 
+    @objc private func openShortcuts() {
+        shortcutsWindow.show()
+    }
+
     private func debugMenuItem() -> NSMenuItem {
         let submenu = NSMenu(title: "Debug")
         let tracked = NSMenuItem(title: "Show Tracked Windows", action: #selector(openTrackedWindows), keyEquivalent: "")
@@ -264,9 +311,25 @@ import os
         submenu.addItem(Self.info(MenuCopy.capabilityItem(windowIDLookupAvailable: available)))
         submenu.addItem(Self.info(MenuCopy.spacesItem(available: system.capabilityReport[.spaces] == true)))
         submenu.addItem(Self.info(MenuCopy.tapItem(running: arrange.isTapRunning)))
+        let zoom = arrange.zoomController
+        submenu.addItem(Self.info(ZoomCopy.zoomStateLine(enabled: arrange.isZoomEnabled, capture: arrange.isZoomEnabled ? captureLine(zoom) : "")))
+        submenu.addItem(Self.info(ZoomCopy.lastSettleLine(zoom?.lastSettle)))
+        let cache = zoom?.cacheStats ?? (windows: 0, bytes: 0)
+        submenu.addItem(Self.info(ZoomCopy.snapshotCacheLine(windows: cache.windows, bytes: cache.bytes)))
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
+    }
+
+    /// The capture half of the "Zoom: on, …" line. Before the first move there is no controller and its state would be a
+    /// placeholder, so a fresh preflight answers (only reached with zoom on).
+    private func captureLine(_ zoom: ZoomController?) -> String {
+        switch zoom?.captureState {
+        case .previews?: ZoomCopy.capturePreviews
+        case .noPermission?: ZoomCopy.captureNoPermission
+        case .failing?: ZoomCopy.captureFailing
+        case nil: SnapshotCapture.isGranted() ? ZoomCopy.capturePreviews : ZoomCopy.captureNoPermission
+        }
     }
 
     /// "Nudge Focused Window" for the frontmost app's focused tracked dockable window; disabled with an explanatory

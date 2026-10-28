@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 4
-current_phase_name: Zoom Camera
+current_phase: 5
+current_phase_name: Gestures
 status: planning
-stopped_at: Phase 2 complete, ready to plan Phase 4
-last_updated: "2026-10-28T02:19:52.721Z"
-last_activity: 2026-10-27
-last_activity_desc: Phase 2 complete, transitioned to Phase 4
-state_head: fb0e29bdfd4800de284fa6de0a460dc9e9057a1e
+stopped_at: Phase 4 complete, ready to plan Phase 5
+last_updated: "2026-10-28T21:10:53.170Z"
+last_activity: 2026-10-28
+last_activity_desc: Phase 4 complete, transitioned to Phase 5
+state_head: "0bbfea68588734ccec74bd6171d274aa28d81286"
 progress:
   total_phases: 9
-  completed_phases: 3
-  total_plans: 51
-  completed_plans: 51
-  percent: 33
+  completed_phases: 4
+  total_plans: 59
+  completed_plans: 59
+  percent: 44
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 3 — Tiling MVP
+**Current focus:** Phase 4 — Zoom Camera
 
 ## Current Position
 
-Phase: 4 — Zoom Camera
+Phase: 5 — Gestures
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-27 — Phase 2 complete, transitioned to Phase 4
+Last activity: 2026-10-28 — Phase 4 complete, transitioned to Phase 5
 
-Progress: [███░░░░░░░] 33%
+Progress: [████░░░░░░] 44%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 51
+- Total plans completed: 59
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -48,6 +48,7 @@ Progress: [███░░░░░░░] 33%
 | 1 | 6 | - | - |
 | 3 | 26 | - | - |
 | 2 | 19 | - | - |
+| 4 | 8 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -102,6 +103,14 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P26 | 5 min | 2 tasks | 7 files |
 | Phase 02 P18 | 6min | 1 tasks | 3 files |
 | Phase 2 P19 | 8 min | 2 tasks | 7 files |
+| Phase 4 P01 | 8h 34m | 3 tasks | 12 files |
+| Phase 04 P02 | 15 min | 2 tasks | 8 files |
+| Phase 4 P03 | 92 min | 3 tasks | 8 files |
+| Phase 4 P04 | 29 min | 3 tasks | 16 files |
+| Phase 04 P05 | 9min | 3 tasks | 13 files |
+| Phase 04 P06 | 14 min | 3 tasks | 12 files |
+| Phase 4 P07 | 13 min | 3 tasks | 13 files |
+| Phase 04 P08 | 21 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -246,6 +255,35 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-18: the setup window uses sizingOptions [.preferredContentSize] and one setContentSize(fittingSize) before centring; preferredContentSize alone sizes the window only after a run-loop turn on macOS 27, too late for the centring code
 - [Phase 2]: 02-19: on macOS 15.7.7 a hidden tab keeps its CG bounds from when it was hidden (G-02-10), so TabGroupTracker links a shown tab to the tab shown just before it by timing (wentHidden), keeps own members whatever their bounds, and joins a new tab to the group whose shown tab went hidden; bounds only find candidates and break ties
 - [Phase 2]: 02-19: the timing opener and timing join are refused after a blind Space switch (spaceChanged without Space data), like the 02-17 orphan handoff and folds
+- [Phase 4]: Spike verdict GO with conditions: G4 crossfade stalls accepted as VM noise, no host run
+- [Phase 4]: SnapshotCache is mandatory in 04-04 (only about 6 of 15 captures land inside 120 ms in the VM)
+- [Phase 4]: sharingType .none does not hide the stage from system screen recording on macOS 15.7; it only keeps it out of Transom's own snapshots
+- [Phase 4]: ZOOM-07 500 ms is the write path only: first AX write to last read-back; capture budget and animation are separate
+- [Phase 04]: 04-02: Gap handles show only on displays at the home view; a zoomed display gets none
+- [Phase 04]: 04-02: LayoutTree.subtree(at:) lives in TransomEngine (ViewPlanner.swift), model unchanged
+- [Phase 04]: 04-02: ViewPlanner applies the collapse pass to any planned view, .home included; empty set = Planner.plan exactly
+- [Phase 4]: 04-03: one cameraStep resolver feeds camera() and cameraAvailable(), so greyed items and refused hotkeys agree
+- [Phase 4]: 04-03: PendingMove.kind (.navigate/.back(n)/.forward(n)) applies history only at settle; a second Back during a pending one goes on from it
+- [Phase 4]: 04-03: frame toggles compare against the current view (pending target while pending); Frame Focused Window acts on the pointer display
+- [Phase 4]: 04-03: widening covers docked windows and floaters outside the view; unparkedNew is cleared per desk at settle
+- [Phase 4]: 04-04: beginSettle takes the move ID; a settle answered after a retarget never attaches to the new move
+- [Phase 4]: 04-04: a move during the 120 ms reveal fade is queued until the fade ends
+- [Phase 4]: 04-04: fallback icon and title capsule centred as one group; capture size min(max(start,end), own frame) x scale
+- [Phase 4]: 04-04: ZOOM-01/02/05/07 deferred to later phase-4 plans (shared IDs)
+- [Phase 04]: 04-05: camera commands bypass the availability gate so refusals beep and announce; URL refusals stay silent
+- [Phase 04]: 04-05: zoom hotkeys are disabled at launch in TransomMacApp (not in start()) and menuDidClose keeps them off while zoom is off
+- [Phase 04]: 04-05: Turn Off Zoom waits only for displays whose move home started, with a 3 s fallback; ArrangeController owns ZoomController.onRevealed
+- [Phase 04]: 04-05: ZOOM-08/09/10/11/01/02/04 deferred to phase end (shared IDs with 04-06..04-08)
+- [Phase 04]: 04-06: every mouse-down re-decides the zoom swallow, so a lost mouse-up never traps the next click
+- [Phase 04]: 04-06: pick clicks and title-bar double-clicks are taken only unmodified and only on the tile's own topmost window
+- [Phase 04]: 04-06: pick mode is keyed to the zoom-out move id; collapsed blocks become pickable in 04-07
+- [Phase 04]: 04-06: Desktop double-click decided on main after the event; unknown Finder AX roles count as icons (A4 unverified)
+- [Phase 4]: Collapsible windows plan at 1x1 in every Phase 3 plan and dry run; ViewPlanner alone sees learned minimums (04-07)
+- [Phase 4]: TileMove.Kind.collapsed means a block in the end view (04-07)
+- [Phase 4]: Pick mode takes a collapsed block's click from the tap's passing press, not the panel (04-07)
+- [Phase 04]: 04-08: homeTiles() covers only desks whose camera is not at home, so zoom off and home keep the Phase 3 quit plan (the OS can keep a docked window a few points off its tile)
+- [Phase 04]: 04-08: crash and crash-loop relaunches needed no code (camera never persisted); tests pin it
+- [Phase 04]: 04-08: fixed a 04-04 bug where the stage's reveal timer was never stored, so an old settle's cap revealed the next move early
 
 ### Quick Tasks Completed
 
@@ -262,6 +300,7 @@ Recent decisions affecting current work:
 
 - Re-check on the first Transom build (deferred from Phase 3 by the user, 2026-10-27): UAT 16 (Hide Desktop on one display parks safely) and the display half of UAT 17 (two displays x two Spaces relaunch, clean and kill -9, plus a cross-display drag while a window is dormant, WR-04) on the DELL; in the VM, pre-dock frames survive a relaunch, and a Dock tile over a docked window's green button owns the click. Also Phase 2 UAT 9 (deferred by the user, 2026-10-27): multi-display Nudge on the DELL, with the external display above, left and below, the Display column following, and one displaysChanged then one refresh about 500 ms after a hot-plug.
 - Phase 2 leftovers for the same re-check: in the VM, UAT 11's whole-group close followed at once by a Space switch (the only live evidence for 02-17 truth 2) and UAT 17's long-CFBundleName wrap. FrameWriteIntegrationTests passed 5/5 in the VM on 2026-10-28 (incl. aRefusedSizeIsReadBackAndLearned).
+- CI is disabled (user, 2026-10-28: `gh workflow disable CI`; re-enable with `gh workflow enable CI`). Before re-enabling, fix the failure: the last runs on `macos-26` (e.g. run 40620416102) aborted mid-way through `swift test` with no failing-test line, so the test process probably crashed on the runner; not diagnosed. All 999 tests pass locally.
 
 ### Blockers/Concerns
 
@@ -285,8 +324,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T21:12:16.233Z
-Stopped at: Phase 2 complete, ready to plan Phase 4
+Last session: 2026-10-28T16:38:24.560Z
+Stopped at: Phase 4 complete, ready to plan Phase 5
 Resume file: None
 
 ## Deferred Verification

@@ -1,0 +1,4 @@
+# Keep OS/editor junk out of deployed assets; .well-known/ stays deployable.
+.DS_Store
+*.swp
+*~
