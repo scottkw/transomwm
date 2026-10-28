@@ -308,3 +308,32 @@ extension ArrangerCollapseTests {
         #expect(relaunched.camera.collapsible.isEmpty)
     }
 }
+
+/// WR-01 (04-REVIEW): a window is collapsible only while it is collapsed, so CONTEXT E's refusals and floats still hold
+/// for it afterwards.
+extension ArrangerCollapseTests {
+    @Test func aWindowThatFitsAgainIsNoLongerCollapsible() throws {
+        var arranger = try wideA(zoom: true)
+        _ = dropF(&arranger)
+        try #require(arranger.camera.collapsible == [a.identity])
+
+        _ = arranger.handle(.event(.windowDestroyed(f)), now: .now)
+        #expect(arranger.camera.collapsible.isEmpty, "a fits beside the Desktop again but stayed collapsible")
+
+        let grown = [info(1, frame: floatingFrame, minimum: huge)]
+        let effects = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: grown, initialRefreshComplete: true)), now: .now)
+        #expect(effects.contains(.notice(.lostRoom([a]))), "an OS-caused loss of room collapsed a instead of floating it: \(effects)")
+        #expect(arranger.world[mainKey]?.desktop.contains(a) == true)
+    }
+
+    @Test func aCollapsedWindowThatFloatsIsNoLongerCollapsible() throws {
+        var arranger = bare([info(2, frame: floatingFrame, minimum: huge)], zoom: true)
+        _ = dropF(&arranger)
+        try #require(arranger.camera.collapsible == [f.identity])
+
+        _ = arranger.handle(.command(.float, focused: f), now: .now)
+
+        #expect(arranger.world[mainKey]?.desktop.contains(f) == true)
+        #expect(arranger.camera.collapsible.isEmpty)
+    }
+}

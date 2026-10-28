@@ -1565,6 +1565,7 @@ public struct Arranger: Sendable {
         var lost: [WindowRef] = []
         var handles: [String: [GapHandle]] = [:]
         var blocks: [String: [CollapsedBlock]] = [:]
+        var fitAtHome: Set<WindowIdentity> = []
         let mins = minimums
         for display in displays {
             let key = Self.key(display)
@@ -1584,6 +1585,10 @@ public struct Arranger: Sendable {
                     (plan.frames, plan.parks, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.resolution)
                     blocks[display.uuid] = viewPlan.collapsed.map { CollapsedBlock(window: $0.key, rect: $0.value) }
                         .sorted { $0.window.identity < $1.window.identity }
+                    let home = view == .home ? viewPlan : try ViewPlanner.plan(
+                        desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                        collapsible: camera.collapsible)
+                    fitAtHome.formUnion(home.frames.keys.map(\.identity))
                 }
             } catch {
                 faults.append(.fault("could not plan \(key): \(error)"))
@@ -1636,6 +1641,11 @@ public struct Arranger: Sendable {
             windows[id].map { info in world.desks.values.contains { $0.tree.state(of: info.window) != nil } } ?? false
         }
         parkRequested = parkRequested.filter { parkedNow.contains($0) || hidden.contains($0) }
+        // Collapsible only while collapsed: one that fits its home tile again, or left every tree, gets CONTEXT E's
+        // refusals and lost-room float again (WR-01). A desk not shown keeps its windows' membership.
+        camera.collapsible = camera.collapsible.filter { id in
+            !fitAtHome.contains(id) && world.desks.values.contains { $0.tree.state(of: WindowRef(identity: id)) != nil }
+        }
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
             + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles) + showBlocks(blocks)
