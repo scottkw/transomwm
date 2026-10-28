@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Zoom Camera
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-10-28T14:40:46.942Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-10-28T15:15:52.170Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 4 execution started
-state_head: 3aba1ab15df0dfb8c2430c339ce9fb447e59fa42
+state_head: 25d67f64d31829a782cb6303f277f6e066f84e1a
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 59
-  completed_plans: 54
+  completed_plans: 55
   percent: 33
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 4 (Zoom Camera) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-10-27 — Phase 4 execution started
 
@@ -105,6 +105,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 4 P01 | 8h 34m | 3 tasks | 12 files |
 | Phase 04 P02 | 15 min | 2 tasks | 8 files |
 | Phase 4 P03 | 92 min | 3 tasks | 8 files |
+| Phase 4 P04 | 29 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -260,6 +261,10 @@ Recent decisions affecting current work:
 - [Phase 4]: 04-03: PendingMove.kind (.navigate/.back(n)/.forward(n)) applies history only at settle; a second Back during a pending one goes on from it
 - [Phase 4]: 04-03: frame toggles compare against the current view (pending target while pending); Frame Focused Window acts on the pointer display
 - [Phase 4]: 04-03: widening covers docked windows and floaters outside the view; unparkedNew is cleared per desk at settle
+- [Phase 4]: 04-04: beginSettle takes the move ID; a settle answered after a retarget never attaches to the new move
+- [Phase 4]: 04-04: a move during the 120 ms reveal fade is queued until the fade ends
+- [Phase 4]: 04-04: fallback icon and title capsule centred as one group; capture size min(max(start,end), own frame) x scale
+- [Phase 4]: 04-04: ZOOM-01/02/05/07 deferred to later phase-4 plans (shared IDs)
 
 ### Quick Tasks Completed
 
@@ -300,8 +305,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T14:40:46.204Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-10-28T15:15:51.774Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification

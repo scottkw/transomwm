@@ -217,7 +217,7 @@ Plans:
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
   6. User can move the view to a neighbouring area, frame the focused window or the Desktop on its own and toggle back (including by double-click), cancel a rectangle zoom with Esc, and tiles too small for their window show as collapsed app-colour blocks that zoom in on double-click
 
-**Plans**: 3/8 plans executed
+**Plans**: 4/8 plans executed
 
 Plans:
 **Wave 1**
@@ -228,7 +228,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [x] 04-03-PLAN.md — Engine navigation: step in/out, per-display history, pan, frame window/Desktop toggles, rect target, widen-on-focus
-- [ ] 04-04-PLAN.md — Shell camera: ZoomController, stage tiles, app colour, snapshot cache, Reduce Motion, Screen Recording explainer
+- [x] 04-04-PLAN.md — Shell camera: ZoomController, stage tiles, app colour, snapshot cache, Reduce Motion, Screen Recording explainer
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 04-05-PLAN.md — 11 hotkeys, 11 URLs, Zoom menu section and toggle, Shortcuts window (44 recorder rows)
@@ -343,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
-| 4. Zoom Camera | 3/8 | In Progress | - |
+| 4. Zoom Camera | 4/8 | In Progress | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
