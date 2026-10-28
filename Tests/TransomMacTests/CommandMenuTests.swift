@@ -114,6 +114,76 @@ import Testing
     }
 }
 
+/// 04 UI-SPEC Surface 6: the Zoom section's items, toggle, checkmarks and greying.
+@Suite @MainActor struct ZoomMenuTests {
+    private let base: NSEvent.ModifierFlags = [.control, .option, .command]
+    private static let cameraCommands: [CameraCommand] = [
+        .zoomOutAll, .stepOut, .stepIn, .back, .forward, .pan(.left), .pan(.right), .pan(.top), .pan(.bottom), .frameWindow, .frameDesktop,
+    ]
+
+    private func toggle() -> NSMenuItem { NSMenuItem(title: "", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "") }
+
+    @Test(arguments: cameraCommands)
+    func eachCameraItemShowsItsHotkeyAndDispatchesItsCommand(command: CameraCommand) throws {
+        var sent: [Command] = []
+        let menu = CommandMenu { sent.append($0) }
+        #expect(CommandMenu.commands.contains(.camera(command)))
+        let item = menu.item(for: .camera(command))
+        #expect(item.title == MenuCopy.cameraTitle(command))
+        #expect(!item.keyEquivalent.isEmpty)
+        #expect(item.keyEquivalentModifierMask.intersection([.control, .option, .command, .shift]) == base)
+        _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item)
+        #expect(sent == [.camera(command)])
+    }
+
+    @Test func theMoveViewSubmenuListsLeftRightUpDown() throws {
+        let menu = CommandMenu { _ in }
+        #expect(menu.moveViewMenu.title == "Move View")
+        let items = try #require(menu.moveViewMenu.submenu).items
+        #expect(items.map(\.title) == ["Left", "Right", "Up", "Down"])
+        #expect(items[0] === menu.item(for: .camera(.pan(.left))) && items[3] === menu.item(for: .camera(.pan(.bottom))))
+    }
+
+    @Test func withZoomOnTheSectionFollowsSurface6() {
+        let menu = CommandMenu { _ in }
+        let previews = NSMenuItem(title: "Allow Window Previews\u{2026}", action: nil, keyEquivalent: "")
+        let section = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: false, previews: previews, toggle: toggle())
+        #expect(section.map(\.title) == [
+            "Zoom", "Zoom Out to All Windows", "Zoom Out One Level", "Zoom In One Level", "Back", "Forward", "Move View",
+            "Frame Focused Window", "Frame Desktop", "Allow Window Previews\u{2026}", "Turn Off Zoom",
+        ])
+        #expect(section[0].isSectionHeader)
+        let granted = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: false, previews: nil, toggle: toggle())
+        #expect(!granted.map(\.title).contains("Allow Window Previews\u{2026}"))
+    }
+
+    @Test func withZoomOffTheSectionIsTheHeaderAndTurnOnZoom() {
+        let menu = CommandMenu { _ in }
+        let previews = NSMenuItem(title: "Allow Window Previews\u{2026}", action: nil, keyEquivalent: "")
+        let section = menu.zoomSection(enabled: false, framingWindow: true, framingDesktop: true, previews: previews, toggle: toggle())
+        #expect(section.map(\.title) == ["Zoom", "Turn On Zoom"])
+    }
+
+    @Test func whilePausedTheCameraItemsAreDisabledAndTurnOffZoomStaysEnabled() {
+        let menu = CommandMenu { _ in }
+        menu.update { if case .camera = $0 { false } else { true } }  // paused: the availability rule refuses every camera command
+        let off = toggle()
+        let section = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: false, previews: nil, toggle: off)
+        for command in Self.cameraCommands { #expect(!menu.item(for: .camera(command)).isEnabled) }
+        #expect(section.last === off && off.isEnabled && off.title == "Turn Off Zoom")
+    }
+
+    @Test func theFrameItemsCarryTheirCheckmarks() {
+        let menu = CommandMenu { _ in }
+        _ = menu.zoomSection(enabled: true, framingWindow: true, framingDesktop: false, previews: nil, toggle: toggle())
+        #expect(menu.item(for: .camera(.frameWindow)).state == .on)
+        #expect(menu.item(for: .camera(.frameDesktop)).state == .off)
+        _ = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: true, previews: nil, toggle: toggle())
+        #expect(menu.item(for: .camera(.frameWindow)).state == .off)
+        #expect(menu.item(for: .camera(.frameDesktop)).state == .on)
+    }
+}
+
 /// TILE-18: Don't Arrange acts on the frontmost regular app only; with none (or Transom itself) it changes nothing,
 /// and the caller beeps.
 @Suite @MainActor struct FrontmostExclusionTests {

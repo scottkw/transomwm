@@ -48,4 +48,35 @@ import Testing
         #expect(ZoomCopy.logExplainerAllow == "explainer: allow")
         #expect(ZoomCopy.logExplainerNotNow == "explainer: not now")
     }
+
+    /// Surface 6 menu copy and the Accessibility "Zoom off" / "Zoom on" announcements.
+    @Test func theMenuCopyMatchesTheContract() {
+        #expect(ZoomCopy.zoomSection == "Zoom")
+        #expect(ZoomCopy.moveViewMenu == "Move View")
+        #expect(ZoomCopy.allowWindowPreviews == "Allow Window Previews\u{2026}")
+        #expect(ZoomCopy.turnOffZoom == "Turn Off Zoom")
+        #expect(ZoomCopy.turnOnZoom == "Turn On Zoom")
+        #expect(ZoomCopy.shortcutsItem == "Shortcuts\u{2026}")
+        #expect(ZoomCopy.zoomedInDescription == "Transom: zoomed in")
+        #expect(ZoomCopy.zoomOffAnnouncement == "Zoom off")
+        #expect(ZoomCopy.zoomOnAnnouncement == "Zoom on")
+    }
+
+    @Test func theZoomStateDebugLine() {
+        #expect(ZoomCopy.zoomStateLine(enabled: true, capture: ZoomCopy.capturePreviews) == "Zoom: on, window previews")
+        #expect(
+            ZoomCopy.zoomStateLine(enabled: true, capture: ZoomCopy.captureNoPermission) == "Zoom: on, app-icon tiles (no Screen Recording)")
+        #expect(ZoomCopy.zoomStateLine(enabled: true, capture: ZoomCopy.captureFailing) == "Zoom: on, app-icon tiles (capture failing)")
+        #expect(ZoomCopy.zoomStateLine(enabled: false, capture: ZoomCopy.capturePreviews) == "Zoom: off")
+    }
+
+    /// Zero-one-many: explicit branches, never "(s)".
+    @Test func theSettleAndCacheDebugLinesUseExplicitPlurals() {
+        #expect(ZoomCopy.lastSettleLine(nil) == "Last settle: none yet")
+        #expect(ZoomCopy.lastSettleLine((ms: 42, windows: 1)) == "Last settle: 42 ms, 1 window")
+        #expect(ZoomCopy.lastSettleLine((ms: 120, windows: 6)) == "Last settle: 120 ms, 6 windows")
+        #expect(ZoomCopy.snapshotCacheLine(windows: 0, bytes: 0) == "Snapshot cache: empty")
+        #expect(ZoomCopy.snapshotCacheLine(windows: 1, bytes: 3 * 1_048_576) == "Snapshot cache: 1 window, 3 MB")
+        #expect(ZoomCopy.snapshotCacheLine(windows: 5, bytes: 40 * 1_048_576 + 400_000) == "Snapshot cache: 5 windows, 40 MB")
+    }
 }
