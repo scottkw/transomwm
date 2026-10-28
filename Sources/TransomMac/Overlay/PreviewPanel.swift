@@ -135,6 +135,11 @@ private final class PreviewLabelView: NSView {
         }
     }
 
+    /// Re-orders the shown preview's panel above a panel at the same level that just ordered in (the camera stage).
+    func bringFront() {
+        if let display = shown?.display { overlays[display]?.panel.orderFrontRegardless() }
+    }
+
     /// Keyboard parity: the blocked preview at `rect` for 600 ms (fade in 120 ms, hold, fade out 120 ms).
     func flashBlocked(_ rect: Rect, on displayUUID: String) {
         guard shown == nil, let overlay = overlays[displayUUID] else { return }

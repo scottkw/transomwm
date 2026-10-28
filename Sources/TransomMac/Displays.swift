@@ -44,6 +44,11 @@ public enum Displays {
         return names
     }
 
+    /// The screen with that display UUID, or nil when it is gone.
+    public static func screen(uuid: String) -> NSScreen? {
+        NSScreen.screens.first { screen in displayID(screen).flatMap(Self.uuid) == uuid }
+    }
+
     private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }

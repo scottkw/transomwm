@@ -62,10 +62,18 @@ import os
     private var activationObserver: NSObjectProtocol?
     private var loggedTapRefusal = false
 
-    public init(system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8) {
+    /// Whether zoom exists at all this launch (the `zoomEnabled` preference; tests default to off, D-D).
+    private let zoomEnabled: Bool
+    /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
+    private(set) var zoomController: ZoomController?
+
+    public init(
+        system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, zoomEnabled: Bool = false
+    ) {
         self.system = system
         self.store = store
         self.exclusions = exclusions
+        self.zoomEnabled = zoomEnabled
         arranger = Arranger(gap: gap)
         gapPanels.onDrag = { [weak self] handle, delta, ended in
             Task { [weak self] in
@@ -118,11 +126,14 @@ import os
         }
         fedCompleteInventory = inventory.initialRefreshComplete
         await run(arranger.handle(.inventory(inventory), now: .now))
+        if zoomEnabled { await run(arranger.handle(.zoomEnabled(true), now: .now)) }
         onInventory?(inventory)
         Task { [weak self, system] in
             for await event in system.events {
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
+                if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
+                if case .displaysChanged = event { self.zoomController?.displaysChanged() }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
                 // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does
@@ -429,10 +440,43 @@ import os
             case .gapHandles(let handles, let displayUUID):
                 gapPanels.show(handles, on: displayUUID)
             case .cameraMove(let move):
-                // No stage yet: settle at once, so the move protocol runs end to end. The stage (04-04) takes over this case.
-                await run(arranger.handle(.cameraSettle(displayUUID: move.displayUUID, moveID: move.id), now: .now))
+                guard zoomEnabled else {
+                    // Never expected: zoom off never enables the engine's camera. Settle at once so windows stay right.
+                    logger.fault("camera move \(move.id, privacy: .public) with zoom off; settling without a stage")
+                    await settle(displayUUID: move.displayUUID, moveID: move.id)
+                    continue
+                }
+                zoom().run(move) { [weak self] id in
+                    Task { await self?.settle(displayUUID: move.displayUUID, moveID: id) }
+                }
             }
         }
+    }
+
+    private func zoom() -> ZoomController {
+        if let zoomController { return zoomController }
+        let zoom = ZoomController()
+        zoom.windowInfo = { [weak self] in self?.arranger.windows[$0] }
+        zoom.bringNoticesFront = { [weak self] in
+            self?.toast.bringFront()
+            self?.previews?.bringFront()
+        }
+        zoomController = zoom
+        return zoom
+    }
+
+    /// Answers a finished stage move: the engine commits the view and plans the writes, and the stage learns which
+    /// read-backs to wait for before any write goes out.
+    private func settle(displayUUID: String, moveID: UInt64) async {
+        let effects = arranger.handle(.cameraSettle(displayUUID: displayUUID, moveID: moveID), now: .now)
+        let writes = effects.flatMap { effect -> [WindowCommand] in if case .perform(let commands) = effect { commands } else { [] } }
+        zoomController?.beginSettle(displayUUID: displayUUID, moveID: moveID, writes: writes)
+        await run(effects)
+    }
+
+    /// Zooms `displayUUID`'s camera to `target` (the shell entry point; pointer input uses it from 04-06).
+    public func zoom(to target: ViewTarget, displayUUID: String) async {
+        await run(arranger.handle(.zoomTo(target, displayUUID: displayUUID), now: .now))
     }
 
     /// Presses Finder's ⌘N menu item on Finder's AX thread (RESEARCH Pattern 14): no Apple Events, no Automation
