@@ -199,7 +199,11 @@ import os
 
     private func armReveal(_ uuid: String) {
         guard let at = active[uuid]?.tracker?.revealAt() else { return }
-        revealTimers[uuid, default: WakeTimer()].set(at) { [weak self] in self?.reveal(uuid) }
+        // Stored before use: `revealTimers[uuid, default:]` on a class only reads, so the timer was never kept and an
+        // earlier settle's cap timer fired into the next move's settle (04-08).
+        let timer = revealTimers[uuid] ?? WakeTimer()
+        revealTimers[uuid] = timer
+        timer.set(at) { [weak self] in self?.reveal(uuid) }
     }
 
     /// UI-SPEC step 7: every write back + 50 ms, or the cap; the stage fades out over 120 ms.
