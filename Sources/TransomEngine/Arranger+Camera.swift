@@ -147,7 +147,12 @@ extension Arranger {
         camera.paths = [:]
         camera.unparkedNew = []
         camera.collapsible = []  // they float with N1: Phase 3 has no collapsed tiles (Surface 3)
-        return replan() + showBlocks([:])  // also when paused, so no block outlives zoom
+        // Paused, the replan writes nothing: camera-parked and collapsed windows come on screen now (D-D, CR-02). A hidden
+        // Desktop's floaters keep Phase 3's park.
+        let paused = !pauseReasons.isEmpty || sessionPaused
+        let hidden = Set(world.desks.values.filter { $0.tree.isDesktopHidden == true }.flatMap { $0.desktop.windows.map(\.window.identity) })
+        let rescued = paused ? rescueStranded(desks: world, sparing: hidden) : []
+        return (rescued.isEmpty ? [] : [.perform(rescued)]) + replan() + showBlocks([:])  // blocks go also when paused
     }
 
     /// The collapsible set an accepted edit leaves, and the windows it newly collapses.

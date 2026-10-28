@@ -437,11 +437,13 @@ public struct Arranger: Sendable {
     /// Moves every stranded window Transom may move (tracked, dockable, present, not excluded) back on screen: its home
     /// frame clamped on screen, else centred on its display, shrunk to fit (`Recovery.destination`). Its display is the
     /// one its desk in `desks` is on, else the one it is nearest. Runs while paused (UI-SPEC N3, SAFE-03). Returns the
-    /// moves in identity order; the caller sends them before any layout work.
-    mutating func rescueStranded(desks: World) -> [WindowCommand] {
+    /// moves in identity order; the caller sends them before any layout work. `spared` windows stay where they are.
+    mutating func rescueStranded(desks: World, sparing spared: Set<WindowIdentity> = []) -> [WindowCommand] {
         var moves: [WindowCommand] = []
         for info in windows.values.sorted(by: { $0.window.identity < $1.window.identity })
-        where info.kind == .dockable && !info.isExcluded && info.state == .present && Recovery.isStranded(info.frame, displays: displays) {
+        where info.kind == .dockable && !info.isExcluded && info.state == .present && !spared.contains(info.window.identity)
+            && Recovery.isStranded(info.frame, displays: displays)
+        {
             let id = info.window.identity
             let uuid = desks.desks.first { $0.value.contains(info.window) }?.key.displayUUID ?? info.displayUUID
             guard let display = displays.first(where: { $0.uuid == uuid }) ?? displays.first else { continue }

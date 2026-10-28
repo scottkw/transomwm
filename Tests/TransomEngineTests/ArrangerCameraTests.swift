@@ -418,4 +418,20 @@ extension ArrangerCameraTests {
         #expect(notices(effects).contains(.lostRoom([a])), "a floats with N1, as with zoom off")
         #expect(effects.contains(.collapsedBlocks([], displayUUID: "main")))
     }
+
+    /// At home a is collapsed; zoomed to its leaf it is still collapsed and b, outside the view, is camera-parked.
+    @Test(arguments: [false, true]) func turningZoomOffWhilePausedLeavesNoWindowParked(zoomedIn: Bool) async throws {
+        var harness = try await collapsedA()
+        if zoomedIn {
+            let move = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
+            await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+            try #require(await harness.fake.parked == [a.identity, b.identity])
+        }
+        await harness.send(.command(.togglePause, focused: nil))
+
+        await harness.send(.zoomEnabled(false))
+
+        #expect(harness.arranger.zoomEnabled == false)
+        for window in [a, b] { try await onScreen(window, harness) }
+    }
 }
