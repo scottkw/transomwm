@@ -54,7 +54,7 @@ import os
     private var tapReader: Task<Void, Never>?
     private let dragPoller = DragFramePoller()
     /// The drop preview panels, one per display; made when tracking starts.
-    private var previews: PreviewPresenter?
+    private(set) var previews: PreviewPresenter?
     /// The gap handles (TILE-05). A panel is made only when a handle first shows.
     private let gapPanels = GapHandlePanels()
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
@@ -198,6 +198,7 @@ import os
     /// Takes the tap down (Accessibility left `.ready`, Pitfall 4). Hotkeys and the menu keep working.
     public func stopTap() {
         tap.stop()
+        zoomInput.reset()
         dragPoller.stop()
         previews?.show(nil, on: nil)
     }
@@ -228,6 +229,7 @@ import os
         guard !tap.isRunning else { return }
         logger.error("event tap refused by macOS; taken down, drags are not detected")
         loggedTapRefusal = true
+        zoomInput.reset()
         dragPoller.stop()
         previews?.show(nil, on: nil)
     }

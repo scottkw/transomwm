@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import TransomEngine
 import TransomModel
 import os
@@ -22,8 +23,18 @@ import os
         var current: CGPoint
         var tiles: [NodeID: Rect]
         var tree: LayoutTree?
+        /// Shown once the pointer has travelled 4 pt; until then the press may still be a ⌘⇧-click.
+        var shown = false
+        var target: NodeID?
+        /// Esc canceled it: the tap still takes the rest of the press, which then does nothing.
+        var cancelled = false
     }
     private var band: Band?
+    /// The temporary Esc hotkeys while a band is active (ZOOM-12). Each stream registers its Carbon hotkey when it
+    /// starts and unregisters when its task is cancelled.
+    private var bandEscapes: [Task<Void, Never>] = []
+    /// Esc with no modifier, ⇧, ⌘ and ⌘⇧ (the user may still hold ⌘⇧). Never with ⌥: ⌥⌘Esc is Force Quit.
+    private static let escapeModifiers: [NSEvent.ModifierFlags] = [[], [.shift], [.command], [.command, .shift]]
 
     init(controller: ArrangeController, tap: InputTap) {
         self.controller = controller
@@ -59,7 +70,7 @@ import os
     private func bandEvent(_ event: TapEvent) async {
         switch event.type {
         case .leftMouseDown:
-            band = nil
+            endBand()  // a press whose release was lost
             guard let controller, let display = controller.arranger.displays.first(where: { Self.cgRect($0.frame).contains(event.location) })
             else { return }
             let arranger = controller.arranger
@@ -72,28 +83,99 @@ import os
             band = Band(
                 start: event.location, flags: event.flags, clickState: event.clickState, display: display, current: event.location, tiles: tiles,
                 tree: arranger.world[Self.deskKey(display)]?.tree)
+            bandEscapes = Self.escapeModifiers.map { modifiers in
+                Task { [weak self] in
+                    for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape, modifiers: modifiers)) where key == .keyDown {
+                        self?.cancelBand()
+                    }
+                }
+            }
         case .leftMouseDragged:
-            guard var current = band else { return }
+            guard var current = band, !current.cancelled else { return }
             current.current = Self.clamp(event.location, to: current.display.frame)
+            current.shown = current.shown || !Self.isClick(start: current.start, end: current.current)
             band = current
+            if current.shown { drawBand() }
         case .leftMouseUp:
             guard var current = band else { return }
-            band = nil
+            endBand()
+            guard !current.cancelled else { return }
             current.current = Self.clamp(event.location, to: current.display.frame)
-            guard !Self.isClick(start: current.start, end: current.current) else { return }
+            guard current.shown || !Self.isClick(start: current.start, end: current.current) else { return repost(current) }
             let rect = Self.bandRect(current.start, current.current)
             guard let tree = current.tree, let target = Navigator.rectTarget(band: rect, tiles: current.tiles, tree: tree) else {
-                log.info("rect zoom: no target")  // a marquee over nothing: no move, no beep
+                log.info("\(ZoomCopy.logRectNoTarget, privacy: .public)")  // a marquee over nothing: no move, no beep
                 return
             }
-            log.info("rect zoom → \(String(describing: target), privacy: .public)")
+            log.info("\(ZoomCopy.logRectZoom(String(describing: target)), privacy: .public)")
             await controller?.zoom(to: Navigator.target(target, in: tree), displayUUID: current.display.uuid)
         default:
             break
         }
     }
 
+    /// The band and, when its target node changes, the target preview.
+    private func drawBand() {
+        guard var current = band else { return }
+        let rect = Self.bandRect(current.start, current.current)
+        current.target = current.tree.flatMap { Navigator.rectTarget(band: rect, tiles: current.tiles, tree: $0) }
+        band = current
+        let targetRect = current.target.flatMap { target in current.tree.flatMap { Self.rect(of: target, tiles: current.tiles, tree: $0) } }
+        controller?.previews?.showBand(rect, target: targetRect, on: current.display.uuid)
+    }
+
+    /// Esc during the band (ZOOM-12): no move, the band fades out, "Zoom canceled". The tap still takes the rest of the
+    /// press, so no click reaches an app.
+    private func cancelBand() {
+        guard var current = band, !current.cancelled else { return }
+        current.cancelled = true
+        band = current
+        stopEscapes()
+        controller?.previews?.hideBand(on: current.display.uuid)
+        postAnnouncement(ZoomCopy.zoomCanceled)
+        log.info("\(ZoomCopy.logRectCanceled, privacy: .public)")
+    }
+
+    /// The band is over: its drawing fades and its Esc hotkeys go.
+    private func endBand() {
+        guard let current = band else { return }
+        band = nil
+        stopEscapes()
+        controller?.previews?.hideBand(on: current.display.uuid)
+    }
+
+    private func stopEscapes() {
+        for task in bandEscapes { task.cancel() }
+        bandEscapes = []
+    }
+
+    /// A ⌘⇧-click (Pitfall 10): the exact press, re-posted at its point and flags, tagged so the tap lets it through.
+    private func repost(_ press: Band) {
+        for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+            guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: press.start, mouseButton: .left) else { continue }
+            event.flags = press.flags
+            event.setIntegerValueField(.mouseEventClickState, value: max(press.clickState, 1))
+            event.setIntegerValueField(.eventSourceUserData, value: ZoomTapRules.repostTag)
+            event.post(tap: .cgSessionEventTap)
+        }
+        log.info("\(ZoomCopy.logRepost, privacy: .public)")
+    }
+
+    /// The tap went down or Accessibility left: nothing of a press may linger.
+    func reset() {
+        endBand()
+    }
+
     // MARK: Pure helpers
+
+    /// The on-screen rect of `node`: the union of its leaves' tiles.
+    nonisolated static func rect(of node: NodeID, tiles: [NodeID: Rect], tree: LayoutTree) -> Rect? {
+        let rects = tiles.filter { Navigator.ancestors(of: $0.key, in: tree).contains(node) }.values
+        guard let minX = rects.map(\.minX).min(), let minY = rects.map(\.minY).min(), let maxX = rects.map(\.maxX).max(),
+            let maxY = rects.map(\.maxY).max()
+        else { return nil }
+        return Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
 
     /// A ⌘⇧ press that travelled under 4 pt is a click, not a band.
     nonisolated static func isClick(start: CGPoint, end: CGPoint) -> Bool {

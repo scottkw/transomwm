@@ -115,4 +115,18 @@ nonisolated public enum ZoomCopy {
     public static let logExplainerShown = "explainer shown"
     public static let logExplainerAllow = "explainer: allow"
     public static let logExplainerNotNow = "explainer: not now"
+
+    // MARK: Pointer input (Surface 4, 5, 9; Logging, category zoomInput)
+
+    /// Announced when Esc cancels a rubber band (ZOOM-12).
+    public static let zoomCanceled = "Zoom canceled"
+    public static func logRectZoom(_ node: String) -> String { "rect zoom \u{2192} \(node)" }
+    public static let logRectNoTarget = "rect zoom: no target"
+    public static let logRectCanceled = "rect zoom canceled (Esc)"
+    public static let logRepost = "\u{2318}\u{21E7}-click re-posted"
+    public static let logPickOn = "pick mode on"
+    public static func logPick(_ windowID: UInt32) -> String { "pick \u{2192} window \(windowID)" }
+    public static func logPickOff(_ reason: String) -> String { "pick mode off: \(reason)" }
+    public static func logTitleBarDoubleClick(_ windowID: UInt32) -> String { "title bar double-click \u{2192} frame window \(windowID)" }
+    public static let logDesktopDoubleClick = "desktop double-click \u{2192} frame desktop"
 }

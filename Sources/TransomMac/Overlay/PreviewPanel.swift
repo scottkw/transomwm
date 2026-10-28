@@ -73,6 +73,19 @@ private final class PreviewLabelView: NSView {
     }
 
     private var overlays: [String: Overlay] = [:]
+    /// The zoom marquee per display: the rubber band, its target preview and pick mode's hover ring (Surface 4, 5). Their
+    /// own layers above the drop preview's on the same panel; a window drag and a band both start with a left press, so
+    /// the two never show at once.
+    private final class Marquee {
+        let band = CAShapeLayer()
+        let target = CAShapeLayer()
+        let ring = CAShapeLayer()
+        var bandShown = false
+        var targetRect: Rect?
+        var ringRect: Rect?
+        var isIdle: Bool { !bandShown && ringRect == nil }
+    }
+    private var marquees: [String: Marquee] = [:]
     private var shown: (state: PreviewState, display: String)?
     /// Bumped by every show and hide, so a fade that finishes after a newer change does not order a panel out.
     private var generation = 0
@@ -160,6 +173,7 @@ private final class PreviewLabelView: NSView {
     private func rebuildPanels() {
         for overlay in overlays.values { overlay.panel.orderOut(nil) }
         overlays = [:]
+        marquees = [:]
         shown = nil
         guard let primaryHeight = NSScreen.screens.first?.frame.height else { return }
         for display in Displays.current() {
@@ -184,9 +198,15 @@ private final class PreviewLabelView: NSView {
             root.frame = view.bounds
             root.opacity = 0
             view.layer?.addSublayer(root)
+            let marquee = Marquee()
+            for layer in [marquee.target, marquee.band, marquee.ring] {
+                layer.opacity = 0
+                view.layer?.addSublayer(layer)
+            }
             panel.contentView = view
             panel.setFrame(frame, display: false)
             overlays[display.uuid] = Overlay(panel: panel, view: view, root: root, frame: frame)
+            marquees[display.uuid] = marquee
         }
     }
 
@@ -206,13 +226,7 @@ private final class PreviewLabelView: NSView {
         for style in PreviewStyle.layers(for: state, increaseContrast: increaseContrast) {
             let local = localRect(style.rect, in: overlay)
             let shape = CAShapeLayer()
-            shape.path = CGPath(roundedRect: local, cornerWidth: style.cornerRadius, cornerHeight: style.cornerRadius, transform: nil)
-            shape.lineWidth = style.borderWidth
-            shape.lineDashPattern = style.dash?.map { NSNumber(value: $0) }
-            overlay.view.effectiveAppearance.performAsCurrentDrawingAppearance {
-                shape.fillColor = Self.color(style.fill).withAlphaComponent(style.fillAlpha).cgColor
-                shape.strokeColor = Self.color(style.border).withAlphaComponent(style.borderAlpha).cgColor
-            }
+            apply(style, to: shape, in: overlay)
             overlay.root.addSublayer(shape)
             if let label = style.label {
                 let view = PreviewLabelView(label, glyphColor: Self.color(label.glyphRole))
@@ -225,6 +239,115 @@ private final class PreviewLabelView: NSView {
             }
         }
         CATransaction.commit()
+    }
+
+    /// Styles `shape` as `style` (path, border, colours resolved in the panel's appearance).
+    private func apply(_ style: PreviewStyle.LayerStyle, to shape: CAShapeLayer, in overlay: Overlay) {
+        let local = localRect(style.rect, in: overlay)
+        shape.path = CGPath(roundedRect: local, cornerWidth: style.cornerRadius, cornerHeight: style.cornerRadius, transform: nil)
+        shape.lineWidth = style.borderWidth
+        shape.lineDashPattern = style.dash?.map { NSNumber(value: $0) }
+        overlay.view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            shape.fillColor = Self.color(style.fill).withAlphaComponent(style.fillAlpha).cgColor
+            shape.strokeColor = Self.color(style.border).withAlphaComponent(style.borderAlpha).cgColor
+        }
+    }
+
+    // MARK: Zoom marquee (Surface 4, 5)
+
+    /// The rubber band at `band`, following the pointer with no easing, and the target preview at `target`: it fades in
+    /// over 80 ms, then morphs over 120 ms when the target changes (Reduce Motion: the new rect fades in over 120 ms).
+    func showBand(_ band: Rect, target: Rect?, on displayUUID: String) {
+        guard let overlay = overlays[displayUUID], let marquee = marquees[displayUUID] else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        apply(PreviewStyle.band(band, increaseContrast: increaseContrast), to: marquee.band, in: overlay)
+        if !marquee.bandShown {
+            marquee.bandShown = true
+            marquee.band.removeAllAnimations()
+            marquee.band.opacity = 1
+            orderFront(overlay)
+        }
+        CATransaction.commit()
+        guard target != marquee.targetRect else { return }
+        let previous = marquee.targetRect
+        marquee.targetRect = target
+        guard let target else { return fade(marquee.target, to: 0, duration: 0.08) }
+        let oldPath = marquee.target.path
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        apply(PreviewStyle.rectTarget(target, increaseContrast: increaseContrast), to: marquee.target, in: overlay)
+        CATransaction.commit()
+        if previous == nil {
+            fade(marquee.target, from: 0, to: 1, duration: 0.08)
+        } else if reduceMotion {
+            fade(marquee.target, from: 0, to: 1, duration: 0.12)
+        } else {
+            let morph = CABasicAnimation(keyPath: "path")
+            morph.fromValue = oldPath
+            morph.toValue = marquee.target.path
+            morph.duration = 0.12
+            morph.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            marquee.target.add(morph, forKey: "morph")
+        }
+    }
+
+    /// The band and its target preview fade out over 80 ms (release or Esc).
+    func hideBand(on displayUUID: String) {
+        guard let marquee = marquees[displayUUID], marquee.bandShown else { return }
+        marquee.bandShown = false
+        marquee.targetRect = nil
+        fade(marquee.band, to: 0, duration: 0.08)
+        fade(marquee.target, to: 0, duration: 0.08)
+        orderOutWhenIdle(displayUUID, after: 0.08)
+    }
+
+    /// Pick mode's hover ring inside the tile at `rect` (fade in 80 ms).
+    func showPickRing(_ rect: Rect, radius: CGFloat, on displayUUID: String) {
+        guard let overlay = overlays[displayUUID], let marquee = marquees[displayUUID], marquee.ringRect != rect else { return }
+        marquee.ringRect = rect
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        apply(PreviewStyle.pickRing(rect, radius: radius, increaseContrast: increaseContrast), to: marquee.ring, in: overlay)
+        CATransaction.commit()
+        orderFront(overlay)
+        fade(marquee.ring, from: 0, to: 1, duration: 0.08)
+    }
+
+    /// The hover ring fades out over 120 ms.
+    func hidePickRing(on displayUUID: String) {
+        guard let marquee = marquees[displayUUID], marquee.ringRect != nil else { return }
+        marquee.ringRect = nil
+        fade(marquee.ring, to: 0, duration: 0.12)
+        orderOutWhenIdle(displayUUID, after: 0.12)
+    }
+
+    /// Orders the panel in; the bump stops a drop preview's pending fade from ordering it out under the marquee.
+    private func orderFront(_ overlay: Overlay) {
+        generation += 1
+        overlay.panel.orderFrontRegardless()
+    }
+
+    /// Orders the panel out once the fade is over, unless something showed on it meanwhile.
+    private func orderOutWhenIdle(_ displayUUID: String, after duration: Double) {
+        generation += 1
+        let at = generation
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(Int(duration * 1000)))
+            guard let self, self.generation == at, self.shown?.display != displayUUID, self.marquees[displayUUID]?.isIdle == true else { return }
+            self.overlays[displayUUID]?.panel.orderOut(nil)
+        }
+    }
+
+    /// Fades a layer from its current (presentation) opacity unless `from` is given.
+    private func fade(_ layer: CALayer, from: Float? = nil, to: Float, duration: Double) {
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = from ?? layer.presentation()?.opacity ?? layer.opacity
+        animation.toValue = to
+        animation.duration = duration
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(animation, forKey: "fade")
+        layer.opacity = to
     }
 
     /// Animates each rect from where it is to `state`'s, 120 ms ease-in-out (UI-SPEC animation table).
