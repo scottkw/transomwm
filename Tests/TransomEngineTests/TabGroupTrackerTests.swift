@@ -624,4 +624,33 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(!tracker.isKnownMember(11, pid: pid))
         #expect(tracker.shownTab(containing: 21, pid: pid) == 10)
     }
+
+    // MARK: Review GAPS2: timing links against the slot, failed reads, the orphan handoff and stale sweep lists
+
+    /// Space data off; on with hidden tabs reporting no Space; on with hidden tabs reporting their group's Space.
+    private static let modes: [(spacesAvailable: Bool, hiddenTabsReportSpace: Bool)] = [(false, false), (true, false), (true, true)]
+
+    /// CR-01 (P1): group B (20 shown, 21 hidden, both at `frame`) and standalone W (10, elsewhere). In one refresh W goes
+    /// hidden (minimized, moved off the Space) and Cmd-T in B opens 50 exactly in B's slot: B takes it, never W.
+    @Test(arguments: modes)
+    func aCmdTInAGroupIsNeverHandedToAStandaloneThatWentHidden(spacesAvailable: Bool, hiddenTabsReportSpace: Bool) {
+        let away = Rect(x: 900, y: 300, width: 400, height: 300)
+        let hidden: Set<UInt64> = hiddenTabsReportSpace ? [1] : []
+        func spaces(_ map: [UInt32: Set<UInt64>]) -> [UInt32: Set<UInt64>]? { spacesAvailable ? map : nil }
+        var tracker = TabGroupTracker()
+        let tracked = [identity(10), identity(20)]
+        _ = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(10, 1, away), visible(20, 2)],
+            cgWindows: [cg(10, away, onScreen: true), cg(20, onScreen: true), cg(21)], tracked: tracked,
+            spaces: spaces([10: [1], 20: [1], 21: hidden])
+        )
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(50, 3)], cgWindows: [cg(10, away), cg(20), cg(21), cg(50, onScreen: true)],
+            tracked: tracked, spaces: spaces([10: [1], 20: hidden, 21: hidden, 50: [1]])
+        )
+        #expect(resolution.groupFor == [50: identity(20)])
+        #expect(tracker.members(of: identity(20)) == [20, 21, 50])
+        #expect(tracker.members(of: identity(10)).isEmpty)
+        #expect(resolution.folded.isEmpty)
+    }
 }

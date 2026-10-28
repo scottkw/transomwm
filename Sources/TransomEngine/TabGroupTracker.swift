@@ -56,8 +56,9 @@ public struct TabResolution: Equatable, Sendable {
 /// groups of one app on two Spaces can be tracked as one window; with Space data, an unknown-Space hidden tab can stay
 /// out of its group until a tab switch shows it (visibleMemberID and tabCount are unaffected). A Cmd-T in the same
 /// update as a Space switch without Space data is linked only if its opener is in the slot, and a tab switch or Cmd-T
-/// there with stale bounds can leave an extra row until the app relaunches (no merge, no destroy). Two windows of one
-/// app going hidden in one refresh are told apart by the slot, then by origin and width: a same-app window leaving the
+/// there with stale bounds can leave an extra row until the app relaunches (no merge, no destroy). A new tab whose
+/// slot holds a group's members joins that group before any timing link applies; the standalones and groups whose
+/// shown tab went hidden in one refresh then compete by bounds match, then origin and width: a same-app window leaving the
 /// Space in the same refresh as a new tab, other than by a Space switch, can be taken as its opener or group (an
 /// identity misattributed, never a window lost). Merge All Windows across different frames is not covered by timing. A
 /// Space-switch notification that reaches main only after the update that already saw the new Space protects nothing;
@@ -154,14 +155,6 @@ public struct TabGroupTracker: Equatable, Sendable {
                     && !Self.differ(space($0.windowID), shownSpace)
             }.map(\.windowID)
             var opener = isNew ? standalone.first { mayBeOpener($0.windowID) && candidates.contains($0.windowID) }?.windowID : nil
-            // Its opener can miss the slot: Terminal's first Cmd-T grows the new tab by the tab bar (G-02-10).
-            if opener == nil, isNew, v.tabCount >= 2 {
-                let hidden = standalone.map(\.windowID).filter {
-                    mayBeOpener($0) && wentHidden($0) && canBeHiddenTab($0) && !Self.differ(space($0), shownSpace)
-                }
-                let bounds = hidden.compactMap { id in cg.first { $0.windowID == id }.map { (id: id, bounds: $0.bounds) } }
-                opener = Self.nearest(bounds, to: v.frame).map { bounds[$0].id }
-            }
             var index = list.firstIndex { $0.members.contains(v.id) }
             var refused: Int?
             if let member = index, list[member].shown != v.id, v.tabCount >= 2, !mayRebind(list[member], v) {
@@ -175,14 +168,22 @@ public struct TabGroupTracker: Equatable, Sendable {
                         && !Self.differ(shownSpace, list[i].spaces)
                 }
             }
-            // A new tab joins the group whose shown tab went hidden this refresh, whatever its bounds (Finder opens it at a
-            // hidden sibling's frame after a resize, G-02-10), so a group with stale bounds is never founded twice.
+            // Timing, whatever the bounds (G-02-10): a brand-new tab takes the standalone it was opened from (Terminal's first
+            // Cmd-T grows the new tab by the tab bar), and a new tab joins the group whose shown tab went hidden (Finder
+            // opens it at a hidden sibling's frame after a resize). Both compete in one tie-break, so a group's own slot
+            // beats an unrelated standalone that went hidden in the same refresh (review CR-01).
             if index == nil, v.tabCount >= 2, opener == nil {
+                let hidden = isNew ? standalone.map(\.windowID).filter {
+                    mayBeOpener($0) && wentHidden($0) && canBeHiddenTab($0) && !Self.differ(space($0), shownSpace)
+                } : []
+                let openers = hidden.compactMap { id in cg.first { $0.windowID == id }.map { (id: id, bounds: $0.bounds) } }
                 let joinable = list.indices.filter { i in
                     i != refused && wentHidden(list[i].shown) && !Self.differ(space(list[i].shown), shownSpace)
                         && !Self.differ(list[i].spaces, shownSpace) && list[i].members.count < v.tabCount
                 }
-                index = Self.nearest(joinable.map { (id: list[$0].leader.windowID, bounds: list[$0].frame) }, to: v.frame).map { joinable[$0] }
+                if let pick = Self.nearest(openers + joinable.map { (id: list[$0].leader.windowID, bounds: list[$0].frame) }, to: v.frame) {
+                    if pick < openers.count { opener = openers[pick].id } else { index = joinable[pick - openers.count] }
+                }
             }
             // Orphan handoff: a group whose shown tab and every known member are gone passes to a listed window only
             // if it was an offscreen entry in the group's slot last refresh, so a former tab. A brand-new window never is.

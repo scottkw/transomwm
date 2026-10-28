@@ -799,3 +799,61 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(step(&tracker, listed: [(10, 3)], onScreen: [10], offScreen: [20, 30], spaceChanged: true, spaces: spaces)) == [ref(20)])
     }
 }
+
+/// Review GAPS2 (CR-01, WR-01, WR-02, WR-03) through WindowTracker, with per-window reads the fake cannot fail.
+@Suite struct TimingLinkTrackerTests {
+    private let clock = ContinuousClock()
+    private static let away = Rect(x: 900, y: 300, width: 400, height: 300)
+    private static let shorter = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height - 28)
+    private static let taller = Rect(x: frame.x, y: frame.y, width: frame.width, height: frame.height + 28)
+
+    private func snapshot(_ tabs: Int?, _ frame: Rect, minimized: Bool = false) -> WindowSnapshot {
+        WindowSnapshot(
+            role: "AXWindow", subrole: "AXStandardWindow", modal: false, main: false, minimized: minimized, fullScreen: false,
+            close: .enabled, minimize: .enabled, zoom: .enabled, fullScreenButton: .enabled,
+            tabGroup: tabs.map { TabGroupFact(tabCount: $0) }, frame: frame
+        )
+    }
+
+    private func listed(_ id: UInt32, _ tabs: Int?, _ frame: Rect = frame, minimized: Bool = false) -> WindowObservation {
+        WindowObservation(windowID: id, idSource: .axPrivate, read: .success(snapshot(tabs, frame, minimized: minimized)), title: "")
+    }
+
+    private func unlisted(_ id: UInt32) -> WindowObservation {
+        WindowObservation(windowID: id, idSource: .axPrivate, read: .success(snapshot(nil, frame)), title: "", listedInAXWindows: false)
+    }
+
+    private func cg(_ id: UInt32, _ bounds: Rect = frame, onScreen: Bool = false) -> CGWindowEntry {
+        CGWindowEntry(windowID: id, pid: pid, bounds: bounds, layer: 0, onScreen: onScreen, alpha: 1)
+    }
+
+    private func ingest(
+        _ tracker: inout WindowTracker, _ windows: [WindowObservation], _ cgWindows: [CGWindowEntry], initial: Bool = false
+    ) -> [WindowEvent] {
+        tracker.ingest(AppObservation(pid: pid, bundleID: bundleID, windows: windows),
+                       context: ObservationContext(cgWindows: cgWindows, initialSweep: initial, now: clock.now))
+    }
+
+    private func rows(_ tracker: WindowTracker) -> [[UInt32]] {
+        tracker.sortedWindows().map { [$0.window.windowID, $0.visibleMemberID ?? 0, UInt32($0.tabCount)] }
+    }
+
+    /// CR-01 (P6): W (10) is minimized (listed, offscreen) beside group B (20 shown, 21 hidden). In the refresh of a
+    /// Cmd-T in B, W's read times out (-25204). B keeps the new tab, W keeps its own row, and it stays that way.
+    @Test func aCmdTInAGroupBesideAMinimizedWindowWhoseReadTimedOutStaysInTheGroup() {
+        var tracker = WindowTracker(settleDelay: .zero)
+        let w = listed(10, nil, Self.away, minimized: true)
+        let before = [cg(10, Self.away), cg(20, onScreen: true), cg(21)]
+        var events = ingest(&tracker, [w, listed(20, 2)], before, initial: true)
+        events += ingest(&tracker, [w, listed(20, 2)], before)
+        #expect(rows(tracker) == [[10, 10, 1], [20, 20, 2]])
+        let timedOut = WindowObservation(windowID: 10, idSource: .axPrivate, read: .failure(.cannotComplete), title: "")
+        let after = [cg(10, Self.away), cg(20), cg(21), cg(50, onScreen: true)]
+        events += ingest(&tracker, [timedOut, listed(50, 3), unlisted(20)], after)
+        #expect(rows(tracker) == [[10, 10, 1], [20, 50, 3]])
+        for _ in 0..<4 { events += ingest(&tracker, [w, listed(50, 3), unlisted(20)], after) }
+        #expect(rows(tracker) == [[10, 10, 1], [20, 50, 3]])
+        #expect(destroyed(events).isEmpty)
+        #expect(created(events).map(\.window) == [ref(10), ref(20)])
+    }
+}
