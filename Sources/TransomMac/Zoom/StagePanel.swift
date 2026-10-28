@@ -23,10 +23,14 @@ public struct StageTile {
     }
 }
 
-/// Re-resolves the tiles' colours when the appearance changes.
+/// Re-resolves the tiles' colours when the appearance changes, and takes every click on the stage.
 private final class StageContentView: NSView {
     var onAppearanceChange: () -> Void = {}
+    var onMouseDown: (CGPoint) -> Void = { _ in }
     override func viewDidChangeEffectiveAppearance() { onAppearanceChange() }
+    // The panel is never key, so the first click must reach the view.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { onMouseDown(convert(event.locationInWindow, from: nil)) }
 }
 
 /// The camera stage (UI-SPEC Surface 1): one never-key panel per display covering its whole frame, shown only while
@@ -45,6 +49,8 @@ public final class StagePanel: NSPanel {
     private var tiles: [StageTile] = []
     /// Chosen when a move starts (Reduce Motion), kept by its retargets.
     private var crossfade = false
+    /// A click on a tile, by its window ID (Surface 5: retargets the camera). A click on the backdrop is swallowed.
+    var onTileClick: ((UInt32) -> Void)?
 
     public init(screen: NSScreen) {
         super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -78,6 +84,10 @@ public final class StagePanel: NSPanel {
         }
         view.layer?.addSublayer(backdrop)
         view.onAppearanceChange = { [weak self] in self?.resolveColors() }
+        view.onMouseDown = { [weak self] point in
+            guard let self, let id = self.layers.first(where: { $0.value.currentRect.contains(point) })?.key else { return }
+            self.onTileClick?(id)
+        }
         colorObserver = NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) {
             [weak self] _ in
             MainActor.assumeIsolated { self?.resolveColors() }

@@ -37,6 +37,8 @@ import os
     private let captureLog = Logger(subsystem: "com.eightabyte.transom", category: "capture")
     /// Fires when a reveal fade ends (04-05's Turn Off Zoom and 04-06's pick mode wait for it).
     var onRevealed: ((_ displayUUID: String, _ move: CameraMove) -> Void)?
+    /// A click on a stage tile, by display and tile (CG window) ID (Surface 5).
+    var onTileClick: ((_ displayUUID: String, _ windowID: UInt32) -> Void)?
     /// Re-orders a visible toast and drop preview above a stage that just ordered in (UI-SPEC Surface 1 level row).
     var bringNoticesFront: () -> Void = {}
     /// The Arranger's info for a window: the CG window of its visible tab, its frame.
@@ -153,6 +155,7 @@ import os
         if let stage = stages[uuid] { return stage }
         guard let nsScreen = Displays.screen(uuid: uuid) else { return nil }
         let panel = StagePanel(screen: nsScreen)
+        panel.onTileClick = { [weak self] id in self?.onTileClick?(uuid, id) }
         stages[uuid] = panel
         return panel
     }

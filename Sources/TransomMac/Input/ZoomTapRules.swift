@@ -59,6 +59,16 @@ nonisolated enum ZoomTapRules {
                 swallow = .band
                 return .consume(.band)
             }
+            // Clicks are plain only; the window must be the one on top at the point, so a floater over a tile passes.
+            guard chord.isEmpty, windowID != 0 else { return .pass }
+            if state.pickTiles?[windowID]?.contains(location) == true {
+                swallow = .click
+                return .consume(.pick(windowID))
+            }
+            if clickState == 2, state.titleBarDoubleClick, state.titleBars[windowID]?.contains(location) == true {
+                swallow = .click
+                return .consume(.titleBarDoubleClick(windowID))
+            }
             return .pass
         case .leftMouseDragged:
             return swallow == .band ? .consume(.band) : swallow == .click ? .consume(nil) : .pass

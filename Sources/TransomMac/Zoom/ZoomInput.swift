@@ -36,6 +36,18 @@ import os
     /// Esc with no modifier, ⇧, ⌘ and ⌘⇧ (the user may still hold ⌘⇧). Never with ⌥: ⌥⌘Esc is Force Quit.
     private static let escapeModifiers: [NSEvent.ModifierFlags] = [[], [.shift], [.command], [.command, .shift]]
 
+    /// Pick mode on one display (Surface 5): its window tiles by CG window, the passive hover monitor, the Esc hotkey.
+    private struct Pick {
+        var displayUUID: String
+        var tiles: [UInt32: CGRect]
+        var monitor: Any?
+        var escape: Task<Void, Never>
+        var hovered: UInt32?
+    }
+    private var pick: Pick?
+    /// The Zoom Out to All Windows / Zoom Out One Level move whose reveal starts pick mode.
+    private var pickMove: UInt64?
+
     init(controller: ArrangeController, tap: InputTap) {
         self.controller = controller
         self.tap = tap
@@ -51,18 +63,163 @@ import os
             controller.isZoomEnabled && controller.isReady() && arranger.pauseReasons.isEmpty && (controller.zoomController?.isIdle ?? true)
         if state.armed {
             state.deskDisplays = arranger.displays.filter { arranger.world[Self.deskKey($0)] != nil }.map { Self.cgRect($0.frame) }
+            state.pickTiles = pick?.tiles
+            state.titleBarDoubleClick = UserDefaults.standard.object(forKey: ShortcutsModel.doubleClickKey) as? Bool ?? true
+            if state.titleBarDoubleClick { state.titleBars = titleBars(arranger) }
         }
         guard state != published else { return }
         published = state
         tap.setZoomState(state)
     }
 
+    /// Every docked window's title band, by the CG window it shows: from its top edge down to its green button's
+    /// bottom, from the frames Transom tracks (no AX). Floating windows keep macOS's own double-click.
+    private func titleBars(_ arranger: Arranger) -> [UInt32: CGRect] {
+        var bars: [UInt32: CGRect] = [:]
+        for info in arranger.windows.values where info.kind == .dockable && !info.isExcluded && info.state == .present {
+            guard let button = info.greenButton, let leaf = arranger.leafNode(of: info.window), leaf != .desktop else { continue }
+            bars[info.visibleMemberID ?? info.window.windowID] = CGRect(
+                x: info.frame.x, y: info.frame.y, width: info.frame.width, height: button.y + button.height)
+        }
+        return bars
+    }
+
     /// One event of a taken zoom press.
     func tapEvent(_ kind: ZoomTapRules.Kind, _ event: TapEvent) async {
         switch kind {
-        case .band: await bandEvent(event)
-        case .pick, .titleBarDoubleClick: break
+        case .band:
+            if event.type == .leftMouseDown { endPick(reason: "rect zoom") }
+            await bandEvent(event)
+        case .pick(let id): await pickClick(cgID: id)
+        case .titleBarDoubleClick(let id): await titleBarDoubleClick(cgID: id, at: event.location)
         }
+    }
+
+    /// A left press the tap let through (or a green-button press): ends a band whose release was lost and pick mode,
+    /// and frames the Desktop on a double-click on its wallpaper (ZOOM-11), which is never taken.
+    func pointerDown(_ event: TapEvent) {
+        endBand()
+        endPick(reason: "click")
+        guard event.clickState == 2, published.armed else { return }
+        // Its own task: Finder's hit test must not hold up the Arranger's view of this press.
+        Task { await desktopDoubleClick(at: event.location) }
+    }
+
+    private func desktopDoubleClick(at location: CGPoint) async {
+        guard let controller else { return }
+        let point = Point(x: location.x, y: location.y)
+        let arranger = controller.arranger
+        guard let display = arranger.displays.first(where: { $0.frame.contains(point) }),
+            let desktop = (try? arranger.shownLeafRects(displayUUID: display.uuid))?[.desktop], desktop.contains(point),
+            CGWindowList.topmostWindow(at: point) == nil  // wallpaper, not a window over the Desktop tile
+        else { return }
+        let finder = NSRunningApplication.runningApplications(withBundleIdentifier: Arranger.finderBundleID).first?.processIdentifier
+        // Off the tap and off main: Finder's hit test may take up to its 0.25 s timeout.
+        let hit = await Task.detached { finder.flatMap { Self.finderElement(at: location, pid: $0) } }.value
+        if let hit { log.debug("desktop double-click hit \(hit.role, privacy: .public) / \(hit.subrole ?? "-", privacy: .public)") }
+        guard !Self.isDesktopItem(hit) else { return }  // a desktop icon only opens
+        log.info("\(ZoomCopy.logDesktopDoubleClick, privacy: .public)")
+        await controller.camera(.frameDesktop, displayUUID: display.uuid, focused: nil, pointer: point)
+    }
+
+    /// A title-bar double-click on a docked window (ZOOM-10): frame it, or go back when it is framed (the engine toggles).
+    private func titleBarDoubleClick(cgID: UInt32, at location: CGPoint) async {
+        guard let controller, let window = controller.trackedWindow(cgID: cgID) else { return }
+        let point = Point(x: location.x, y: location.y)
+        guard let uuid = controller.arranger.windows[window.identity]?.displayUUID ?? controller.pointerDisplay().uuid else { return }
+        log.info("\(ZoomCopy.logTitleBarDoubleClick(window.windowID), privacy: .public)")
+        await controller.camera(.frameWindow, displayUUID: uuid, focused: window, pointer: point)
+    }
+
+    // MARK: Pick mode (Surface 5)
+
+    /// Any Transom command ends pick mode and forgets a pending zoom-out.
+    func noteCommand() {
+        endPick(reason: "command")
+        pickMove = nil
+    }
+
+    /// The camera command that made `moveID` was Zoom Out to All Windows or Zoom Out One Level.
+    func expectPick(moveID: UInt64) {
+        pickMove = moveID
+    }
+
+    /// A move revealed: pick mode starts when it was the expected zoom-out and the new view holds more than one window.
+    func revealed(displayUUID uuid: String, move: CameraMove) {
+        guard let expected = pickMove, expected == move.id else { return }
+        pickMove = nil
+        let shown = move.tiles.filter { $0.kind != .leaving }
+        guard shown.count > 1, let controller else { return }
+        let arranger = controller.arranger
+        var tiles: [UInt32: CGRect] = [:]
+        // shortcut: collapsed blocks are not pickable until 04-07 gives them panels; their click passes through.
+        for tile in shown {
+            guard let info = arranger.windows[tile.window.identity], let leaf = arranger.leafNode(of: tile.window), leaf != .desktop else { continue }
+            tiles[info.visibleMemberID ?? tile.window.windowID] = Self.cgRect(tile.end)
+        }
+        endPick(reason: "new pick")
+        let monitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hover() }
+        }
+        let escape = Task { [weak self] in
+            for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape)) where key == .keyDown {
+                self?.endPick(reason: "Esc")
+            }
+        }
+        pick = Pick(displayUUID: uuid, tiles: tiles, monitor: monitor, escape: escape)
+        log.info("\(ZoomCopy.logPickOn, privacy: .public)")
+        publish()
+        hover()
+    }
+
+    /// The hover ring follows the tile under the pointer; none over the Desktop tile, gaps, the menu bar or the Dock.
+    private func hover() {
+        guard var current = pick, let controller else { return }
+        let point = controller.pointerDisplay().point
+        let hovered = current.tiles.first { $0.value.contains(CGPoint(x: point.x, y: point.y)) }
+        guard hovered?.key != current.hovered else { return }
+        current.hovered = hovered?.key
+        pick = current
+        if let rect = hovered?.value {
+            controller.previews?.showPickRing(
+                Rect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height), radius: TileLayer.cornerRadius, on: current.displayUUID)
+        } else {
+            controller.previews?.hidePickRing(on: current.displayUUID)
+        }
+    }
+
+    /// Ends pick mode: the monitor, the Esc hotkey, the ring and the published tiles all go.
+    func endPick(reason: String) {
+        guard let current = pick else { return }
+        pick = nil
+        if let monitor = current.monitor { NSEvent.removeMonitor(monitor) }
+        current.escape.cancel()
+        controller?.previews?.hidePickRing(on: current.displayUUID)
+        log.info("\(ZoomCopy.logPickOff(reason), privacy: .public)")
+        publish()
+    }
+
+    /// A pick click on a docked window: zoom to its leaf and focus it once the move settles.
+    private func pickClick(cgID: UInt32) async {
+        guard let uuid = pick?.displayUUID else { return }
+        endPick(reason: "picked")
+        guard let window = controller?.trackedWindow(cgID: cgID) else { return }
+        log.info("\(ZoomCopy.logPick(window.windowID), privacy: .public)")
+        await zoom(toLeafOf: window, displayUUID: uuid)
+    }
+
+    /// A click on a stage tile while the stage is up (any mode): retargets the move to that window's leaf, focused at
+    /// settle. The backdrop swallows its own clicks.
+    func stageClick(cgID: UInt32, displayUUID uuid: String) async {
+        guard let window = controller?.trackedWindow(cgID: cgID) else { return }
+        await zoom(toLeafOf: window, displayUUID: uuid)
+    }
+
+    private func zoom(toLeafOf window: TransomModel.WindowRef, displayUUID uuid: String) async {
+        guard let controller, let leaf = controller.arranger.leafNode(of: window), leaf != .desktop,
+            let tree = controller.arranger.deskKey(of: window).flatMap({ controller.arranger.world[$0]?.tree })
+        else { return }
+        await controller.zoom(to: Navigator.target(leaf, in: tree), displayUUID: uuid, focus: window)
     }
 
     // MARK: Rubber band (Surface 4)
@@ -161,9 +318,33 @@ import os
         log.info("\(ZoomCopy.logRepost, privacy: .public)")
     }
 
-    /// The tap went down or Accessibility left: nothing of a press may linger.
-    func reset() {
+    /// The tap went down, Accessibility left or zoom turned off: nothing of a press or of pick mode may linger.
+    func reset(reason: String) {
         endBand()
+        endPick(reason: reason)
+        pickMove = nil
+    }
+
+    // MARK: Desktop hit test (A4)
+
+    /// Finder's AX element at `point`: its role and subrole. Nil when Finder has nothing there.
+    nonisolated private static func finderElement(at point: CGPoint, pid: pid_t) -> (role: String, subrole: String?)? {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        var element: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &element) == .success, let element else { return nil }
+        func string(_ attribute: String) -> String? {
+            var value: CFTypeRef?
+            return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value as? String : nil
+        }
+        return string(kAXRoleAttribute).map { ($0, string(kAXSubroleAttribute)) }
+    }
+
+    /// Whether the hit is a desktop icon (or its label) rather than bare wallpaper. Only the desktop's own containers
+    /// count as wallpaper, so an unknown role is treated as an icon and never frames (RESEARCH A4, unverified: UAT).
+    nonisolated static func isDesktopItem(_ hit: (role: String, subrole: String?)?) -> Bool {
+        guard let hit else { return false }
+        return ![kAXScrollAreaRole, kAXGroupRole, kAXWindowRole, kAXApplicationRole].contains(hit.role)
     }
 
     // MARK: Pure helpers

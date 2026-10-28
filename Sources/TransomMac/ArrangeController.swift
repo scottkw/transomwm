@@ -145,7 +145,9 @@ import os
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
+                if case .spaceChanged = event { self.zoomInput.endPick(reason: "space changed") }
                 if case .displaysChanged = event {
+                    self.zoomInput.endPick(reason: "displays changed")
                     self.zoomController?.displaysChanged()
                     self.zoomInput.publish()  // a move whose display went away never reveals
                 }
@@ -198,7 +200,7 @@ import os
     /// Takes the tap down (Accessibility left `.ready`, Pitfall 4). Hotkeys and the menu keep working.
     public func stopTap() {
         tap.stop()
-        zoomInput.reset()
+        zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
     }
@@ -229,7 +231,7 @@ import os
         guard !tap.isRunning else { return }
         logger.error("event tap refused by macOS; taken down, drags are not detected")
         loggedTapRefusal = true
-        zoomInput.reset()
+        zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
     }
@@ -263,7 +265,7 @@ import os
     }
 
     /// The tracked window showing CG window `id` (`visibleMemberID ?? windowID`).
-    private func trackedWindow(cgID id: UInt32) -> TransomModel.WindowRef? {
+    func trackedWindow(cgID id: UInt32) -> TransomModel.WindowRef? {
         arranger.windows.values.first { ($0.visibleMemberID ?? $0.window.windowID) == id }?.window
     }
 
@@ -273,6 +275,7 @@ import os
             await zoomInput.tapEvent(kind, event)
             return
         }
+        if event.type == .leftMouseDown { zoomInput.pointerDown(event) }
         if case .greenButton(let id) = event.kind {
             guard let window = trackedWindow(cgID: id) else { return }
             await run(arranger.handle(.greenButton(window), now: .now))
@@ -401,6 +404,7 @@ import os
     /// Every route (hotkey, menu item, URL) calls this. A command that cannot act beeps (UI-SPEC: no hotkey fails
     /// silently), except from a URL, whose user may not be at the keyboard (Pitfall 21).
     public func dispatch(_ command: Command, from source: CommandSource = .hotkey) async {
+        zoomInput.noteCommand()
         let refuse = source == .url ? {} : beep
         if command == .toggleExcludeFrontmost {
             // The store's onChange hands the list to the window system, whose windowChanged events float the windows.
@@ -440,7 +444,15 @@ import os
             effects = [.beep, .info("refused \(camera): no display under the pointer")]
         }
         if source == .url { effects.removeAll { if case .beep = $0 { true } else if case .announce = $0 { true } else { false } } }
+        if camera == .zoomOutAll || camera == .stepOut {
+            for case .cameraMove(let move) in effects { zoomInput.expectPick(moveID: move.id) }  // its reveal starts pick mode
+        }
         await run(effects)
+    }
+
+    /// A camera command from pointer input, on a given display with a given window (title-bar and Desktop double-clicks).
+    func camera(_ camera: CameraCommand, displayUUID: String, focused: TransomModel.WindowRef?, pointer: Point) async {
+        await run(arranger.handle(.camera(camera, displayUUID: displayUUID, focused: focused, pointer: pointer), now: .now))
     }
 
     public func dispatch(_ command: Command, focused: TransomModel.WindowRef?) async {
@@ -522,7 +534,13 @@ import os
         zoom.announce = { postAnnouncement($0) }
         zoom.appName = { Self.appName($0) }
         zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
-        zoom.onRevealed = { [weak self] uuid, _ in self?.revealed(uuid) }
+        zoom.onRevealed = { [weak self] uuid, move in
+            self?.revealed(uuid)
+            self?.zoomInput.revealed(displayUUID: uuid, move: move)
+        }
+        zoom.onTileClick = { [weak self] uuid, id in
+            Task { await self?.zoomInput.stageClick(cgID: id, displayUUID: uuid) }
+        }
         zoom.bringNoticesFront = { [weak self] in
             self?.toast.bringFront()
             self?.previews?.bringFront()
@@ -555,6 +573,7 @@ import os
         guard on else {
             guard zoomEnabled, !turningOff else { return }
             turningOff = true
+            zoomInput.reset(reason: "zoom off")
             for display in arranger.displays {
                 let effects = arranger.handle(.zoomTo(.home, displayUUID: display.uuid), now: .now)
                 if effects.contains(where: { if case .cameraMove = $0 { true } else { false } }) { awaitingHome.insert(display.uuid) }
