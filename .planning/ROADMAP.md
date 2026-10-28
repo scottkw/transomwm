@@ -217,11 +217,11 @@ Plans:
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
   6. User can move the view to a neighbouring area, frame the focused window or the Desktop on its own and toggle back (including by double-click), cancel a rectangle zoom with Esc, and tiles too small for their window show as collapsed app-colour blocks that zoom in on double-click
 
-**Plans**: 8 plans
+**Plans**: 1/8 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md — Feasibility spike: transom-zoom-spike harness, final SnapshotCapture.swift, gates G1–G8 in the Tart VM, go/no-go checkpoint
+- [x] 04-01-PLAN.md — Feasibility spike: transom-zoom-spike harness, final SnapshotCapture.swift, gates G1–G8 in the Tart VM, go/no-go checkpoint
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-02-PLAN.md — Engine camera core: ViewPlanner, .cameraMove → .cameraSettle protocol, view-aware planShown, rehome exemption, SettleTracker (zoom off by default)
@@ -343,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
-| 4. Zoom Camera | 0/TBD | Not started | - |
+| 4. Zoom Camera | 1/8 | In Progress | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |

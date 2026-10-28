@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Zoom Camera
 status: executing
-stopped_at: Phase 2 complete, ready to plan Phase 4
-last_updated: "2026-10-28T04:07:07.037Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-10-28T12:46:58.635Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 2 complete, transitioned to Phase 4
-state_head: a9756d6a45324235c9bffdb9cc637644c3a1762c
+last_activity_desc: Phase 4 execution started
+state_head: 154b3de3d7e717d231ca48e37a2d99dadf842d08
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 59
-  completed_plans: 51
+  completed_plans: 52
   percent: 33
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 3 — Tiling MVP
+**Current focus:** Phase 4 — Zoom Camera
 
 ## Current Position
 
-Phase: 4 (Zoom Camera) — READY TO EXECUTE
-Plan: Not started
+Phase: 4 (Zoom Camera) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-10-27 — Phase 2 complete, transitioned to Phase 4
+Last activity: 2026-10-27 — Phase 4 execution started
 
 Progress: [███░░░░░░░] 33%
 
@@ -102,6 +102,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P26 | 5 min | 2 tasks | 7 files |
 | Phase 02 P18 | 6min | 1 tasks | 3 files |
 | Phase 2 P19 | 8 min | 2 tasks | 7 files |
+| Phase 4 P01 | 8h 34m | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -246,6 +247,10 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-18: the setup window uses sizingOptions [.preferredContentSize] and one setContentSize(fittingSize) before centring; preferredContentSize alone sizes the window only after a run-loop turn on macOS 27, too late for the centring code
 - [Phase 2]: 02-19: on macOS 15.7.7 a hidden tab keeps its CG bounds from when it was hidden (G-02-10), so TabGroupTracker links a shown tab to the tab shown just before it by timing (wentHidden), keeps own members whatever their bounds, and joins a new tab to the group whose shown tab went hidden; bounds only find candidates and break ties
 - [Phase 2]: 02-19: the timing opener and timing join are refused after a blind Space switch (spaceChanged without Space data), like the 02-17 orphan handoff and folds
+- [Phase 4]: Spike verdict GO with conditions: G4 crossfade stalls accepted as VM noise, no host run
+- [Phase 4]: SnapshotCache is mandatory in 04-04 (only about 6 of 15 captures land inside 120 ms in the VM)
+- [Phase 4]: sharingType .none does not hide the stage from system screen recording on macOS 15.7; it only keeps it out of Transom's own snapshots
+- [Phase 4]: ZOOM-07 500 ms is the write path only: first AX write to last read-back; capture budget and animation are separate
 
 ### Quick Tasks Completed
 
@@ -286,8 +291,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-27T21:12:16.233Z
-Stopped at: Phase 2 complete, ready to plan Phase 4
+Last session: 2026-10-28T12:46:58.255Z
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
 
 ## Deferred Verification
