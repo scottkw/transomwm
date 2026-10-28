@@ -74,7 +74,7 @@ import os
     public var onViewChanged: (() -> Void)?
     /// Turn Off Zoom in progress: the displays whose move home has not revealed yet.
     private var turningOff = false
-    private var awaitingHome: Set<String> = []
+    private var awaitingHome: [String: UInt64] = [:]
     private let zoomOffFallback = WakeTimer()
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
     private(set) var zoomController: ZoomController?
@@ -547,7 +547,7 @@ import os
         zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
         zoom.onRevealed = { [weak self] uuid, move in
             self?.collapsedPanels.fadeIn(on: uuid)
-            self?.revealed(uuid)
+            self?.revealed(uuid, moveID: move.id)
             self?.zoomInput.revealed(displayUUID: uuid, move: move)
         }
         zoom.onTileClick = { [weak self] uuid, id in
@@ -570,10 +570,13 @@ import os
         await run(effects)
     }
 
-    private func revealed(_ uuid: String) {
+    private func revealed(_ uuid: String, moveID: UInt64) {
         zoomInput.publish()
         onViewChanged?()
-        guard awaitingHome.remove(uuid) != nil, awaitingHome.isEmpty else { return }
+        // Only the home move's own reveal counts: an older move revealing first must not end zoom early (WR-06).
+        guard awaitingHome[uuid] == moveID else { return }
+        awaitingHome[uuid] = nil
+        guard awaitingHome.isEmpty else { return }
         Task { await finishZoomOff() }
     }
 
@@ -588,7 +591,7 @@ import os
             zoomInput.reset(reason: "zoom off")
             for display in arranger.displays {
                 let effects = arranger.handle(.zoomTo(.home, displayUUID: display.uuid), now: .now)
-                if effects.contains(where: { if case .cameraMove = $0 { true } else { false } }) { awaitingHome.insert(display.uuid) }
+                for case .cameraMove(let move) in effects { awaitingHome[display.uuid] = move.id }
                 await run(effects)
             }
             guard awaitingHome.isEmpty else {
@@ -611,7 +614,7 @@ import os
     private func finishZoomOff() async {
         guard turningOff else { return }
         turningOff = false
-        awaitingHome = []
+        awaitingHome = [:]
         zoomOffFallback.cancel()
         zoomEnabled = false
         zoomInput.publish()
