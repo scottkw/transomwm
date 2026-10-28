@@ -4,10 +4,10 @@ current_phase: 4
 current_phase_name: Zoom Camera
 status: planning
 stopped_at: Phase 2 complete, ready to plan Phase 4
-last_updated: "2026-10-28T02:07:25.087Z"
+last_updated: "2026-10-28T02:19:52.721Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 2 complete, transitioned to Phase 4
-state_head: 739295bdbd62d97d7892d796752c108cb95352b6
+state_head: fb0e29bdfd4800de284fa6de0a460dc9e9057a1e
 progress:
   total_phases: 9
   completed_phases: 3
@@ -256,6 +256,7 @@ Recent decisions affecting current work:
 | 3 | Log every notice before queuing its toast (03-22) | 2026-10-27 | 7e2b0a9 | — |
 | 261027-ijh | Rename Pane to Transom (code 221fd39, docs 0d33bba) | 2026-10-27 | 0d33bba | [261027-ijh-rename-the-app-from-pane-to-transom-acro](./quick/261027-ijh-rename-the-app-from-pane-to-transom-acro/) |
 | 5 | Write a comprehensive README.md for Transom | 2026-10-27 | 739295b | — |
+| 6 | Add the MIT LICENSE file | 2026-10-27 | fb0e29b | — |
 
 ### Pending Todos
 
