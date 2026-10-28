@@ -217,7 +217,30 @@ Plans:
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
   6. User can move the view to a neighbouring area, frame the focused window or the Desktop on its own and toggle back (including by double-click), cancel a rectangle zoom with Esc, and tiles too small for their window show as collapsed app-colour blocks that zoom in on double-click
 
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Feasibility spike: transom-zoom-spike harness, final SnapshotCapture.swift, gates G1–G8 in the Tart VM, go/no-go checkpoint
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — Engine camera core: ViewPlanner, .cameraMove → .cameraSettle protocol, view-aware planShown, rehome exemption, SettleTracker (zoom off by default)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-03-PLAN.md — Engine navigation: step in/out, per-display history, pan, frame window/Desktop toggles, rect target, widen-on-focus
+- [ ] 04-04-PLAN.md — Shell camera: ZoomController, stage tiles, app colour, snapshot cache, Reduce Motion, Screen Recording explainer
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-05-PLAN.md — 11 hotkeys, 11 URLs, Zoom menu section and toggle, Shortcuts window (44 recorder rows)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 04-06-PLAN.md — Pointer input: ⌘⇧-drag rectangle zoom, Esc cancel, pick mode, title-bar and Desktop double-click
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 04-07-PLAN.md — Collapsed blocks: zoom-on oversized drops, CollapsedPanels, Collapsed drop preview
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 04-08-PLAN.md — Safety and proof: home tiles on quit, Restore All, crash rescue, 15-window VM settle, phase UAT
 **UI hint**: yes
 **Research**: Needs phase research. Start with a feasibility spike with measurable criteria: settle latency with Electron-heavy windows, terminal re-wrap, represented-state UX, ScreenCaptureKit memory growth over hours (soak test), overlay window level versus menus, Core Animation performance with 100+ layers
 **Scope notes**: Only the snapshot overlay animates; real windows get one AX write when the camera settles (changed and visible targets only). Capture before parking; park by moving, not shrinking. Camera targets are `NodeID`s so history and saved views survive reflows.
