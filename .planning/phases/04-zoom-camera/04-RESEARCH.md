@@ -612,16 +612,21 @@ Run it in the VM over SSH. The guest's `sshd-keygen-wrapper` already holds Acces
 | A8 | Keeping `parkedFrame` (visibleFrame bottom corners) over the UI-SPEC's four display-frame corners is acceptable | Pattern 1 | A corner case with displays below both bottom corners, which already falls back to the union corner |
 | A9 | A spike executable run over SSH in the VM can show `NSPanel`s in the console session, as fixture apps already do | Spike Design | The harness may instead need to run as a Debug-menu command inside `Transom Debug.app` |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **What does the camera do when a window outside the view gets focus or is created?** (A1)
    - What we know: the UI-SPEC is silent. A parked focused window is effectively invisible.
    - Recommendation: move to the LCA of the current view and the window's leaf (the smallest move that shows it). New floaters while the Desktop is out of view go home. Confirm with the user in plan review.
+   - **RESOLVED (2026-10-27, CONTEXT E):** user chose widen to the smallest view containing both.
 2. **With zoom on, does lost room from OS facts collapse or float?** (A2)
    - Recommendation: collapse, for consistency ("with zoom on, unfit means collapsed"), and keep Arrange All's float. Otherwise keep Phase 3 floats for OS facts and collapse only on drops and keyboard Dock/Move, as the UI-SPEC literally says. **Default to the literal UI-SPEC** unless the user says otherwise.
+   - **RESOLVED (CONTEXT E):** literal UI-SPEC: OS-caused loss of room floats; only drops and keyboard Dock/Move collapse.
 3. **Do grow/shrink/rotate/flip/balance still refuse with zoom on?** The UI-SPEC accepts only Dock/Move. Recommendation: keep refusing (literal UI-SPEC).
+   - **RESOLVED (CONTEXT E):** keep refusing.
 4. **Hardware-sensitive gates (G1, G4) on the host?** The VM is macOS 15.7.7 with 4 CPUs, 8 GB and a paravirtualized GPU, and it has no Electron app. Host runs violate the live-test rules unless the user allows them. Recommendation: run every gate in the VM. Ask the user for one bounded host run of G1 and G4 on macOS 27 as a confirmation checkpoint.
+   - **RESOLVED (CONTEXT E):** VM only; VS Code installed in the VM; no host runs; virtual-GPU numbers treated as pessimistic.
 5. **Parking corner rule:** keep the code's `visibleFrame` bottom corners (A8). Update the UI-SPEC wording at plan time if needed.
+   - **RESOLVED (CONTEXT E):** keep the `visibleFrame` bottom corners.
 
 ## Environment Availability
 
