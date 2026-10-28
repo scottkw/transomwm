@@ -428,6 +428,9 @@ import os
                 previews?.flashBlocked(rect, on: displayUUID)
             case .gapHandles(let handles, let displayUUID):
                 gapPanels.show(handles, on: displayUUID)
+            case .cameraMove(let move):
+                // No stage yet: settle at once, so the move protocol runs end to end. The stage (04-04) takes over this case.
+                await run(arranger.handle(.cameraSettle(displayUUID: move.displayUUID, moveID: move.id), now: .now))
             }
         }
     }
