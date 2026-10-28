@@ -667,13 +667,14 @@ import os
     }
 
     /// Before Transom exits (SAFE-01, D-15): every parked or off-screen window Transom may move goes back on screen, within
-    /// `limit` in total; docked windows stay where they are. Synchronous, so it never waits on MainActor work
-    /// (Pitfall 14). Returns how many writes finished.
+    /// `limit` in total; a docked window parked or zoomed by the camera goes back to its home-view tile (D-D). Synchronous,
+    /// so it never waits on MainActor work (Pitfall 14). Returns how many writes finished.
     @discardableResult
     public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
         let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) })
         let plan = Recovery.terminationPlan(
-            windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked)
+            windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked,
+            homeTiles: arranger.homeTiles())
         guard !plan.isEmpty else { return 0 }
         let (seconds, attoseconds) = limit.components
         let restored = system.restoreForTermination(plan, deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)

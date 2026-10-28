@@ -114,6 +114,30 @@ extension Arranger {
         return effects
     }
 
+    /// The quit restore's targets (D-D): every docked window's home-view tile on each desk whose camera is not at home,
+    /// shown or not. A desk at home gives none, so zoom off and home stay exactly Phase 3 (a docked window the OS keeps a
+    /// few points off its tile is not rewritten). A collapsed window has none; a desk that cannot be planned gives none,
+    /// so its windows keep the stranded rule.
+    public func homeTiles() -> [WindowIdentity: Rect] {
+        var tiles: [WindowIdentity: Rect] = [:]
+        for (key, desk) in world.desks where resolvedView(for: key) != .home {
+            guard let display = displays.first(where: { $0.uuid == key.displayUUID }),
+                let plan = try? ViewPlanner.plan(
+                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                    collapsible: camera.collapsible)
+            else { continue }
+            for window in desk.tree.windows { tiles[window.identity] = plan.frames[window] }
+        }
+        return tiles
+    }
+
+    /// Every display's camera home with no move (Restore All, D-D); the caller's replan writes it. History is kept.
+    mutating func goHome() {
+        camera.views = [:]
+        camera.paths = [:]
+        camera.pending = [:]
+    }
+
     mutating func setZoomEnabled(_ on: Bool) -> [ArrangerEffect] {
         camera.enabled = on
         guard !on else { return [] }

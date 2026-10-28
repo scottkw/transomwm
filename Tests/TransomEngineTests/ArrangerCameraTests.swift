@@ -239,6 +239,7 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         var harness = try await threeDocked()
         let home = await frames(harness)
         await harness.send(.zoomEnabled(true))
+        #expect(harness.arranger.homeTiles().isEmpty, "at home the quit leaves docked windows alone (Phase 3)")
         let move = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
         await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
         try #require(await harness.frame(a) == full)
