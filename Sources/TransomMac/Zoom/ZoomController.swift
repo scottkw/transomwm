@@ -14,6 +14,8 @@ import os
     static let settleBudget: Duration = .milliseconds(500)
 
     enum Phase: String { case capturing, moving, settling, revealing }
+    /// What tiles show, for the Debug line (04-05).
+    enum CaptureState { case previews, noPermission, failing }
 
     /// One display's move in flight, from capture to the end of the reveal fade.
     private struct Active {
@@ -32,19 +34,35 @@ import os
     }
 
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "camera")
+    private let captureLog = Logger(subsystem: "com.eightabyte.transom", category: "capture")
     /// Fires when a reveal fade ends (04-05's Turn Off Zoom and 04-06's pick mode wait for it).
     var onRevealed: ((_ displayUUID: String, _ move: CameraMove) -> Void)?
     /// Re-orders a visible toast and drop preview above a stage that just ordered in (UI-SPEC Surface 1 level row).
     var bringNoticesFront: () -> Void = {}
     /// The Arranger's info for a window: the CG window of its visible tab, its frame.
     var windowInfo: (WindowIdentity) -> WindowInfo? = { _ in nil }
+    /// Posts a VoiceOver announcement (ArrangeController's `postAnnouncement` path).
+    var announce: (String) -> Void = { _ in }
+    /// The app name for a one-window view's announcement.
+    var appName: (TransomModel.WindowRef) -> String = { $0.bundleID }
+    /// Whether a drag or rubber band is in progress: the explainer waits for it to end.
+    var isPointerBusy: () -> Bool = { false }
     private(set) var lastSettle: (ms: Int, windows: Int)?
+    private(set) var captureState = CaptureState.noPermission
+    var cacheStats: (windows: Int, bytes: Int) { (capture.cache.count, capture.cache.bytes) }
     var isIdle: Bool { active.isEmpty }
 
     private var stages: [String: StagePanel] = [:]
     private var active: [String: Active] = [:]
     private var revealTimers: [String: WakeTimer] = [:]
     private let capture = SnapshotCapture()
+    /// The permission seen at the last move start (nil before the first), and whether the revoke and failing lines were
+    /// logged this session.
+    private var granted: Bool?
+    private var loggedRevoke = false
+    private var loggedFailing = false
+    private var explainer: ExplainerAlert?
+    private let explainerRetry = WakeTimer()
 
     /// Runs one `.cameraMove`; `settle(moveID)` is called when its animation ends. A move on a display that already has
     /// one in flight retargets it from where the tiles are (no queue, no jump).
@@ -77,9 +95,10 @@ import os
             return
         }
         active[uuid] = Active(move: move, settle: settle, phase: .capturing)
+        let granted = checkPermission()
         Task { [weak self] in
             guard let self else { return }
-            let images = await self.captureStart(move)
+            let images = granted ? await self.captureStart(move) : [:]
             guard let current = self.active[uuid], current.phase == .capturing else { return }
             self.show(current.move, images: images)
         }
@@ -141,7 +160,6 @@ import os
     /// UI-SPEC step 3: the windows on screen at the start, at the larger of their start and end size (capped at their
     /// own size) in pixels, within 120 ms, four at a time. Skipped without Screen Recording.
     private func captureStart(_ move: CameraMove) async -> [UInt32: CGImage] {
-        guard SnapshotCapture.isGranted() else { return [:] }
         let scale = Displays.screen(uuid: move.displayUUID)?.backingScaleFactor ?? 2
         let requests = move.tiles.compactMap { tile -> (CGWindowID, CGSize)? in
             guard tile.kind != .entering, let id = cgWindow(tile.window) else { return nil }
@@ -150,7 +168,9 @@ import os
             let height = min(max(tile.start.height, tile.end.height), native.height)
             return (id, CGSize(width: width * scale, height: height * scale))
         }
-        return await capture.captureAll(requests, deadline: SnapshotCapture.moveBudget)
+        let images = await capture.captureAll(requests, deadline: SnapshotCapture.moveBudget)
+        updateFailing()
+        return images
     }
 
     /// UI-SPEC steps 4 and 5: the stage orders in instantly with every tile over its window, then the 250 ms move.
@@ -205,8 +225,102 @@ import os
     private func finishReveal(_ uuid: String, _ move: CameraMove) {
         let queued = active[uuid]?.queued
         active[uuid] = nil
+        let shown = move.tiles.filter { $0.kind != .leaving }
+        // shortcut: collapsed is 0 until 04-07 feeds the collapsible set; then pass the view's collapsed count.
+        announce(
+            ZoomCopy.revealAnnouncement(view: move.to, appName: shown.count == 1 ? appName(shown[0].window) : nil, windowCount: shown.count, collapsed: 0))
+        if granted == true { refresh(shown, on: uuid) }
         onRevealed?(uuid, move)
-        if let queued { run(queued.move, settle: queued.settle) }
+        if let queued {
+            run(queued.move, settle: queued.settle)
+        } else {
+            offerExplainer()
+        }
+    }
+
+    /// Zoom turned off: every snapshot and stage goes (T-04-13).
+    func purge() {
+        capture.purge()
+        for (uuid, stage) in stages {
+            stage.orderOut(nil)
+            revealTimers[uuid]?.cancel()
+        }
+        stages = [:]
+        active = [:]
+        explainerRetry.cancel()
+    }
+
+    // MARK: Screen Recording (UI-SPEC Surface 2)
+
+    /// Read at every move start. The state is logged the first time and on every change; a revoke once per session,
+    /// silently (no alert, no toast).
+    private func checkPermission() -> Bool {
+        let now = SnapshotCapture.isGranted()
+        if now != granted {
+            if now {
+                captureLog.info("\(ZoomCopy.logGranted, privacy: .public)")
+            } else if granted == true {
+                if !loggedRevoke { captureLog.notice("\(ZoomCopy.logRevoked, privacy: .public)") }
+                loggedRevoke = true
+            } else {
+                captureLog.info("\(ZoomCopy.logNotGranted, privacy: .public)")
+            }
+            granted = now
+        }
+        captureState = !now ? .noPermission : captureState == .failing ? .failing : .previews
+        return now
+    }
+
+    /// Three failures in a row while granted mean macOS may need Transom reopened; any success clears it.
+    private func updateFailing() {
+        guard granted == true else { return }
+        if capture.consecutiveFailures >= SnapshotCapture.failingAfter {
+            if !loggedFailing { captureLog.error("\(ZoomCopy.logFailing, privacy: .public)") }
+            loggedFailing = true
+            captureState = .failing
+        } else if capture.consecutiveFailures == 0 {
+            loggedFailing = false
+            captureState = .previews
+        }
+    }
+
+    /// UI-SPEC step 8: the windows now visible, re-captured at their new size into the cache, off the critical path.
+    private func refresh(_ tiles: [TileMove], on uuid: String) {
+        let scale = Displays.screen(uuid: uuid)?.backingScaleFactor ?? 2
+        let requests = tiles.compactMap { tile in
+            cgWindow(tile.window).map { ($0, CGSize(width: tile.end.width * scale, height: tile.end.height * scale)) }
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            await self.capture.refresh(requests)
+            self.updateFailing()
+        }
+    }
+
+    /// The first move without Screen Recording asks once, after its reveal, never during a move, drag or rubber band.
+    /// The flag is saved when the alert appears, so it never shows again (no re-prompt loop, T-04-15).
+    private func offerExplainer() {
+        guard granted == false, explainer == nil, !UserDefaults.standard.bool(forKey: Self.explainerShownKey) else { return }
+        guard active.isEmpty, !isPointerBusy() else {
+            explainerRetry.set(.now + .milliseconds(500)) { [weak self] in self?.offerExplainer() }
+            return
+        }
+        UserDefaults.standard.set(true, forKey: Self.explainerShownKey)
+        captureLog.info("\(ZoomCopy.logExplainerShown, privacy: .public)")
+        let previous = NSWorkspace.shared.frontmostApplication
+        let alert = ExplainerAlert { [weak self] allow in
+            guard let self else { return }
+            self.explainer = nil
+            if allow {
+                self.captureLog.info("\(ZoomCopy.logExplainerAllow, privacy: .public)")
+                _ = SnapshotCapture.request()
+            } else {
+                self.captureLog.info("\(ZoomCopy.logExplainerNotNow, privacy: .public)")
+                previous?.activate()
+            }
+        }
+        explainer = alert
+        alert.show()
     }
 
     // MARK: Tiles
@@ -253,5 +367,48 @@ import os
         case .setFrame(let window, _), .park(let window, _): window.identity
         case .focus, .raise, .setHidden: nil
         }
+    }
+}
+
+/// The Screen Recording explainer (UI-SPEC Surface 2): a modeless alert, "Allow Previews" first and default, "Not Now"
+/// with Esc; closing it counts as Not Now. Tracking, hotkeys and zoom keep working while it is up.
+private final class ExplainerAlert: NSObject, NSWindowDelegate {
+    private let alert = NSAlert()
+    private let answered: (_ allow: Bool) -> Void
+    private var done = false
+
+    init(answered: @escaping (_ allow: Bool) -> Void) {
+        self.answered = answered
+        super.init()
+        alert.alertStyle = .informational
+        alert.messageText = ZoomCopy.explainerMessage
+        alert.informativeText = ZoomCopy.explainerInformative
+        let allow = alert.addButton(withTitle: ZoomCopy.allowPreviews)  // first: default, Return
+        let notNow = alert.addButton(withTitle: ZoomCopy.notNow)
+        notNow.keyEquivalent = "\u{1b}"  // NSAlert gives Esc only to a button titled Cancel
+        allow.target = self
+        allow.action = #selector(allowPreviews)
+        notNow.target = self
+        notNow.action = #selector(notNowPressed)
+    }
+
+    func show() {
+        alert.layout()
+        alert.window.delegate = self
+        alert.window.hidesOnDeactivate = false
+        NSApp.activate()
+        alert.window.center()
+        alert.window.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func allowPreviews() { finish(true) }
+    @objc private func notNowPressed() { finish(false) }
+    func windowWillClose(_ notification: Notification) { finish(false) }
+
+    private func finish(_ allow: Bool) {
+        guard !done else { return }
+        done = true
+        alert.window.orderOut(nil)
+        answered(allow)
     }
 }

@@ -458,6 +458,9 @@ import os
         if let zoomController { return zoomController }
         let zoom = ZoomController()
         zoom.windowInfo = { [weak self] in self?.arranger.windows[$0] }
+        zoom.announce = { postAnnouncement($0) }
+        zoom.appName = { Self.appName($0) }
+        zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
         zoom.bringNoticesFront = { [weak self] in
             self?.toast.bringFront()
             self?.previews?.bringFront()
