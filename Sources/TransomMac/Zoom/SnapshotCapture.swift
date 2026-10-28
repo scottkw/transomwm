@@ -20,19 +20,32 @@ import os
     /// Failed captures since the last success.
     public private(set) var consecutiveFailures = 0
 
+    /// Every call that reaches ScreenCaptureKit or the Screen Recording permission; it exists for the zoom-off guard test
+    /// (ZoomOffTests, success criterion 5), which expects 0.
+    public static private(set) var touches = 0
+
     public init() {}
 
-    public static func isGranted() -> Bool { CGPreflightScreenCaptureAccess() }
-    public static func request() -> Bool { CGRequestScreenCaptureAccess() }
+    public static func isGranted() -> Bool {
+        touches += 1
+        return CGPreflightScreenCaptureAccess()
+    }
+
+    public static func request() -> Bool {
+        touches += 1
+        return CGRequestScreenCaptureAccess()
+    }
 
     /// Re-reads the shareable windows. Slow: never call it on a move's critical path.
     public func refreshShareable() async throws {
+        Self.touches += 1
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         scWindows = Dictionary(content.windows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// One window at `pixelSize`, or nil when the window is unknown, the capture failed or it took over 1 s.
     public func capture(_ id: CGWindowID, pixelSize: CGSize) async -> CGImage? {
+        Self.touches += 1
         guard let window = scWindows[id] else { return nil }
         let config = SCStreamConfiguration()
         config.width = max(1, Int(pixelSize.width))

@@ -25,9 +25,11 @@ extension Arranger {
         }
     }
 
-    /// Restore All Windows (SAFE-03): every stranded window back on screen and every hidden Desktop tile holding windows
-    /// shown, one undo step per desk shown. Runs while paused; N6 counts the windows moved.
+    /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every
+    /// hidden Desktop tile holding windows shown, one undo step per desk shown. Runs while paused; N6 counts the windows
+    /// moved, camera-parked ones included.
     mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
+        goHome()
         let moves = rescueStranded(desks: world)
         try showParkedDesktops(keeping: moves, undoable: true)
         return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + [.notice(.restored(count: moves.count))]

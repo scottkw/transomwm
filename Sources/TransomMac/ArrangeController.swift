@@ -78,6 +78,7 @@ import os
     private let zoomOffFallback = WakeTimer()
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
     private(set) var zoomController: ZoomController?
+    var hasZoomController: Bool { zoomController != nil }
     /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
     private lazy var zoomInput = ZoomInput(controller: self, tap: tap)
 
