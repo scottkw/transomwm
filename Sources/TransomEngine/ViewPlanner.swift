@@ -63,13 +63,36 @@ public enum ViewPlanner {
         return plan
     }
 
-    /// `Planner.plan`, then the zoom-on collapse pass for `collapsible` windows (Task 2).
+    /// `Planner.plan`, then the zoom-on collapse pass (RESEARCH Pattern 3): unfit `collapsible` windows are planned again
+    /// at a 1x1 minimum, so each takes its weighted share while the others keep their real minimums. One whose share is
+    /// below its minimum on an axis is collapsed (parked, its share the block rect); one still unfit at 1x1 is parked
+    /// with no block. Unfit windows outside `collapsible` stay unfit (OS-caused lost room floats, CONTEXT E).
     private static func collapsing(
         desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect], collapsible: Set<WindowIdentity>
     ) throws(LayoutError) -> ViewPlan {
-        let plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wanted)
-        return ViewPlan(
+        var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wanted)
+        var shrunk: Set<WindowRef> = []
+        var tiny = mins
+        // Each pass grows `shrunk`, which the window count bounds, so this ends.
+        while case let more = plan.unfit.filter({ collapsible.contains($0.identity) && !shrunk.contains($0) }), !more.isEmpty {
+            shrunk.formUnion(more)
+            for window in more { tiny[window] = Size(width: 1, height: 1) }
+            plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: tiny, wanted: wanted)
+        }
+        var result = ViewPlan(
             frames: plan.frames, parks: plan.parks, unfit: plan.unfit, collapsed: [:], desktopRect: plan.desktopRect,
             resolution: plan.resolution, homeResolution: plan.resolution)
+        guard !shrunk.isEmpty else { return result }
+        for window in shrunk {
+            let min = mins[window] ?? Size(width: 1, height: 1)
+            // Its share is enough after all: it keeps its frame. Plain comparisons on resolve's own numbers, no epsilon.
+            if let rect = plan.resolution.windowRects[window], !(rect.width < min.width || rect.height < min.height) { continue }
+            result.collapsed[window] = plan.resolution.windowRects[window]
+            result.frames[window] = nil
+            result.parks.append(window)
+        }
+        result.parks.sort { $0.identity < $1.identity }
+        result.unfit = plan.unfit.filter { !collapsible.contains($0.identity) }
+        return result
     }
 }
