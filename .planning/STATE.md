@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Zoom Camera
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-10-28T12:46:58.635Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-10-28T13:05:05.653Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 4 execution started
-state_head: 154b3de3d7e717d231ca48e37a2d99dadf842d08
+state_head: 85ef3b1e9f152f571245a3e6f5d34603ee563a67
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 59
-  completed_plans: 52
+  completed_plans: 53
   percent: 33
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 4 (Zoom Camera) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-10-27 — Phase 4 execution started
 
@@ -103,6 +103,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P18 | 6min | 1 tasks | 3 files |
 | Phase 2 P19 | 8 min | 2 tasks | 7 files |
 | Phase 4 P01 | 8h 34m | 3 tasks | 12 files |
+| Phase 04 P02 | 15 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -251,6 +252,9 @@ Recent decisions affecting current work:
 - [Phase 4]: SnapshotCache is mandatory in 04-04 (only about 6 of 15 captures land inside 120 ms in the VM)
 - [Phase 4]: sharingType .none does not hide the stage from system screen recording on macOS 15.7; it only keeps it out of Transom's own snapshots
 - [Phase 4]: ZOOM-07 500 ms is the write path only: first AX write to last read-back; capture budget and animation are separate
+- [Phase 04]: 04-02: Gap handles show only on displays at the home view; a zoomed display gets none
+- [Phase 04]: 04-02: LayoutTree.subtree(at:) lives in TransomEngine (ViewPlanner.swift), model unchanged
+- [Phase 04]: 04-02: ViewPlanner applies the collapse pass to any planned view, .home included; empty set = Planner.plan exactly
 
 ### Quick Tasks Completed
 
@@ -291,8 +295,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T12:46:58.255Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-10-28T13:05:05.158Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
 
 ## Deferred Verification
