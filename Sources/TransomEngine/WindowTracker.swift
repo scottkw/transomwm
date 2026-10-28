@@ -76,7 +76,8 @@ public struct WindowTracker: Sendable {
                 return o.windowID
             })
             tabs = tabGroups.update(pid: app.pid, bundleID: app.bundleID, visible: visible, cgWindows: context.cgWindows, tracked: tracked,
-                                     spaces: context.windowSpaces, invalid: invalid, spaceChanged: context.spaceChanged)
+                                     spaces: context.windowSpaces, invalid: invalid, spaceChanged: context.spaceChanged,
+                                     listed: Set(app.windows.compactMap { $0.listedInAXWindows ? $0.windowID : nil }))
             // Merged into another window's tab group: gone as a separate window once two consecutive refreshes with
             // the same shown tab agree, so one wrong fold never removes a live window (D-09).
             var folds: [WindowIdentity: (shown: UInt32, refreshes: Int)] = [:]

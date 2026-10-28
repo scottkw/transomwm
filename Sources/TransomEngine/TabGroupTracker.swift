@@ -94,11 +94,12 @@ public struct TabGroupTracker: Equatable, Sendable {
     /// app's tracked window identities, oldest first: a standalone one that gains a tab (Cmd-T) leads the new group.
     /// `spaces` are the CG windows' Spaces; nil means no Space data (single-Space behaviour). `invalid` are the
     /// windows whose AX element reported -25202 this refresh: for a group they count as gone, never as destroyed.
-    /// `spaceChanged`: the active Space changed since this app's previous full update.
+    /// `spaceChanged`: the active Space changed since this app's previous full update. `listed` are the IDs AXWindows
+    /// listed whatever their read (a read that failed or had no frame is not in `visible`); nil means `visible`'s.
     public mutating func update(
         pid: Int32, bundleID: String, visible: [(id: UInt32, frame: Rect, tabCount: Int)], cgWindows: [CGWindowEntry],
         tracked: [WindowIdentity] = [], spaces: [UInt32: Set<UInt64>]? = nil, invalid: Set<UInt32> = [],
-        spaceChanged: Bool = false
+        spaceChanged: Bool = false, listed: Set<UInt32>? = nil
     ) -> TabResolution {
         // A Space switch without Space data: geometry alone cannot tell another Space's twin from a former tab.
         let blindSwitch = spaceChanged && spaces == nil
@@ -118,14 +119,15 @@ public struct TabGroupTracker: Equatable, Sendable {
         let trackedIDs = Set(tracked.filter { $0.pid == pid }.map(\.windowID))
         let listedTabCount = Dictionary(visible.map { ($0.id, $0.tabCount) }, uniquingKeysWith: max)
         let wasListed = lastListed[pid] ?? []
-        let listedIDs = Set(visible.map(\.id))
+        // A listed window whose read failed is still listed, never a tab that just went hidden (review WR-01).
+        let listedIDs = listed ?? Set(visible.map(\.id))
         /// Listed at the last update and hidden now, still offscreen in the CG list and AX-valid: shown just before (G-02-10).
         func wentHidden(_ id: UInt32) -> Bool {
             !blindSwitch && wasListed.contains(id) && !listedIDs.contains(id) && inCG.contains(id) && !onScreen.contains(id)
                 && !invalid.contains(id)
         }
         func canBeHiddenTab(_ id: UInt32) -> Bool {
-            if let tabCount = listedTabCount[id], tabCount < 2 { return false }
+            if listedIDs.contains(id), (listedTabCount[id] ?? 1) < 2 { return false }
             // A window folded in earlier stays a member until the fold guard decides it.
             return wasListed.contains(id) || !standalone.contains { $0.windowID == id } || list.contains { $0.members.contains(id) }
         }
@@ -242,7 +244,7 @@ public struct TabGroupTracker: Equatable, Sendable {
         }
         list.removeAll { $0.members.isEmpty }
         groups[pid] = list.isEmpty ? nil : list
-        lastListed[pid] = visible.isEmpty ? nil : Set(visible.map(\.id))
+        lastListed[pid] = listedIDs.isEmpty ? nil : listedIDs
         lastCG[pid] = cg.filter { $0.layer == 0 }
         let memberIDs = list.reduce(into: Set<UInt32>()) { $0.formUnion($1.members) }
         return TabResolution(

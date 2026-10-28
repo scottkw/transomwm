@@ -856,4 +856,21 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events).isEmpty)
         #expect(created(events).map(\.window) == [ref(10), ref(20)])
     }
+
+    /// WR-01: W (5) is minimized at O's (10) frame. Cmd-T in O opens 40 taller, and W's read times out in that refresh.
+    /// W is still listed in AXWindows, so it never "went hidden" and O stays the opener.
+    @Test func aListedWindowWhoseReadFailedIsNeverTakenAsTheOpener() {
+        var tracker = WindowTracker(settleDelay: .zero)
+        let w = listed(5, nil, minimized: true)
+        let before = [cg(5), cg(10, onScreen: true)]
+        var events = ingest(&tracker, [w, listed(10, nil)], before, initial: true)
+        events += ingest(&tracker, [w, listed(10, nil)], before)
+        let timedOut = WindowObservation(windowID: 5, idSource: .axPrivate, read: .failure(.cannotComplete), title: "")
+        let after = [cg(5), cg(10), cg(40, Self.taller, onScreen: true)]
+        events += ingest(&tracker, [timedOut, listed(40, 2, Self.taller), unlisted(10)], after)
+        for _ in 0..<3 { events += ingest(&tracker, [w, listed(40, 2, Self.taller), unlisted(10)], after) }
+        #expect(rows(tracker) == [[5, 5, 1], [10, 40, 2]])
+        #expect(destroyed(events).isEmpty)
+        #expect(created(events).map(\.window) == [ref(5), ref(10)])
+    }
 }

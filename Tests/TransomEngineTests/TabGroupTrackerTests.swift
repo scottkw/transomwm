@@ -653,4 +653,15 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(tracker.members(of: identity(10)).isEmpty)
         #expect(resolution.folded.isEmpty)
     }
+
+    /// WR-01: 31 sits offscreen in 30's slot and is listed in AXWindows (a minimized twin) but its read failed, so it is
+    /// not in `visible`. A listed window is never a hidden tab, read or not.
+    @Test func aListedWindowWhoseReadFailedIsNeverAHiddenTab() {
+        var tracker = TabGroupTracker()
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(30, 2)], cgWindows: [cg(30, onScreen: true), cg(31)], listed: [30, 31]
+        )
+        #expect(resolution.groupFor == [30: identity(30)])
+        #expect(tracker.members(of: identity(30)) == [30])
+    }
 }
