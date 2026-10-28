@@ -114,6 +114,11 @@ import Testing
         #expect(MenuCopy.commandTitle(.camera(.zoomOutAll)) == "Zoom Out to All Windows")
         #expect(MenuCopy.commandTitle(.camera(.stepOut)) == "Zoom Out One Level")
         #expect(MenuCopy.commandTitle(.camera(.stepIn)) == "Zoom In One Level")
+        #expect(MenuCopy.commandTitle(.camera(.back)) == "Back")
+        #expect(MenuCopy.commandTitle(.camera(.forward)) == "Forward")
+        #expect(Edge.allCases.map { MenuCopy.commandTitle(.camera(.pan($0))) } == ["Left", "Right", "Up", "Down"])
+        #expect(MenuCopy.commandTitle(.camera(.frameWindow)) == "Frame Focused Window")
+        #expect(MenuCopy.commandTitle(.camera(.frameDesktop)) == "Frame Desktop")
     }
 
     @Test func exclusionCopyQuotesTheAppName() {

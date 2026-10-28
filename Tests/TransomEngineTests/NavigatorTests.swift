@@ -56,8 +56,10 @@ private func infos(_ effects: [ArrangerEffect]) -> [String] {
 extension Harness {
     /// Sends a camera command on the main display.
     @discardableResult
-    fileprivate mutating func camera(_ command: CameraCommand, focused: WindowRef? = nil, pointer: Point? = nil) async -> [ArrangerEffect] {
-        await send(.camera(command, displayUUID: "main", focused: focused, pointer: pointer))
+    fileprivate mutating func camera(
+        _ command: CameraCommand, on uuid: String = "main", focused: WindowRef? = nil, pointer: Point? = nil
+    ) async -> [ArrangerEffect] {
+        await send(.camera(command, displayUUID: uuid, focused: focused, pointer: pointer))
     }
 
     /// Settles every camera move in `effects`, oldest first; returns the last settle's effects.
@@ -68,12 +70,19 @@ extension Harness {
         return last
     }
 
-    /// Moves the main display's camera to `target` and settles.
-    fileprivate mutating func go(_ target: ViewTarget) async throws {
-        let effects = await send(.zoomTo(target, displayUUID: "main"))
+    /// Moves that display's camera to `target` and settles.
+    fileprivate mutating func go(_ target: ViewTarget, on uuid: String = "main") async throws {
+        let effects = await send(.zoomTo(target, displayUUID: uuid))
         #expect(moves(effects).count == 1)
         await settle(effects)
-        #expect(arranger.view(on: "main") == target)
+        #expect(arranger.view(on: uuid) == target)
+    }
+
+    /// Runs a camera command that must move, settles it and returns where it went.
+    fileprivate mutating func step(_ command: CameraCommand, on uuid: String = "main", focused: WindowRef? = nil) async -> ViewTarget? {
+        let effects = await camera(command, on: uuid, focused: focused)
+        await settle(effects)
+        return moves(effects).first?.to
     }
 }
 
@@ -205,5 +214,262 @@ private func expectRefused(_ effects: [ArrangerEffect], _ announcement: String, 
         let effects = await harness.send(.camera(.stepIn, displayUUID: "fullscreen-display", focused: nil, pointer: nil))
 
         expectRefused(effects, "Zoom isn't available in full screen", command: "stepIn")
+    }
+}
+
+
+private let d = ref(4)
+private let n = (0...7).map { NodeID(raw: UInt64($0)) }
+
+/// n1 = V[n2 = H[n3, n4], n6 = H[n5, n7]]: two rows of two leaves, the bottom row cut at x = `cut`.
+private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
+    let tree = try LayoutTree(
+        root: n[1],
+        nodes: [
+            n[1]: .split(axis: .vertical, children: [n[2], n[6]], weights: [0.5, 0.5]),
+            n[2]: .split(axis: .horizontal, children: [n[3], n[4]], weights: [0.5, 0.5]),
+            n[6]: .split(axis: .horizontal, children: [n[5], n[7]], weights: [0.5, 0.5]),
+            n[3]: .panel(a), n[4]: .panel(b), n[5]: .panel(c), n[7]: .panel(d),
+        ],
+        states: [a.identity: .present, b.identity: .present, c.identity: .present, d.identity: .present])
+    let resolution = Resolution(nodeRects: [
+        n[1]: Rect(x: 0, y: 0, width: 1000, height: 1000), n[2]: Rect(x: 0, y: 0, width: 1000, height: 496),
+        n[6]: Rect(x: 0, y: 504, width: 1000, height: 496),
+        n[3]: Rect(x: 0, y: 0, width: 496, height: 496), n[4]: Rect(x: 504, y: 0, width: 496, height: 496),
+        n[5]: Rect(x: 0, y: 504, width: cut - 4, height: 496), n[7]: Rect(x: cut + 4, y: 504, width: 996 - cut, height: 496),
+    ])
+    return (tree, resolution)
+}
+
+/// ZOOM-09, ZOOM-10, ZOOM-11: Move View, Frame Focused Window and Frame Desktop with toggle-back.
+@Suite struct NavigatorPanAndFrameTests {
+    @Test func panMovesToTheSameDepthNeighbourWithTheLongestSharedEdge() async throws {
+        // n3 spans 0..496: with the bottom row cut at 200 it shares 292 pt with n7 and 196 with n5.
+        let (tree, wide) = try rows(cut: 200)
+        #expect(Navigator.pan(view: .node(n[3]), edge: .bottom, tree: tree, homeResolution: wide, gap: 8, recency: []) == n[7])
+        let (_, narrow) = try rows(cut: 400)
+        #expect(Navigator.pan(view: .node(n[3]), edge: .bottom, tree: tree, homeResolution: narrow, gap: 8, recency: []) == n[5])
+        // Same depth only: the top row (depth 1) pans to the bottom row, never into its leaves.
+        #expect(Navigator.pan(view: .node(n[2]), edge: .bottom, tree: tree, homeResolution: wide, gap: 8, recency: []) == n[6])
+
+        var harness = try await nested()
+        try await harness.go(.node(try leaf(a, harness)))
+        #expect(await harness.step(.pan(.right)) == .node(try column(harness)))
+        #expect(await harness.step(.pan(.left)) == .node(try leaf(a, harness)))
+    }
+
+    @Test func panTiesGoToTheMostRecentlyViewed() throws {
+        let (tree, even) = try rows(cut: 248)  // n5 and n7 each share 244 pt with n3
+        #expect(Navigator.pan(view: .node(n[3]), edge: .bottom, tree: tree, homeResolution: even, gap: 8, recency: []) == n[5])
+        #expect(Navigator.pan(view: .node(n[3]), edge: .bottom, tree: tree, homeResolution: even, gap: 8, recency: [n[7], n[5]]) == n[7])
+    }
+
+    @Test func panAtHomeIsRefused() async throws {
+        var harness = try await nested()
+        let expected: [Edge: String] = [
+            .left: "No area to the left", .right: "No area to the right", .top: "No area above", .bottom: "No area below",
+        ]
+        for edge in Edge.allCases {
+            expectRefused(await harness.camera(.pan(edge)), try #require(expected[edge]), command: "pan(")
+        }
+    }
+
+    @Test func panWithNothingAcrossIsRefused() async throws {
+        var harness = try await nested()
+        try await harness.go(.node(try leaf(a, harness)))
+
+        expectRefused(await harness.camera(.pan(.left)), "No area to the left", command: "pan(")
+        expectRefused(await harness.camera(.pan(.top)), "No area above", command: "pan(")
+    }
+
+    @Test func frameWindowFramesTheFocusedLeafAndTogglesBack() async throws {
+        var harness = try await nested()
+        let leafB = try leaf(b, harness)
+        #expect(!harness.arranger.isFramingFocused(displayUUID: "main", focused: b))
+
+        #expect(await harness.step(.frameWindow, focused: b) == .node(leafB))
+        #expect(harness.arranger.isFramingFocused(displayUUID: "main", focused: b))
+        #expect(!harness.arranger.isFramingFocused(displayUUID: "main", focused: c))
+        #expect(await harness.step(.frameWindow, focused: b) == .home)
+        #expect(!harness.arranger.isFramingFocused(displayUUID: "main", focused: b))
+        #expect(await harness.step(.frameWindow, focused: b) == .node(leafB))
+
+        // From another view, the toggle goes Back to it.
+        try await harness.go(.node(try column(harness)))
+        #expect(await harness.step(.frameWindow, focused: c) == .node(try leaf(c, harness)))
+        #expect(await harness.step(.frameWindow, focused: c) == .node(try column(harness)))
+    }
+
+    @Test func frameWindowDuringAPendingMoveComparesAgainstThePendingTarget() async throws {
+        var harness = try await nested()
+        let leafB = try leaf(b, harness)
+
+        let first = try #require(moves(await harness.camera(.frameWindow, focused: b)).first)
+        let second = try #require(moves(await harness.camera(.frameWindow, focused: b)).first)
+
+        #expect(first.to == .node(leafB))
+        #expect(second.from == .node(leafB) && second.to == .home)
+        #expect(await harness.send(.cameraSettle(displayUUID: "main", moveID: first.id)).isEmpty)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: second.id))
+        #expect(harness.arranger.view(on: "main") == .home)
+    }
+
+    @Test func frameWindowRefusesFloatingExcludedOrNoFocus() async throws {
+        var harness = try await nested()
+        expectRefused(await harness.camera(.frameWindow), "No docked window to frame", command: "frameWindow")
+        #expect(!harness.arranger.availability(.camera(.frameWindow), context: CommandContext(focused: nil, ready: true, displayUUID: "main")))
+        #expect(harness.arranger.availability(.camera(.frameWindow), context: CommandContext(focused: b, ready: true, displayUUID: "main")))
+
+        await harness.send(.command(.float, focused: c))
+        #expect(harness.arranger.isFloating(c))
+        expectRefused(await harness.camera(.frameWindow, focused: c), "No docked window to frame", command: "frameWindow")
+
+        var excluded = try #require(harness.arranger.windows[b.identity])
+        excluded.isExcluded = true
+        await harness.send(.event(.windowChanged(excluded)))
+        expectRefused(await harness.camera(.frameWindow, focused: b), "No docked window to frame", command: "frameWindow")
+    }
+
+    @Test func frameDesktopTogglesAndIsRefusedWhileHidden() async throws {
+        var harness = try await nested()
+        let main = CommandContext(focused: nil, ready: true, displayUUID: "main")
+        #expect(harness.arranger.availability(.camera(.frameDesktop), context: main))
+
+        #expect(await harness.step(.frameDesktop) == .node(.desktop))
+        #expect(harness.arranger.isFramingDesktop(displayUUID: "main"))
+        #expect(await harness.step(.frameDesktop) == .home)
+        #expect(!harness.arranger.isFramingDesktop(displayUUID: "main"))
+
+        await harness.send(.command(.toggleDesktop, focused: a))
+        #expect(harness.arranger.world[key]?.tree.isDesktopHidden == true)
+        expectRefused(await harness.camera(.frameDesktop), "The Desktop tile is hidden", command: "frameDesktop")
+        #expect(!harness.arranger.availability(.camera(.frameDesktop), context: main))
+    }
+}
+
+private func entry(_ raw: UInt64) -> ViewEntry {
+    ViewEntry(desk: key, target: .node(NodeID(raw: raw)), path: [NodeID(raw: raw)])
+}
+
+/// ZOOM-04, D-D: one history per display, pushed only at settle, dead entries skipped.
+@Suite struct CameraHistoryTests {
+    @Test func aSettlePushesThePreviousViewAndBackThenForwardReturnToIt() async throws {
+        var harness = try await nested()
+        let main = CommandContext(focused: nil, ready: true, displayUUID: "main")
+        #expect(!harness.arranger.availability(.camera(.back), context: main))
+        try await harness.go(.node(try leaf(a, harness)))
+        try await harness.go(.node(try column(harness)))
+        #expect(harness.arranger.availability(.camera(.back), context: main))
+        #expect(!harness.arranger.availability(.camera(.forward), context: main))
+
+        #expect(await harness.step(.back) == .node(try leaf(a, harness)))
+        #expect(await harness.step(.back) == .home)
+        #expect(harness.arranger.availability(.camera(.forward), context: main))
+        #expect(await harness.step(.forward) == .node(try leaf(a, harness)))
+        #expect(await harness.step(.forward) == .node(try column(harness)))
+        expectRefused(await harness.camera(.forward), "No later view", command: "forward")
+    }
+
+    @Test func aDoubleBackGoesBackTwoAndForwardRetracesThem() async throws {
+        var harness = try await nested()
+        try await harness.go(.node(try leaf(a, harness)))
+        try await harness.go(.node(try column(harness)))
+
+        let first = await harness.camera(.back)
+        let second = await harness.camera(.back)
+        #expect(moves(second).first?.to == .home)
+        await harness.settle(first + second)
+        #expect(harness.arranger.view(on: "main") == .home)
+
+        #expect(await harness.step(.forward) == .node(try leaf(a, harness)))
+        #expect(await harness.step(.forward) == .node(try column(harness)))
+    }
+
+    @Test func historyIsPerDisplay() async throws {
+        var harness = try await nested()
+        let side = DisplayInfo(
+            uuid: "side", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 1440, y: 0, width: 1920, height: 1080),
+            currentSpaceID: nil)
+        await harness.fake.setDisplays([try #require(harness.arranger.displays.first), side])
+        await harness.fake.open(.standard(id: 4, pid: pid, frame: Rect(x: 1600, y: 100, width: 300, height: 200)))
+        await harness.refresh()
+        await harness.fake.advance(by: .milliseconds(300))
+        await harness.refresh()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        await harness.send(.command(.dock, focused: d))
+        let sideLeaf = try #require(harness.arranger.world[DeskKey(displayUUID: "side", spaceID: nil)]?.tree.leaf(containing: d))
+
+        try await harness.go(.node(try leaf(a, harness)))
+        expectRefused(await harness.camera(.back, on: "side"), "No earlier view", command: "back")
+        try await harness.go(.node(sideLeaf), on: "side")
+
+        #expect(await harness.step(.back) == .home)
+        #expect(harness.arranger.view(on: "side") == .node(sideLeaf))
+        #expect(await harness.step(.back, on: "side") == .home)
+    }
+
+    @Test func the51stPushDropsTheOldest() {
+        var history = CameraHistory()
+        for raw in 1...51 { history.push(entry(UInt64(raw))) }
+
+        #expect(CameraHistory.limit == 50)
+        #expect(history.back.count == 50)
+        #expect(history.back.first == entry(2) && history.back.last == entry(51))
+    }
+
+    @Test func aPushClearsForward() {
+        var history = CameraHistory()
+        history.push(entry(1))
+        history.forward = [entry(2)]
+
+        history.push(entry(3))
+
+        #expect(history.back == [entry(1), entry(3)] && history.forward.isEmpty)
+    }
+
+    @Test func aRetargetPushesOnce() async throws {
+        var harness = try await nested()
+
+        let first = await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))
+        let second = await harness.send(.zoomTo(.node(try column(harness)), displayUUID: "main"))
+        await harness.settle(first + second)
+        #expect(harness.arranger.view(on: "main") == .node(try column(harness)))
+
+        #expect(await harness.step(.back) == .home)
+        expectRefused(await harness.camera(.back), "No earlier view", command: "back")
+    }
+
+    @Test func backSkipsAnEntryWhoseNodeWasRemoved() async throws {
+        var harness = try await nested()
+        try await harness.go(.node(try leaf(c, harness)))
+        try await harness.go(.node(try leaf(a, harness)))
+        await harness.fake.close(3)
+        await harness.refresh()
+        #expect(harness.arranger.world[key]?.tree.windows == [a, b])
+
+        #expect(await harness.step(.back) == .home)
+    }
+
+    @Test func backSkipsAnEntryWhoseDeskIsNotShown() async throws {
+        var harness = await Harness.onSpaceOne()
+        await harness.send(.zoomEnabled(true))
+        let space1 = DeskKey(displayUUID: "D", spaceID: 1)
+        let leafA = try #require(harness.arranger.world[space1]?.tree.leaf(containing: a))
+        try await harness.go(.node(leafA), on: "D")
+        _ = await harness.switchTo(2)
+        await harness.openNew(3, frame: Rect(x: 730, y: 400, width: 150, height: 120), space: 2)
+        await harness.send(.command(.dock, focused: c))
+        let leafC = try #require(harness.arranger.world[DeskKey(displayUUID: "D", spaceID: 2)]?.tree.leaf(containing: c))
+        try await harness.go(.node(leafC), on: "D")
+
+        #expect(await harness.step(.back, on: "D") == .home)
+        expectRefused(await harness.camera(.back, on: "D"), "No earlier view", command: "back")
+    }
+
+    @Test func emptyHistoryRefusesBothWays() async throws {
+        var harness = try await nested()
+
+        expectRefused(await harness.camera(.back), "No earlier view", command: "back")
+        expectRefused(await harness.camera(.forward), "No later view", command: "forward")
     }
 }
