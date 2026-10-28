@@ -62,8 +62,10 @@ import os
     private var activationObserver: NSObjectProtocol?
     private var loggedTapRefusal = false
 
-    /// Whether zoom exists at all this launch (the `zoomEnabled` preference; tests default to off, D-D).
-    private let zoomEnabled: Bool
+    /// Whether zoom is on (the `zoomEnabled` preference; tests default to off, D-D). Turn Off / Turn On Zoom change it.
+    private var zoomEnabled: Bool
+    public var isZoomEnabled: Bool { zoomEnabled }
+    private let zoomInputLog = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
     private(set) var zoomController: ZoomController?
 
@@ -358,7 +360,19 @@ import os
     /// The frontmost app's focused tracked window and the access state: what availability depends on.
     public func commandContext() -> CommandContext {
         let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        return CommandContext(focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady())
+        return CommandContext(
+            focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady(), displayUUID: pointerDisplay().uuid)
+    }
+
+    /// The pointer in top-left global points and the display under it: where every camera command acts (UI-SPEC: hotkeys,
+    /// menu items and URLs act on the pointer's display; the status menu opens on it).
+    func pointerDisplay() -> (point: Point, uuid: String?) {
+        let location = NSEvent.mouseLocation
+        let point = Point(x: location.x, y: Double(NSScreen.screens.first?.frame.height ?? 0) - location.y)
+        let displays = arranger.displays
+        let uuid = displays.first { $0.frame.contains(point) }?.uuid
+            ?? Coordinates.displayUUID(for: Rect(x: point.x, y: point.y, width: 0, height: 0), among: displays)
+        return (point, uuid)
     }
 
     /// The refusal sound; a seam for tests.
@@ -374,6 +388,10 @@ import os
             refuse()
             return
         }
+        if case .camera(let camera) = command {
+            await dispatchCamera(camera, from: source)
+            return
+        }
         let context = commandContext()
         guard arranger.availability(command, context: context) else {
             refuse()
@@ -381,6 +399,28 @@ import os
         }
         let effects = arranger.handle(.command(command, focused: context.focused), now: .now)
         await run(source == .url ? effects.filter { $0 != .beep } : effects)
+    }
+
+    /// A camera command on the pointer's display. A refusal beeps and announces (Surface 1), except from a URL, which
+    /// only logs; with zoom off a URL is ignored and logged (its hotkeys are disabled then, D-D).
+    private func dispatchCamera(_ camera: CameraCommand, from source: CommandSource) async {
+        guard zoomEnabled else {
+            if source == .url { zoomInputLog.info("url \(String(describing: camera), privacy: .public) ignored: zoom off") }
+            return
+        }
+        let context = commandContext()
+        let pointer = pointerDisplay()
+        var effects: [ArrangerEffect]
+        if let uuid = pointer.uuid, context.ready {
+            effects = arranger.handle(.camera(camera, displayUUID: uuid, focused: context.focused, pointer: pointer.point), now: .now)
+        } else if !context.ready {  // the engine never sees "not ready"; the shell refuses for it
+            let refusal = Navigator.Refusal.notReady
+            effects = [.beep, .announce(refusal.announcement), .info("refused \(camera): \(refusal)")]
+        } else {
+            effects = [.beep, .info("refused \(camera): no display under the pointer")]
+        }
+        if source == .url { effects.removeAll { if case .beep = $0 { true } else if case .announce = $0 { true } else { false } } }
+        await run(effects)
     }
 
     public func dispatch(_ command: Command, focused: TransomModel.WindowRef?) async {

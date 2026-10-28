@@ -1,5 +1,6 @@
 import KeyboardShortcuts
 import TransomEngine
+import os
 
 // These raw names are a persistent contract (Pitfall 13): KeyboardShortcuts stores each binding under
 // `KeyboardShortcuts_<name>`, so the Phase 4 recorder reuses them. Never rename one.
@@ -37,6 +38,18 @@ extension KeyboardShortcuts.Name {
     static let arrangeAll = Self("arrangeAll", initial: .init(.d, modifiers: [.control, .option, .command, .shift]))
     static let floatAll = Self("floatAll", initial: .init(.f, modifiers: [.control, .option, .command, .shift]))
     static let restoreAll = Self("restoreAll", initial: .init(.zero, modifiers: [.control, .option, .command]))
+    // Zoom (04 UI-SPEC Hotkeys and URLs).
+    static let zoomOutAll = Self("zoomOutAll", initial: .init(.o, modifiers: [.control, .option, .command]))
+    static let stepOut = Self("stepOut", initial: .init(.comma, modifiers: [.control, .option, .command]))
+    static let stepIn = Self("stepIn", initial: .init(.period, modifiers: [.control, .option, .command]))
+    static let zoomBack = Self("zoomBack", initial: .init(.leftBracket, modifiers: [.control, .option, .command]))
+    static let zoomForward = Self("zoomForward", initial: .init(.rightBracket, modifiers: [.control, .option, .command]))
+    static let panLeft = Self("panLeft", initial: .init(.home, modifiers: [.control, .option, .command]))
+    static let panRight = Self("panRight", initial: .init(.end, modifiers: [.control, .option, .command]))
+    static let panUp = Self("panUp", initial: .init(.pageUp, modifiers: [.control, .option, .command]))
+    static let panDown = Self("panDown", initial: .init(.pageDown, modifiers: [.control, .option, .command]))
+    static let frameWindow = Self("frameWindow", initial: .init(.m, modifiers: [.control, .option, .command]))
+    static let frameDesktop = Self("frameDesktop", initial: .init(.g, modifiers: [.control, .option, .command]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -75,12 +88,40 @@ enum Hotkeys {
         (.arrangeAll, .arrangeAll),
         (.floatAll, .floatAll),
         (.restoreAll, .restoreAll),
+        (.zoomOutAll, .camera(.zoomOutAll)),
+        (.stepOut, .camera(.stepOut)),
+        (.stepIn, .camera(.stepIn)),
+        (.zoomBack, .camera(.back)),
+        (.zoomForward, .camera(.forward)),
+        (.panLeft, .camera(.pan(.left))),
+        (.panRight, .camera(.pan(.right))),
+        (.panUp, .camera(.pan(.top))),
+        (.panDown, .camera(.pan(.bottom))),
+        (.frameWindow, .camera(.frameWindow)),
+        (.frameDesktop, .camera(.frameDesktop)),
     ]
+
+    /// The camera hotkeys: disabled while zoom is off, so their chords reach apps as in Phase 3 (D-D).
+    static let zoomNames: [KeyboardShortcuts.Name] = entries.compactMap { if case .camera = $0.command { $0.name } else { nil } }
+
+    private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
 
     /// Installs a key-down handler per entry. Call once.
     static func register(_ dispatch: @escaping @MainActor (Command) -> Void) {
         for entry in entries {
             KeyboardShortcuts.onKeyDown(for: entry.name) { dispatch(entry.command) }
+        }
+    }
+
+    static func setZoomHotkeys(enabled: Bool) {
+        if enabled { KeyboardShortcuts.enable(zoomNames) } else { KeyboardShortcuts.disable(zoomNames) }
+    }
+
+    /// The zoom defaults macOS also uses (⌃⌥⌘, and ⌃⌥⌘. when the contrast shortcuts are on); macOS takes them.
+    static func logSystemConflicts() {
+        for name in zoomNames {
+            guard let chord = name.initialShortcut, chord.isTakenBySystem else { continue }
+            logger.info("hotkey \(name.rawValue, privacy: .public) \(chord.description, privacy: .public) is also a macOS shortcut; macOS takes it")
         }
     }
 }

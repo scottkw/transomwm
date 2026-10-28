@@ -91,6 +91,8 @@ public enum TransomMacApp {
         accessSubscription = permissionController.$state.map { $0.phase == .ready }.removeDuplicates().dropFirst()
             .sink { ready in arrangeController.accessChanged(ready: ready) }
         Hotkeys.register(dispatch)
+        Hotkeys.setZoomHotkeys(enabled: arrangeController.isZoomEnabled)  // zoom off: the chords reach apps (D-D)
+        Hotkeys.logSystemConflicts()
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
         // A quit first returns parked and off-screen windows, then records cleanExit in layout.json (SAFE-01).
