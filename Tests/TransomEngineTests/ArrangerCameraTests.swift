@@ -260,3 +260,121 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         #expect(ids.count == 3)
     }
 }
+
+private func notices(_ effects: [ArrangerEffect]) -> [Notice] {
+    effects.compactMap { if case .notice(let notice) = $0 { notice } else { nil } }
+}
+
+/// Same windows, every rect within 1 pt (the fake reports whole points; plans can be half points).
+private func sameTiles(_ x: [WindowRef: Rect], _ y: [WindowRef: Rect?]) -> Bool {
+    let y = y.compactMapValues { $0 }
+    return Set(x.keys) == Set(y.keys) && x.allSatisfy { window, r in
+        y[window].map { abs(r.x - $0.x) <= 1 && abs(r.y - $0.y) <= 1 && abs(r.width - $0.width) <= 1 && abs(r.height - $0.height) <= 1 } ?? false
+    }
+}
+
+private let d = ref(4), e = ref(5)
+private let sideKey = DeskKey(displayUUID: "side", spaceID: nil)
+
+/// D-D, 04-08: parked windows come back through Restore All, a crash relaunch and a crash-loop relaunch.
+extension ArrangerCameraTests {
+    /// a, b, c docked on main; d, e docked on the side display; zoom on.
+    private func twoDisplays() async throws -> (Harness, home: [WindowRef: Rect]) {
+        var harness = try await threeDocked()
+        await harness.fake.setDisplays([mainDisplay, side])
+        await harness.fake.open(.standard(id: 4, pid: pid, frame: Rect(x: 1600, y: 100, width: 300, height: 200)))
+        await harness.fake.open(.standard(id: 5, pid: pid, frame: Rect(x: 2600, y: 600, width: 300, height: 200)))
+        await harness.refresh()
+        await harness.fake.advance(by: .milliseconds(300))  // new windows wait out the settle delay
+        await harness.refresh()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        for window in [d, e] { await harness.send(.command(.dock, focused: window)) }
+        try #require(harness.arranger.world[sideKey].map { Set($0.tree.windows) } == [d, e])
+        var home: [WindowRef: Rect] = [:]
+        for window in [a, b, c, d, e] { home[window] = try #require(await harness.frame(window)) }
+        await harness.send(.zoomEnabled(true))
+        return (harness, home)
+    }
+
+    private func zoom(_ harness: inout Harness, to window: WindowRef, on uuid: String) async throws {
+        let target = try #require(harness.arranger.world[DeskKey(displayUUID: uuid, spaceID: nil)]?.tree.leaf(containing: window))
+        let move = try #require(moves(await harness.send(.zoomTo(.node(target), displayUUID: uuid))).first)
+        await harness.send(.cameraSettle(displayUUID: uuid, moveID: move.id))
+    }
+
+    @Test func restoreAllReturnsEveryCameraHome() async throws {
+        var (harness, home) = try await twoDisplays()
+        try await zoom(&harness, to: a, on: "main")
+        try await zoom(&harness, to: d, on: "side")
+        try #require(await harness.fake.parked.isSuperset(of: [b.identity, c.identity, e.identity]))
+
+        let effects = await harness.send(.command(.restoreAll, focused: nil))
+
+        #expect(harness.arranger.view(on: "main") == .home && harness.arranger.view(on: "side") == .home)
+        for window in [a, b, c, d, e] { #expect(await harness.frame(window) == home[window], "\(window) is not back in its tile") }
+        #expect(notices(effects) == [.restored(count: 3)], "N6 counts the three un-parked windows")
+    }
+
+    /// Paused: the rescue brings the parked windows on screen at once; the tiles wait for Resume (Phase 3).
+    @Test func restoreAllWhilePausedUnparksAndResumeTilesEveryWindow() async throws {
+        var (harness, home) = try await twoDisplays()
+        try await zoom(&harness, to: a, on: "main")
+        await harness.send(.command(.togglePause, focused: nil))
+
+        let effects = await harness.send(.command(.restoreAll, focused: nil))
+
+        #expect(harness.arranger.view(on: "main") == .home)
+        #expect(notices(effects) == [.restored(count: 2)])
+        for window in [b, c] {
+            let frame = try #require(await harness.frame(window))
+            #expect(!Recovery.isStranded(frame, displays: [mainDisplay, side]), "\(window) is still parked at \(frame)")
+        }
+        await harness.send(.command(.togglePause, focused: nil))
+        for window in [a, b, c, d, e] { #expect(await harness.frame(window) == home[window], "\(window) is not back in its tile") }
+    }
+
+    /// A session that crashed zoomed to a: b and c parked, a filling the display. Returns the fresh Arranger's launch
+    /// effects (launch, restore, first inventory, zoom on, as ArrangeController.start sends them) and the home tiles.
+    private func relaunchAfterACrashWhileZoomed(_ mode: LaunchMode) async throws -> (Arranger, [ArrangerEffect], home: [WindowRef: Rect], Harness) {
+        var source = try await threeDocked()
+        let home = await frames(source)
+        await source.send(.zoomEnabled(true))
+        try await zoom(&source, to: a, on: "main")
+        try #require(await source.fake.parked == [b.identity, c.identity])
+        let snapshot = source.arranger.snapshot
+        var restored = Arranger()
+        var effects = restored.handle(.launch(mode), now: .now)
+        effects += restored.handle(.restore(snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames), now: .now)
+        effects += restored.handle(.inventory(await source.fake.inventory()), now: .now)
+        effects += restored.handle(.zoomEnabled(true), now: .now)
+        return (restored, effects, home, source)
+    }
+
+    @Test func aRecoveryLaunchBringsParkedDockedWindowsBack() async throws {
+        let (restored, effects, home, _) = try await relaunchAfterACrashWhileZoomed(.recovery)
+
+        let sent = performs(effects)
+        try #require(sent.count >= 2, "expected the rescue, then the layout: \(effects)")
+        #expect(Set(setFrames([.perform(sent[0])]).keys) == [b, c], "the rescue moves the parked windows first")
+        #expect(sameTiles(setFrames(effects), [a: home[a], b: home[b], c: home[c]]), "\(setFrames(effects)) vs \(home)")
+        #expect(!sent.joined().contains { if case .park = $0 { true } else { false } }, "a window was parked again")
+        #expect(restored.view(on: "main") == .home)
+        #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
+    }
+
+    @Test func aCrashLoopLaunchStillRescuesParkedDockedWindows() async throws {
+        var (restored, effects, home, source) = try await relaunchAfterACrashWhileZoomed(.crashLoop)
+
+        #expect(restored.pauseReasons == [.crashLoop])
+        let rescued = setFrames(effects)
+        #expect(Set(rescued.keys) == [b, c], "only the stranded windows move while paused: \(rescued)")
+        for (window, frame) in rescued { #expect(!Recovery.isStranded(frame, displays: [mainDisplay]), "\(window) stays parked at \(frame)") }
+        #expect(notices(effects) == [.crashLoop])
+        await source.fake.perform(performs(effects).flatMap { $0 })
+        let resumed = restored.handle(.command(.togglePause, focused: nil), now: .now)
+        await source.fake.perform(performs(resumed).flatMap { $0 })
+        var after: [WindowRef: Rect] = [:]
+        for window in [a, b, c] { after[window] = await source.frame(window) }
+        #expect(sameTiles(after, [a: home[a], b: home[b], c: home[c]]), "Resume puts every window in its tile: \(after)")
+    }
+}
