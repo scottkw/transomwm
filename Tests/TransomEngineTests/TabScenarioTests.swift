@@ -885,4 +885,18 @@ private func summary(_ fake: FakeWindowSystem) async -> [[UInt32]] {
         #expect(destroyed(events).isEmpty)
         #expect(created(events).map(\.window) == [ref(219)])
     }
+
+    /// WR-03 (P3T): `cmdTSeenWithAStaleSweepCGListStaysOneWindow` with Terminal's taller first Cmd-T. One window
+    /// throughout, and nothing is destroyed or created.
+    @Test func aTallerCmdTSeenWithAStaleSweepCGListStaysOneWindow() {
+        var tracker = WindowTracker(settleDelay: .zero)
+        var events = ingest(&tracker, [listed(10, nil)], [cg(10, onScreen: true)], initial: true)
+        events += ingest(&tracker, [listed(10, nil)], [cg(10, onScreen: true)])
+        events += ingest(&tracker, [listed(40, 2, Self.taller), unlisted(10)], [cg(10, onScreen: true)])
+        #expect(rows(tracker) == [[10, 40, 2]])
+        for _ in 0..<3 { events += ingest(&tracker, [listed(40, 2, Self.taller), unlisted(10)], [cg(10), cg(40, Self.taller, onScreen: true)]) }
+        #expect(rows(tracker) == [[10, 40, 2]])
+        #expect(destroyed(events).isEmpty)
+        #expect(created(events).map(\.window) == [ref(10)])
+    }
 }

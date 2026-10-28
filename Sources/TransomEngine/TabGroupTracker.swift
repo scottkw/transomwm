@@ -124,11 +124,12 @@ public struct TabGroupTracker: Equatable, Sendable {
         let wasListed = lastListed[pid] ?? []
         // A listed window whose read failed is still listed, never a tab that just went hidden (review WR-01).
         let listedIDs = listed ?? Set(visible.map(\.id))
-        /// Listed at the last update and hidden now, still offscreen in the CG list and AX-valid: shown just before (G-02-10).
-        func wentHidden(_ id: UInt32) -> Bool {
-            !blindSwitch && wasListed.contains(id) && !listedIDs.contains(id) && inCG.contains(id) && !onScreen.contains(id)
-                && !invalid.contains(id)
+        /// Listed at the last update and unlisted now, still in the CG list and AX-valid.
+        func leftAX(_ id: UInt32) -> Bool {
+            !blindSwitch && wasListed.contains(id) && !listedIDs.contains(id) && inCG.contains(id) && !invalid.contains(id)
         }
+        /// Left AXWindows and offscreen in the CG list: shown just before (G-02-10).
+        func wentHidden(_ id: UInt32) -> Bool { leftAX(id) && !onScreen.contains(id) }
         func canBeHiddenTab(_ id: UInt32) -> Bool {
             if listedIDs.contains(id), (listedTabCount[id] ?? 1) < 2 { return false }
             // A window folded in earlier stays a member until the fold guard decides it.
@@ -178,8 +179,9 @@ public struct TabGroupTracker: Equatable, Sendable {
             // opens it at a hidden sibling's frame after a resize). Both compete in one tie-break, so a group's own slot
             // beats an unrelated standalone that went hidden in the same refresh (review CR-01).
             if index == nil, v.tabCount >= 2, opener == nil {
+                // A CG list older than the AX read can still show the opener onscreen, as the slot allows (review WR-03).
                 let hidden = isNew ? standalone.map(\.windowID).filter {
-                    mayBeOpener($0) && wentHidden($0) && canBeHiddenTab($0) && !Self.differ(space($0), shownSpace)
+                    mayBeOpener($0) && (wentHidden($0) || staleCG && leftAX($0)) && canBeHiddenTab($0) && !Self.differ(space($0), shownSpace)
                 } : []
                 let openers = hidden.compactMap { id in cg.first { $0.windowID == id }.map { (id: id, bounds: $0.bounds) } }
                 let joinable = list.indices.filter { i in

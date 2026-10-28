@@ -691,4 +691,16 @@ private func threeTabs() -> (TabGroupTracker, TabResolution) {
         #expect(resolution.groupFor == [30: identity(30)])
         #expect(tracker.members(of: identity(30)) == [30])
     }
+
+    /// WR-03 (P3): Cmd-T lands between a sweep's CG snapshot and the AX read, and the new tab is 28 pt taller. The CG
+    /// list still shows the opener onscreen and lacks the tab, but the opener left AXWindows: it is still the opener.
+    @Test func aTallerNewTabMissingFromAStaleCGListStillTakesItsOpener() {
+        var tracker = TabGroupTracker()
+        _ = tracker.update(pid: pid, bundleID: bundleID, visible: [visible(10, 1)], cgWindows: [cg(10, onScreen: true)], tracked: [identity(10)])
+        let resolution = tracker.update(
+            pid: pid, bundleID: bundleID, visible: [visible(40, 2, Self.taller)], cgWindows: [cg(10, onScreen: true)], tracked: [identity(10)]
+        )
+        #expect(resolution.groupFor == [40: identity(10)])
+        #expect(tracker.members(of: identity(10)) == [10, 40])
+    }
 }
