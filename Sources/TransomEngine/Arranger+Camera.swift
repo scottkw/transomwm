@@ -11,6 +11,10 @@ public struct CameraState: Sendable {
     public var collapsible: Set<WindowIdentity> = []
     /// Back/Forward per display (D-D); changed only at settle.
     public var histories: [String: CameraHistory] = [:]
+    /// Each committed node view's `Navigator.ancestors`, so a vanished node falls back to its deepest surviving one.
+    public var paths: [DeskKey: [NodeID]] = [:]
+    /// New windows outside the view, kept unparked until the move that shows them settles (RESEARCH Pitfall 3).
+    public var unparkedNew: Set<WindowIdentity> = []
 
     public init() {}
 }
@@ -22,6 +26,8 @@ public struct PendingMove: Equatable, Sendable {
     public var key: DeskKey
     public var target: ViewTarget
     public var kind: Kind = .navigate
+    /// Focused right after the settle's writes.
+    public var focus: WindowRef?
 }
 
 /// One camera move for the stage: a start and end rect per window, no writes (RESEARCH Pattern 4).
@@ -53,10 +59,11 @@ extension Arranger {
         return camera.views[Self.key(display)] ?? .home
     }
 
-    /// The committed view of `key`, or home when its node is gone.
+    /// The committed view of `key`. When its node is gone: the deepest node of its stored path still in the tree, else home.
     func resolvedView(for key: DeskKey) -> ViewTarget {
-        guard camera.enabled, case .node(let id)? = camera.views[key] else { return .home }
-        return world[key]?.tree.node(id) != nil ? .node(id) : .home
+        guard camera.enabled, case .node(let id)? = camera.views[key], let tree = world[key]?.tree else { return .home }
+        if tree.node(id) != nil { return .node(id) }
+        return camera.paths[key]?.last { tree.node($0) != nil }.map { Navigator.target($0, in: tree) } ?? .home
     }
 
     /// The view a camera command starts from: the pending target, else the committed view. A move pending on a desk no
@@ -69,9 +76,28 @@ extension Arranger {
     mutating func effectiveView(for key: DeskKey, notes: inout [ArrangerEffect]) -> ViewTarget {
         let view = resolvedView(for: key)
         guard view != camera.views[key] ?? .home else { return view }
-        camera.views[key] = view == .home ? nil : view
+        commit(view, on: key)
         notes.append(.info("view node gone; showing \(view)"))
         return view
+    }
+
+    private mutating func commit(_ view: ViewTarget, on key: DeskKey) {
+        camera.views[key] = view == .home ? nil : view
+        camera.paths[key] = if case .node(let id) = view, let tree = world[key]?.tree { Navigator.ancestors(of: id, in: tree) } else { nil }
+    }
+
+    /// CONTEXT E: a window outside its display's view (the pending target while a move is pending) moves the camera to the
+    /// smallest view holding both. A `new` one stays unparked until a move settles on its desk (Pitfall 3).
+    mutating func widen(toShow window: WindowRef, new: Bool) -> [ArrangerEffect] {
+        guard camera.enabled, pauseReasons.isEmpty, !sessionPaused, windows[window.identity]?.isExcluded == false,
+            let key = deskKey(of: window), let display = display(for: key), let tree = world[key]?.tree, let leaf = leafNode(of: window)
+        else { return [] }
+        let view = currentView(display.uuid, key)
+        let target = Navigator.widenTarget(view: view, leaf: leaf, tree: tree)
+        guard target != view else { return [] }
+        let effects = zoomTo(target, displayUUID: display.uuid)
+        if new, effects.contains(where: { if case .cameraMove = $0 { true } else { false } }) { camera.unparkedNew.insert(window.identity) }
+        return effects
     }
 
     mutating func setZoomEnabled(_ on: Bool) -> [ArrangerEffect] {
@@ -80,10 +106,14 @@ extension Arranger {
         camera.views = [:]
         camera.pending = [:]
         camera.histories = [:]
+        camera.paths = [:]
+        camera.unparkedNew = []
         return replan()
     }
 
-    mutating func zoomTo(_ target: ViewTarget, displayUUID uuid: String, kind: PendingMove.Kind = .navigate) -> [ArrangerEffect] {
+    mutating func zoomTo(
+        _ target: ViewTarget, displayUUID uuid: String, kind: PendingMove.Kind = .navigate, focus: WindowRef? = nil
+    ) -> [ArrangerEffect] {
         func refused(_ reason: String) -> [ArrangerEffect] { [.info("refused zoomTo: \(reason)")] }
         guard camera.enabled else { return [.info("zoom off: zoomTo ignored")] }
         guard pauseReasons.isEmpty, !sessionPaused else { return refused("paused") }
@@ -121,7 +151,7 @@ extension Arranger {
             }
         }
         camera.nextMoveID += 1
-        camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target, kind: kind)
+        camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target, kind: kind, focus: focus)
         let move = CameraMove(
             id: camera.nextMoveID, displayUUID: uuid, from: current, to: target, tiles: tiles.sorted { $0.window.identity < $1.window.identity })
         return notes + [.cameraMove(move)]
@@ -132,9 +162,12 @@ extension Arranger {
         guard let move = camera.pending[uuid], move.id == moveID else { return [] }
         camera.pending[uuid] = nil
         let previous = resolvedView(for: move.key)
-        camera.views[move.key] = move.target == .home ? nil : move.target
+        commit(move.target, on: move.key)
         recordHistory(move, leaving: previous, on: uuid)
-        return planShown()
+        if let desk = world[move.key] { camera.unparkedNew = camera.unparkedNew.filter { !desk.contains(WindowRef(identity: $0)) } }
+        let effects = planShown()
+        guard let focus = move.focus, windows[focus.identity] != nil else { return effects }
+        return effects + [.perform([.focus(focus)])]
     }
 
     /// The history changes only here (D-D), so a retarget never pushes twice.

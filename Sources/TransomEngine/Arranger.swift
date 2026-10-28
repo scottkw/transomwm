@@ -26,8 +26,9 @@ public enum ArrangerInput: Sendable {
     case launch(LaunchMode)
     /// Zoom on or off (D-D); off by default, which is exactly Phase 3.
     case zoomEnabled(Bool)
-    /// Move that display's camera to `ViewTarget` (D-A): answered with one `.cameraMove`, no writes.
-    case zoomTo(ViewTarget, displayUUID: String)
+    /// Move that display's camera to `ViewTarget` (D-A): answered with one `.cameraMove`, no writes. `focus` is focused
+    /// right after the settle's writes (a click on a window, ZOOM-06).
+    case zoomTo(ViewTarget, displayUUID: String, focus: WindowRef? = nil)
     /// The stage finished move `moveID` on that display: the view is committed and written now.
     case cameraSettle(displayUUID: String, moveID: UInt64)
     /// A camera command on that display (the pointer's), with the focused window and the pointer Step In reads.
@@ -345,8 +346,8 @@ public struct Arranger: Sendable {
             return hideHandles()
         case .zoomEnabled(let on):
             return setZoomEnabled(on)
-        case .zoomTo(let target, let uuid):
-            return zoomTo(target, displayUUID: uuid)
+        case .zoomTo(let target, let uuid, let focus):
+            return zoomTo(target, displayUUID: uuid, focus: focus)
         case .cameraSettle(let uuid, let moveID):
             return cameraSettle(displayUUID: uuid, moveID: moveID)
         case .camera(let command, let uuid, let focused, let pointer):
@@ -624,9 +625,12 @@ public struct Arranger: Sendable {
         } catch {
             return [.fault("ignored an event: \(error)")]
         }
-        guard case .windowCreated(let info) = event else { return faults + hidden + replan() }
+        // CONTEXT E: focus outside the view widens the camera.
+        let widened = if case .windowFocused(let window) = event { widen(toShow: window, new: false) } else { [ArrangerEffect]() }
+        guard case .windowCreated(let info) = event else { return faults + hidden + widened + replan() }
         do throws(LayoutError) {
-            return try faults + takeFinderWindow(info, now: now) + replan()
+            let taken = try takeFinderWindow(info, now: now)
+            return faults + taken + widen(toShow: info.window, new: true) + replan()
         } catch {
             return faults + [.fault("could not dock the new Finder window: \(error)")] + replan()
         }
@@ -1565,7 +1569,8 @@ public struct Arranger: Sendable {
             // gets nothing either: the window system would drop the command, and its windowCreated replans it.
             var desired = plan.frames.filter { windows[$0.key.identity]?.isExcluded == false }
             let desktopHidden = desk.tree.isDesktopHidden == true
-            for window in plan.parks where windows[window.identity]?.isExcluded == false {
+            // A just-created window outside the view stays where it opened until its widen move settles (Pitfall 3).
+            for window in plan.parks where windows[window.identity]?.isExcluded == false && !camera.unparkedNew.contains(window.identity) {
                 parkedNow.insert(window.identity)
                 guard parkRequested.insert(window.identity).inserted else { continue }
                 if homeFrames[window.identity] == nil, windows[window.identity]?.isExcluded != true {

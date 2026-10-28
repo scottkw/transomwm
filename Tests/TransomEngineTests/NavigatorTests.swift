@@ -502,7 +502,7 @@ private func band() throws -> (LayoutTree, [NodeID: Rect]) {
         // b's centre (600, 250) and c's (600, 750).
         #expect(Navigator.rectTarget(band: Rect(x: 550, y: 200, width: 100, height: 600), tiles: tiles, tree: tree) == n[2])
         #expect(Navigator.rectTarget(band: Rect(x: 550, y: 200, width: 100, height: 100), tiles: tiles, tree: tree) == n[3])
-        #expect(Navigator.rectTarget(band: Rect(x: 150, y: 200, width: 500, height: 100), tiles: tiles, tree: tree) == n[5])
+        #expect(Navigator.rectTarget(band: Rect(x: 150, y: 200, width: 500, height: 350), tiles: tiles, tree: tree) == n[5])
         #expect(Navigator.lowestCommonAncestor([n[3], n[4]], in: tree) == n[2])
         #expect(Navigator.lowestCommonAncestor([n[3], NodeID(raw: 99)], in: tree) == nil)
         #expect(Navigator.ancestors(of: n[4], in: tree) == [n[5], n[2], n[4]])
@@ -524,7 +524,7 @@ private func band() throws -> (LayoutTree, [NodeID: Rect]) {
     @Test func collapsedAndDesktopTilesCount() async throws {
         let (tree, tiles) = try band()
         #expect(Navigator.rectTarget(band: Rect(x: 850, y: 450, width: 100, height: 100), tiles: tiles, tree: tree) == .desktop)
-        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 700, width: 400, height: 100), tiles: tiles, tree: tree) == n[5])
+        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 450, width: 400, height: 350), tiles: tiles, tree: tree) == n[5])
 
         // The engine's tiles: every leaf of the committed view on screen, the Desktop tile included, splits never.
         var harness = try await nested()

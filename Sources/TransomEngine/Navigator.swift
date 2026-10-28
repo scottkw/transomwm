@@ -47,6 +47,29 @@ public enum Navigator {
         return tree.root
     }
 
+    /// The deepest node every one of `ids` descends from (or is); nil when `ids` is empty or one is not in `tree`.
+    public static func lowestCommonAncestor(_ ids: [NodeID], in tree: LayoutTree) -> NodeID? {
+        let paths = ids.map { ancestors(of: $0, in: tree) }
+        guard var common = paths.first else { return nil }
+        for path in paths.dropFirst() { common = zip(common, path).prefix { $0 == $1 }.map(\.0) }
+        return common.last
+    }
+
+    /// The rubber band's target (UI-SPEC Surface 4): the lowest common ancestor of every tile in `tiles` (on-screen leaf
+    /// rects) whose centre lies in `band`, edges included. Nil when no centre is inside.
+    public static func rectTarget(band: Rect, tiles: [NodeID: Rect], tree: LayoutTree) -> NodeID? {
+        let inside = tiles.filter { _, tile in
+            band.minX <= tile.midX && tile.midX <= band.maxX && band.minY <= tile.midY && tile.midY <= band.maxY
+        }
+        return inside.isEmpty ? nil : lowestCommonAncestor(inside.keys.sorted(), in: tree)
+    }
+
+    /// The smallest view holding both the view and `leaf` (CONTEXT E); `.home` when that is the root.
+    public static func widenTarget(view: ViewTarget, leaf: NodeID, tree: LayoutTree) -> ViewTarget {
+        guard let node = node(of: view, in: tree), let common = lowestCommonAncestor([node, leaf], in: tree) else { return .home }
+        return target(common, in: tree)
+    }
+
     /// The parent of the view's node (`.home` when that is the root); nil at home.
     public static func stepOut(view: ViewTarget, tree: LayoutTree) -> ViewTarget? {
         guard case .node(let id) = view else { return nil }
@@ -176,6 +199,16 @@ extension Arranger {
             case .success? = try? cameraStep(command, displayUUID: uuid, focused: context.focused, pointer: nil)
         else { return false }
         return true
+    }
+
+    /// Every leaf of that display's committed view with its on-screen rect: collapsed tiles and the Desktop tile included,
+    /// splits never. The band preview's `tiles` (04-06); empty for a display with no desk.
+    public func shownLeafRects(displayUUID uuid: String) throws(LayoutError) -> [NodeID: Rect] {
+        guard let display = displays.first(where: { $0.uuid == uuid }), let desk = world[Self.key(display)] else { return [:] }
+        let plan = try ViewPlanner.plan(
+            desk: desk, view: resolvedView(for: Self.key(display)), area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames,
+            collapsible: camera.collapsible)
+        return plan.resolution.nodeRects.filter { if case .split? = desk.tree.node($0.key) { false } else { true } }
     }
 
     /// The docked window's leaf, or the Desktop tile for a present floater on a shown Desktop.
