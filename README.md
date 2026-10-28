@@ -240,4 +240,4 @@ Transom is inspired by the commercial app TrellisWM and contains no code, text o
 
 ## License
 
-Transom is MIT licensed. The LICENSE file has not been added to the repo yet.
+Transom is MIT licensed. See [LICENSE](LICENSE).
