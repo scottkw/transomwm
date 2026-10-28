@@ -96,6 +96,89 @@ private let armed = ZoomTapState(armed: true, deskDisplays: [CGRect(x: 0, y: 0, 
     }
 }
 
+private let tile = CGRect(x: 100, y: 100, width: 600, height: 400)
+private let titleBand = CGRect(x: 800, y: 100, width: 500, height: 28)
+private let inTile = CGPoint(x: 300, y: 300)
+private let inTitle = CGPoint(x: 1000, y: 110)
+private let full = ZoomTapState(
+    armed: true, deskDisplays: [CGRect(x: 0, y: 0, width: 1440, height: 900)], titleBars: [9: titleBand], pickTiles: [7: tile],
+    titleBarDoubleClick: true)
+
+/// Pick mode clicks (ZOOM-06) and title-bar double-clicks (ZOOM-10): a click is taken (down and up) only on the window
+/// the tile or band belongs to; the Desktop double-click (ZOOM-11) is never taken.
+@Suite struct ZoomTapClickRulesTests {
+    private func decide(
+        _ type: CGEventType, at location: CGPoint, flags: CGEventFlags = [], clickState: Int64 = 1, window: UInt32,
+        state: ZoomTapState = full, _ swallow: inout ZoomTapRules.Swallow
+    ) -> ZoomTapRules.Decision {
+        ZoomTapRules.decide(
+            type: type, location: location, flags: flags, clickState: clickState, windowID: window, userData: 0, state: state, swallow: &swallow)
+    }
+
+    @Test func aPlainClickOnAPickTileIsTakenWithItsRelease() {
+        var swallow = ZoomTapRules.Swallow.none
+        #expect(decide(.leftMouseDown, at: inTile, window: 7, &swallow) == .consume(.pick(7)))
+        #expect(decide(.leftMouseDragged, at: inTile, window: 7, &swallow) == .consume(nil))
+        #expect(decide(.leftMouseUp, at: inTile, window: 7, &swallow) == .consume(nil))
+        #expect(swallow == .none)
+        #expect(decide(.leftMouseDown, at: inTile, window: 7, state: ZoomTapState(armed: true, deskDisplays: full.deskDisplays), &swallow) == .pass)
+    }
+
+    @Test func aClickOutsideEveryTileOrOnAnotherWindowPasses() {
+        var swallow = ZoomTapRules.Swallow.none
+        #expect(decide(.leftMouseDown, at: CGPoint(x: 750, y: 600), window: 7, &swallow) == .pass)
+        // A floating window over the tile is on top.
+        #expect(decide(.leftMouseDown, at: inTile, window: 8, &swallow) == .pass)
+        #expect(decide(.leftMouseDown, at: inTile, window: 0, &swallow) == .pass)
+        #expect(decide(.leftMouseUp, at: inTile, window: 7, &swallow) == .pass)
+    }
+
+    @Test func aModifiedClickOnAPickTilePassesAndCommandShiftIsABand() {
+        var swallow = ZoomTapRules.Swallow.none
+        #expect(decide(.leftMouseDown, at: inTile, flags: .maskCommand, window: 7, &swallow) == .pass)
+        #expect(decide(.leftMouseDown, at: inTile, flags: .maskAlternate, window: 7, &swallow) == .pass)
+        #expect(decide(.leftMouseDown, at: inTile, flags: [.maskCommand, .maskShift], window: 7, &swallow) == .consume(.band))
+    }
+
+    @Test func theSecondPressOfATitleBarDoubleClickIsTakenWithItsRelease() {
+        var swallow = ZoomTapRules.Swallow.none
+        #expect(decide(.leftMouseDown, at: inTitle, clickState: 1, window: 9, &swallow) == .pass)
+        #expect(decide(.leftMouseUp, at: inTitle, clickState: 1, window: 9, &swallow) == .pass)
+        #expect(decide(.leftMouseDown, at: inTitle, clickState: 2, window: 9, &swallow) == .consume(.titleBarDoubleClick(9)))
+        #expect(decide(.leftMouseUp, at: inTitle, clickState: 2, window: 9, &swallow) == .consume(nil))
+        #expect(swallow == .none)
+    }
+
+    @Test func aTitleBarDoubleClickPassesWithThePreferenceOffUnarmedOrOnAnotherWindow() {
+        var swallow = ZoomTapRules.Swallow.none
+        var off = full
+        off.titleBarDoubleClick = false
+        #expect(decide(.leftMouseDown, at: inTitle, clickState: 2, window: 9, state: off, &swallow) == .pass)
+        var unarmed = full
+        unarmed.armed = false
+        #expect(decide(.leftMouseDown, at: inTitle, clickState: 2, window: 9, state: unarmed, &swallow) == .pass)
+        #expect(decide(.leftMouseDown, at: inTile, clickState: 2, window: 7, state: unarmed, &swallow) == .pass)
+        #expect(decide(.leftMouseDown, at: inTitle, clickState: 2, window: 4, &swallow) == .pass)
+        #expect(swallow == .none)
+    }
+
+    @Test func aDesktopDoubleClickIsNeverTaken() {
+        var swallow = ZoomTapRules.Swallow.none
+        #expect(decide(.leftMouseDown, at: CGPoint(x: 1000, y: 700), clickState: 2, window: 0, &swallow) == .pass)
+        #expect(decide(.leftMouseUp, at: CGPoint(x: 1000, y: 700), clickState: 2, window: 0, &swallow) == .pass)
+    }
+
+    @Test func onlyAPressInsideAPickTileOrATitleBandOnADoubleClickReadsTheWindowList() {
+        #expect(ZoomTapRules.needsWindow(location: inTile, clickState: 1, state: full))
+        #expect(ZoomTapRules.needsWindow(location: inTitle, clickState: 2, state: full))
+        #expect(!ZoomTapRules.needsWindow(location: inTitle, clickState: 1, state: full))
+        #expect(!ZoomTapRules.needsWindow(location: CGPoint(x: 1000, y: 700), clickState: 2, state: full))
+        var unarmed = full
+        unarmed.armed = false
+        #expect(!ZoomTapRules.needsWindow(location: inTile, clickState: 1, state: unarmed))
+    }
+}
+
 /// The band's pure geometry: a press under 4 pt is a click (re-posted), and the band stays on its display.
 @Suite struct ZoomInputGeometryTests {
     private let start = CGPoint(x: 100, y: 100)
