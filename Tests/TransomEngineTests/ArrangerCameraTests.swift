@@ -234,6 +234,20 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         #expect(harness.arranger.focusOrder.first == b.identity)
     }
 
+    /// D-D, 04-08: the quit's home tiles are the home view's frames, whatever the camera shows.
+    @Test func homeTilesAreTheHomeViewWhileZoomed() async throws {
+        var harness = try await threeDocked()
+        let home = await frames(harness)
+        await harness.send(.zoomEnabled(true))
+        let move = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+        try #require(await harness.frame(a) == full)
+
+        let tiles = harness.arranger.homeTiles()
+
+        #expect(tiles == [a.identity: home[a], b.identity: home[b], c.identity: home[c]].compactMapValues { $0 })
+    }
+
     @Test func tilesAreSortedByIdentity() async throws {
         var harness = try await threeDocked()
         await harness.send(.zoomEnabled(true))

@@ -161,6 +161,72 @@ private let side = DisplayInfo(
         #expect(plan.isEmpty)
     }
 
+    // MARK: Quit while zoomed (D-D, 04-08)
+
+    /// [docked tile | …] on the main display: the home tile the quit puts a docked window back in.
+    private static let tile = Rect(x: 8, y: 33, width: 704, height: 859)
+
+    @Test func aParkedDockedWindowGoesBackToItsHomeTile() {
+        let docked = Self.window(7)
+        let parked = main.parkedFrame(size: Size(width: 400, height: 300), among: [main])
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(docked, parked)], homeFrames: [:], displays: [main], docked: [docked.identity],
+            homeTiles: [docked.identity: Self.tile])
+        #expect(plan == [docked: Self.tile])
+    }
+
+    @Test func aZoomedDockedWindowGoesBackToItsHomeTile() {
+        let docked = Self.window(7)
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(docked, Rect(x: 8, y: 33, width: 1424, height: 859))], homeFrames: [:], displays: [main],
+            docked: [docked.identity], homeTiles: [docked.identity: Self.tile])
+        #expect(plan == [docked: Self.tile])
+    }
+
+    @Test func aDockedWindowWithin2ptOfItsHomeTileIsLeftAlone() {
+        let docked = Self.window(7)
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(docked, Rect(x: 9.5, y: 31.5, width: 702, height: 861))], homeFrames: [:], displays: [main],
+            docked: [docked.identity], homeTiles: [docked.identity: Self.tile])
+        #expect(plan.isEmpty)
+    }
+
+    /// A collapsed window has no home tile: parked, it is centred on its display as before.
+    @Test func aStrandedDockedWindowWithNoHomeTileIsCentred() {
+        let collapsed = Self.window(8), other = Self.window(9)
+        let parked = main.parkedFrame(size: Size(width: 400, height: 300), among: [main])
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(collapsed, parked)], homeFrames: [:], displays: [main], docked: [collapsed.identity],
+            homeTiles: [other.identity: Self.tile])
+        #expect(plan == [collapsed: Rect(x: 520, y: 312.5, width: 400, height: 300)])
+    }
+
+    /// The tile's display decides, not the display the parked sliver is reported on.
+    @Test func aHomeTileOnAnotherDisplayIsUsedOnThatDisplay() {
+        let docked = Self.window(7)
+        let sideTile = Rect(x: 1448, y: 8, width: 952, height: 1064)
+        let parked = main.parkedFrame(size: Size(width: 400, height: 300), among: [main, side])
+        let plan = Recovery.terminationPlan(
+            windows: [Self.info(docked, parked)], homeFrames: [:], displays: [main, side], docked: [docked.identity],
+            homeTiles: [docked.identity: sideTile])
+        #expect(plan == [docked: sideTile])
+    }
+
+    @Test func floatersAndThePhase3PlanAreUnchangedByHomeTiles() {
+        let parked = Self.window(1), docked = Self.window(3)
+        let home = Rect(x: 1300, y: 700, width: 400, height: 300)
+        let windows = [
+            Self.info(parked, main.parkedFrame(size: Size(width: 400, height: 300), among: [main])),
+            Self.info(docked, Rect(x: 0, y: 25, width: 720, height: 875)),
+        ]
+        let phase3 = Recovery.terminationPlan(windows: windows, homeFrames: [parked.identity: home], displays: [main], docked: [docked.identity])
+        let withTiles = Recovery.terminationPlan(
+            windows: windows, homeFrames: [parked.identity: home], displays: [main], docked: [docked.identity],
+            homeTiles: [parked.identity: Self.tile])
+        #expect(phase3 == [parked: Rect(x: 1040, y: 600, width: 400, height: 300)])
+        #expect(withTiles == phase3, "a floater's home tile entry must not matter")
+    }
+
     @Test func anExcludedOrNeverDockWindowIsNeverMoved() {
         let excluded = Self.window(5), panel = Self.window(6)
         var never = Self.info(panel, Rect(x: 10000, y: 50, width: 400, height: 300))
