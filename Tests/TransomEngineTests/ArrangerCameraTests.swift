@@ -435,3 +435,19 @@ extension ArrangerCameraTests {
         for window in [a, b] { try await onScreen(window, harness) }
     }
 }
+
+/// WR-05 (04-REVIEW): a move dropped because its display went away leaves no stale pending target behind.
+extension ArrangerCameraTests {
+    @Test func aMoveOnADisplayThatWentAwayIsForgotten() async throws {
+        var (harness, _) = try await twoDisplays()
+        try await zoom(&harness, to: d, on: "side")
+        #expect(moves(await harness.send(.zoomTo(.home, displayUUID: "side"))).count == 1)  // never settles: the display goes
+
+        await harness.send(.inventory(WindowInventory(displays: [mainDisplay], windows: Array(harness.arranger.windows.values), initialRefreshComplete: true)))
+        await harness.send(.inventory(await harness.fake.inventory()))
+
+        try #require(harness.arranger.view(on: "side") != .home, "the committed view is still the node")
+        let effects = await harness.send(.zoomTo(.home, displayUUID: "side"))
+        #expect(moves(effects).count == 1, "Zoom Out was refused against the dropped move's target: \(infos(effects))")
+    }
+}

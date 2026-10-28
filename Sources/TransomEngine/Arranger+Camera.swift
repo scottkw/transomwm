@@ -138,6 +138,15 @@ extension Arranger {
         camera.pending = [:]
     }
 
+    /// A move whose display went away never settles (the stage drops it): its pending target and the new windows it kept
+    /// unparked go, so neither outlives it (WR-05).
+    mutating func forgetMoves(onDisplaysOtherThan present: Set<String>) {
+        let gone = camera.pending.filter { !present.contains($0.key) }.values
+        guard !gone.isEmpty else { return }
+        camera.pending = camera.pending.filter { present.contains($0.key) }
+        camera.unparkedNew = camera.unparkedNew.filter { id in !gone.contains { world[$0.key]?.contains(WindowRef(identity: id)) == true } }
+    }
+
     mutating func setZoomEnabled(_ on: Bool) -> [ArrangerEffect] {
         camera.enabled = on
         guard !on else { return [] }

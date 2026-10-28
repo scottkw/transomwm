@@ -217,6 +217,7 @@ public struct Arranger: Sendable {
                 if display.currentSpaceID == nil { display.currentSpaceID = previous.first { $0.uuid == display.uuid }?.currentSpaceID }
                 return display
             }
+            forgetMoves(onDisplaysOtherThan: Set(displays.map(\.uuid)))
             sessionPaused = inventory.sessionPaused
             let dormant = Set(dormantWindows.map(\.identity))
             windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
@@ -703,6 +704,7 @@ public struct Arranger: Sendable {
         undockedWanted[window.identity] = nil
         floaterFloors[window.identity] = nil
         camera.collapsible.remove(window.identity)
+        camera.unparkedNew.remove(window.identity)
         focusOrder.removeAll { $0 == window.identity }
     }
 
