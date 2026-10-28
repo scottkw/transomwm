@@ -225,8 +225,15 @@ import os
         }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.watchdogTick() }
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                // ⌘-Tab sends no focused-window change, so pick mode must also end here (G-04-12).
+                if app?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                    self?.zoomInput.endPick(reason: "app activated")
+                }
+                self?.watchdogTick()
+            }
         }
     }
 
