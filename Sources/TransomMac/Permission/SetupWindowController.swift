@@ -38,6 +38,7 @@ import SwiftUI
     }
 
     func makeWindow() -> NSWindow {
+        if let window { return window }  // a second window would orphan the first, still delegate-wired
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? ProcessInfo.processInfo.processName
         let view = SetupView(permission: permission, appName: appName) { [weak self] in self?.window?.performClose(nil) }
         let hosting = NSHostingController(rootView: view)
