@@ -52,6 +52,42 @@ nonisolated public enum ZoomCopy {
     public static let zoomOffAnnouncement = "Zoom off"
     public static let zoomOnAnnouncement = "Zoom on"
 
+    // MARK: Shortcuts window (Surface 8, Copywriting Contract)
+
+    public static let shortcutsWindowTitle = "Shortcuts"
+    public static let mouseSection = "Mouse"
+    public static let doubleClickToggle = "Double-click a title bar to frame its window"
+    public static let doubleClickFooterOn = "When off, double-clicking a title bar does what Desktop & Dock settings say."
+    public static let doubleClickFooterZoomOff = "Turn on zoom to use this."
+    public static let restoreDefaults = "Restore Defaults"
+    public static let restoreDefaultsMessage = "Restore all shortcuts to their defaults?"
+    public static let restoreDefaultsInformative = "Every shortcut you changed or cleared goes back to its default. This can't be undone."
+
+    /// A Recorder row's title: the menu title, naming the submenu where the item title alone ("Left") is ambiguous.
+    public static func shortcutTitle(_ command: Command) -> String {
+        switch command {
+        case .camera(.pan(let edge)): "Move View \(MenuCopy.direction(edge))"
+        case .focus(let edge): "Focus \(MenuCopy.direction(edge))"
+        case .moveOrSnap(let edge): "Move Window \(MenuCopy.direction(edge)) or Snap to \(MenuCopy.snapTitle(half(edge)))"
+        case .toggleDesktop: "Hide or Show Desktop Tile"
+        case .togglePause: "Pause or Resume Arranging"
+        default: MenuCopy.commandTitle(command)
+        }
+    }
+
+    private static func half(_ edge: Edge) -> SnapTarget {
+        switch edge {
+        case .left: .leftHalf
+        case .right: .rightHalf
+        case .top: .topHalf
+        case .bottom: .bottomHalf
+        }
+    }
+
+    public static func duplicateShortcut(usedBy title: String) -> String {
+        "This shortcut is already used by \u{201C}\(title)\u{201D} in Transom."
+    }
+
     // MARK: Debug submenu lines (Surface 6)
 
     /// "Zoom: on, {capture state}" or "Zoom: off"; `capture` is one of the capture strings above.
