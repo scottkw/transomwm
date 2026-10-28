@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Zoom Camera
-status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-10-28T16:10:40.765Z"
+status: verifying
+stopped_at: Completed 04-08-PLAN.md
+last_updated: "2026-10-28T16:38:24.841Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 4 execution started
-state_head: 305782b5ed4d3e48e9d173ef5e9d9ba7df31422c
+state_head: 113f70957496cecec2ddb9b75ceb9b9f24bc20ca
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 59
-  completed_plans: 58
+  completed_plans: 59
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 Phase: 4 (Zoom Camera) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-27 — Phase 4 execution started
 
 Progress: [███░░░░░░░] 33%
@@ -109,6 +109,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 04 P05 | 9min | 3 tasks | 13 files |
 | Phase 04 P06 | 14 min | 3 tasks | 12 files |
 | Phase 4 P07 | 13 min | 3 tasks | 13 files |
+| Phase 04 P08 | 21 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -279,6 +280,9 @@ Recent decisions affecting current work:
 - [Phase 4]: Collapsible windows plan at 1x1 in every Phase 3 plan and dry run; ViewPlanner alone sees learned minimums (04-07)
 - [Phase 4]: TileMove.Kind.collapsed means a block in the end view (04-07)
 - [Phase 4]: Pick mode takes a collapsed block's click from the tap's passing press, not the panel (04-07)
+- [Phase 04]: 04-08: homeTiles() covers only desks whose camera is not at home, so zoom off and home keep the Phase 3 quit plan (the OS can keep a docked window a few points off its tile)
+- [Phase 04]: 04-08: crash and crash-loop relaunches needed no code (camera never persisted); tests pin it
+- [Phase 04]: 04-08: fixed a 04-04 bug where the stage's reveal timer was never stored, so an old settle's cap revealed the next move early
 
 ### Quick Tasks Completed
 
@@ -319,8 +323,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T16:10:40.383Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-10-28T16:38:24.560Z
+Stopped at: Completed 04-08-PLAN.md
 Resume file: None
 
 ## Deferred Verification

@@ -64,15 +64,15 @@
 
 ### Zoom
 
-- [ ] **ZOOM-01**: User can zoom out to see every window on the display at once
-- [ ] **ZOOM-02**: User can step in or out one level of the layout tree
+- [x] **ZOOM-01**: User can zoom out to see every window on the display at once
+- [x] **ZOOM-02**: User can step in or out one level of the layout tree
 - [ ] **ZOOM-03**: User can ⌘⇧-drag a rectangle to zoom to the windows it frames
-- [ ] **ZOOM-04**: User can go back and forward through previous views
-- [ ] **ZOOM-05**: Zoomed views show live window snapshots, or app colour and icon when Screen Recording isn't granted
+- [x] **ZOOM-04**: User can go back and forward through previous views
+- [x] **ZOOM-05**: Zoomed views show live window snapshots, or app colour and icon when Screen Recording isn't granted
 - [ ] **ZOOM-06**: Clicking a window in a zoomed view zooms in to it and focuses it
-- [ ] **ZOOM-07**: After a zoom settles, real windows are arranged at their new sizes within 500 ms for 15 windows, without visible flashing of stale layouts (the 500 ms is the write path only: from the first AX write to the last read-back; the capture budget and the 250 ms animation are separate. 04-01 verdict, 2026-10-28)
+- [x] **ZOOM-07**: After a zoom settles, real windows are arranged at their new sizes within 500 ms for 15 windows, without visible flashing of stale layouts (the 500 ms is the write path only: from the first AX write to the last read-back; the capture budget and the 250 ms animation are separate. 04-01 verdict, 2026-10-28)
 - [ ] **ZOOM-08**: Zoom hotkeys are rebindable
-- [ ] **ZOOM-09**: User can move the view to the neighbouring area left, right, up or down by hotkey and URL
+- [x] **ZOOM-09**: User can move the view to the neighbouring area left, right, up or down by hotkey and URL
 - [ ] **ZOOM-10**: User can frame the focused window on its own and toggle back, by hotkey, URL or double-clicking its title bar
 - [ ] **ZOOM-11**: User can frame the Desktop on its own and toggle back, by hotkey, URL or double-clicking the Desktop
 - [ ] **ZOOM-12**: Esc cancels a ⌘⇧-drag rectangle zoom in progress
@@ -198,15 +198,15 @@ Populated by the roadmapper on 2026-10-23.
 | SAFE-04 | Phase 3 | Complete |
 | SAFE-05 | Phase 2 | Complete |
 | SAFE-06 | Phase 3 | Complete |
-| ZOOM-01 | Phase 4 | Pending |
-| ZOOM-02 | Phase 4 | Pending |
+| ZOOM-01 | Phase 4 | Complete |
+| ZOOM-02 | Phase 4 | Complete |
 | ZOOM-03 | Phase 4 | Pending |
-| ZOOM-04 | Phase 4 | Pending |
-| ZOOM-05 | Phase 4 | Pending |
+| ZOOM-04 | Phase 4 | Complete |
+| ZOOM-05 | Phase 4 | Complete |
 | ZOOM-06 | Phase 4 | Pending |
-| ZOOM-07 | Phase 4 | Pending |
+| ZOOM-07 | Phase 4 | Complete |
 | ZOOM-08 | Phase 4 | Pending |
-| ZOOM-09 | Phase 4 | Pending |
+| ZOOM-09 | Phase 4 | Complete |
 | ZOOM-10 | Phase 4 | Pending |
 | ZOOM-11 | Phase 4 | Pending |
 | ZOOM-12 | Phase 4 | Pending |

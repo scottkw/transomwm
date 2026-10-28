@@ -217,7 +217,7 @@ Plans:
   5. User can rebind every zoom hotkey, and turning zoom off leaves Phase 3 tiling fully working
   6. User can move the view to a neighbouring area, frame the focused window or the Desktop on its own and toggle back (including by double-click), cancel a rectangle zoom with Esc, and tiles too small for their window show as collapsed app-colour blocks that zoom in on double-click
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 **Wave 1**
@@ -240,7 +240,7 @@ Plans:
 - [x] 04-07-PLAN.md — Collapsed blocks: zoom-on oversized drops, CollapsedPanels, Collapsed drop preview
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 04-08-PLAN.md — Safety and proof: home tiles on quit, Restore All, crash rescue, 15-window VM settle, phase UAT
+- [x] 04-08-PLAN.md — Safety and proof: home tiles on quit, Restore All, crash rescue, 15-window VM settle, phase UAT
 **UI hint**: yes
 **Research**: Needs phase research. Start with a feasibility spike with measurable criteria: settle latency with Electron-heavy windows, terminal re-wrap, represented-state UX, ScreenCaptureKit memory growth over hours (soak test), overlay window level versus menus, Core Animation performance with 100+ layers
 **Scope notes**: Only the snapshot overlay animates; real windows get one AX write when the camera settles (changed and visible targets only). Capture before parking; park by moving, not shrinking. Camera targets are `NodeID`s so history and saved views survive reflows.
@@ -343,7 +343,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Layout Model | 6/6 | Complete    | 2026-10-24 |
 | 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
-| 4. Zoom Camera | 7/8 | In Progress | - |
+| 4. Zoom Camera | 8/8 | In Progress | - |
 | 5. Gestures | 0/TBD | Not started | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
