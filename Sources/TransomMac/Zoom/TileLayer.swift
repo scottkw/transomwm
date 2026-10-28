@@ -144,16 +144,19 @@ nonisolated final class TileLayer: CALayer {
 
     private static var font: NSFont { NSFont.preferredFont(forTextStyle: .body) }
 
-    /// One line, middle-truncated, Body, `labelColor` (resolved by the caller's drawing appearance).
-    private static func attributed(_ title: String) -> NSAttributedString {
+    /// One line, middle-truncated, Body, in `color` (`labelColor` for measuring).
+    private static func attributed(_ title: String, color: NSColor = .labelColor) -> NSAttributedString {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingMiddle
-        return NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: NSColor.labelColor, .paragraphStyle: style])
+        return NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style])
     }
 
-    private static func text(_ title: String, size: CGSize) -> NSImage {
-        NSImage(size: size, flipped: false) { rect in
-            attributed(title).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    /// The title image. `labelColor` is resolved now, in the caller's drawing appearance: the image draws lazily, when
+    /// that appearance is no longer current (black text on a dark capsule otherwise, UAT 04).
+    static func text(_ title: String, size: CGSize) -> NSImage {
+        let color = NSColor(cgColor: NSColor.labelColor.cgColor) ?? .labelColor
+        return NSImage(size: size, flipped: false) { rect in
+            attributed(title, color: color).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
             return true
         }
     }
