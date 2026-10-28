@@ -1,0 +1,18 @@
+{
+  "name": "transomwm-website",
+  "compatibility_date": "2026-10-20",
+  // Explicit because wrangler defaults workers_dev to false when routes are present.
+  "workers_dev": true,
+  // Version URLs off: no non-active version gets a public workers.dev URL.
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public"
+  },
+  // Custom Domains: Cloudflare creates the DNS records and certificates on deploy. The zone
+  // (transomwm.app) must already be in this Cloudflare account. While at least one entry remains,
+  // this list is the full set: a hostname removed here is detached on the next deploy.
+  "routes": [
+    { "pattern": "transomwm.app", "custom_domain": true },
+    { "pattern": "www.transomwm.app", "custom_domain": true }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-28T16:40:00Z"},
+  "title": "Transom",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 760, "title": "App icon"},
+    "MenuBar.dc.html": {"x": 1360, "y": 0, "w": 1280, "h": 760, "title": "Menu bar icon"},
+    "Website.dc.html": {"x": 0, "y": 1180, "w": 1440, "h": 6400, "title": "Website — transomwm.app", "expand": "fill"}
+  },
+  "order": ["Main.dc.html", "MenuBar.dc.html", "Website.dc.html"],
+  "notes": {
+    "icons": {"x": 0, "y": -300, "text": "Icons", "kind": "title1", "maxW": 2640},
+    "site": {"x": 0, "y": 880, "text": "Website", "kind": "title1", "maxW": 1440}
+  },
+  "designSystems": []
+}
