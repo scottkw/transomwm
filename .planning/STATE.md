@@ -257,7 +257,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Re-check on the first Transom build (deferred from Phase 3 by the user, 2026-10-27): UAT 16 (Hide Desktop on one display parks safely) and the display half of UAT 17 (two displays x two Spaces relaunch, clean and kill -9, plus a cross-display drag while a window is dormant, WR-04) on the DELL; in the VM, pre-dock frames survive a relaunch, and a Dock tile over a docked window's green button owns the click.
+- Re-check on the first Transom build (deferred from Phase 3 by the user, 2026-10-27): UAT 16 (Hide Desktop on one display parks safely) and the display half of UAT 17 (two displays x two Spaces relaunch, clean and kill -9, plus a cross-display drag while a window is dormant, WR-04) on the DELL; in the VM, pre-dock frames survive a relaunch, and a Dock tile over a docked window's green button owns the click. Also Phase 2 UAT 9 (deferred by the user, 2026-10-27): multi-display Nudge on the DELL, with the external display above, left and below, the Display column following, and one displaysChanged then one refresh about 500 ms after a hot-plug.
 
 ### Blockers/Concerns
 
