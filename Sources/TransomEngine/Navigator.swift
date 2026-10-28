@@ -288,10 +288,10 @@ extension Arranger {
             guard let focused, let info = windows[focused.identity], info.kind == .dockable, !info.isExcluded, deskKey(of: focused) == key,
                 desk.tree.state(of: focused) == .present, let leaf = desk.tree.leaf(containing: focused)
             else { return .failure(.noDockedWindow) }
-            return toggle(.node(leaf))
+            return toggle(Navigator.target(leaf, in: desk.tree))
         case .frameDesktop:
             guard desk.tree.isDesktopHidden == false else { return .failure(.desktopHidden) }
-            return toggle(.node(.desktop))
+            return toggle(Navigator.target(.desktop, in: desk.tree))
         }
     }
 }

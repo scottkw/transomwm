@@ -349,6 +349,21 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
         expectRefused(await harness.camera(.frameDesktop), "The Desktop tile is hidden", command: "frameDesktop")
         #expect(!harness.arranger.availability(.camera(.frameDesktop), context: main))
     }
+
+    /// IN-01: with nothing docked the Desktop tile is the root, so framing it is home, never `.node(root)`.
+    @Test func frameDesktopOnAnEmptyDeskStaysHome() async throws {
+        var harness = try await nested()
+        for id: UInt32 in [1, 2, 3] { await harness.fake.close(id) }
+        await harness.refresh()
+        #expect(harness.arranger.world[key]?.tree.root == .desktop)
+        #expect(harness.arranger.view(on: "main") == .home)
+
+        let effects = await harness.camera(.frameDesktop)
+        await harness.settle(effects)
+
+        #expect(moves(effects).allSatisfy { $0.to == .home })
+        #expect(harness.arranger.view(on: "main") == .home)
+    }
 }
 
 private func entry(_ raw: UInt64) -> ViewEntry {
