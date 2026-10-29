@@ -115,7 +115,7 @@ Out of scope:
 <specifics>
 ## Specific Ideas
 
-- The host has both a built-in trackpad and a Magic Trackpad; the user's UAT should cover both, including disconnecting and reconnecting the Magic Trackpad.
+- The host has only the MacBook Air's built-in trackpad (corrected at the spike gate, 2026-10-29); no Magic Trackpad, so reconnect checks are N/A. Spaces switching on this Mac is a 4-finger swipe or ⌃←→.
 
 </specifics>
 
