@@ -20,10 +20,14 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
     public var finderPID: Int32
     /// Registry IDs of the trackpads (field 87). Empty means not known, and the sender filter is off (E-04).
     public var trackpadSenders: Set<UInt64>
+    /// Whether the target pid (field 40) may short-circuit the wallpaper test. Off by default: in the VM (05-SPIKE)
+    /// synthetic events carried the frontmost app's pid even over bare wallpaper, so the pid can't stand for "the app
+    /// under the pointer" until spike gate T6 shows real trackpad events do.
+    public var trustsTargetPID: Bool
 
     public init(
         armed: Bool = false, disarmReason: DisarmReason? = nil, deskDisplays: [CGRect] = [], fullScreenDisplays: [CGRect] = [],
-        finderPID: Int32 = 0, trackpadSenders: Set<UInt64> = []
+        finderPID: Int32 = 0, trackpadSenders: Set<UInt64> = [], trustsTargetPID: Bool = false
     ) {
         self.armed = armed
         self.disarmReason = disarmReason
@@ -31,6 +35,7 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
         self.fullScreenDisplays = fullScreenDisplays
         self.finderPID = finderPID
         self.trackpadSenders = trackpadSenders
+        self.trustsTargetPID = trustsTargetPID
     }
 }
 
@@ -172,8 +177,8 @@ public nonisolated enum GestureTapRules {
         }
     }
 
-    /// Whether the tap takes this event. `surface` is called at most once per sequence, only when neither ⌥ nor the
-    /// target pid decides.
+    /// Whether the tap takes this event. `surface` is called at most once per sequence, only when neither ⌥ nor (when
+    /// trusted) the target pid decides.
     public static func decide(
         _ input: Input, state: GestureTapState, latch: inout Latch, surface: (CGPoint) -> PointerSurface
     ) -> Decision {
@@ -247,7 +252,7 @@ public nonisolated enum GestureTapRules {
         }
         if !input.flags.intersection([.maskControl, .maskCommand]).isEmpty { return passing(.chord) }
         if option { return taking(.optionHeld) }
-        if input.targetPID != 0 && input.targetPID != state.finderPID { return passing(.shortCircuit) }
+        if state.trustsTargetPID, input.targetPID != 0, input.targetPID != state.finderPID { return passing(.shortCircuit) }
         switch surface(location) {
         case .wallpaper: return taking(.wallpaper)
         case .window: return passing(.windowUnderPointer)
