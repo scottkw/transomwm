@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 current_phase: 5
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-10-28T23:54:04.107Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-10-29T23:38:33.244Z"
 last_activity: 2026-10-28
 last_activity_desc: Phase 5 execution started
-state_head: affb25ec29973c624deb495b0ffe92ac6806e624
+state_head: f4cef28f36574f73da39377aefff1f0e285632ed
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 67
-  completed_plans: 59
+  completed_plans: 60
   percent: 44
 ---
 
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 5 — EXECUTING
-Plan: 1 of ?
-Status: Executing Phase 5
+Plan: 2 of 8
+Status: Ready to execute
 Last activity: 2026-10-28 — Phase 5 execution started
 
 Progress: [████░░░░░░] 44%
@@ -110,6 +110,7 @@ Progress: [████░░░░░░] 44%
 | Phase 04 P06 | 14 min | 3 tasks | 12 files |
 | Phase 4 P07 | 13 min | 3 tasks | 13 files |
 | Phase 04 P08 | 21 min | 3 tasks | 12 files |
+| Phase 05 P01 | 23h43m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -283,6 +284,11 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-08: homeTiles() covers only desks whose camera is not at home, so zoom off and home keep the Phase 3 quit plan (the OS can keep a docked window a few points off its tile)
 - [Phase 04]: 04-08: crash and crash-loop relaunches needed no code (camera never persisted); tests pin it
 - [Phase 04]: 04-08: fixed a 04-04 bug where the stage's reveal timer was never stored, so an old settle's cap revealed the next move early
+- [Phase 05]: E-01 = "tap+multitouch": plan 05-07 ships MultitouchSupport; MT supplies pinch when the tap sees no zoom events (C4)
+- [Phase 05]: C1: a consuming pinch latch takes every type-29 event (all sub-types); host leaked sub-type 4 inside taken pinches
+- [Phase 05]: C2: recognizer ignores pan sequences with no phase 1/2 or zero delta (128→8 noise)
+- [Phase 05]: C3: trustsTargetPID stays false (field 40 = frontmost app on real trackpads)
+- [Phase 05]: C5: host has built-in trackpad only; Magic Trackpad and reconnect UAT items are N/A
 
 ### Quick Tasks Completed
 
@@ -323,9 +329,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T21:37:17.160Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-gestures/05-CONTEXT.md
+Last session: 2026-10-29T23:38:24.961Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
 
 ## Deferred Verification
 
