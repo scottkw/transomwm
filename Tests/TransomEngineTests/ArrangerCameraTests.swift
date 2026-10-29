@@ -1,4 +1,4 @@
-import TransomEngine
+@testable import TransomEngine
 import TransomModel
 import TransomTestSupport
 import Testing
@@ -258,6 +258,90 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         let ids = move.tiles.map(\.window.identity)
         #expect(ids == ids.sorted())
         #expect(ids.count == 3)
+    }
+
+    // 05-02: the gesture preview (E-03) and targets (D-02). Previews change no camera state; the commit is zoomTo.
+
+    @Test func previewMoveIsTheNextZoomToMoveAndChangesNothing() async throws {
+        var harness = try await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        let target = ViewTarget.node(try leaf(a, harness))
+        let pending = harness.arranger.camera.pending, nextID = harness.arranger.camera.nextMoveID
+
+        let preview = try #require(harness.arranger.previewMove(to: target, displayUUID: "main"))
+
+        #expect(harness.arranger.camera.pending == pending && harness.arranger.camera.nextMoveID == nextID)
+        #expect(preview.id == 0 && preview.displayUUID == "main" && preview.from == .home && preview.to == target)
+        let move = try #require(moves(await harness.send(.zoomTo(target, displayUUID: "main"))).first)
+        #expect(move.tiles == preview.tiles)
+        #expect(move.from == preview.from && move.to == preview.to)
+    }
+
+    @Test func previewMoveWhilePendingStartsFromThePendingTarget() async throws {
+        var harness = try await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        let first = ViewTarget.node(try leaf(a, harness))
+        try #require(moves(await harness.send(.zoomTo(first, displayUUID: "main"))).count == 1)  // never settled
+        let pending = harness.arranger.camera.pending, nextID = harness.arranger.camera.nextMoveID
+
+        let preview = try #require(harness.arranger.previewMove(to: .home, displayUUID: "main"))
+
+        #expect(preview.from == first && preview.to == .home)
+        #expect(harness.arranger.camera.pending == pending && harness.arranger.camera.nextMoveID == nextID)
+        let retarget = try #require(moves(await harness.send(.zoomTo(.home, displayUUID: "main"))).first)
+        #expect(retarget.tiles == preview.tiles)
+    }
+
+    @Test func previewMoveIsNilWhenTheCameraCannotMove() async throws {
+        var harness = try await threeDocked()
+        let target = ViewTarget.node(try leaf(a, harness))
+        #expect(harness.arranger.previewMove(to: target, displayUUID: "main") == nil, "zoom off")
+        await harness.send(.zoomEnabled(true))
+        #expect(harness.arranger.previewMove(to: target, displayUUID: "nowhere") == nil, "unknown display")
+        #expect(harness.arranger.previewMove(to: .home, displayUUID: "main") == nil, "already shown")
+        #expect(harness.arranger.previewMove(to: .node(NodeID(raw: 9_999)), displayUUID: "main") == nil, "no such node")
+        #expect(harness.arranger.stillMove(displayUUID: "nowhere") == nil)
+
+        await harness.send(.command(.togglePause, focused: nil))
+
+        #expect(harness.arranger.previewMove(to: target, displayUUID: "main") == nil, "paused")
+        #expect(harness.arranger.stillMove(displayUUID: "main") == nil, "paused")
+    }
+
+    @Test func stillMoveIsTheShownTilesStandingStill() async throws {
+        var harness = try await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        let target = ViewTarget.node(try leaf(a, harness))
+        let move = try #require(moves(await harness.send(.zoomTo(target, displayUUID: "main"))).first)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+        let camera = harness.arranger.camera
+
+        let still = try #require(harness.arranger.stillMove(displayUUID: "main"))
+
+        #expect(still.id == 0 && still.from == target && still.to == target)
+        #expect(still.tiles.map(\.window) == [a])
+        #expect(still.tiles.allSatisfy { $0.start == $0.end && $0.kind == .stay })
+        #expect(still.tiles.first?.end == full)
+        #expect(harness.arranger.camera.pending == camera.pending && harness.arranger.camera.nextMoveID == camera.nextMoveID)
+        #expect(harness.arranger.camera.views == camera.views)
+    }
+
+    @Test func gestureTargetsFollowThePinchPoint() async throws {
+        var harness = try await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        let tree = try #require(harness.arranger.world[key]?.tree)
+        let frameB = try #require(await harness.frame(b))
+        let underB = Navigator.ancestors(of: try leaf(b, harness), in: tree)[1]  // the root's child holding b
+        let pointer = Point(x: frameB.midX, y: frameB.midY)
+
+        #expect(harness.arranger.gestureTarget(.pinchIn, displayUUID: "main", pointer: pointer) == .success(.node(underB)))
+        #expect(harness.arranger.gestureTarget(.pinchOut, displayUUID: "main", pointer: pointer) == .failure(.alreadyHome))
+        #expect(harness.arranger.gestureTarget(.pan(.right), displayUUID: "main", pointer: pointer) == .failure(.noArea(.right)))
+
+        let move = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+
+        #expect(harness.arranger.gestureTarget(.pinchIn, displayUUID: "main", pointer: pointer) == .failure(.nothingToZoomIn))
     }
 }
 
