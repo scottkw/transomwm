@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 current_phase: 5
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-10-29T23:38:33.244Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-10-29T23:51:58.690Z"
 last_activity: 2026-10-28
 last_activity_desc: Phase 5 execution started
-state_head: f4cef28f36574f73da39377aefff1f0e285632ed
+state_head: de81080b03e336f1738d9dd31819d54e68c50163
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 67
-  completed_plans: 60
+  completed_plans: 61
   percent: 44
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 5 — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-10-28 — Phase 5 execution started
 
@@ -111,6 +111,7 @@ Progress: [████░░░░░░] 44%
 | Phase 4 P07 | 13 min | 3 tasks | 13 files |
 | Phase 04 P08 | 21 min | 3 tasks | 12 files |
 | Phase 05 P01 | 23h43m | 3 tasks | 8 files |
+| Phase 05 P02 | 10min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -289,6 +290,8 @@ Recent decisions affecting current work:
 - [Phase 05]: C2: recognizer ignores pan sequences with no phase 1/2 or zero delta (128→8 noise)
 - [Phase 05]: C3: trustsTargetPID stays false (field 40 = frontmost app on real trackpads)
 - [Phase 05]: C5: host has built-in trackpad only; Magic Trackpad and reconnect UAT items are N/A
+- [Phase 05]: 05-02: C2 applied kind-agnostically: a never-started sequence with no phase 1/2 or no motion ends silently; a started gesture always gets exactly one .ended
+- [Phase 05]: 05-02: fingers-down timeout ends as a cancel; a pending fingers-up pan release decides after momentumWait and is endedByTimeout only when polled past 0.3 s
 
 ### Quick Tasks Completed
 
@@ -329,8 +332,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-29T23:38:24.961Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-10-29T23:51:58.227Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
 
 ## Deferred Verification
