@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Runs one transom-zoom-spike subcommand inside the Tart test VM, never on this Mac (04-01, CONTEXT E): builds the
-# harness and TransomFixtureApp here (nothing runs), copies them into the VM, runs the subcommand there and copies its
-# JSON lines (and any recordings or stills) back to .build/spike/<subcommand>-<timestamp>/, whose path is the last line.
-# Usage: scripts/vm-spike.sh <subcommand> [args...]      e.g. scripts/vm-spike.sh settle --runs 2 --fixtures 4
-# Env: TRANSOM_VM (default pane-test), TRANSOM_VM_USER (default admin), TRANSOM_VM_KEY (default ~/.ssh/pane_vm_ed25519),
+# Runs one spike subcommand inside the Tart test VM, never on this Mac (04-01, 05-01, CONTEXT E / D-08): builds the
+# harness and TransomFixtureApp here (nothing runs), copies them into the VM, wakes the guest display, runs the
+# subcommand there and copies its JSON lines (and any recordings or stills) back to
+# .build/spike/[gesture-]<subcommand>-<timestamp>/, whose path is the last line.
+# Usage: [SPIKE_PRODUCT=transom-gesture-spike] scripts/vm-spike.sh <subcommand> [args...]
+#        e.g. scripts/vm-spike.sh settle --runs 2 --fixtures 4
+#             SPIKE_PRODUCT=transom-gesture-spike scripts/vm-spike.sh synth --scenario all --seconds 60
+# Env: SPIKE_PRODUCT (default transom-zoom-spike), TRANSOM_VM (default pane-test), TRANSOM_VM_USER (default admin),
+#      TRANSOM_VM_KEY (default ~/.ssh/pane_vm_ed25519),
 #      SPIKE_ENV (extra VAR=value words for the guest run, e.g. "TRANSOM_STAGE_CAPTURABLE=1").
 # Transom is quit in the VM for the run (its tiling would fight the harness) and relaunched after if it was running.
 set -euo pipefail
@@ -11,6 +15,7 @@ set -euo pipefail
 subcommand="${1:?usage: scripts/vm-spike.sh <subcommand> [args...]}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+product="${SPIKE_PRODUCT:-transom-zoom-spike}"
 vm="${TRANSOM_VM:-pane-test}"
 key="${TRANSOM_VM_KEY:-$HOME/.ssh/pane_vm_ed25519}"
 host="${TRANSOM_VM_USER:-admin}@$(tart ip "$vm")"
@@ -22,11 +27,11 @@ mkdir .build/transom-vm.lock 2>/dev/null || { echo "vm-spike: VM busy (.build/tr
 trap 'rmdir .build/transom-vm.lock' EXIT
 
 scratch=.build/vm
-swift build --scratch-path "$scratch" --product transom-zoom-spike >&2
+swift build --scratch-path "$scratch" --product "$product" >&2
 swift build --scratch-path "$scratch" --product TransomFixtureApp >&2
 stage="$scratch/spike-stage"
 rm -rf "$stage" && mkdir -p "$stage"
-cp -R "$scratch/debug/transom-zoom-spike" "$scratch/debug/TransomFixtureApp" "$scratch"/debug/*.bundle "$stage/"
+cp -R "$scratch/debug/$product" "$scratch/debug/TransomFixtureApp" "$scratch"/debug/*.bundle "$stage/"
 rsync -a --delete --exclude out -e "ssh ${ssh_opts[*]}" "$stage/" "$host:transomspike/" >&2
 
 args="$(printf '%q ' "$@")"
@@ -45,12 +50,17 @@ caffeinate -d -i ssh -t "${ssh_opts[@]}" "$host" "
         for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Transom >/dev/null || break; sleep 0.5; done
         if pgrep -x Transom >/dev/null; then echo 'vm-spike: Transom is still running in the VM' >&2; exit 1; fi
     fi
+    # A sleeping guest display leaves CGMainDisplayID() == 0 and every frame 768 pt off (04-UAT, Pitfall 11).
+    caffeinate -u -t 2
     rc=0
-    env ${SPIKE_ENV:-} caffeinate -dimsu ./transom-zoom-spike $args --out ~/transomspike/out/out.jsonl || rc=\$?
+    env ${SPIKE_ENV:-} caffeinate -dimsu ./$product $args --out ~/transomspike/out/out.jsonl || rc=\$?
     exit \$rc
 " >&2 || rc=$?
 
-dest=".build/spike/${subcommand}-$(date +%Y%m%d-%H%M%S)"
+# Gesture runs land beside the CLI's own default (.build/spike/gesture-<subcommand>-…); zoom runs keep their names.
+prefix=""
+[ "$product" = transom-zoom-spike ] || { prefix="${product#transom-}"; prefix="${prefix%-spike}-"; }
+dest=".build/spike/${prefix}${subcommand}-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$dest"
 # Recordings and stills leave the guest once copied (T-04-05); .build/ is git-ignored.
 rsync -a -e "ssh ${ssh_opts[*]}" --exclude work "$host:transomspike/out/" "$dest/" >&2 || true
