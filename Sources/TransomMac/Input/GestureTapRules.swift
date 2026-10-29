@@ -20,9 +20,8 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
     public var finderPID: Int32
     /// Registry IDs of the trackpads (field 87). Empty means not known, and the sender filter is off (E-04).
     public var trackpadSenders: Set<UInt64>
-    /// Whether the target pid (field 40) may short-circuit the wallpaper test. Off by default: in the VM (05-SPIKE)
-    /// synthetic events carried the frontmost app's pid even over bare wallpaper, so the pid can't stand for "the app
-    /// under the pointer" until spike gate T6 shows real trackpad events do.
+    /// Whether the target pid (field 40) may short-circuit the wallpaper test. Off (C3): in the VM and on the host's
+    /// real trackpad (05-SPIKE T6) field 40 is the frontmost app's pid, not the app under the pointer.
     public var trustsTargetPID: Bool
 
     public init(
@@ -218,9 +217,11 @@ public nonisolated enum GestureTapRules {
         sequence.lastEvent = now
         let ends = zoom && (input.gesturePhase == 4 || input.gesturePhase == 8)
         latch.pinch = ends ? nil : sequence
-        // Envelopes 61/62 pass even inside a taken pinch (A4; spike gate T2 decides whether to flip this).
-        let taken = zoom || input.hidType == GestureEventFields.hidRotate || input.hidType == 0
-        guard sequence.consuming, taken else { return .pass }
+        // C1 (05-SPIKE T2): a taken pinch takes every type-29 sub-type inside it; sub-type 4 leaked 81 times on the host
+        // when only 8/5/0 were taken. The 61/62 envelopes still pass, so an app that saw the start envelope (it comes
+        // before zoom began) also sees the end one; passing them left nothing stuck on the host (A4 held).
+        let envelope = input.hidType == GestureEventFields.hidGestureStarted || input.hidType == GestureEventFields.hidGestureEnded
+        guard sequence.consuming, !envelope else { return .pass }
         return .consume(zoom ? sample(input, kind: .pinch, reason: first ? sequence.reason : nil) : nil)
     }
 

@@ -434,6 +434,10 @@ let scenarios: [Scenario] = {
         + Array(pinchSteps(option, survives: false, changes: 3).dropLast())
         + [gestureStep(0, 2, option, survives: false), gestureStep(GestureEventFields.hidZoom, 4, option, survives: false)]
         + [gestureStep(GestureEventFields.hidGestureEnded, 0, option, survives: true)]
+    // C1: the sub-type 4 events that leaked inside taken pinches on the host.
+    let subTypeFour = Array(pinchSteps(option, survives: false, changes: 3).dropLast())
+        + Array(repeating: gestureStep(4, 2, option, survives: false), count: 4)
+        + [gestureStep(GestureEventFields.hidZoom, 4, option, survives: false)]
     let rotate = [gestureStep(GestureEventFields.hidRotate, 1, option, survives: true)]
         + Array(repeating: gestureStep(GestureEventFields.hidRotate, 2, option, survives: true), count: 5)
         + [gestureStep(GestureEventFields.hidRotate, 4, option, survives: true)]
@@ -455,6 +459,7 @@ let scenarios: [Scenario] = {
         Scenario(name: "stuck-latch-then-plain-scroll", onWallpaper: false, steps: stuck),
         Scenario(name: "alt-pinch-envelopes", onWallpaper: false, steps: envelopes),
         Scenario(name: "rotate-only", onWallpaper: false, steps: rotate),
+        Scenario(name: "alt-pinch-subtype-4", onWallpaper: false, steps: subTypeFour),
     ]
 }()
 

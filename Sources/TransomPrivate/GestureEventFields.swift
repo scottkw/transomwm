@@ -31,6 +31,9 @@ public enum GestureEventFields {
     public static let senderID = CGEventField(rawValue: 87)!
 
     /// Field 110 values (WebKit, ScrollToZoom `kIOHIDEventTypeZoom = 8` / `kIOHIDEventTypeRotation = 5`).
+    /// Host data (05-SPIKE T2, built-in trackpad, macOS 27.2): inside real pinches sub-type 4 came 91 times and 5 only
+    /// twice, so `hidRotate` may not be what real rotation sends (4 is `kIOHIDEventTypeTranslation` in IOHIDFamily).
+    /// `GestureTapRules.decide` no longer depends on it: a taken pinch takes every sub-type but the envelopes (C1).
     public static let hidZoom: Int64 = 8
     public static let hidRotate: Int64 = 5
     public static let hidGestureStarted: Int64 = 61

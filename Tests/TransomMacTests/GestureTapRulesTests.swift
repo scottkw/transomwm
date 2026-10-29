@@ -228,6 +228,23 @@ private let gesture = GestureEventFields.gestureType
         #expect(isConsume(pinch(&latch, 2)))
     }
 
+    /// C1 (05-SPIKE T2): every type-29 sub-type inside a taken pinch is taken, sub-type 4 above all (81 leaked on the
+    /// host); the envelopes still pass, and nothing is taken once the zoom has ended or in a pinch that passes.
+    @Test func aTakenPinchTakesEverySubTypeButTheEnvelopes() {
+        var latch = GestureTapRules.Latch.none
+        #expect(isConsume(pinch(&latch, 1)))
+        for hid: Int64 in [4, 0, 6, 32, 5, 7] { #expect(pinch(&latch, 2, hid: hid) == .consume(nil), "sub-type \(hid) passed") }
+        #expect(pinch(&latch, 0, hid: GestureEventFields.hidGestureStarted) == .pass)
+        #expect(pinch(&latch, 0, hid: GestureEventFields.hidGestureEnded) == .pass)
+        #expect(isConsume(pinch(&latch, 4)))
+        #expect(pinch(&latch, 2, hid: 4) == .pass)
+        #expect(pinch(&latch, 0, hid: 0) == .pass)
+
+        var plain = GestureTapRules.Latch.none
+        #expect(pinch(&plain, 1, flags: []) == .pass)
+        #expect(pinch(&plain, 2, hid: 4, flags: []) == .pass)
+    }
+
     @Test func magnificationIsClampedAndNonFiniteReadsZero() {
         var latch = GestureTapRules.Latch.none
         guard case .consume(let nan?) = pinch(&latch, 1, zoom: .nan) else { Issue.record("not consumed"); return }
