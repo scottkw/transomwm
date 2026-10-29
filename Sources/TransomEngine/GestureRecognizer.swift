@@ -103,6 +103,8 @@ public struct GestureRecognizer: Sendable {
     /// The signed value after each sample (p for a pinch, Σdx and Σdy for a pan), for flicks.
     private var history: [(t: Double, x: Double, y: Double)] = []
     private var lastT: Double?
+    /// A pan's fingers lifted short of the threshold: the release waits for the first momentum sample.
+    private var fingersUp = false
 
     public init(kind: Kind, viewSize: Size) {
         self.kind = kind
@@ -113,6 +115,7 @@ public struct GestureRecognizer: Sendable {
         guard !isFinished, raw.kind == kind else { return nil }
         let sample = sanitized(raw)
         lastT = sample.t
+        if sample.momentum != 0 { return fingersUp ? momentum(sample) : nil }
         switch sample.phase {
         case 1, 2: moved = true
         case 4: break
@@ -122,14 +125,19 @@ public struct GestureRecognizer: Sendable {
         sumM += sample.magnification
         sumX += sample.dx
         sumY += sample.dy
+        if kind == .pan, axis == nil { lockAxis() }
         history.append(kind == .pinch ? (sample.t, signed, 0) : (sample.t, sumX, sumY))
-        return sample.phase == 4 ? end() : report()
+        return sample.phase == 4 ? fingersLifted() : report()
     }
 
-    /// Ends a gesture whose events stopped: `fingersDownTimeout` with fingers down, as a cancel.
+    /// Call while a gesture is open. A pan waiting for momentum decides after `momentumWait`. Polled that late, past
+    /// `fingersUpTimeout`, its stream went quiet, so the release is flagged endedByTimeout. With fingers down,
+    /// `fingersDownTimeout` of silence ends it as a cancel.
     public mutating func timeout(now: Double) -> Update? {
         guard !isFinished, let lastT else { return nil }
-        return now - lastT >= GestureTuning.fingersDownTimeout ? end(cancelled: true, byTimeout: true) : nil
+        let quiet = now - lastT
+        if fingersUp { return quiet >= GestureTuning.momentumWait ? end(byTimeout: quiet >= GestureTuning.fingersUpTimeout) : nil }
+        return quiet >= GestureTuning.fingersDownTimeout ? end(cancelled: true, byTimeout: true) : nil
     }
 
     /// UI-SPEC Surface 1: with a target t = min(|p|, 1) and overscroll past one level; with none t = 0 and overscroll
@@ -173,7 +181,8 @@ public struct GestureRecognizer: Sendable {
     private mutating func report() -> Update? {
         let value = signed
         guard let current = direction else {
-            guard abs(value) * log(2) >= GestureTuning.pinchDeadZone else { return nil }
+            let begun = kind == .pinch ? abs(value) * log(2) >= GestureTuning.pinchDeadZone : axis != nil
+            guard begun else { return nil }
             direction = direction(of: value)
             return direction.map { .started($0) }
         }
@@ -203,12 +212,38 @@ public struct GestureRecognizer: Sendable {
         }
     }
 
-    private mutating func end(cancelled: Bool = false, byTimeout: Bool = false) -> Update? {
+    /// The pan axis locks once |Σ| reaches `panAxisLock` with one axis `panAxisDominance` times the other.
+    private mutating func lockAxis() {
+        let x = abs(sumX), y = abs(sumY)
+        guard (x * x + y * y).squareRoot() >= GestureTuning.panAxisLock else { return }
+        if x >= GestureTuning.panAxisDominance * y {
+            axis = .horizontal
+        } else if y >= GestureTuning.panAxisDominance * x {
+            axis = .vertical
+        }
+    }
+
+    private var byDistance: Bool { progress >= (kind == .pinch ? GestureTuning.pinchCommit : GestureTuning.panCommit) }
+
+    /// Fingers up: a pan short of the threshold waits for its first momentum sample's velocity; anything else ends now.
+    private mutating func fingersLifted() -> Update? {
+        guard kind == .pan, direction != nil, !byDistance, !flicks(windowVelocity) else { return end() }
+        fingersUp = true
+        return nil
+    }
+
+    /// The first momentum sample decides: its delta on the locked axis over the time since the last finger sample.
+    private mutating func momentum(_ sample: Sample) -> Update? {
+        let dt = history.last.map { sample.t - $0.t } ?? 0
+        let delta = axis == .vertical ? sample.dy : sample.dx
+        return end(momentumVelocity: dt > 0 ? delta / dt : 0)
+    }
+
+    private mutating func end(cancelled: Bool = false, byTimeout: Bool = false, momentumVelocity: Double = 0) -> Update? {
         isFinished = true
         // C2: never started, no phase 1 or 2 or no motion at all: noise, so no gesture.
         guard direction != nil || (moved && (sumM != 0 || sumX != 0 || sumY != 0)) else { return nil }
-        let byDistance = progress >= (kind == .pinch ? GestureTuning.pinchCommit : GestureTuning.panCommit)
-        let passed = direction != nil && !cancelled && (byDistance || flicks(windowVelocity))
+        let passed = direction != nil && !cancelled && (byDistance || flicks(windowVelocity) || flicks(momentumVelocity))
         return .ended(
             Release(
                 direction: direction, progress: progress, passedThreshold: passed, byFlick: passed && !byDistance, endedByTimeout: byTimeout,
