@@ -37,8 +37,9 @@ public enum MultitouchSupport {
     /// OMS `MTTouch`, 96 bytes (four header lineages agree): identifier 16, state 20, normalized x/y 32/36, velocity 40/44.
     static let touchStride = 96
     static let maxTouches = 20
+    /// Whether a multitouch device of this family ID is a trackpad, for the shim and for IOKit's `Family ID` alike.
     /// Magic Mouse is a multitouch device too, but never a trackpad (ScrollToZoom `kMTDeviceFamilyMagicMouse = 112`).
-    static let magicMouseFamily: Int32 = 112
+    public static func isTrackpad(family: Int) -> Bool { family != 112 }
 
     static let symbolNames = [
         "MTDeviceCreateList", "MTRegisterContactFrameCallbackWithRefcon", "MTRegisterContactFrameCallback",
@@ -100,7 +101,7 @@ public enum MultitouchSupport {
             self.driverType = driverType
         }
 
-        public var isTrackpad: Bool { family != MultitouchSupport.magicMouseFamily }
+        public var isTrackpad: Bool { MultitouchSupport.isTrackpad(family: Int(family)) }
         public var name: String { builtIn ? "built-in" : isTrackpad ? "Magic Trackpad" : "Magic Mouse" }
     }
 

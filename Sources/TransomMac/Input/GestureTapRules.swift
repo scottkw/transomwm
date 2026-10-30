@@ -18,8 +18,11 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
     public var fullScreenDisplays: [CGRect]
     /// Finder's pid, whose target pid means "maybe the desktop" (0 = unknown).
     public var finderPID: Int32
-    /// Registry IDs of the trackpads (field 87). Empty means not known, and the sender filter is off (E-04).
+    /// Registry IDs of the trackpads (field 87). Empty means none found: every event that has a sender then passes
+    /// (E-04, fail closed). Synthetic events have sender 0 and are judged as before.
     public var trackpadSenders: Set<UInt64>
+    /// Off only in the spike's listen and `--no-sender-filter` modes; the product never turns it off.
+    public var filtersBySender: Bool
     /// Whether the target pid (field 40) may short-circuit the wallpaper test. Off (C3): in the VM and on the host's
     /// real trackpad (05-SPIKE T6) field 40 is the frontmost app's pid, not the app under the pointer.
     public var trustsTargetPID: Bool
@@ -30,7 +33,8 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
 
     public init(
         armed: Bool = false, disarmReason: DisarmReason? = nil, deskDisplays: [CGRect] = [], fullScreenDisplays: [CGRect] = [],
-        finderPID: Int32 = 0, trackpadSenders: Set<UInt64> = [], trustsTargetPID: Bool = false, windowRects: [CGRect] = []
+        finderPID: Int32 = 0, trackpadSenders: Set<UInt64> = [], filtersBySender: Bool = true, trustsTargetPID: Bool = false,
+        windowRects: [CGRect] = []
     ) {
         self.armed = armed
         self.disarmReason = disarmReason
@@ -38,6 +42,7 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
         self.fullScreenDisplays = fullScreenDisplays
         self.finderPID = finderPID
         self.trackpadSenders = trackpadSenders
+        self.filtersBySender = filtersBySender
         self.trustsTargetPID = trustsTargetPID
         self.windowRects = windowRects
     }
@@ -280,7 +285,7 @@ public nonisolated enum GestureTapRules {
         guard state.armed else { return passing(.disarmed(state.disarmReason)) }
         if state.fullScreenDisplays.contains(where: { $0.contains(location) }) { return passing(.fullScreen) }
         guard state.deskDisplays.contains(where: { $0.contains(location) }) else { return passing(.notDeskDisplay) }
-        if input.senderID != 0, !state.trackpadSenders.isEmpty, !state.trackpadSenders.contains(input.senderID) {
+        if state.filtersBySender, input.senderID != 0, !state.trackpadSenders.contains(input.senderID) {
             return passing(.notTrackpad)
         }
         if !input.flags.intersection([.maskControl, .maskCommand]).isEmpty { return passing(.chord) }

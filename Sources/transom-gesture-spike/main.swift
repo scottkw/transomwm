@@ -925,12 +925,14 @@ func printSummary(_ rows: [String], gates: [String], record: [String: Any]) {
 func pad(_ text: String, _ width: Int = 28) -> String { text.padding(toLength: max(width, text.count), withPad: " ", startingAt: 0) }
 
 func tapState() -> GestureTapState {
-    let senders = senderFilter ? Set(deviceList.infos.filter(\.isTrackpad).map(\.registryID).filter { $0 != 0 }) : []
-    return GestureTapState(armed: true, deskDisplays: displayFrames(), finderPID: finderPID(), trackpadSenders: senders)
+    let senders = Set(deviceList.infos.filter(\.isTrackpad).map(\.registryID).filter { $0 != 0 })
+    return GestureTapState(
+        armed: true, deskDisplays: displayFrames(), finderPID: finderPID(), trackpadSenders: senders, filtersBySender: senderFilter)
 }
 
 /// A permissive state for listen-only segmentation: every display a desk, no sender filter.
-let listenState = GestureTapState(armed: true, deskDisplays: [CGRect(x: -100_000, y: -100_000, width: 200_000, height: 200_000)])
+let listenState = GestureTapState(
+    armed: true, deskDisplays: [CGRect(x: -100_000, y: -100_000, width: 200_000, height: 200_000)], filtersBySender: false)
 
 /// Runs `work` on main every `seconds` until the process exits.
 func every(_ seconds: Double, _ work: @escaping @MainActor () -> Void) {

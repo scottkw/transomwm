@@ -7,10 +7,6 @@ import os
 /// The main-actor owner of the gesture tap (05-03): publishes what its rules read, drains its events, logs and counts
 /// each gesture once at its end (UI-SPEC Logging). Created by ArrangeController, which decides when the tap runs.
 @MainActor final class GestureController {
-    /// E-04 sender filter on: on the host, field 87 equalled the built-in trackpad's AppleMultitouchDevice registry ID on
-    /// every gesture event (05-SPIKE T6). Events from any other sender (a mouse, a tablet) pass.
-    static let filtersBySender = true
-
     private let tap: GestureTap
     private weak var controller: ArrangeController?
     private let log = Logger(subsystem: "com.eightabyte.transom", category: "gesture")
@@ -22,6 +18,8 @@ import os
     private var loggedStartFailure = false
     private var seenCounters = GestureTapCounters()
     private var finderPID: Int32 = 0
+    /// E-04: on the host, field 87 equalled the built-in trackpad's AppleMultitouchDevice registry ID on every gesture
+    /// event (05-SPIKE T6). Events from any other sender (a mouse, a tablet) pass, and all of them do when none is found.
     private var trackpadSenders: Set<UInt64> = []
     private var watcher: TrackpadWatcher?
     private var wakeObservers: [any NSObjectProtocol] = []
@@ -177,7 +175,7 @@ import os
             armed: controller.isZoomEnabled && disarm == nil, disarmReason: disarm,
             deskDisplays: arranger.displays.filter(hasDesk).map { ZoomInput.cgRect($0.frame) },
             fullScreenDisplays: arranger.displays.filter { !hasDesk($0) }.map { ZoomInput.cgRect($0.frame) }, finderPID: finderPID,
-            trackpadSenders: Self.filtersBySender ? trackpadSenders : [], windowRects: windows.map { ZoomInput.cgRect($0.frame) })
+            trackpadSenders: trackpadSenders, windowRects: windows.map { ZoomInput.cgRect($0.frame) })
         guard state != published else { return }
         published = state
         tap.setState(state)

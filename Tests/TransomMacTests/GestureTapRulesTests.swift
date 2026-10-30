@@ -150,7 +150,13 @@ private let gesture = GestureEventFields.gestureType
         #expect(decide(&latch, phase: 1, sender: 0x2, flags: option, state: filtered) == .pass)
         #expect(latch.pan?.passReason == .notTrackpad)
         #expect(isConsume(decide(&latch, phase: 1, sender: 0x1, flags: option, state: filtered)))
-        #expect(isConsume(decide(&latch, phase: 1, sender: 0x2, flags: option, state: armed)))
+        // WR-06, E-04 fail closed: no trackpad found (a desktop Mac with a Magic Mouse) means a sender is never taken.
+        #expect(decide(&latch, phase: 1, sender: 0x2, flags: option, state: armed) == .pass)
+        #expect(latch.pan?.passReason == .notTrackpad)
+        #expect(isConsume(pinch(&latch, 1)), "synthetic sender 0 is still judged")
+        var unfiltered = armed
+        unfiltered.filtersBySender = false
+        #expect(isConsume(decide(&latch, phase: 1, sender: 0x2, flags: option, state: unfiltered)), "the spike's listen mode")
     }
 
     @Test func aTrustedNonFinderTargetPassesWithNoSurfaceRead() {

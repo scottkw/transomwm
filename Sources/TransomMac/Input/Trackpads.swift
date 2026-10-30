@@ -1,5 +1,6 @@
 import Foundation
 import IOKit
+import TransomPrivate
 
 /// One multitouch trackpad in the IOKit registry. `registryID` is what gesture events carry in field 87 (05-SPIKE T6).
 nonisolated struct Trackpad: Equatable, Sendable {
@@ -9,9 +10,6 @@ nonisolated struct Trackpad: Equatable, Sendable {
 
 /// The trackpads, from public IOKit only (E-04, RESEARCH Pattern 5).
 nonisolated enum Trackpads {
-    /// Magic Mouse family: a multitouch device whose scrolls are a mouse's (RESEARCH Pitfall 9).
-    static let magicMouseFamily = 112
-
     static func current() -> [Trackpad] {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("AppleMultitouchDevice"), &iterator) == KERN_SUCCESS
@@ -24,7 +22,7 @@ nonisolated enum Trackpads {
             guard IORegistryEntryGetRegistryEntryID(service, &id) == KERN_SUCCESS else { continue }
             let family = IORegistryEntryCreateCFProperty(service, "Family ID" as CFString, kCFAllocatorDefault, 0)?
                 .takeRetainedValue() as? Int ?? 0
-            if family != magicMouseFamily { pads.append(Trackpad(registryID: id, familyID: family)) }
+            if MultitouchSupport.isTrackpad(family: family) { pads.append(Trackpad(registryID: id, familyID: family)) }
         }
         return pads
     }
