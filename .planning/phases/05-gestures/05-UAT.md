@@ -9,7 +9,7 @@ updated: 2026-10-30
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[awaiting the user: run items 1-24 on the host with the built-in trackpad, one at a time]
+[awaiting the user: run the pending items on the host with the built-in trackpad, one at a time. Items 4, 5, 9, 12, 13, 16, 19 and 22 passed in the VM with synthetic events (see VM UAT run); re-checking them on the host is optional except the "1 trackpad" Multitouch values in 19 and 22]
 
 ## Build under test
 
@@ -32,6 +32,10 @@ updated: 2026-10-30
 | VM `MultitouchIntegrationTests` (05-07, no device in the guest) | 1 test passed |
 
 VM: Tart `pane-test`, macOS 15.7.7. The guest display was woken and `caffeinate -dimsu` held by `scripts/vm-live-test.sh`. One suite ran per invocation, using fixtures only. Logs are in `.build/0508-vm-*.log`. The VM was stopped afterwards.
+
+## VM UAT run (2026-10-30, agent)
+
+Items 4, 5, 9, 12, 13, 16, 19 and 22 ran in the Tart `pane-test` guest (macOS 15.7.7, 1024×768) against the build under test, installed as `/Applications/Transom Debug.app`. The Accessibility and Screen Recording grants carried over from the older Debug build ("permission probing -> ready", Debug "Zoom: on, window previews"). Four TransomFixtureApp windows were docked with ⌃⌥⌘D. Gestures were synthetic CGEvents: type 29 with field 110 = 8, phases in field 132 and magnification in field 113, plus phased pixel scrolls, all posted at the HID tap with ⌥ in the event flags. Debug lines were read through AX: the status item was pressed while a posted ⌥ key-down was held. VoiceOver announcements came from an AXObserver for AXAnnouncementRequested on the app. Screenshots used `TRANSOM_STAGE_CAPTURABLE=1` so that the stage panel shows up. The guest has no trackpad, so the sender filter wasn't exercised and multitouch reads "available, no trackpad found". The guest log is at `.build/0508-uat-vm-transom.log`.
 
 ## Before you start
 
@@ -70,10 +74,10 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
    result: pending
 
 4. At the view showing all windows, hold ⌥ and scroll in any direction. *Expected: the screen stretches a little, resists, and springs back. No beep.*
-   result: pending
+   result: pass (VM, synthetic events — ⌥-pans at home left/right/up/down were all taken (0 of 10 events reached a tail tap), logged "took pan #n: ⌥ held … no area right/left/bottom/top", and a mid-gesture screenshot showed the stage rubber-banded ~58 pt for 120 pt of travel, then back at home; no beep call on the gesture path, but the VM can't hear one; small pans (40 pt) posted no announcement, decisive ones posted "No area to the …")
 
 5. Hold ⌥ and make one long pinch, fingers fully apart. *Expected: it goes in exactly one level, resisting past that. Pinch again to go one more level.*
-   result: pending
+   result: pass (VM, synthetic events — one 3.0-magnification ⌥-pinch went home → node(n29) only ("took pinch #2 … moved to node(n29)"), the mid-gesture screenshot showed the stage stretched past that level; a second identical pinch went n29 → node(n28), one more level)
 
 6. Without ⌥, pinch and scroll over bare wallpaper. *Expected: zoom and pan work. Without ⌥ over a window: the app zooms and scrolls as usual, and Transom does nothing.*
    result: pending
@@ -85,7 +89,7 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
    result: pending
 
 9. Press ⌃⌥⌘-Comma (Zoom Out One Level) to zoom out and, while it is still moving, ⌥-pinch apart. *Expected: the motion carries on from where it was, without a jump.*
-   result: pending
+   result: pass (VM, synthetic events — ⌃⌥⌘-Comma from n28 logged "move … node(n28) → node(n29)", then the ⌥-pinch 100 ms later logged "retarget gesture pinch during moving" and "took pinch … moved to node(n28)" with one settle; a 6-screenshot series showed the follow continuing from the step-out position; smoothness at frame rate can't be judged from screenshots, worth a glance on the host)
 
 10. Mid-scroll with ⌥, rest your fingers still for a second, then keep scrolling and lift. *Expected: no scroll reaches Safari at any point.*
    result: pending
@@ -94,10 +98,10 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
    result: pending
 
 12. Turn on VoiceOver (⌘F5). Repeat item 1, then pinch apart fully on a single window. *Expected: you hear "Showing …" after the first, and "Nothing to zoom in to" after the second.* Turn VoiceOver off.
-   result: pending
+   result: pass (VM, synthetic events — VoiceOver speech not heard in the VM; an AXObserver on the app saw AXAnnouncementRequested "Nothing to zoom in to" after a full ⌥-pinch apart on leaf n28, and "Showing 11 windows" / "Showing all windows" after committed pinches, priority 90 (high))
 
 13. Status menu ▸ Turn Off Zoom. ⌥-pinch and ⌥-scroll over Safari. *Expected: Safari zooms and scrolls as if Transom weren't running.* Turn zoom back on.
-   result: pending
+   result: pass (VM, synthetic events — after status menu ▸ Turn Off Zoom the log said "gesture tap stopped: zoom off"; an ⌥-pinch, an ⌥-scroll with momentum and a pinch over the Desktop tile all reached a tail tap whole (12/12, 15/15, 12/12) and Transom logged no took line; Turn On Zoom restarted the tap)
 
 14. Sleep the Mac, wake it, then ⌥-pinch. *Expected: it works first time.*
    result: pending
@@ -106,7 +110,7 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
    result: n/a (05-SPIKE C5, no Magic Trackpad)
 
 16. Open the status menu ▸ Debug. *Expected: "Gestures: on, …", a "Gestures taken" count, and "Last gesture" matching your last gesture.*
-   result: pending
+   result: pass (VM, synthetic events — Debug read through AX with ⌥ posted: "Gestures: on, trackpad events and multitouch", "Gestures taken: 9", "Last gesture: pinch in, moved" right after a committed ⌥-pinch in)
 
 ## Added checks (05-07 multitouch and items earlier plans left to UAT)
 
@@ -127,7 +131,7 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
     open "/Users/ken/dev/transomwm/xcode/.xcode-build/Build/Products/Debug/Transom Debug.app" --args --disable-private=Multitouch
     ```
     Turn zoom on if it's off. Hold ⌥, click the menu bar icon ▸ Debug. *Expected: "Gestures: on, trackpad events" and "Multitouch: off, trackpad events only".* With "Zoom in or out" on, hold ⌥ over Safari and pinch apart. *Expected: it still zooms the desk (trackpad events alone).* Then quit and relaunch normally with the `open` command from step 2. *Expected: Debug shows "Multitouch: available, 1 trackpad" again.*
-    result: pending
+    result: pass (VM, synthetic events — launched with --args --disable-private=Multitouch: log "Multitouch: off", Debug "Gestures: on, trackpad events" and "Multitouch: off, trackpad events only"; an ⌥-pinch still zoomed ("took pinch #1 … moved to node(n29)", 0 of 12 downstream); a normal relaunch showed "Multitouch: available, no trackpad found" (VM has no trackpad; the host should show "1 trackpad"))
 
 20. **Reduce Motion takeover mid-crossfade (05-05).** Turn on System Settings ▸ Accessibility ▸ Display ▸ Reduce motion. Press ⌃⌥⌘-Comma (Zoom Out One Level). While the fade is still running (about a quarter of a second), hold ⌥ and pinch apart. *Expected: the screen follows your fingers from where it was, with no jump in position. Half-faded tiles may turn fully opaque at once. That pop is known, so say if it bothers you.* Turn Reduce motion off again.
     result: pending
@@ -142,7 +146,7 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
     d. At the view showing all windows, ⌥-pinch together fully and let go: "Last gesture: pinch out, already showing all windows".
     e. A tiny ⌥ two-finger touch that barely moves: "Last gesture: pan, too small" or "pinch, too small".
     f. Menu bar icon ▸ Turn Off Zoom, then Debug: "Gestures: off (zoom off)", and the Multitouch line still reads "available, 1 trackpad". Turn zoom back on.
-    result: pending
+    result: pass (VM, synthetic events — a "none yet" ×2 before any gesture; b "Gestures: on, trackpad events and multitouch", count +1 per gesture, "pinch in, moved"; c "pinch in, sprang back" and "pinch out, sprang back"; d "pinch out, already showing all windows"; e "pan, too small" and "pinch, too small"; f "Gestures: off (zoom off)" with "Multitouch: available, no trackpad found"; the VM has no trackpad, so the host should re-check that b and f say "1 trackpad")
 
 23. **Pinch-out and flick feel (05-02).** Zoomed in one level, hold ⌥ and pinch together slowly, noting how far your fingers travel before letting go would commit. Compare it with item 1's pinch apart. *Known: pinch-out reaches the halfway point with about half the finger travel that pinch-in needs.* Then, zoomed in, hold ⌥ and make a **short, quick** two-finger scroll (well under a third of the screen) and lift. *Known: most real pans are fast enough to commit as a flick, so it will probably move one area.* A short, **slow** scroll should spring back. Tell us if pinch-out feels too twitchy or quick short pans commit too easily. The constants are in `GestureTuning`.
     result: pending
@@ -160,9 +164,9 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
 ## Summary
 
 total: 24
-passed: 0
+passed: 8 (VM, synthetic events: items 4, 5, 9, 12, 13, 16, 19, 22)
 issues: 0
-pending: 23
+pending: 15
 skipped: 0
 n/a: 1 (item 15); item 8 is N/A if there's no mouse
 
