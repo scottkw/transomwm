@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 current_phase: 5
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-10-30T00:32:24.144Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-10-30T03:33:16.141Z"
 last_activity: 2026-10-28
 last_activity_desc: Phase 5 execution started
-state_head: a1a29a3e4e5c80fb8714d351c2694300de884967
+state_head: 8db5f865fa60a80dd547286b2ff580d4e6c071fe
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 67
-  completed_plans: 63
+  completed_plans: 64
   percent: 44
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 5 — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-10-28 — Phase 5 execution started
 
@@ -114,6 +114,7 @@ Progress: [████░░░░░░] 44%
 | Phase 05 P02 | 10min | 2 tasks | 15 files |
 | Phase 05 P03 | 16min | 2 tasks | 12 files |
 | Phase 05 P04 | 15 min | 2 tasks | 8 files |
+| Phase 05 P05 | 65 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -299,6 +300,8 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-03: E-04 sender filter on (field 87 = AppleMultitouchDevice registry ID); trustsTargetPID stays false (C3)
 - [Phase 05]: 05-03: gesture tap exists only while zoom is on and the mouse tap runs (updateGestureTap)
 - [Phase 05]: 05-04: a committed gesture is an ordinary zoomTo whose .cameraMove retargets the .following stage; a released gesture's judgement is kept until the tap ends the sequence
+- [Phase 05]: E-03 follow lerps from the tiles' frozen frames (StagePanel.followFrom); a takeover's spring back retargets to the interrupted move's tiles and resumes it, settling exactly once
+- [Phase 05]: A move queued behind a reveal fade is a gesture takeover's base; stage completions scheduled before a takeover are fenced by a generation counter
 
 ### Quick Tasks Completed
 
@@ -339,8 +342,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-30T00:32:23.848Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-10-30T03:33:15.880Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None
 
 ## Deferred Verification
