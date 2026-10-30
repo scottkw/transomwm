@@ -16,6 +16,15 @@ struct GestureControllerTests {
         .ended(GestureTapSummary(seq: seq, kind: .pan, taken: true, optionHeld: true, startedAt: 0, endedAt: 0))
     }
 
+    /// WR-09: gestures are disarmed while Turn Off Zoom moves home, as while paused.
+    @Test func turningZoomOffDisarmsGestures() {
+        #expect(GestureController.disarmReason(ready: true, paused: false, turningOff: true, busy: false) == .zoomPaused)
+        #expect(GestureController.disarmReason(ready: true, paused: false, turningOff: false, busy: false) == nil)
+        #expect(GestureController.disarmReason(ready: true, paused: true, turningOff: false, busy: true) == .zoomPaused)
+        #expect(GestureController.disarmReason(ready: true, paused: false, turningOff: false, busy: true) == .rectZoomOrDrag)
+        #expect(GestureController.disarmReason(ready: false, paused: true, turningOff: true, busy: true) == .notReady)
+    }
+
     /// WR-07: after `stop` nothing is handled; after a restart the stopped tap's buffered events are dropped.
     @Test func onlyTheRunningTapsEventsAreHandled() {
         for event in [sample(5), ended(5)] {

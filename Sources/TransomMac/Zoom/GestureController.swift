@@ -166,10 +166,9 @@ import os
     func publish() {
         guard isActive, let controller else { return }
         let arranger = controller.arranger
-        let disarm: GestureTapState.DisarmReason? =
-            !controller.isReady() ? .notReady
-            : !arranger.pauseReasons.isEmpty ? .zoomPaused
-            : arranger.isDragging || controller.isRectZoomActive ? .rectZoomOrDrag : nil
+        let disarm = Self.disarmReason(
+            ready: controller.isReady(), paused: !arranger.pauseReasons.isEmpty, turningOff: controller.isTurningOff,
+            busy: arranger.isDragging || controller.isRectZoomActive)
         let hasDesk = { (display: DisplayInfo) in arranger.world[ZoomInput.deskKey(display)] != nil }
         // The windows publishGreenButtons trusts, so the no-⌥ test skips the CG read over them (WR-01).
         let windows = arranger.windows.values.filter {
@@ -183,6 +182,11 @@ import os
         guard state != published else { return }
         published = state
         tap.setState(state)
+    }
+
+    /// Why the tap is not armed. Turn Off Zoom's move home counts as paused: a gesture must not take it over (WR-09).
+    nonisolated static func disarmReason(ready: Bool, paused: Bool, turningOff: Bool, busy: Bool) -> GestureTapState.DisarmReason? {
+        !ready ? .notReady : paused || turningOff ? .zoomPaused : busy ? .rectZoomOrDrag : nil
     }
 
     /// Re-reads what can change behind Transom's back and publishes even if nothing changed.

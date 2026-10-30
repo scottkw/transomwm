@@ -76,6 +76,8 @@ import os
     public var onViewChanged: (() -> Void)?
     /// Turn Off Zoom in progress: the displays whose move home has not revealed yet.
     private var turningOff = false
+    /// Gestures stay disarmed through it, so none takes the home move over (WR-09).
+    var isTurningOff: Bool { turningOff }
     private var awaitingHome: [String: UInt64] = [:]
     private let zoomOffFallback = WakeTimer()
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
@@ -661,6 +663,7 @@ import os
         guard on else {
             guard zoomEnabled, !turningOff else { return }
             turningOff = true
+            gestures.publish()
             zoomInput.reset(reason: "zoom off")
             for display in arranger.displays {
                 let effects = arranger.handle(.zoomTo(.home, displayUUID: display.uuid), now: .now)
