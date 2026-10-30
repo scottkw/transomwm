@@ -317,13 +317,16 @@ import os
         let cache = zoom?.cacheStats ?? (windows: 0, bytes: 0)
         submenu.addItem(Self.info(ZoomCopy.snapshotCacheLine(windows: cache.windows, bytes: cache.bytes)))
         let source: GestureCopy.Source =
-            if !arrange.isZoomEnabled { .offZoom } else if arrange.isGestureTapRunning { .on } else if arrange.gestureTapFailedToStart {
+            if !arrange.isZoomEnabled { .offZoom } else if arrange.isGestureTapRunning {
+                arrange.isMultitouchRunning ? .onWithMultitouch : .on
+            } else if arrange.gestureTapFailedToStart {
                 .unavailable
             } else { .offTapNotRunning }
         submenu.addItem(Self.info(GestureCopy.gesturesLine(source)))
         let gestures = arrange.gestures
         submenu.addItem(Self.info(GestureCopy.takenLine(taken: gestures.taken, timeouts: gestures.timeouts)))
         submenu.addItem(Self.info(gestures.lastGesture.map(Self.lastGestureLine) ?? GestureCopy.lastGestureNone))
+        submenu.addItem(Self.info(GestureCopy.multitouchLine(arrange.multitouchStatus)))
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item

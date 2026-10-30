@@ -3,10 +3,11 @@ import TransomMac
 import TransomModel
 import Testing
 
-/// UI-SPEC Surface 5: the gesture Debug lines G1-G3.
+/// UI-SPEC Surface 5: the gesture Debug lines G1-G4.
 @Suite struct GestureCopyTests {
     @Test(arguments: [
         (GestureCopy.Source.on, "Gestures: on, trackpad events"),
+        (.onWithMultitouch, "Gestures: on, trackpad events and multitouch"),
         (.offZoom, "Gestures: off (zoom off)"),
         (.offTapNotRunning, "Gestures: off (gesture tap not running)"),
         (.unavailable, "Gestures: unavailable (no gesture source)"),
@@ -46,5 +47,16 @@ import Testing
     @Test func refusalTextIsTheAnnouncementLowerCaseFirst() {
         #expect(GestureCopy.refusalText(.noArea(.top)) == "no area above")
         #expect(GestureCopy.refusalText(.noArea(.right)) == "no area to the right")
+    }
+
+    @Test(arguments: [
+        (GestureCopy.Multitouch.available(1), "Multitouch: available, 1 trackpad"),
+        (.available(3), "Multitouch: available, 3 trackpads"),
+        (.available(0), "Multitouch: available, no trackpad found"),
+        (.off, "Multitouch: off, trackpad events only"),
+        (.offAfterCrash, "Multitouch: off after a crash last launch, trackpad events only"),
+    ])
+    func multitouchLine(state: GestureCopy.Multitouch, expected: String) {
+        #expect(GestureCopy.multitouchLine(state) == expected)
     }
 }
