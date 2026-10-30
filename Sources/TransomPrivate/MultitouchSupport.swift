@@ -4,9 +4,10 @@ import Foundation
 import IOKit
 import os
 
-/// Spike-only MultitouchSupport shim (E-01: it moves into TransomPrivate only if the user picks multitouch at the gate,
-/// plan 05-07). Reached by `dlopen` + `dlsym` into optional `@convention(c)` pointers, never linked, so a missing symbol
-/// is a nil, not a launch failure.
+/// The MultitouchSupport shim (05-07; the user chose "tap+multitouch" at the spike gate, E-01). The one shim: the spike
+/// CLI uses it too. Reached by `dlopen` + `dlsym` into optional `@convention(c)` pointers, never linked, so a missing
+/// symbol is a nil, not a launch failure, and `--disable-private=Multitouch` never even opens the framework. Layout and
+/// the Int32 return were validated on real hardware, macOS 27.2 (05-SPIKE M1, M2).
 ///
 /// Provenance (prototypes and layout, read as facts, never copied): OpenMultitouchSupport `OpenMTInternal.h` (MIT),
 /// Mac-trackpad-mapper `MultitouchSupport.h` and ScrollToZoom `MTSupportSPI.h` (MIT); OMS issues #2 (over-release crash
@@ -14,8 +15,8 @@ import os
 /// Rules: the callback returns Int32 and always 0; the touch count is bounded to 0...20 and the pointer nil-checked
 /// before reading the 96-byte stride; devices from the list are never released (the list owns them); devices are started
 /// and stopped on one dedicated CFRunLoop thread.
-nonisolated enum Multitouch {
-    typealias Device = UnsafeMutableRawPointer
+public enum MultitouchSupport {
+    public typealias Device = UnsafeMutableRawPointer
     typealias CreateList = @convention(c) () -> Unmanaged<CFArray>?
     /// (device, touches, count, timestamp, frame, refcon). Count and frame are declared Int32: the lineages disagree
     /// (int, size_t, CFIndex), and the low 32 bits of the register are right either way on arm64 and x86_64.
@@ -46,7 +47,9 @@ nonisolated enum Multitouch {
     ]
 
     /// Written once at first use, then only read.
-    nonisolated(unsafe) private static let handle = dlopen("/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport", RTLD_LAZY)
+    nonisolated(unsafe) private static let handle =
+        Capabilities.isForcedOff(.multitouch)
+        ? nil : dlopen("/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport", RTLD_LAZY)
     private static func symbol<T>(_ name: String, _ type: T.Type) -> T? {
         guard let handle, let pointer = dlsym(handle, name) else { return nil }
         return unsafeBitCast(pointer, to: type)
@@ -65,52 +68,80 @@ nonisolated enum Multitouch {
     static let service = symbol("MTDeviceGetService", GetService.self)
     static let driverType = symbol("MTDeviceGetDriverType", GetInt32.self)
 
+    /// The framework opened and every symbol streaming needs resolved (not forced off at launch).
+    public static var isLoaded: Bool {
+        createList != nil && start != nil && stop != nil && unregister != nil && (registerWithRefcon != nil || register != nil)
+    }
+
     /// The `dlsym` table for `mt-devices`: name and whether it resolved.
-    static func symbolTable() -> [(String, Bool)] {
+    public static func symbolTable() -> [(String, Bool)] {
         symbolNames.map { name in (name, handle.flatMap { dlsym($0, name) } != nil) }
     }
 
-    struct Info: Sendable {
-        let index: Int
-        let builtIn: Bool
-        let family: Int32
-        let deviceID: UInt64
-        let registryID: UInt64
-        let widthMM: Double
-        let heightMM: Double
-        let driverType: Int32
-        var isTrackpad: Bool { family != Multitouch.magicMouseFamily }
-        var name: String { builtIn ? "built-in" : isTrackpad ? "Magic Trackpad" : "Magic Mouse" }
+    public struct Info: Sendable {
+        public let index: Int
+        public let builtIn: Bool
+        public let family: Int32
+        public let deviceID: UInt64
+        public let registryID: UInt64
+        public let widthMM: Double
+        public let heightMM: Double
+        public let driverType: Int32
+        public init(
+            index: Int, builtIn: Bool, family: Int32, deviceID: UInt64, registryID: UInt64, widthMM: Double, heightMM: Double, driverType: Int32
+        ) {
+            self.index = index
+            self.builtIn = builtIn
+            self.family = family
+            self.deviceID = deviceID
+            self.registryID = registryID
+            self.widthMM = widthMM
+            self.heightMM = heightMM
+            self.driverType = driverType
+        }
+
+        public var isTrackpad: Bool { family != MultitouchSupport.magicMouseFamily }
+        public var name: String { builtIn ? "built-in" : isTrackpad ? "Magic Trackpad" : "Magic Mouse" }
     }
 
-    struct Touch: Sendable {
-        let id: Int32
-        let state: Int32
-        let x: Float
-        let y: Float
-        let vx: Float
-        let vy: Float
+    public struct Touch: Sendable {
+        public let id: Int32
+        public let state: Int32
+        public let x: Float
+        public let y: Float
+        public let vx: Float
+        public let vy: Float
     }
 
-    struct Frame: Sendable {
-        let device: Int
+    public struct Frame: Sendable {
+        public let device: Int
         /// Uptime-clock seconds when the callback ran; `deviceTime` is the callback's own timestamp argument.
-        let t: Double
-        let deviceTime: Double
-        let frame: Int32
-        let rawCount: Int32
-        let touches: [Touch]
-        let mainThread: Bool
+        public let t: Double
+        public let deviceTime: Double
+        public let frame: Int32
+        public let rawCount: Int32
+        public let touches: [Touch]
+        public let mainThread: Bool
+
+        public init(device: Int, t: Double, deviceTime: Double, frame: Int32, rawCount: Int32, touches: [Touch], mainThread: Bool) {
+            self.device = device
+            self.t = t
+            self.deviceTime = deviceTime
+            self.frame = frame
+            self.rawCount = rawCount
+            self.touches = touches
+            self.mainThread = mainThread
+        }
     }
 
     /// One device list. The array owns its devices, so it stays alive while they run and is dropped only after stop.
-    final class DeviceList: @unchecked Sendable {
-        let array: CFArray?
-        let devices: [Device]
-        let infos: [Info]
+    public final class DeviceList: @unchecked Sendable {
+        public let array: CFArray?
+        public let devices: [Device]
+        public let infos: [Info]
 
-        init() {
-            array = Multitouch.createList?()?.takeRetainedValue()
+        public init() {
+            array = MultitouchSupport.createList?()?.takeRetainedValue()
             var devices: [Device] = []
             if let array {
                 for index in 0..<CFArrayGetCount(array) {
@@ -118,7 +149,7 @@ nonisolated enum Multitouch {
                 }
             }
             self.devices = devices
-            infos = devices.enumerated().map { Multitouch.info($0.element, index: $0.offset) }
+            infos = devices.enumerated().map { MultitouchSupport.info($0.element, index: $0.offset) }
         }
     }
 
@@ -141,8 +172,8 @@ nonisolated enum Multitouch {
 
     // MARK: Streaming
 
-    /// Frames waiting for main, and the device index per device pointer (for the no-refcon fallback).
-    static let frames = OSAllocatedUnfairLock(initialState: [Frame]())
+    /// Where frames go, called on the worker thread; and the device index per device pointer (for the no-refcon fallback).
+    private static let handler = OSAllocatedUnfairLock<(@Sendable (Frame) -> Void)?>(initialState: nil)
     static let indexes = OSAllocatedUnfairLock(initialState: [UInt: Int]())
 
     static func receive(_ device: Device?, _ touches: UnsafeRawPointer?, _ count: Int32, _ timestamp: Double, _ frame: Int32, index: Int?) {
@@ -164,24 +195,28 @@ nonisolated enum Multitouch {
         let record = Frame(
             device: resolved, t: Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1e9, deviceTime: timestamp, frame: frame, rawCount: count,
             touches: decoded, mainThread: Thread.isMainThread)
-        frames.withLock { $0.append(record) }
+        handler.withLock { $0 }?(record)
     }
+
+    /// Sets the one frame handler. It runs on the worker thread for every frame and must return fast; it never decides
+    /// whether a frame is consumed (the callback always returns 0).
+    public static func setHandler(_ new: (@Sendable (Frame) -> Void)?) { handler.withLock { $0 = new } }
 
     /// One stable C function pointer each, so unregister gets the same pointer register got.
     static let callback: FrameCallback = { device, touches, count, timestamp, frame, refcon in
-        Multitouch.receive(device, touches, count, timestamp, frame, index: refcon.map { Int(bitPattern: $0) - 1 })
+        MultitouchSupport.receive(device, touches, count, timestamp, frame, index: refcon.map { Int(bitPattern: $0) - 1 })
         return 0  // never consume: system gestures must keep their frames (Pitfall 8)
     }
     static let plainCallback: PlainFrameCallback = { device, touches, count, timestamp, frame in
-        Multitouch.receive(device, touches, count, timestamp, frame, index: nil)
+        MultitouchSupport.receive(device, touches, count, timestamp, frame, index: nil)
         return 0
     }
 
     /// The dedicated thread every start and stop runs on.
-    final class Worker: @unchecked Sendable {
+    public final class Worker: @unchecked Sendable {
         private var runLoop: CFRunLoop?
 
-        init() {
+        public init() {
             let ready = DispatchSemaphore(value: 0)
             let thread = Thread { [self] in
                 runLoop = CFRunLoopGetCurrent()
@@ -190,14 +225,14 @@ nonisolated enum Multitouch {
                 ready.signal()
                 CFRunLoopRun()
             }
-            thread.name = "GestureSpikeMultitouch"
+            thread.name = "TransomMultitouch"
             thread.qualityOfService = .userInteractive
             thread.start()
             ready.wait()
         }
 
         /// Runs `work` on the worker thread and waits for it.
-        func sync(_ work: @escaping @Sendable () -> Void) {
+        public func sync(_ work: @escaping @Sendable () -> Void) {
             guard let runLoop else { return }
             let done = DispatchSemaphore(value: 0)
             CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) {
@@ -212,7 +247,7 @@ nonisolated enum Multitouch {
     /// Registers and starts every device of `list` (trackpads only unless `all`), on the worker thread. False when the
     /// needed symbols are missing.
     /// Frames carry `tagBase + index` as their device, so a rescan's generations stay apart.
-    static func startStreaming(_ list: DeviceList, on worker: Worker, tagBase: Int = 0, all: Bool = false) -> Bool {
+    public static func startStreaming(_ list: DeviceList, on worker: Worker, tagBase: Int = 0, all: Bool = false) -> Bool {
         guard let start, registerWithRefcon != nil || register != nil else { return false }
         let chosen = list.infos.filter { all || $0.isTrackpad }
         indexes.withLock { map in for info in chosen { map[UInt(bitPattern: list.devices[info.index])] = tagBase + info.index } }
@@ -232,7 +267,7 @@ nonisolated enum Multitouch {
 
     /// Stops and unregisters every device of `list` on the worker thread. The list's array is released by its owner
     /// afterwards; no device is ever released on its own.
-    static func stopStreaming(_ list: DeviceList, on worker: Worker) {
+    public static func stopStreaming(_ list: DeviceList, on worker: Worker) {
         worker.sync {
             for device in list.devices {
                 if let unregister {
@@ -244,6 +279,4 @@ nonisolated enum Multitouch {
             }
         }
     }
-
-    static func takeFrames() -> [Frame] { frames.withLock { pending in defer { pending = [] }; return pending } }
 }

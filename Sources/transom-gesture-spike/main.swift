@@ -1029,14 +1029,18 @@ func runTapConsume() {
 
 // MARK: - Multitouch (mt-devices, mt-stream, compare, rescan)
 
-let deviceList = Multitouch.DeviceList()
+/// Frames from the product shim (TransomPrivate), queued for the main-thread drains below.
+nonisolated let pendingFrames = OSAllocatedUnfairLock(initialState: [MultitouchSupport.Frame]())
+nonisolated func takeFrames() -> [MultitouchSupport.Frame] { pendingFrames.withLock { pending in defer { pending = [] }; return pending } }
 
-func deviceLine(_ info: Multitouch.Info) -> String {
+let deviceList = MultitouchSupport.DeviceList()
+
+func deviceLine(_ info: MultitouchSupport.Info) -> String {
     "\(info.name) · family \(info.family) · device id \(hex(info.deviceID)) · registry \(hex(info.registryID)) · "
         + String(format: "surface %.1f × %.1f mm", info.widthMM, info.heightMM) + " · driver type \(info.driverType)"
 }
 
-func deviceRecord(_ info: Multitouch.Info) -> [String: Any] {
+func deviceRecord(_ info: MultitouchSupport.Info) -> [String: Any] {
     [
         "type": "device", "name": info.name, "builtIn": info.builtIn, "family": Int(info.family), "deviceID": hex(info.deviceID),
         "registry": hex(info.registryID), "widthMM": info.widthMM, "heightMM": info.heightMM, "driverType": Int(info.driverType),
@@ -1050,7 +1054,7 @@ func runDevices() {
         Output.record(deviceRecord(info))
     }
     if deviceList.infos.isEmpty { Output.say("No multitouch devices.") }
-    let table = Multitouch.symbolTable()
+    let table = MultitouchSupport.symbolTable()
     for (name, found) in table { Output.say("\(name.padding(toLength: 42, withPad: " ", startingAt: 0))\(found ? "found" : "missing")") }
     Output.record(["type": "symbols", "table": Dictionary(uniqueKeysWithValues: table.map { ($0.0, $0.1) })])
     let builtIn = deviceList.infos.filter(\.builtIn).count
@@ -1064,7 +1068,7 @@ func runDevices() {
 
 /// Multitouch frames on main: JSON per frame, one line per device per second, layout sanity counts for M1.
 final class Stream {
-    var infos: [Int: Multitouch.Info] = [:]
+    var infos: [Int: MultitouchSupport.Info] = [:]
     var frames = 0, touchFrames = 0, touches = 0, outOfRange = 0, badStates = 0, backwards = 0
     var maxSpeed: Float = 0
     var mainThreadFrames = 0
@@ -1073,15 +1077,15 @@ final class Stream {
     var lastState: [Int: [Int32: Int32]] = [:]
     var lastDeviceTime: [Int: Double] = [:]
     var lastCount: [Int: Int] = [:]
-    var secondFrames: [Int: [Multitouch.Frame]] = [:]
+    var secondFrames: [Int: [MultitouchSupport.Frame]] = [:]
     /// Uptime of each 0 → touching transition, for compare.
     var touchDowns: [Double] = []
-    var firstFrame: ((Int, Multitouch.Frame) -> Void)?
+    var firstFrame: ((Int, MultitouchSupport.Frame) -> Void)?
     var seen: Set<Int> = []
 
     func name(_ device: Int) -> String { infos[device]?.name ?? "device \(device)" }
 
-    func feed(_ batch: [Multitouch.Frame]) {
+    func feed(_ batch: [MultitouchSupport.Frame]) {
         for frame in batch {
             frames += 1
             if frame.mainThread { mainThreadFrames += 1 }
@@ -1160,13 +1164,16 @@ final class Stream {
     }
 }
 
-let worker = Multitouch.Worker()
+let worker: MultitouchSupport.Worker = {
+    MultitouchSupport.setHandler { frame in pendingFrames.withLock { $0.append(frame) } }
+    return MultitouchSupport.Worker()
+}()
 
 /// Starts streaming the trackpads of `list` into `stream`; false when there is nothing to stream.
-func stream(_ list: Multitouch.DeviceList, into stream: Stream, tagBase: Int = 0) -> Bool {
+func stream(_ list: MultitouchSupport.DeviceList, into stream: Stream, tagBase: Int = 0) -> Bool {
     for info in list.infos where info.isTrackpad { stream.infos[tagBase + info.index] = info }
     guard !stream.infos.isEmpty else { return false }
-    return Multitouch.startStreaming(list, on: worker, tagBase: tagBase)
+    return MultitouchSupport.startStreaming(list, on: worker, tagBase: tagBase)
 }
 
 func runMTStream() {
@@ -1177,13 +1184,13 @@ func runMTStream() {
         Run.finish()
         return
     }
-    Run.onFinish.append { Multitouch.stopStreaming(deviceList, on: worker) }
+    Run.onFinish.append { MultitouchSupport.stopStreaming(deviceList, on: worker) }
     every(1) {
-        frames.feed(Multitouch.takeFrames())
+        frames.feed(takeFrames())
         frames.printSecond()
     }
     Run.onFinish.append {
-        frames.feed(Multitouch.takeFrames())
+        frames.feed(takeFrames())
         printSummary(
             frames.summaryRows(), gates: frames.gateRows() + ["M2  system gestures while streaming: your checklist item 4 answer  (gate: 10 of 10)"],
             record: frames.summaryRecord())
@@ -1198,7 +1205,7 @@ func runCompare() {
         Run.finish()
         return
     }
-    Run.onFinish.append { Multitouch.stopStreaming(deviceList, on: worker) }
+    Run.onFinish.append { MultitouchSupport.stopStreaming(deviceList, on: worker) }
     let box = TapBox(mode: .listen, state: listenState)
     guard Tap.start(box, mask: GestureTapRules.mask, place: .tailAppendEventTap, options: .listenOnly) else {
         permissionFailure("Accessibility")
@@ -1214,9 +1221,9 @@ func runCompare() {
         return ("first MT frame leads first tap event by \(Int(lead)) ms", lead)
     }
     // Frames first, so a gesture closing in this tick already has its touch-down.
-    startDrain(box, into: gestures) { frames.feed(Multitouch.takeFrames()) }
+    startDrain(box, into: gestures) { frames.feed(takeFrames()) }
     Run.onFinish.append {
-        frames.feed(Multitouch.takeFrames())
+        frames.feed(takeFrames())
         gestures.feed(box.take())
         gestures.closeAll()
         var medians: [String] = []
@@ -1258,17 +1265,17 @@ enum Rescan {
         return ids
     }
 
-    static func describe(_ list: Multitouch.DeviceList) -> String {
+    static func describe(_ list: MultitouchSupport.DeviceList) -> String {
         let pads = list.infos.filter(\.isTrackpad)
         return pads.isEmpty ? "none" : pads.map { "\($0.name) (registry \(hex($0.registryID)))" }.joined(separator: " · ")
     }
 
     static func restart(reason: String) {
         let before = describe(list)
-        Multitouch.stopStreaming(list, on: worker)
+        MultitouchSupport.stopStreaming(list, on: worker)
         frames.infos = [:]
         generation += 1
-        list = Multitouch.DeviceList()
+        list = MultitouchSupport.DeviceList()
         _ = stream(list, into: frames, tagBase: generation << 8)
         Output.record(["type": "rescan", "event": "restart", "reason": reason, "devicesBefore": before, "devicesAfter": describe(list)])
     }
@@ -1350,12 +1357,12 @@ enum Rescan {
             Task { @MainActor in Rescan.didWake() }
         }
         every(1) {
-            frames.feed(Multitouch.takeFrames())
+            frames.feed(takeFrames())
             frames.printSecond()
         }
         Run.onFinish.append {
-            Multitouch.stopStreaming(list, on: worker)
-            frames.feed(Multitouch.takeFrames())
+            MultitouchSupport.stopStreaming(list, on: worker)
+            frames.feed(takeFrames())
             for (id, (_, name)) in pendingFirstFrame { Output.say("added \(name) (registry \(hex(id))) · no frame before the end") }
             let wake = firstAfterWake.map { "\(Int($0)) ms" } ?? (wakeTime == nil ? "no wake seen" : "no frame after wake")
             let reAdd = reAddLatency.isEmpty ? "no re-add seen" : reAddLatency.map { "\(Int($0)) ms" }.joined(separator: ", ")
