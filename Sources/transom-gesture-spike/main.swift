@@ -546,6 +546,10 @@ func wallpaperPoint(avoiding avoid: CGRect) -> CGPoint? {
 }
 
 func runSynth() async {
+    // IN-02: synth posts ⌥ scroll and gesture events into the session, so it refuses to run outside a VM.
+    var vmm: Int32 = 0
+    var size = MemoryLayout<Int32>.size
+    guard sysctlbyname("kern.hv_vmm_present", &vmm, &size, nil, 0) == 0, vmm == 1 else { fail("synth runs only inside the VM", 64) }
     let chosen = scenarioName == "all" ? scenarios : scenarios.filter { $0.name == scenarioName }
     guard !chosen.isEmpty else { fail("unknown scenario \(scenarioName); one of: all, \(scenarios.map(\.name).joined(separator: ", "))", 64) }
     let fixture: FixtureWindow
