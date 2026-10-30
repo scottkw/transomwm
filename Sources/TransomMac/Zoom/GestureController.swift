@@ -169,11 +169,15 @@ import os
             : !arranger.pauseReasons.isEmpty ? .zoomPaused
             : arranger.isDragging || controller.isRectZoomActive ? .rectZoomOrDrag : nil
         let hasDesk = { (display: DisplayInfo) in arranger.world[ZoomInput.deskKey(display)] != nil }
+        // The windows publishGreenButtons trusts, so the no-⌥ test skips the CG read over them (WR-01).
+        let windows = arranger.windows.values.filter {
+            $0.kind == .dockable && !$0.isExcluded && $0.state == .present && arranger.deskKey(of: $0.window) != nil
+        }
         let state = GestureTapState(
             armed: controller.isZoomEnabled && disarm == nil, disarmReason: disarm,
             deskDisplays: arranger.displays.filter(hasDesk).map { ZoomInput.cgRect($0.frame) },
             fullScreenDisplays: arranger.displays.filter { !hasDesk($0) }.map { ZoomInput.cgRect($0.frame) }, finderPID: finderPID,
-            trackpadSenders: Self.filtersBySender ? trackpadSenders : [])
+            trackpadSenders: Self.filtersBySender ? trackpadSenders : [], windowRects: windows.map { ZoomInput.cgRect($0.frame) })
         guard state != published else { return }
         published = state
         tap.setState(state)

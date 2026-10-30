@@ -23,10 +23,14 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
     /// Whether the target pid (field 40) may short-circuit the wallpaper test. Off (C3): in the VM and on the host's
     /// real trackpad (05-SPIKE T6) field 40 is the frontmost app's pid, not the app under the pointer.
     public var trustsTargetPID: Bool
+    /// Frames of the windows Transom tracks on a desk (WR-01). A point inside one is not bare wallpaper whatever is on
+    /// top, so the no-⌥ test passes it with no CG window-list read in the tap callback. A stale frame can only make a
+    /// wallpaper gesture pass, never take a gesture over a window.
+    public var windowRects: [CGRect]
 
     public init(
         armed: Bool = false, disarmReason: DisarmReason? = nil, deskDisplays: [CGRect] = [], fullScreenDisplays: [CGRect] = [],
-        finderPID: Int32 = 0, trackpadSenders: Set<UInt64> = [], trustsTargetPID: Bool = false
+        finderPID: Int32 = 0, trackpadSenders: Set<UInt64> = [], trustsTargetPID: Bool = false, windowRects: [CGRect] = []
     ) {
         self.armed = armed
         self.disarmReason = disarmReason
@@ -35,6 +39,7 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
         self.finderPID = finderPID
         self.trackpadSenders = trackpadSenders
         self.trustsTargetPID = trustsTargetPID
+        self.windowRects = windowRects
     }
 }
 
@@ -176,8 +181,8 @@ public nonisolated enum GestureTapRules {
         }
     }
 
-    /// Whether the tap takes this event. `surface` is called at most once per sequence, only when neither ⌥ nor (when
-    /// trusted) the target pid decides.
+    /// Whether the tap takes this event. `surface` is called at most once per sequence, only when neither ⌥, (when
+    /// trusted) the target pid, nor a tracked window under the pointer decides.
     public static func decide(
         _ input: Input, state: GestureTapState, latch: inout Latch, surface: (CGPoint) -> PointerSurface
     ) -> Decision {
@@ -255,6 +260,7 @@ public nonisolated enum GestureTapRules {
         if !input.flags.intersection([.maskControl, .maskCommand]).isEmpty { return passing(.chord) }
         if option { return taking(.optionHeld) }
         if state.trustsTargetPID, input.targetPID != 0, input.targetPID != state.finderPID { return passing(.shortCircuit) }
+        if state.windowRects.contains(where: { $0.contains(location) }) { return passing(.windowUnderPointer) }
         switch surface(location) {
         case .wallpaper: return taking(.wallpaper)
         case .window: return passing(.windowUnderPointer)

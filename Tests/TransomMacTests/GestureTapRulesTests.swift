@@ -152,6 +152,25 @@ private let gesture = GestureEventFields.gestureType
         #expect(latch.pan?.reason == .wallpaper)
     }
 
+    /// WR-01: a tracked window's frame under the pointer passes a no-⌥ gesture with no CG read in the callback; outside
+    /// every frame the surface is read as before, and ⌥ never looks at the frames.
+    @Test func aTrackedWindowUnderThePointerPassesWithNoSurfaceRead() {
+        var tiled = armed
+        tiled.windowRects = [CGRect(x: 300, y: 200, width: 300, height: 300)]
+        let surface = Surface(.wallpaper)
+        var latch = GestureTapRules.Latch.none
+        #expect(decide(&latch, phase: 1, state: tiled, surface: surface) == .pass)
+        #expect(decide(&latch, phase: 2, state: tiled, surface: surface) == .pass)
+        #expect(latch.pan?.passReason == .windowUnderPointer)
+        #expect(surface.calls == 0)
+        latch = .none
+        #expect(isConsume(decide(&latch, phase: 1, at: CGPoint(x: 100, y: 100), state: tiled, surface: surface)))
+        #expect(surface.calls == 1)
+        latch = .none
+        #expect(isConsume(decide(&latch, phase: 1, flags: option, state: tiled, surface: surface)))
+        #expect(surface.calls == 1)
+    }
+
     @Test(arguments: [Int32(0), finder])
     func withoutOptionTheSurfaceDecidesOncePerSequence(pid: Int32) {
         for (answer, consumed, reason) in [
