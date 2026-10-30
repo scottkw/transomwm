@@ -165,11 +165,18 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
 
 total: 24
 passed: 8 (VM, synthetic events: items 4, 5, 9, 12, 13, 16, 19, 22)
-issues: 0
+issues: 1 (G-01, fixed, awaiting host re-check)
 pending: 15
 skipped: 0
 n/a: 1 (item 15); item 8 is N/A if there's no mouse
 
 ## Gaps
 
-[none yet]
+### G-01: Crash in the multitouch frame path while zoom is on (fixed `7357a32`, awaiting host re-check)
+
+- **Seen:** Transom Debug 0.3.0 on macOS 27.2 (MacBook Air, built-in trackpad) crashed repeatedly with zoom on, 33 s and about 3 min after launch (`~/Library/Logs/DiagnosticReports/Transom Debug-2026-10-30-093943.ips` and `-094043.ips`). EXC_BAD_ACCESS / SIGBUS, KERN_PROTECTION_FAILURE in a stack guard page, on MultitouchSupport's own callback thread (`mt_ThreadedMTEntry`), under `MultitouchSupport.receive` → a chain of reabstraction thunks → `ShimMultitouchBackend.open` handler → `DispatchQueue.main.async`.
+- **Root cause:** the frame handler was stored in `OSAllocatedUnfairLock<(@Sendable (Frame) -> Void)?>`. In Debug (-Onone), each `withLock { $0 }` read wrote the closure back through unspecialized generic `inout` state. That wrapped it in one more thunk pair per frame, so calling it recursed deeper every frame until the 512 KB thread stack ran out. The crash report shows only six of the thousands of pairs. The spike streamed about 1,400 frames, under the limit. The VM has no multitouch device. Reproduced headless: a no-op handler passes 1,000 frames and crashes at 6,000 on a normal thread.
+- **Fix:** frames now go into a lock-protected buffer (`os_unfair_lock`) and wake main through a `DispatchSourceUserDataAdd`. The handler runs on main, in order, from a plain stored property, so no closure sits behind generic state and there is no per-frame `DispatchQueue.main.async`. The crash canary now stays armed while multitouch runs and clears only at a clean stop (zoom off, quit), so a crash minutes into streaming makes the next launch tap-only ("Multitouch: off after a crash last launch"). Trade-off: any crash while zoom is on now turns multitouch off for that OS build and app version.
+- **Regression test:** `MultitouchDevicesTests.theShimFramePathSurvivesThousandsOfFramesOnASmallStack` sends 3,000 frames through the real callback path from a 64 KB thread. Run against the old code, it crashes with the same SIGBUS. `framesKeepTheCanaryArmedUntilACleanStop` covers the new canary rule. Full host `swift test`: 193 + 306 + 75 + 690 = 1,264 passed.
+- **Re-check on the host:** rebuilt `Transom Debug.app` (same path as above, not launched). Run with zoom on and use the trackpad for several minutes (pinches, pans, two-finger scrolls). Expect no crash and Debug G4 reading "Multitouch: available, 1 trackpad".
+- **Status:** fixed, awaiting host re-check.
