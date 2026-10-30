@@ -316,6 +316,14 @@ import os
         submenu.addItem(Self.info(ZoomCopy.lastSettleLine(zoom?.lastSettle)))
         let cache = zoom?.cacheStats ?? (windows: 0, bytes: 0)
         submenu.addItem(Self.info(ZoomCopy.snapshotCacheLine(windows: cache.windows, bytes: cache.bytes)))
+        let source: GestureCopy.Source =
+            if !arrange.isZoomEnabled { .offZoom } else if arrange.isGestureTapRunning { .on } else if arrange.gestureTapFailedToStart {
+                .unavailable
+            } else { .offTapNotRunning }
+        submenu.addItem(Self.info(GestureCopy.gesturesLine(source)))
+        let gestures = arrange.gestures
+        submenu.addItem(Self.info(GestureCopy.takenLine(taken: gestures.taken, timeouts: gestures.timeouts)))
+        submenu.addItem(Self.info(gestures.lastGesture.map(Self.lastGestureLine) ?? GestureCopy.lastGestureNone))
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
@@ -414,6 +422,17 @@ import os
     #endif
 
     /// A disabled informational item (no action, so NSMenu's auto-enabling greys it out).
+    private static func lastGestureLine(_ last: GestureController.LastGesture) -> String {
+        let outcome: GestureCopy.Outcome =
+            switch last.outcome {
+            case .moved: .moved
+            case .sprangBack: .sprangBack
+            case .refused(let refusal): .refused(refusal)
+            case .tooSmall: .tooSmall
+            }
+        return GestureCopy.lastGestureLine(kind: last.kind == .pinch ? .pinch : .pan, direction: last.direction, outcome: outcome)
+    }
+
     private static func info(_ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
