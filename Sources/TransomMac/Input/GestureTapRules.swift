@@ -182,8 +182,8 @@ public nonisolated enum GestureTapRules {
         _ input: Input, state: GestureTapState, latch: inout Latch, surface: (CGPoint) -> PointerSurface
     ) -> Decision {
         let now = input.timestamp
-        if let pan = latch.pan, expired(pan, now: now) { latch.pan = nil }
-        if let pinch = latch.pinch, expired(pinch, now: now) { latch.pinch = nil }
+        if let pan = latch.pan, isExpired(pan, now: now) { latch.pan = nil }
+        if let pinch = latch.pinch, isExpired(pinch, now: now) { latch.pinch = nil }
 
         if input.type == CGEventType.scrollWheel.rawValue {
             // Discrete wheels and unphased scrolls are never a trackpad gesture (E-04).
@@ -225,7 +225,8 @@ public nonisolated enum GestureTapRules {
         return .consume(zoom ? sample(input, kind: .pinch, reason: first ? sequence.reason : nil) : nil)
     }
 
-    private static func expired(_ sequence: Sequence, now: Double) -> Bool {
+    /// Whether `decide` drops this latched sequence at an event at `now`.
+    public static func isExpired(_ sequence: Sequence, now: Double) -> Bool {
         now - sequence.lastEvent > (sequence.fingersUp ? quietTimeout : fingersDownTimeout)
     }
 

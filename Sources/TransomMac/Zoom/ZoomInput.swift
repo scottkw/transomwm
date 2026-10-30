@@ -388,7 +388,7 @@ import os
     nonisolated static func cgRect(_ rect: Rect) -> CGRect { CGRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height) }
 
     /// The desk shown on `display` (the engine's `Arranger.key`).
-    nonisolated private static func deskKey(_ display: DisplayInfo) -> DeskKey {
+    nonisolated static func deskKey(_ display: DisplayInfo) -> DeskKey {
         DeskKey(displayUUID: display.uuid, spaceID: display.currentSpaceID)
     }
 }

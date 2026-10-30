@@ -48,8 +48,10 @@ ssh -t "${ssh_opts[@]}" "$host" "
         for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Transom >/dev/null || break; sleep 0.5; done
         if pgrep -x Transom >/dev/null; then echo 'vm-live-test: Transom is still running in the VM' >&2; exit 1; fi
     fi
+    # A sleeping guest display shifts NSScreen geometry by -768 pt (04-UAT, Pitfall 11): wake it, keep it awake.
+    caffeinate -u -t 2
     rc=0
-    env TRANSOM_LIVE=1 $* ./swiftpm-testing-helper --test-bundle-path \"\$PWD/TransomMacIntegrationTests.xctest/Contents/MacOS/TransomMacIntegrationTests\" \
+    env TRANSOM_LIVE=1 $* caffeinate -dimsu ./swiftpm-testing-helper --test-bundle-path \"\$PWD/TransomMacIntegrationTests.xctest/Contents/MacOS/TransomMacIntegrationTests\" \
         --testing-library swift-testing --filter '$filter' || rc=\$?
     exit \$rc
 "

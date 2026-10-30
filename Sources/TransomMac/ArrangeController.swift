@@ -20,6 +20,7 @@ import os
         didSet {
             publishGreenButtons()
             zoomInput.publish()
+            gestures.publish()
             guard arranger.pauseReasons != reportedPause else { return }
             reportedPause = arranger.pauseReasons
             onPauseChanged?()
@@ -81,6 +82,12 @@ import os
     var hasZoomController: Bool { zoomController != nil }
     /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
     private lazy var zoomInput = ZoomInput(controller: self, tap: tap)
+    /// The gesture session tap (05-03): runs only while zoom is on and the mouse tap runs (D-07).
+    private let gestureTap = GestureTap()
+    private(set) lazy var gestures = GestureController(tap: gestureTap, controller: self)
+    public var isGestureTapRunning: Bool { gestureTap.isRunning }
+    /// The last start attempt was refused (the Debug line tells "unavailable" from "not running").
+    public private(set) var gestureTapFailedToStart = false
 
     public init(
         system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, zoomEnabled: Bool = false
@@ -151,13 +158,17 @@ import os
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
-                if case .spaceChanged = event { self.zoomInput.endPick(reason: "space changed") }
+                if case .spaceChanged = event {
+                    self.zoomInput.endPick(reason: "space changed")
+                    self.gestures.republish(reason: "space change")
+                }
                 // Back at the keyboard (⌘-Tab, a Dock click): pick mode's Esc hotkey must not keep Esc from that app (WR-02).
                 if case .windowFocused = event { self.zoomInput.endPick(reason: "focus changed") }
                 if case .displaysChanged = event {
                     self.zoomInput.endPick(reason: "displays changed")
                     self.zoomController?.displaysChanged()
                     self.zoomInput.publish()  // a move whose display went away never reveals
+                    self.gestures.republish(reason: "display change")
                 }
                 if case .windowDestroyed(let window) = event { self.zoomController?.windowClosed(window) }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
@@ -202,12 +213,14 @@ import os
                 }
             }
         }
+        updateGestureTap(reason: "")
         return true
     }
 
     /// Takes the tap down (Accessibility left `.ready`, Pitfall 4). Hotkeys and the menu keep working.
     public func stopTap() {
         tap.stop()
+        updateGestureTap(reason: "access lost")
         zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
@@ -238,6 +251,11 @@ import os
     }
 
     private func watchdogTick() {
+        defer {
+            gestureTap.watchdogTick()
+            updateGestureTap(reason: "access lost")
+            gestures.noteReEnables()
+        }
         guard tap.isRunning else {
             if tapAllowed, isReady() { startTap() }
             return
@@ -257,6 +275,19 @@ import os
         tapAllowed = ready
         if ready { startTap() } else { stopTap() }
         zoomInput.publish()
+        gestures.publish()
+    }
+
+    /// Starts the gesture tap when zoom is on and the mouse tap runs, else stops it (D-07). A tap macOS took down is
+    /// started again.
+    func updateGestureTap(reason: String) {
+        if zoomEnabled && tap.isRunning {
+            guard !gestureTap.isRunning else { return }
+            gestures.stop(reason: reason)
+            gestureTapFailedToStart = !gestures.start()
+        } else {
+            gestures.stop(reason: reason)
+        }
     }
 
     /// The green buttons the tap last got, so an unchanged set is not swapped in again.
@@ -612,6 +643,7 @@ import os
         guard !zoomEnabled else { return }
         zoomEnabled = true
         zoomInput.publish()
+        updateGestureTap(reason: "")
         await run(arranger.handle(.zoomEnabled(true), now: .now))
         Hotkeys.setZoomHotkeys(enabled: true)
         postAnnouncement(ZoomCopy.zoomOnAnnouncement)
@@ -625,6 +657,7 @@ import os
         zoomOffFallback.cancel()
         zoomEnabled = false
         zoomInput.publish()
+        updateGestureTap(reason: "zoom off")
         let effects = arranger.handle(.zoomEnabled(false), now: .now)
         let floated = effects.reduce(0) { count, effect in if case .notice(.lostRoom(let windows)) = effect { count + windows.count } else { count } }
         await run(effects)
@@ -684,6 +717,7 @@ import os
     /// so it never waits on MainActor work (Pitfall 14). Returns how many writes finished.
     @discardableResult
     public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
+        gestures.stop(reason: "quit")
         let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) })
         let plan = Recovery.terminationPlan(
             windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked,
