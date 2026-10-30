@@ -36,6 +36,37 @@ import os
         var fingersUp = false
     }
     private var current: Current?
+
+    /// The taken gesture's judgement and stage (05-04), from its first sample to its release.
+    private struct Follow {
+        var seq: UInt64
+        var kind: GestureSample.Kind
+        var recognizer: GestureRecognizer
+        var uuid: String
+        /// The pointer at the latch: the pinch point.
+        var pointer: Point
+        var first: Double
+        var target: ViewTarget?
+        var refusal: Navigator.Refusal?
+        /// The stage is up for this gesture.
+        var shown = false
+    }
+    private var follow: Follow?
+    /// Polls the recognizer while a gesture is open: a released pan decides within `momentumWait` (05-02).
+    private let recognizerTimer = WakeTimer()
+
+    /// How a gesture ended, for the log line and plan 05-06's Debug line.
+    enum Outcome: Equatable {
+        case moved(ViewTarget), sprangBack, refused(Navigator.Refusal), tooSmall
+    }
+    struct LastGesture: Equatable {
+        var seq: UInt64
+        var kind: GestureSample.Kind
+        /// Nil when it never left the dead zone or locked an axis.
+        var direction: GestureRecognizer.Direction?
+        var outcome: Outcome
+    }
+    private(set) var lastGesture: LastGesture?
     /// Sequences whose line the timeout timer wrote; their late `.ended` writes none.
     private var loggedByTimer: Set<UInt64> = []
     private let timeoutTimer = WakeTimer()
@@ -46,7 +77,7 @@ import os
     private(set) var republished = 0
     /// The last gesture the tap summed up (taken or passed), for plan 05-06's Debug lines.
     private(set) var lastSummary: GestureTapSummary?
-    /// The current gesture's latest consumed sample; plan 05-04 feeds them to the recognizer.
+    /// The current gesture's latest consumed sample.
     private(set) var latestSample: GestureSample?
 
     init(tap: GestureTap, controller: ArrangeController) {
@@ -94,6 +125,7 @@ import os
         for observer in wakeObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         wakeObservers = []
         timeoutTimer.cancel()
+        if let seq = follow?.seq { finishFollow(seq) }  // never leave a stage up over the screen
         current = nil
         log.info("gesture tap stopped: \(reason, privacy: .public)")
     }
@@ -152,6 +184,7 @@ import os
             current?.fingersUp = sample.kind == .pan && (sample.phase == 4 || sample.momentum != 0)
             let limit = current?.fingersUp == true ? GestureTapRules.quietTimeout : GestureTapRules.fingersDownTimeout
             timeoutTimer.set(.now + .seconds(limit) + .milliseconds(50)) { [weak self] in self?.expire(seq) }
+            feed(sample, seq: seq)
         case .ended(let summary):
             lastSummary = summary
             if summary.seq == current?.seq {
@@ -159,6 +192,7 @@ import os
                 current = nil
             }
             guard loggedByTimer.remove(summary.seq) == nil else { return }
+            if summary.taken { finishFollow(summary.seq) }
             logEnd(summary)
         }
     }
@@ -169,12 +203,13 @@ import os
         guard let gesture = current, gesture.seq == seq else { return }
         current = nil
         loggedByTimer.insert(seq)
+        finishFollow(seq)
         let kind = gesture.kind == .pinch ? "pinch" : "pan"
         if gesture.fingersUp {
             taken += 1
             let ms = Int(((gesture.last - gesture.first) * 1000).rounded())
             let reason = gesture.reason == .wallpaper ? "wallpaper" : "⌥ held"
-            log.info("took \(kind, privacy: .public) #\(seq, privacy: .public): \(reason, privacy: .public), \(gesture.events, privacy: .public) events, \(ms, privacy: .public) ms")
+            log.info("took \(kind, privacy: .public) #\(seq, privacy: .public): \(reason, privacy: .public), \(gesture.events, privacy: .public) events, \(ms, privacy: .public) ms\(self.outcomeText(seq), privacy: .public)")
         } else {
             timeouts += 1
             let ms = Int(((Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1e9 - gesture.first) * 1000).rounded())
@@ -192,7 +227,7 @@ import os
         } else if summary.taken {
             taken += 1
             let reason = summary.reason == .wallpaper ? "wallpaper" : "⌥ held"
-            log.info("took \(kind, privacy: .public) #\(summary.seq, privacy: .public): \(reason, privacy: .public), \(events, privacy: .public) events, \(ms, privacy: .public) ms")
+            log.info("took \(kind, privacy: .public) #\(summary.seq, privacy: .public): \(reason, privacy: .public), \(events, privacy: .public) events, \(ms, privacy: .public) ms\(self.outcomeText(summary.seq), privacy: .public)")
         } else if summary.optionHeld {
             passedWithOption += 1
             log.debug("passed \(kind, privacy: .public) with ⌥: \(Self.optionPassText(summary.passReason), privacy: .public)")
@@ -200,6 +235,140 @@ import os
             log.debug("passed \(kind, privacy: .public): window under pointer")
         } else if summary.passReason == .overlayUnderPointer {
             log.debug("passed \(kind, privacy: .public): menu or popover under pointer")
+        }
+    }
+
+    // MARK: Follow (05-04)
+
+    private static func uptime() -> Double { Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1e9 }
+
+    /// One taken sample into the recognizer; the first of a sequence picks the display under it and the pinch point.
+    private func feed(_ sample: GestureSample, seq: UInt64) {
+        if follow?.seq != seq {
+            if let old = follow?.seq { finishFollow(old) }
+            let pointer = Point(x: sample.location.x, y: sample.location.y)
+            guard let display = controller?.arranger.displays.first(where: { $0.frame.contains(pointer) }) else { return }
+            let size = Size(width: display.visibleFrame.width, height: display.visibleFrame.height)
+            follow = Follow(
+                seq: seq, kind: sample.kind, recognizer: GestureRecognizer(kind: sample.kind == .pinch ? .pinch : .pan, viewSize: size),
+                uuid: display.uuid, pointer: pointer, first: sample.timestamp)
+        }
+        guard var gesture = follow, gesture.seq == seq else { return }
+        let update = gesture.recognizer.feed(
+            GestureRecognizer.Sample(
+                t: sample.timestamp - gesture.first, kind: gesture.recognizer.kind, phase: sample.phase, momentum: sample.momentum,
+                magnification: sample.magnification, dx: sample.dx, dy: sample.dy))
+        follow = gesture
+        apply(update)
+        pollRecognizer(seq)
+    }
+
+    private func pollRecognizer(_ seq: UInt64) {
+        guard let gesture = follow, gesture.seq == seq, !gesture.recognizer.isFinished else { return recognizerTimer.cancel() }
+        recognizerTimer.set(.now + .seconds(GestureTuning.momentumWait)) { [weak self] in
+            guard let self, var gesture = self.follow, gesture.seq == seq else { return }
+            let update = gesture.recognizer.timeout(now: Self.uptime() - gesture.first)
+            self.follow = gesture
+            self.apply(update)
+            self.pollRecognizer(seq)
+        }
+    }
+
+    /// The tap ended or dropped the sequence: a recognizer still open decides now (a release, or a cancel with fingers
+    /// down), so a stage that is up is always resolved.
+    private func finishFollow(_ seq: UInt64) {
+        guard var gesture = follow, gesture.seq == seq else { return }
+        let update = gesture.recognizer.timeout(now: .greatestFiniteMagnitude)
+        follow = gesture
+        apply(update)
+        if follow?.seq == seq {  // never started (spike C2 noise): nothing to resolve
+            follow = nil
+            lastGesture = LastGesture(seq: seq, kind: gesture.kind, direction: nil, outcome: .tooSmall)
+        }
+    }
+
+    private func apply(_ update: GestureRecognizer.Update?) {
+        guard let update, var gesture = follow, let controller else { return }
+        switch update {
+        case .started(let direction):
+            aim(&gesture, direction)
+            if let target = gesture.target, let preview = controller.arranger.previewMove(to: target, displayUUID: gesture.uuid),
+                controller.zoomController?.isIdle ?? true
+            {
+                // A busy display (a move or settle running, E-03) and a refused gesture are plan 05-05's.
+                gesture.shown = controller.beginFollow(preview, gesture: Self.kindText(gesture.kind))
+            }
+            follow = gesture
+            followFrame(gesture, direction)
+        case .progress(let direction, _):
+            followFrame(gesture, direction)
+        case .reversed(let direction):
+            aim(&gesture, direction)
+            follow = gesture
+            if gesture.shown {
+                let preview = gesture.target.flatMap { controller.arranger.previewMove(to: $0, displayUUID: gesture.uuid) }
+                if let move = preview ?? controller.arranger.stillMove(displayUUID: gesture.uuid) { controller.followStage().refollow(move) }
+            }
+            followFrame(gesture, direction)
+        case .ended(let release):
+            follow = nil
+            recognizerTimer.cancel()
+            let outcome: Outcome =
+                if release.tooSmall { .tooSmall } else if release.passedThreshold, let target = gesture.target { .moved(target) } else {
+                    gesture.refusal.map { .refused($0) } ?? .sprangBack
+                }
+            lastGesture = LastGesture(seq: gesture.seq, kind: gesture.kind, direction: release.direction, outcome: outcome)
+            let uuid = gesture.uuid
+            guard case .moved(let target) = outcome else {
+                if gesture.shown { controller.followStage().springBack(displayUUID: uuid) }
+                return
+            }
+            // A committed gesture is an ordinary zoomTo: its .cameraMove retargets the following stage, then Phase 4's
+            // settle, parks and history.
+            Task { [weak controller] in
+                guard let controller else { return }
+                await controller.zoom(to: target, displayUUID: uuid)
+                // Refused at the last moment (paused meanwhile): nothing took the stage over, so it springs back.
+                if controller.zoomController?.isFollowing(uuid) == true { controller.followStage().springBack(displayUUID: uuid) }
+            }
+        }
+    }
+
+    /// The target for `direction`, from Phase 4's camera step with the pinch point; never a beep (UI-SPEC Surface 3).
+    private func aim(_ gesture: inout Follow, _ direction: GestureRecognizer.Direction) {
+        switch controller?.arranger.gestureTarget(direction, displayUUID: gesture.uuid, pointer: gesture.pointer) {
+        case .success(let target)?: (gesture.target, gesture.refusal) = (target, nil)
+        case .failure(let refusal)?: (gesture.target, gesture.refusal) = (nil, refusal)
+        case nil: (gesture.target, gesture.refusal) = (nil, nil)
+        }
+    }
+
+    private func followFrame(_ gesture: Follow, _ direction: GestureRecognizer.Direction) {
+        guard gesture.shown, let controller else { return }
+        controller.followStage().follow(
+            displayUUID: gesture.uuid, state: gesture.recognizer.follow(hasTarget: gesture.target != nil), anchor: gesture.pointer,
+            direction: direction)
+    }
+
+    private static func kindText(_ kind: GestureSample.Kind) -> String { kind == .pinch ? "pinch" : "pan" }
+
+    /// ", moved to {node}" / ", sprang back" / ", too small" / ", {refusal}" for the took line (UI-SPEC Logging).
+    private func outcomeText(_ seq: UInt64) -> String {
+        guard let last = lastGesture, last.seq == seq else { return "" }
+        return switch last.outcome {
+        case .moved(let target): ", moved to \(target)"
+        case .sprangBack: ", sprang back"
+        case .tooSmall: ", too small"
+        case .refused(let refusal): ", \(Self.refusalText(refusal))"
+        }
+    }
+
+    private static func refusalText(_ refusal: Navigator.Refusal) -> String {
+        switch refusal {
+        case .alreadyHome: "already home"
+        case .nothingToZoomIn: "nothing to zoom in to"
+        case .noArea(let edge): "no area \(edge)"
+        default: "\(refusal)"
         }
     }
 

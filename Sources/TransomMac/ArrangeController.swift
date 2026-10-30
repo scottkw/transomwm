@@ -592,12 +592,30 @@ import os
         zoom.onTileClick = { [weak self] uuid, id in
             Task { await self?.zoomInput.stageClick(cgID: id, displayUUID: uuid) }
         }
+        zoom.onFollowEnded = { [weak self] uuid in
+            self?.collapsedPanels.fadeIn(on: uuid)
+            self?.zoomInput.publish()
+        }
         zoom.bringNoticesFront = { [weak self] in
             self?.toast.bringFront()
             self?.previews?.bringFront()
         }
         zoomController = zoom
         return zoom
+    }
+
+    /// The stage a gesture follows on (05-04), made with zoom on like a move's.
+    func followStage() -> ZoomController { zoom() }
+
+    /// A gesture's stage orders in: as for `.cameraMove`, collapsed panels hide and zoom presses wait for the end.
+    @discardableResult func beginFollow(_ move: CameraMove, gesture: String) -> Bool {
+        collapsedPanels.hide(on: move.displayUUID)
+        guard zoom().beginFollow(move, gesture: gesture) else {
+            collapsedPanels.fadeIn(on: move.displayUUID)
+            return false
+        }
+        zoomInput.publish()
+        return true
     }
 
     /// Answers a finished stage move: the engine commits the view and plans the writes, and the stage learns which

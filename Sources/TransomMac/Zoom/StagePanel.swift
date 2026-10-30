@@ -169,6 +169,65 @@ public final class StagePanel: NSPanel {
         CATransaction.commit()
     }
 
+    // MARK: Follow (05-04, UI-SPEC Surfaces 1, 2 and 4)
+
+    /// A gesture's stage: in at once with every tile at its start rect. `crossfade` (Reduce Motion) is kept for the snap's
+    /// retarget, as a move's is.
+    public func beginFollow(tiles: [StageTile], crossfade: Bool) {
+        show(tiles: tiles)
+        self.crossfade = crossfade
+    }
+
+    /// One frame of finger tracking, set at once (no animation between samples): every tile at `followRect`.
+    public func follow(t: Double, scale: Double, anchor: CGPoint, offset: CGVector) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for tile in tiles {
+            layers[tile.id]?.set(localRect(Self.followRect(start: tile.start, end: tile.end, t: t, scale: scale, anchor: anchor, offset: offset)))
+        }
+        CATransaction.commit()
+    }
+
+    /// lerp(start, end, t), then scaled by `scale` about `anchor`, then moved by `offset`. Global AppKit coordinates.
+    nonisolated public static func followRect(start: CGRect, end: CGRect, t: Double, scale: Double, anchor: CGPoint, offset: CGVector) -> CGRect {
+        func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * t }
+        let x = lerp(start.minX, end.minX), y = lerp(start.minY, end.minY)
+        return CGRect(
+            x: anchor.x + (x - anchor.x) * scale + offset.dx, y: anchor.y + (y - anchor.y) * scale + offset.dy,
+            width: lerp(start.width, end.width) * scale, height: lerp(start.height, end.height) * scale)
+    }
+
+    /// Spring back: every tile from where it is to its start rect over a move, then the reveal fade; with `fade` (Reduce
+    /// Motion) the stage just fades out over a move, nothing moving. The real windows never moved, so nothing settles.
+    public func springBack(fade: Bool, completion: @escaping @MainActor () -> Void) {
+        guard !fade else { return fadeOut(duration: Self.moveDuration, completion: completion) }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        CATransaction.setCompletionBlock { [weak self] in
+            MainActor.assumeIsolated { self?.fadeOut(completion: completion) }
+        }
+        for tile in tiles {
+            guard let layer = layers[tile.id] else { continue }
+            layer.move(from: layer.currentRect, to: localRect(tile.start), duration: Self.moveDuration, timing: Self.moveTiming)
+        }
+        CATransaction.commit()
+    }
+
+    /// A capture that came back while the stage is up: the tile's contents cross-fade to it over the reveal fade (opacity,
+    /// not motion, so also under Reduce Motion); its frame is untouched.
+    public func setContents(_ image: CGImage, for id: UInt32) {
+        guard let layer = layers[id], let index = tiles.firstIndex(where: { $0.id == id }) else { return }
+        tiles[index].content = .snapshot(image)
+        let fade = CATransition()
+        fade.type = .fade
+        fade.duration = Self.revealFade
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.add(fade, forKey: "contents")
+        layer.setSnapshot(image)
+        CATransaction.commit()
+    }
+
     /// Fades the whole stage out, then orders it out. Window alpha rather than layer opacity: the panel is opaque, so
     /// transparent content would show black instead of the windows underneath.
     public func fadeOut(duration: Double = StagePanel.revealFade, completion: (@MainActor () -> Void)? = nil) {

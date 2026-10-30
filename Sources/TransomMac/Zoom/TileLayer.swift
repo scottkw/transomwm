@@ -74,6 +74,24 @@ nonisolated final class TileLayer: CALayer {
         position = CGPoint(x: rect.midX, y: rect.midY)
     }
 
+    /// Puts the tile at `rect` at once with its snapshot re-fitted (follow mode; the caller disables actions).
+    func set(_ rect: CGRect) {
+        place(rect)
+        if case .snapshot(let image) = content { picture.frame = Self.pictureFrame(image, in: rect.size) }
+    }
+
+    /// Swaps a fallback for a snapshot that came back late (the caller adds the cross-fade).
+    func setSnapshot(_ image: CGImage) {
+        content = .snapshot(image)
+        for layer in sublayers ?? [] { layer.removeFromSuperlayer() }
+        backgroundColor = nil
+        borderWidth = 0
+        cornerRadius = 0
+        picture.contents = image
+        picture.frame = Self.pictureFrame(image, in: bounds.size)
+        addSublayer(picture)
+    }
+
     /// Where the tile is on screen now: its presentation rect while it animates.
     var currentRect: CGRect { presentation()?.frame ?? frame }
 

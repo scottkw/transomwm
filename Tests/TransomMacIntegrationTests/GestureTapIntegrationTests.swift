@@ -10,7 +10,7 @@ import os
 
 /// A pass-through tap at the tail of the session: counts what survived every head tap. Active, not listen-only, as the
 /// 05-01 spike's counter was, so it surely runs after the gesture tap.
-private final class Downstream: @unchecked Sendable {
+final class Downstream: @unchecked Sendable {
     private let count = OSAllocatedUnfairLock(initialState: 0)
     private var port: CFMachPort?
     private var runLoop: CFRunLoop?
