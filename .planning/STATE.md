@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 current_phase: 5
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-10-30T00:12:08.933Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-10-30T00:32:24.144Z"
 last_activity: 2026-10-28
 last_activity_desc: Phase 5 execution started
-state_head: 16eb5ca21af1a2d57c625de91bc78d4e678338f9
+state_head: a1a29a3e4e5c80fb8714d351c2694300de884967
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 67
-  completed_plans: 62
+  completed_plans: 63
   percent: 44
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 5 — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-10-28 — Phase 5 execution started
 
@@ -113,6 +113,7 @@ Progress: [████░░░░░░] 44%
 | Phase 05 P01 | 23h43m | 3 tasks | 8 files |
 | Phase 05 P02 | 10min | 2 tasks | 15 files |
 | Phase 05 P03 | 16min | 2 tasks | 12 files |
+| Phase 05 P04 | 15 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -297,6 +298,7 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-03: a taken pan does not take type-29 companions (sub-types 0/6/32); host showed nothing moved
 - [Phase 05]: 05-03: E-04 sender filter on (field 87 = AppleMultitouchDevice registry ID); trustsTargetPID stays false (C3)
 - [Phase 05]: 05-03: gesture tap exists only while zoom is on and the mouse tap runs (updateGestureTap)
+- [Phase 05]: 05-04: a committed gesture is an ordinary zoomTo whose .cameraMove retargets the .following stage; a released gesture's judgement is kept until the tap ends the sequence
 
 ### Quick Tasks Completed
 
@@ -337,8 +339,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-30T00:12:08.649Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-10-30T00:32:23.848Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification
