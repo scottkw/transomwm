@@ -73,6 +73,8 @@ import os
     /// Sequences whose line the timeout timer wrote; their late `.ended` writes none.
     private var loggedByTimer: Set<UInt64> = []
     private let timeoutTimer = WakeTimer()
+    /// The tap's last seq before the current start: events at or below it are a stopped tap's, still buffered (WR-07).
+    private var seqFloor: UInt64 = 0
 
     private(set) var taken = 0
     private(set) var timeouts = 0
@@ -104,6 +106,7 @@ import os
     func start() -> Bool {
         isActive = true
         refresh()
+        seqFloor = tap.counters().lastSeq  // read before the start, so no new sequence can fall under it
         guard tap.start() else {
             isActive = false
             if !loggedStartFailure { log.error("gesture tap failed to start") }
@@ -147,6 +150,7 @@ import os
         timeoutTimer.cancel()
         if let seq = follow?.seq { finishFollow(seq) }  // never leave a stage up over the screen
         current = nil
+        loggedByTimer = []  // their late `.ended` can no longer be handled (WR-07)
         log.info("gesture tap stopped: \(reason, privacy: .public)")
     }
 
@@ -196,7 +200,17 @@ import os
         publish()
     }
 
+    /// WR-07: only the running tap's events count. Nothing is handled after `stop`, and after a restart the old tap's
+    /// buffered events are dropped, so no stage comes up once the tap is gone.
+    nonisolated static func isCurrent(_ event: GestureTapEvent, active: Bool, floor: UInt64) -> Bool {
+        switch event {
+        case .sample(_, let seq): active && seq > floor
+        case .ended(let summary): active && summary.seq > floor
+        }
+    }
+
     private func handle(_ event: GestureTapEvent) {
+        guard Self.isCurrent(event, active: isActive, floor: seqFloor) else { return }
         switch event {
         case .sample(let sample, let seq):
             latestSample = sample
