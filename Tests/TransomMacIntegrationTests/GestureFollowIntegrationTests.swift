@@ -48,9 +48,14 @@ private func pan(_ total: Double, momentum: Bool, flags: CGEventFlags = .maskAlt
 }
 
 /// Posts `events` at `point` through the HID tap, `gap` apart, then lets them settle; returns how many reached `downstream`.
-private func post(_ events: [(CGPoint) -> CGEvent?], at point: CGPoint, gap: Duration = .milliseconds(8), downstream: Downstream) async throws -> Int {
-    CGWarpMouseCursorPosition(point)
-    try await Task.sleep(for: .milliseconds(300))
+/// `warp` false: the pointer is already there, and the events go out at once (a gesture during a move).
+private func post(
+    _ events: [(CGPoint) -> CGEvent?], at point: CGPoint, gap: Duration = .milliseconds(8), warp: Bool = true, downstream: Downstream
+) async throws -> Int {
+    if warp {
+        CGWarpMouseCursorPosition(point)
+        try await Task.sleep(for: .milliseconds(300))
+    }
     let before = downstream.value
     for make in events {
         make(point)?.post(tap: .cghidEventTap)
@@ -83,6 +88,14 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
 
     func idle() async -> Bool { await waitUntil(timeout: .seconds(3)) { arrange.zoomController?.isIdle ?? true } }
 
+    /// Replaces the refusal announcement and the beep with recorders (UI-SPEC Surface 3: a gesture never beeps).
+    func recordFeedback() -> Feedback {
+        let feedback = Feedback()
+        arrange.gestures.announce = { feedback.announcements.append($0) }
+        arrange.beep = { feedback.beeps += 1 }
+        return feedback
+    }
+
     func target(_ direction: GestureRecognizer.Direction, at point: CGPoint) -> ViewTarget? {
         guard case .success(let target)? = arrange.arranger.gestureTarget(direction, displayUUID: uuid, pointer: Point(x: point.x, y: point.y))
         else { return nil }
@@ -107,6 +120,11 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
         try #require(await idle(), "the stage never revealed")
         try #require(view == target)
     }
+}
+
+@MainActor private final class Feedback {
+    var announcements: [String] = []
+    var beeps = 0
 }
 
 @MainActor private func withDesk(_ body: (Desk) async throws -> Void) async throws {
@@ -281,6 +299,70 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
             #expect(try await post(pinch(1.2, flags: []), at: wallpaper, downstream: desk.downstream) == 0)
             #expect(await desk.idle(), "the stage never revealed")
             #expect(desk.view != .home, "a no-⌥ pinch on the wallpaper did not zoom in")
+        }
+    }
+
+    // MARK: Refused gestures and the one-level clamp (05-05)
+
+    @Test(.timeLimit(.minutes(1)))
+    func aPanAtHomeOverscrollsAndSpringsBackSilently() async throws {
+        try await withDesk { desk in
+            let feedback = desk.recordFeedback()
+            let total = -0.2 * desk.visible.width
+            let survived = try await post(pan(total, momentum: false), at: center(desk.tiles[0]), gap: .milliseconds(100), downstream: desk.downstream)
+            #expect(survived == 0, "pan events reached the app")
+            #expect(await desk.idle(), "the stage stayed up")
+            #expect(desk.view == .home)
+            #expect(feedback.announcements.isEmpty, "a sub-threshold overscroll announced \(feedback.announcements)")
+            #expect(feedback.beeps == 0)
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .refused(.noArea(.right)))
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aDecisivePanAtHomeAnnouncesNoArea() async throws {
+        try await withDesk { desk in
+            let feedback = desk.recordFeedback()
+            let total = -0.5 * desk.visible.width
+            let survived = try await post(pan(total, momentum: false), at: center(desk.tiles[0]), downstream: desk.downstream)
+            #expect(survived == 0)
+            #expect(await desk.idle(), "the stage stayed up")
+            #expect(desk.view == .home)
+            #expect(feedback.announcements == [Navigator.Refusal.noArea(.right).announcement])
+            #expect(feedback.beeps == 0)
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .refused(.noArea(.right)))
+        }
+    }
+
+    /// E-02: Σ +3.0 is two levels of finger spread; the camera still goes exactly one level in.
+    @Test(.timeLimit(.minutes(1)))
+    func aLongPinchGoesExactlyOneLevel() async throws {
+        try await withDesk { desk in
+            let point = center(desk.tiles[0])
+            let expected = try #require(desk.target(.pinchIn, at: point), "no pinch-in target at home")
+            let survived = try await post(pinch(3.0), at: point, downstream: desk.downstream)
+            #expect(survived == 0)
+            #expect(await desk.idle(), "the stage never revealed")
+            #expect(desk.view == expected, "a long pinch went to \(desk.view), not one level in (\(expected))")
+            let tree = try #require(desk.arrange.arranger.world[ZoomInput.deskKey(desk.display)]?.tree)
+            if case .node(let node) = desk.view { #expect(Navigator.ancestors(of: node, in: tree).count == 2, "not depth 1") }
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .moved(expected))
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aPinchInOnALeafAnnouncesNothingToZoomIn() async throws {
+        try await withDesk { desk in
+            let leaf = try #require(desk.arrange.arranger.leafNode(of: desk.refs[0]))
+            try await desk.zoom(to: .node(leaf))
+            let feedback = desk.recordFeedback()
+            let survived = try await post(pinch(1.2), at: center(desk.visible), downstream: desk.downstream)
+            #expect(survived == 0)
+            #expect(await desk.idle(), "the stage stayed up")
+            #expect(desk.view == .node(leaf))
+            #expect(feedback.announcements == [Navigator.Refusal.nothingToZoomIn.announcement])
+            #expect(feedback.beeps == 0)
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .refused(.nothingToZoomIn))
         }
     }
 }

@@ -81,6 +81,8 @@ import os
     private(set) var lastSummary: GestureTapSummary?
     /// The current gesture's latest consumed sample.
     private(set) var latestSample: GestureSample?
+    /// Posts a refusal's VoiceOver announcement; a seam for tests.
+    var announce: (String) -> Void = { postAnnouncement($0) }
 
     init(tap: GestureTap, controller: ArrangeController) {
         self.tap = tap
@@ -294,11 +296,11 @@ import os
         switch update {
         case .started(let direction):
             aim(&gesture, direction)
-            if let target = gesture.target, let preview = controller.arranger.previewMove(to: target, displayUUID: gesture.uuid),
-                controller.zoomController?.isIdle ?? true
-            {
-                // A busy display (a move or settle running, E-03) and a refused gesture are plan 05-05's.
-                gesture.shown = controller.beginFollow(preview, gesture: Self.kindText(gesture.kind))
+            // No target (refused, UI-SPEC Surface 3): the current view's still tile set overscrolls and springs back.
+            let preview = gesture.target.flatMap { controller.arranger.previewMove(to: $0, displayUUID: gesture.uuid) }
+            if controller.zoomController?.isIdle ?? true, let move = preview ?? controller.arranger.stillMove(displayUUID: gesture.uuid) {
+                // A busy display (a move or settle running, E-03) is Task 2's.
+                gesture.shown = controller.beginFollow(move, gesture: Self.kindText(gesture.kind))
             }
             follow = gesture
             followFrame(gesture, direction)
@@ -323,6 +325,8 @@ import os
             let uuid = gesture.uuid
             guard case .moved(let target) = outcome else {
                 if gesture.shown { controller.followStage().springBack(displayUUID: uuid) }
+                // Silent to the ear; VoiceOver hears the refusal only when the gesture would have committed (Surface 3).
+                if case .refused(let refusal) = outcome, release.passedThreshold { announce(refusal.announcement) }
                 return
             }
             // A committed gesture is an ordinary zoomTo: its .cameraMove retargets the following stage, then Phase 4's
@@ -336,7 +340,7 @@ import os
         }
     }
 
-    /// The target for `direction`, from Phase 4's camera step with the pinch point; never a beep (UI-SPEC Surface 3).
+    /// The target for `direction`, from Phase 4's camera step with the pinch point; no sound (UI-SPEC Surface 3).
     private func aim(_ gesture: inout Follow, _ direction: GestureRecognizer.Direction) {
         switch controller?.arranger.gestureTarget(direction, displayUUID: gesture.uuid, pointer: gesture.pointer) {
         case .success(let target)?: (gesture.target, gesture.refusal) = (target, nil)
