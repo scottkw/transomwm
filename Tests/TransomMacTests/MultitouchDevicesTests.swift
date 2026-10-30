@@ -1,6 +1,6 @@
 import Foundation
 @testable import TransomMac
-import TransomPrivate
+@testable import TransomPrivate
 import Testing
 
 /// A scripted device list: each `open` returns the next list. No multitouch device exists here.
@@ -80,7 +80,7 @@ private func device(_ registry: UInt64, family: Int32 = 110, builtIn: Bool = tru
         #expect(devices.status == (MultitouchCanary.tripped ? .offAfterCrash : .off))
     }
 
-    @Test func framesReachTheHandlerAndTwoHealthySecondsClearTheCanary() async throws {
+    @Test func framesKeepTheCanaryArmedUntilACleanStop() async throws {
         let backend = FakeBackend([[device(1)]])
         let (canary, defaults) = canary()
         let devices = MultitouchDevices(backend: backend, canary: canary, available: { true })
@@ -90,12 +90,45 @@ private func device(_ registry: UInt64, family: Int32 = 110, builtIn: Bool = tru
         let frame = MultitouchSupport.Frame(device: 256, t: 0, deviceTime: 0, frame: 1, rawCount: 0, touches: [], mainThread: true)
         backend.onFrame?(frame, device(1))
         #expect(received == 1)
-        #expect(defaults.object(forKey: MultitouchCanary.key) != nil)
         try await Task.sleep(for: .milliseconds(2300))
-        #expect(defaults.object(forKey: MultitouchCanary.key) == nil)
-        #expect(devices.isRunning, "clearing the canary does not stop anything")
+        #expect(defaults.object(forKey: MultitouchCanary.key) != nil, "05-08 UAT: the crash came minutes in, so frames never clear it")
+        devices.rescan(afterWake: true)
+        #expect(defaults.object(forKey: MultitouchCanary.key) != nil)
         devices.stop()
+        #expect(defaults.object(forKey: MultitouchCanary.key) == nil, "only a clean stop clears it")
         backend.onFrame?(frame, device(1))
         #expect(received == 1, "no frame is handled after stop")
+    }
+
+    /// 05-08 UAT crash: the old handler gained a thunk pair per frame and overflowed the framework's callback thread
+    /// after a few thousand frames (it overflowed a 64 KB stack within 300). The callback path the shim installs, run
+    /// from a 64 KB thread, must hand thousands of frames to main in order and drop another list's frames.
+    @Test func theShimFramePathSurvivesThousandsOfFramesOnASmallStack() async throws {
+        final class Received { var frames: [Int32] = [] }
+        let received = Received()
+        let count: Int32 = 3000
+        MultitouchSupport.setHandler(
+            ShimMultitouchBackend.frameHandler(pads: [256: device(1)]) { frame, info in
+                MainActor.assertIsolated()
+                #expect(info.registryID == 1 && frame.touches.count == 2)
+                received.frames.append(frame.frame)
+            })
+        defer { MultitouchSupport.setHandler(nil) }
+        nonisolated(unsafe) let touches = UnsafeMutableRawPointer.allocate(byteCount: 2 * 96, alignment: 8)
+        touches.initializeMemory(as: UInt8.self, repeating: 0, count: 2 * 96)
+        defer { touches.deallocate() }
+        let thread = Thread {
+            for i in 0..<count {
+                _ = MultitouchSupport.callback(nil, touches, 2, 0, i, UnsafeMutableRawPointer(bitPattern: 256 + 1))  // this list
+                _ = MultitouchSupport.callback(nil, touches, 2, 0, -1, UnsafeMutableRawPointer(bitPattern: 512 + 1))  // a dropped list
+            }
+        }
+        thread.stackSize = 64 * 1024
+        thread.start()
+        let deadline = ContinuousClock.now + .seconds(20)
+        while received.frames.count < count || !thread.isFinished, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(received.frames == Array(0..<count))
     }
 }

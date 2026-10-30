@@ -129,8 +129,8 @@ public final class CapabilitySession: Sendable {
 }
 
 /// Crash canary for MultitouchSupport (RESEARCH Pattern 6): its layouts are reverse-documented and can change with any
-/// macOS update. `arm()` before the first risky call of a session, `clear()` after 2 s of healthy frames or at a clean
-/// stop. A canary still set at the next launch means that launch died with multitouch running: multitouch stays off
+/// macOS update. `arm()` before the first risky call of a session, `clear()` only at a clean stop (zoom off,
+/// quit). A canary still set at the next launch means that launch died with multitouch running: multitouch stays off
 /// while the OS build and app version are the same, and is retried once either changes.
 public struct MultitouchCanary {
     public static let key = "privateCanary.Multitouch"

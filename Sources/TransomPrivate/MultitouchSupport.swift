@@ -172,9 +172,47 @@ public enum MultitouchSupport {
 
     // MARK: Streaming
 
-    /// Where frames go, called on the worker thread; and the device index per device pointer (for the no-refcon fallback).
-    private static let handler = OSAllocatedUnfairLock<(@Sendable (Frame) -> Void)?>(initialState: nil)
+    /// The device index per device pointer (for the no-refcon fallback).
     static let indexes = OSAllocatedUnfairLock(initialState: [UInt: Int]())
+
+    /// Frames from the framework's callback thread, handed to `handler` on main in order. 05-08 UAT crash: a closure
+    /// kept in `OSAllocatedUnfairLock` gained a reabstraction-thunk pair on every `withLock` read in Debug builds, so
+    /// calling it overflowed the callback thread's stack after a few thousand frames. Here no closure is ever stored
+    /// behind generic state, and the callback side only takes a C lock, appends, and merges into a dispatch source
+    /// (an atomic add that coalesces, unlike a per-frame `DispatchQueue.main.async`).
+    final class FrameSink: @unchecked Sendable {
+        private let lock: os_unfair_lock_t = {
+            let lock = os_unfair_lock_t.allocate(capacity: 1)
+            lock.initialize(to: os_unfair_lock())
+            return lock
+        }()
+        private var pending: [Frame] = []
+        private let source = DispatchSource.makeUserDataAddSource(queue: .main)
+        @MainActor var handler: ((Frame) -> Void)?
+
+        init() {
+            source.setEventHandler { [unowned self] in MainActor.assumeIsolated { self.drain() } }
+            source.activate()
+        }
+
+        /// The callback thread.
+        func push(_ frame: Frame) {
+            os_unfair_lock_lock(lock)
+            pending.append(frame)
+            os_unfair_lock_unlock(lock)
+            source.add(data: 1)
+        }
+
+        @MainActor private func drain() {
+            os_unfair_lock_lock(lock)
+            let frames = pending
+            pending = []
+            os_unfair_lock_unlock(lock)
+            for frame in frames { handler?(frame) }
+        }
+    }
+
+    static let sink = FrameSink()
 
     static func receive(_ device: Device?, _ touches: UnsafeRawPointer?, _ count: Int32, _ timestamp: Double, _ frame: Int32, index: Int?) {
         let n = touches == nil ? 0 : max(0, min(Int(count), maxTouches))
@@ -195,12 +233,12 @@ public enum MultitouchSupport {
         let record = Frame(
             device: resolved, t: Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1e9, deviceTime: timestamp, frame: frame, rawCount: count,
             touches: decoded, mainThread: Thread.isMainThread)
-        handler.withLock { $0 }?(record)
+        sink.push(record)
     }
 
-    /// Sets the one frame handler. It runs on the worker thread for every frame and must return fast; it never decides
-    /// whether a frame is consumed (the callback always returns 0).
-    public static func setHandler(_ new: (@Sendable (Frame) -> Void)?) { handler.withLock { $0 = new } }
+    /// Sets the one frame handler. It runs on main for every frame, in order; it never decides whether a frame is
+    /// consumed (the callback always returns 0).
+    @MainActor public static func setHandler(_ new: ((Frame) -> Void)?) { sink.handler = new }
 
     /// One stable C function pointer each, so unregister gets the same pointer register got.
     static let callback: FrameCallback = { device, touches, count, timestamp, frame, refcon in

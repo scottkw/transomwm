@@ -24,12 +24,16 @@ import os
         // Each list's frames carry its own tag base, so a late frame from a list a rescan dropped is ignored.
         let base = generation << 8
         let pads = Dictionary(uniqueKeysWithValues: list.infos.filter(\.isTrackpad).map { (base + $0.index, $0) })
-        MultitouchSupport.setHandler { frame in
-            guard let info = pads[frame.device] else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { onFrame(frame, info) } }
-        }
+        MultitouchSupport.setHandler(Self.frameHandler(pads: pads, onFrame: onFrame))
         _ = MultitouchSupport.startStreaming(list, on: worker, tagBase: base)
         return list.infos
+    }
+
+    /// What the shim calls on main per frame: a frame whose tag is not this list's is dropped.
+    static func frameHandler(
+        pads: [Int: MultitouchSupport.Info], onFrame: @escaping @MainActor @Sendable (MultitouchSupport.Frame, MultitouchSupport.Info) -> Void
+    ) -> (MultitouchSupport.Frame) -> Void {
+        { frame in if let info = pads[frame.device] { onFrame(frame, info) } }
     }
 
     func close() {
@@ -42,7 +46,8 @@ import os
 
 /// The multitouch devices while the gesture tap runs (05-07, D-07: none is opened while zoom is off). Re-enumerates on
 /// IOKit kIOFirstMatchNotification / kIOTerminatedNotification for AppleMultitouchDevice (through `TrackpadWatcher`)
-/// and on wake. Arms the crash canary before each device list and clears it after 2 s of healthy frames or at stop.
+/// and on wake. Arms the crash canary before each device list and clears it only at a clean stop: the 05-08 UAT crash
+/// came minutes into streaming, long after a "2 s of healthy frames" clear, so any crash while streaming trips it.
 @MainActor final class MultitouchDevices {
     private let backend: any MultitouchBackend
     private let canary: MultitouchCanary
@@ -56,8 +61,6 @@ import os
     var onFrame: (MultitouchSupport.Frame, MultitouchSupport.Info) -> Void = { _, _ in }
     private var watcher: TrackpadWatcher?
     private var wakeObserver: (any NSObjectProtocol)?
-    private let healthy = WakeTimer()
-    private var sawFrame = false
 
     init(
         backend: any MultitouchBackend = ShimMultitouchBackend(), canary: MultitouchCanary = MultitouchCanary(),
@@ -92,7 +95,6 @@ import os
         watcher = nil
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         wakeObserver = nil
-        healthy.cancel()
         backend.close()
         devices = []
         canary.clear()
@@ -116,17 +118,11 @@ import os
 
     private func open() {
         canary.arm()
-        healthy.cancel()
-        sawFrame = false
         devices = backend.open { [weak self] frame, info in self?.frame(frame, info) }
     }
 
     private func frame(_ frame: MultitouchSupport.Frame, _ info: MultitouchSupport.Info) {
         guard isRunning else { return }
-        if !sawFrame {
-            sawFrame = true
-            healthy.set(.now + .seconds(2)) { [weak self] in self?.canary.clear() }
-        }
         onFrame(frame, info)
     }
 }
