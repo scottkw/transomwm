@@ -1,18 +1,35 @@
 import TransomEngine
 import TransomModel
 
-/// Gesture Debug lines from the UI-SPEC (Surface 5, G1-G3). Pure strings, no AppKit types.
+/// Gesture Debug lines from the UI-SPEC (Surface 5, G1-G4). Pure strings, no AppKit types.
 nonisolated public enum GestureCopy {
     // MARK: G1 Gestures
 
-    public enum Source: Sendable { case on, offZoom, offTapNotRunning, unavailable }
+    public enum Source: Sendable { case on, onWithMultitouch, offZoom, offTapNotRunning, unavailable }
 
     public static func gesturesLine(_ source: Source) -> String {
         switch source {
         case .on: "Gestures: on, trackpad events"
+        case .onWithMultitouch: "Gestures: on, trackpad events and multitouch"
         case .offZoom: "Gestures: off (zoom off)"
         case .offTapNotRunning: "Gestures: off (gesture tap not running)"
         case .unavailable: "Gestures: unavailable (no gesture source)"
+        }
+    }
+
+    // MARK: G4 Multitouch
+
+    /// The multitouch capability: available with this many trackpads, off (forced off or symbols missing), or off
+    /// because the crash canary tripped.
+    public enum Multitouch: Equatable, Sendable { case available(Int), off, offAfterCrash }
+
+    public static func multitouchLine(_ state: Multitouch) -> String {
+        switch state {
+        case .available(0): "Multitouch: available, no trackpad found"
+        case .available(1): "Multitouch: available, 1 trackpad"
+        case .available(let n): "Multitouch: available, \(n) trackpads"
+        case .off: "Multitouch: off, trackpad events only"
+        case .offAfterCrash: "Multitouch: off after a crash last launch, trackpad events only"
         }
     }
 

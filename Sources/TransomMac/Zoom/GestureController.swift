@@ -1,6 +1,7 @@
 import AppKit
 import TransomEngine
 import TransomModel
+import TransomPrivate
 import os
 
 /// The main-actor owner of the gesture tap (05-03): publishes what its rules read, drains its events, logs and counts
@@ -52,6 +53,8 @@ import os
         var shown = false
         /// Released; kept until the tap ends the sequence, so its momentum tail starts no new judgement.
         var ended = false
+        /// Left the dead zone or locked an axis.
+        var started = false
     }
     private var follow: Follow?
     /// Polls the recognizer while a gesture is open: a released pan decides within `momentumWait` (05-02).
@@ -84,9 +87,19 @@ import os
     /// Posts a refusal's VoiceOver announcement; a seam for tests.
     var announce: (String) -> Void = { postAnnouncement($0) }
 
-    init(tap: GestureTap, controller: ArrangeController) {
+    /// Multitouch devices, started and stopped with the tap (05-07, D-07).
+    let multitouch: MultitouchDevices
+    /// One tracker per streaming device, and the multitouch pinch being followed (spike C4).
+    private var trackers: [Int: TwoFingerTracker] = [:]
+    private var multitouchPinch: (seq: UInt64, number: Int, reason: GestureSample.Reason?, location: CGPoint, first: Double, frames: Int)?
+    private var multitouchCount = 0
+    /// Multitouch sequences never collide with the tap's, which count up from 1.
+    private static let multitouchSeqBase: UInt64 = 1 << 62
+
+    init(tap: GestureTap, controller: ArrangeController, multitouch: MultitouchDevices = MultitouchDevices()) {
         self.tap = tap
         self.controller = controller
+        self.multitouch = multitouch
     }
 
     /// Publishes the state, then starts the tap. False (logged once) when macOS refuses it.
@@ -101,6 +114,8 @@ import os
         }
         loggedStartFailure = false
         log.info("gesture tap started")
+        multitouch.onFrame = { [weak self] frame, info in self?.multitouchFrame(frame, info) }
+        multitouch.start()
         watcher = TrackpadWatcher { [weak self] in self?.refresh() }  // hot-plug: re-published, no line
         let center = NSWorkspace.shared.notificationCenter
         wakeObservers = [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification].map { name in
@@ -124,6 +139,9 @@ import os
         guard isActive else { return }
         isActive = false
         tap.stop()
+        multitouch.stop()
+        trackers = [:]
+        multitouchPinch = nil
         watcher?.stop()
         watcher = nil
         for observer in wakeObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
@@ -249,6 +267,8 @@ import os
     /// One taken sample into the recognizer; the first of a sequence picks the display under it and the pinch point.
     private func feed(_ sample: GestureSample, seq: UInt64) {
         if follow?.seq != seq {
+            // A multitouch pinch under way keeps the stage; the tap still consumes what it took (C4).
+            if let open = follow, open.seq >= Self.multitouchSeqBase, open.started, !open.ended { return }
             if let old = follow?.seq { finishFollow(old) }
             let pointer = Point(x: sample.location.x, y: sample.location.y)
             guard let display = controller?.arranger.displays.first(where: { $0.frame.contains(pointer) }) else { return }
@@ -296,6 +316,7 @@ import os
         guard let update, var gesture = follow, let controller else { return }
         switch update {
         case .started(let direction):
+            gesture.started = true
             aim(&gesture, direction)
             // No target (refused, UI-SPEC Surface 3): the current view's still tile set overscrolls and springs back.
             let preview = gesture.target.flatMap { controller.arranger.previewMove(to: $0, displayUUID: gesture.uuid) }
@@ -355,6 +376,64 @@ import os
         controller.followStage().follow(
             displayUUID: gesture.uuid, state: gesture.recognizer.follow(hasTarget: gesture.target != nil), anchor: gesture.pointer,
             direction: direction)
+    }
+
+    // MARK: Multitouch pinch (05-07, spike C4)
+
+    /// Two-finger frames become pinch samples for the same recognizer and follow path as the tap's. Multitouch never
+    /// consumes anything; it supplies pinch only when the tap sees none.
+    private func multitouchFrame(_ frame: MultitouchSupport.Frame, _ info: MultitouchSupport.Info) {
+        var tracker = trackers[frame.device] ?? TwoFingerTracker(surface: Size(width: info.widthMM, height: info.heightMM))
+        let touches = frame.touches.map { TwoFingerTracker.Touch(state: Int($0.state), x: Double($0.x), y: Double($0.y)) }
+        let pinch = tracker.feed(t: frame.t, touches: touches).first { $0.kind == .pinch }
+        trackers[frame.device] = tracker
+        guard let pinch else { return }
+        if pinch.phase == 1 {
+            multitouchPinch = nil
+            let location = CGEvent(source: nil)?.location ?? .zero  // the pinch point
+            guard follow?.ended ?? true, let reason = takesMultitouchPinch(info, at: location, t: frame.t) else { return }
+            multitouchCount += 1
+            multitouchPinch = (Self.multitouchSeqBase + UInt64(multitouchCount), multitouchCount, reason, location, frame.t, 0)
+        } else if let open = follow, let current = multitouchPinch, open.seq != current.seq {
+            multitouchPinch = nil  // the tap took a gesture over
+        }
+        guard var current = multitouchPinch else { return }
+        current.frames += 1
+        multitouchPinch = current
+        feed(
+            GestureSample(
+                kind: .pinch, phase: pinch.phase, momentum: 0, magnification: pinch.magnification, dx: 0, dy: 0, location: current.location,
+                timestamp: frame.t, flags: [], senderID: info.registryID, reason: pinch.phase == 1 ? current.reason : nil),
+            seq: current.seq)
+        guard pinch.phase == 4 else { return }
+        finishFollow(current.seq)
+        multitouchPinch = nil
+        taken += 1
+        let ms = Int(((frame.t - current.first) * 1000).rounded())
+        let reason = current.reason == .wallpaper ? "wallpaper" : "⌥ held"
+        log.info("took pinch #m\(current.number, privacy: .public): multitouch, \(reason, privacy: .public), \(current.frames, privacy: .public) frames, \(ms, privacy: .public) ms\(self.outcomeText(current.seq), privacy: .public)")
+    }
+
+    /// The tap's own rules, as for a zoom-began event at the pointer, decide whether this pinch is Transom's: ⌥ held or
+    /// bare wallpaper, armed, a desk display, no ⌃/⌘. Nil (not taken) while the system's pinch-zoom is on: the tap sees
+    /// that pinch then, and two sources must not follow one gesture.
+    private func takesMultitouchPinch(_ info: MultitouchSupport.Info, at location: CGPoint, t: Double) -> GestureSample.Reason? {
+        guard !Self.systemPinchZoomOn() else { return nil }
+        var latch = GestureTapRules.Latch()
+        let input = GestureTapRules.Input(
+            type: GestureEventFields.gestureType, hidType: GestureEventFields.hidZoom, gesturePhase: 1, senderID: info.registryID,
+            flags: CGEventSource.flagsState(.combinedSessionState), location: location, timestamp: t)
+        guard case .consume(let sample?) = GestureTapRules.decide(input, state: published ?? GestureTapState(), latch: &latch, surface: GestureTapRules.liveSurface)
+        else { return nil }
+        return sample.reason
+    }
+
+    /// System Settings ▸ Trackpad ▸ "Zoom in or out" (`TrackpadPinch`; absent means on, the default). With it off the tap
+    /// gets no zoom events at all (05-SPIKE checklist item 3).
+    static func systemPinchZoomOn() -> Bool {
+        let domain = "com.apple.AppleMultitouchTrackpad" as CFString
+        CFPreferencesAppSynchronize(domain)
+        return CFPreferencesCopyAppValue("TrackpadPinch" as CFString, domain) as? Bool ?? true
     }
 
     private static func kindText(_ kind: GestureSample.Kind) -> String { kind == .pinch ? "pinch" : "pan" }

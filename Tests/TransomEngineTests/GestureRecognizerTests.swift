@@ -282,3 +282,77 @@ private let recordedTraces: [String] =
         }
     }
 }
+
+/// Two fingers at (x ± spread/2, y) on a 100 × 70 mm surface, both touching (state 4).
+private func fingers(_ x: Double, _ y: Double, spread: Double) -> [TwoFingerTracker.Touch] {
+    [.init(state: 4, x: x - spread / 2, y: y), .init(state: 4, x: x + spread / 2, y: y)]
+}
+
+private let trackpad = Size(width: 100, height: 70)
+
+/// 05-07 TwoFingerTracker: multitouch frames feed the one recognizer (assumption-delta "promote").
+extension GestureRecognizerTests {
+    /// Invariant: one pinch from 0.2 to 0.4 apart as multitouch frames, and as tap samples summing to +1.0, give the same
+    /// Release (s = 2, p = 1, past the threshold).
+    @Test func aPinchGivesTheSameReleaseAsMultitouchFramesOrTapSamples() throws {
+        var tracker = TwoFingerTracker(surface: trackpad)
+        let spreads = [0.2, 0.25, 0.3, 0.35, 0.4]
+        var frames = spreads.enumerated().flatMap { tracker.feed(t: Double($0.offset) * 0.1, touches: fingers(0.5, 0.5, spread: $0.element)) }
+        frames += tracker.feed(t: 0.5, touches: [])
+        let fromMultitouch = frames.filter { $0.kind == .pinch }
+        #expect(abs(fromMultitouch.map(\.magnification).reduce(0, +) - 1.0) < 1e-9)
+
+        let fromTap = [pinch(0, 1, 0)] + (1...4).map { pinch(Double($0) * 0.1, 2, 0.25) } + [pinch(0.5, 4, 0)]
+        let mt = try #require(releases(run(fromMultitouch, kind: .pinch).1).first)
+        let tap = try #require(releases(run(fromTap, kind: .pinch).1).first)
+        #expect(mt.direction == .pinchIn)
+        #expect(mt.passedThreshold)
+        #expect(abs(mt.progress - 1) < 1e-9)
+        #expect(mt.direction == tap.direction)
+        #expect(mt.passedThreshold == tap.passedThreshold)
+        #expect(mt.byFlick == tap.byFlick)
+        #expect(mt.tooSmall == tap.tooSmall)
+        #expect(abs(mt.progress - tap.progress) < 1e-9)
+    }
+
+    /// Two fingers moving together 40 mm left: Σdx = −40 mm in points, and the view shows the area to the right.
+    @Test func twoFingersTranslatingTogetherArePanSamples() throws {
+        var tracker = TwoFingerTracker(surface: trackpad)
+        var samples: [GestureRecognizer.Sample] = []
+        for step in 0...4 { samples += tracker.feed(t: Double(step) * 0.1, touches: fingers(0.6 - Double(step) * 0.1, 0.5, spread: 0.1)) }
+        samples += tracker.feed(t: 0.5, touches: [])
+        let pans = samples.filter { $0.kind == .pan }
+        let expected: Double = -40 * TwoFingerTracker.pointsPerMM
+        let sumX: Double = pans.map(\.dx).reduce(0, +)
+        #expect(abs(sumX - expected) < 1e-9)
+        #expect(abs(TwoFingerTracker.pointsPerMM - 72 / 25.4) < 1e-12)
+        #expect(abs(pans.map(\.dy).reduce(0, +)) < 1e-9)
+        #expect(pans.map(\.phase) == [1, 2, 2, 2, 2, 4])
+        var (recognizer, updates) = run(pans, kind: .pan)
+        if let late = recognizer.timeout(now: 1) { updates.append(late) }  // short of ⅓: the release waits for momentum
+        let release = try #require(releases(updates).first)
+        #expect(release.direction == .pan(.right))
+        #expect(abs(samples.filter { $0.kind == .pinch }.map(\.magnification).reduce(0, +)) < 1e-9, "a pan does not pinch")
+    }
+
+    @Test(arguments: [
+        [TwoFingerTracker.Touch(state: 4, x: 0.5, y: 0.5)],
+        fingers(0.5, 0.5, spread: 0.2) + [.init(state: 4, x: 0.1, y: 0.1)],
+        [.init(state: 5, x: 0.4, y: 0.5), .init(state: 7, x: 0.6, y: 0.5)],
+    ])
+    func oneFingerMoreThanTwoOrBothBreakingEndTheGesture(frame: [TwoFingerTracker.Touch]) {
+        var tracker = TwoFingerTracker(surface: trackpad)
+        #expect(tracker.feed(t: 0, touches: fingers(0.5, 0.5, spread: 0.2)).map(\.phase) == [1, 1])
+        #expect(tracker.feed(t: 0.1, touches: fingers(0.5, 0.5, spread: 0.3)).map(\.phase) == [2, 2])
+        #expect(tracker.feed(t: 0.2, touches: frame).map(\.phase) == [4, 4])
+        #expect(!tracker.isTracking)
+        #expect(tracker.feed(t: 0.3, touches: frame).isEmpty, "nothing more until two fingers are down again")
+    }
+
+    @Test func framesWithoutTwoFingersDownStartNothing() {
+        var tracker = TwoFingerTracker(surface: trackpad)
+        #expect(tracker.feed(t: 0, touches: []).isEmpty)
+        #expect(tracker.feed(t: 0.1, touches: [.init(state: 4, x: 0.5, y: 0.5)]).isEmpty)
+        #expect(tracker.feed(t: 0.2, touches: [.init(state: 2, x: 0.4, y: 0.5), .init(state: 2, x: 0.6, y: 0.5)]).isEmpty, "hovering")
+    }
+}

@@ -86,6 +86,10 @@ import os
     private let gestureTap = GestureTap()
     private(set) lazy var gestures = GestureController(tap: gestureTap, controller: self)
     public var isGestureTapRunning: Bool { gestureTap.isRunning }
+    /// Multitouch devices are open (05-07): only while the gesture tap runs, never with zoom off (D-07).
+    public var isMultitouchRunning: Bool { gestures.multitouch.isRunning }
+    /// The Debug G4 value.
+    public var multitouchStatus: GestureCopy.Multitouch { gestures.multitouch.status }
     /// The last start attempt was refused (the Debug line tells "unavailable" from "not running").
     public private(set) var gestureTapFailedToStart = false
     var isRectZoomActive: Bool { zoomInput.isBandActive }

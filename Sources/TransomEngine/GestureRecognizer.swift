@@ -261,3 +261,61 @@ public struct GestureRecognizer: Sendable {
         return sample
     }
 }
+
+/// Multitouch frames to recognizer samples (05-07, assumption-delta "promote"): two fingers on the surface are one
+/// gesture, and its pinch and pan samples feed the same `GestureRecognizer` the event tap's samples feed, so one pinch
+/// gives the same Release from either source. Pinch: 1 + Σm equals the finger-distance ratio to the first frame. Pan:
+/// the centroid's motion in points, in the tap's natural-scrolling sense (fingers left is a negative dx).
+public struct TwoFingerTracker: Sendable {
+    /// One contact as MultitouchSupport reports it: x, y normalized to [0, 1] with y up; state 3 make and 4 touching
+    /// are on the surface, 1-2 hover, 5 break, 6 linger and 7 out of range are not.
+    public struct Touch: Equatable, Sendable {
+        public var state: Int
+        public var x: Double
+        public var y: Double
+
+        public init(state: Int, x: Double, y: Double) {
+            self.state = state
+            self.x = x
+            self.y = y
+        }
+    }
+
+    /// The sensor surface in millimetres.
+    public let surface: Size
+    private var last: (distance: Double, centre: Point)?
+    private var startDistance = 1.0
+    public var isTracking: Bool { last != nil }
+
+    public init(surface: Size) {
+        self.surface = surface
+    }
+
+    /// One frame at `t` (seconds). Exactly two fingers on the surface start (phase 1) or continue (phase 2) the gesture;
+    /// any other count ends it as a release (phase 4). Returns a pinch and a pan sample, or nothing.
+    public mutating func feed(t: Double, touches: [Touch]) -> [GestureRecognizer.Sample] {
+        let down = touches.filter { (3...4).contains($0.state) }
+        guard down.count == 2 else {
+            guard last != nil else { return [] }
+            last = nil
+            return [.init(t: t, kind: .pinch, phase: 4), .init(t: t, kind: .pan, phase: 4)]
+        }
+        let a = Point(x: down[0].x * surface.width, y: down[0].y * surface.height)
+        let b = Point(x: down[1].x * surface.width, y: down[1].y * surface.height)
+        let distance = ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)).squareRoot()
+        let centre = Point(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+        guard let previous = last else {
+            last = (distance, centre)
+            startDistance = max(distance, 0.1)  // fingers 0.1 mm apart are one finger read twice: no division by ~0
+            return [.init(t: t, kind: .pinch, phase: 1), .init(t: t, kind: .pan, phase: 1)]
+        }
+        last = (distance, centre)
+        return [
+            .init(t: t, kind: .pinch, phase: 2, magnification: (distance - previous.distance) / startDistance),
+            // y is up on the surface, down in points.
+            .init(t: t, kind: .pan, phase: 2, dx: (centre.x - previous.centre.x) * Self.pointsPerMM, dy: (previous.centre.y - centre.y) * Self.pointsPerMM),
+        ]
+    }
+
+    public static let pointsPerMM = 72 / 25.4
+}
