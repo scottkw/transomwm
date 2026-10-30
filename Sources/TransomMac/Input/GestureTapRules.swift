@@ -224,7 +224,9 @@ public nonisolated enum GestureTapRules {
             latch.pinch = Sequence(kind: .pinch, consuming: false, started: now, lastEvent: now, optionHeld: false, passReason: .midSequence)
         }
         guard var sequence = latch.pinch else { return .pass }
-        sequence.lastEvent = now
+        // Only zoom traffic keeps a pinch latch alive: every two-finger scroll also sends type-29 companions (sub-types
+        // 0, 6, 32), which must not hold a latch whose zoom end was lost (WR-04).
+        if zoom { sequence.lastEvent = now }
         let ends = zoom && (input.gesturePhase == 4 || input.gesturePhase == 8)
         latch.pinch = ends ? nil : sequence
         // C1 (05-SPIKE T2): a taken pinch takes every type-29 sub-type inside it; sub-type 4 leaked 81 times on the host

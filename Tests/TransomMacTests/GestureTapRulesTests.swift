@@ -286,6 +286,20 @@ private let gesture = GestureEventFields.gestureType
         #expect(pinch(&plain, 2, hid: 4, flags: []) == .pass)
     }
 
+    /// WR-04: a taken pinch whose zoom end was lost is not kept alive by the type-29 companions of later scrolls: 2 s
+    /// after its last zoom event they pass again.
+    @Test func scrollCompanionsDoNotKeepALostPinchLatchAlive() {
+        var latch = GestureTapRules.Latch.none
+        #expect(isConsume(pinch(&latch, 1, t: 0)))
+        #expect(isConsume(pinch(&latch, 2, t: 0.1)))
+        var t = 0.5
+        while t < 2.1 {
+            #expect(pinch(&latch, 2, hid: 0, flags: [], t: t) == .consume(nil), "companion at \(t) inside the latch")
+            t += 0.5
+        }
+        for hid: Int64 in [0, 6, 32] { #expect(pinch(&latch, 2, hid: hid, flags: [], t: 2.2) == .pass, "sub-type \(hid) still taken") }
+    }
+
     @Test func magnificationIsClampedAndNonFiniteReadsZero() {
         var latch = GestureTapRules.Latch.none
         guard case .consume(let nan?) = pinch(&latch, 1, zoom: .nan) else { Issue.record("not consumed"); return }
