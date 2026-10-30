@@ -30,6 +30,8 @@ import os
         var cancelled = false
     }
     private var band: Band?
+    /// A ⌘⇧-drag is in progress: gestures are disarmed meanwhile (UI-SPEC Surface 2).
+    var isBandActive: Bool { band != nil }
     /// The temporary Esc hotkeys while a band is active (ZOOM-12). Each stream registers its Carbon hotkey when it
     /// starts and unregisters when its task is cancelled.
     private var bandEscapes: [Task<Void, Never>] = []
@@ -252,6 +254,7 @@ import os
             band = Band(
                 start: event.location, flags: event.flags, clickState: event.clickState, display: display, current: event.location, tiles: tiles,
                 tree: arranger.world[Self.deskKey(display)]?.tree)
+            controller.gestures.publish()
             bandEscapes = Self.escapeModifiers.map { modifiers in
                 Task { [weak self] in
                     for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape, modifiers: modifiers)) where key == .keyDown {
@@ -309,6 +312,7 @@ import os
     private func endBand() {
         guard let current = band else { return }
         band = nil
+        controller?.gestures.publish()
         stopEscapes()
         controller?.previews?.hideBand(on: current.display.uuid)
     }

@@ -124,6 +124,52 @@ private func displayFrames() -> [CGRect] {
 
 private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.x + rect.width / 2, y: rect.y + rect.height / 2) }
 
+/// ⌥ scroll began, `changes` changed, ended; then momentum 1, 2 ×5, 3 with ⌥ already released.
+private func pan(_ flags: CGEventFlags, changes: Int = 8, momentum: Bool = false) -> [(CGPoint) -> CGEvent?] {
+    var events = [scroll(1, flags: flags)] + Array(repeating: scroll(2, flags: flags), count: changes) + [scroll(4, flags: flags)]
+    if momentum { events += [scroll(0, momentum: 1, flags: [])] + Array(repeating: scroll(0, momentum: 2, flags: []), count: 5) + [scroll(0, momentum: 3, flags: [])] }
+    return events
+}
+
+/// A bare-wallpaper point on the main display, far from `avoid` (the 05-01 spike's 8 pt grid: the VM desk may be nearly
+/// covered by windows other runs left open).
+private func wallpaperPoint(avoiding avoid: CGRect = .null) -> CGPoint? {
+    let display = CGDisplayBounds(CGMainDisplayID())
+    guard let list = CGWindowList.onScreenFrontToBack() else { return nil }
+    var best: (CGPoint, Double)?
+    for x in stride(from: display.minX + 4, to: display.maxX, by: 8) {
+        for y in stride(from: display.minY + 4, to: display.maxY, by: 8) {
+            let p = CGPoint(x: x, y: y)
+            guard avoid.isNull || !avoid.insetBy(dx: -40, dy: -40).contains(p),
+                GestureTapRules.surface(at: p, in: list, excludingPID: getpid(), display: display) == .wallpaper
+            else { continue }
+            let distance = avoid.isNull ? 0 : hypot(p.x - avoid.midX, p.y - avoid.midY)
+            if distance > (best?.1 ?? -1) { best = (p, distance) }
+        }
+    }
+    return best?.0
+}
+
+/// A started GestureTap armed on every display, and the downstream counter; both stopped after `body`.
+@MainActor private func withArmedTap(_ body: (GestureTap, Downstream) async throws -> Void) async throws {
+    let tap = GestureTap()
+    defer { tap.stop() }
+    tap.setState(GestureTapState(armed: true, deskDisplays: displayFrames()))
+    try #require(tap.start())
+    let downstream = try Downstream()
+    defer { downstream.stop() }
+    try await body(tap, downstream)
+}
+
+/// The centre of one fixture window, which stays open for `body`.
+@MainActor private func withFixtureWindow(_ body: (CGPoint, CGRect) async throws -> Void) async throws {
+    let fixture = try await FixtureProcess.launch(["standard"])
+    defer { fixture.terminate() }
+    let frame = try #require(fixture.windows.first).frame
+    try await Task.sleep(for: .milliseconds(500))
+    try await body(center(frame), CGRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height))
+}
+
 /// D-06 / D-07 / GEST-03 / GEST-04 live, with synthetic events in the VM only (never on the host): Transom's gesture tap
 /// takes whole sequences, passes everything it should, and exists only while zoom is on. Every tap is stopped in a defer.
 @Suite(.serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"))
@@ -184,5 +230,122 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.x + rect.width / 
         let stopped = await waitUntil(timeout: .seconds(4)) { !arrange.isGestureTapRunning }
         #expect(stopped, "the gesture tap outlived Turn Off Zoom")
         #expect(try await post(pinch(option), at: point, downstream: downstream) == 12)
+    }
+
+    /// C1 (05-SPIKE T2): the sub-type 4 events that leaked inside taken pinches on the host are taken too.
+    @Test(.timeLimit(.minutes(1)))
+    func subTypeFourInsideAnOptionPinchIsConsumed() async throws {
+        try await withArmedTap { _, downstream async throws in
+            let events = Array(pinch(option, changes: 3).dropLast()) + Array(repeating: magnify(2, hid: 4, flags: option), count: 4)
+                + [magnify(4, value: 0, flags: option)]
+            let display = try #require(displayFrames().first)
+            #expect(try await post(events, at: CGPoint(x: display.midX, y: display.midY), downstream: downstream) == 0)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func momentumTailNeverLeaks() async throws {
+        try await withArmedTap { tap, downstream async throws in
+            let collected = Collected(tap)
+            defer { collected.stop() }
+            let display = try #require(displayFrames().first)
+            #expect(try await post(pan(option, momentum: true), at: CGPoint(x: display.midX, y: display.midY), downstream: downstream) == 0)
+            let ended = try #require(collected.ended.last)
+            #expect(ended.taken && ended.kind == .pan && ended.consumed == 17 && !ended.endedByTimeout)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func optionPressedMidSequencePasses() async throws {
+        try await withFixtureWindow { point, _ async throws in
+            try await withArmedTap { _, downstream async throws in
+                let events = [scroll(1, flags: [])] + Array(repeating: scroll(2, flags: option), count: 8) + [scroll(4, flags: option)]
+                #expect(try await post(events, at: point, downstream: downstream) == 10)
+            }
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aDiscreteWheelWithOptionPasses() async throws {
+        try await withArmedTap { _, downstream async throws in
+            let display = try #require(displayFrames().first)
+            let wheel = Array(repeating: scroll(0, continuous: false, flags: option), count: 5)
+            #expect(try await post(wheel, at: CGPoint(x: display.midX, y: display.midY), downstream: downstream) == 5)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func controlOrCommandChordsPass() async throws {
+        try await withArmedTap { _, downstream async throws in
+            let display = try #require(displayFrames().first)
+            let point = CGPoint(x: display.midX, y: display.midY)
+            #expect(try await post(pinch([.maskAlternate, .maskControl]), at: point, downstream: downstream) == 12)
+            #expect(try await post(pan([.maskAlternate, .maskCommand]), at: point, downstream: downstream) == 10)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func wallpaperWithoutOptionIsTaken() async throws {
+        let point = try #require(wallpaperPoint(), "no bare wallpaper on the main display")
+        try await withArmedTap { _, downstream async throws in
+            #expect(try await post(pinch([]), at: point, downstream: downstream) == 0)
+            #expect(try await post(pan([], momentum: true), at: point, downstream: downstream) == 0)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aWindowWithoutOptionPasses() async throws {
+        try await withFixtureWindow { point, _ async throws in
+            try await withArmedTap { _, downstream async throws in
+                #expect(try await post(pinch([]), at: point, downstream: downstream) == 12)
+                #expect(try await post(pan([]), at: point, downstream: downstream) == 10)
+            }
+        }
+    }
+
+    /// T-05-08: an ⌥ pan whose end never comes holds its latch 2 s at most; the next plain scroll reaches the app.
+    @Test(.timeLimit(.minutes(1)))
+    func aStuckLatchReleasesTheNextScroll() async throws {
+        try await withFixtureWindow { point, _ async throws in
+            try await withArmedTap { _, downstream async throws in
+                let stuck = [scroll(1, flags: option)] + Array(repeating: scroll(2, flags: option), count: 3)
+                #expect(try await post(stuck, at: point, downstream: downstream) == 0)
+                try await Task.sleep(for: .milliseconds(2200))
+                #expect(try await post(pan([]), at: point, downstream: downstream) == 10)
+            }
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aDisabledGestureTapIsReEnabledByOneTick() async throws {
+        let tap = GestureTap()
+        defer { tap.stop() }
+        #expect(tap.start())
+        let port = try #require(tap.port)
+        #expect(tap.thread.map { !$0.isMainThread } == true)
+        // As InputTapIntegrationTests: the callback may already have re-enabled it; either way one tick leaves it enabled.
+        CGEvent.tapEnable(tap: port, enable: false)
+        tap.watchdogTick()
+        #expect(CGEvent.tapIsEnabled(tap: port), "the watchdog left the gesture tap disabled")
+        #expect(tap.isRunning)
+        tap.stop()
+        #expect(!tap.isRunning)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func wakeRepublishesState() async throws {
+        let arrange = ArrangeController(system: AXWindowSystem(), zoomEnabled: true)
+        defer {
+            arrange.stopTap()
+            withExtendedLifetime(arrange) {}
+        }
+        #expect(arrange.startTap())
+        #expect(arrange.isGestureTapRunning)
+        let before = arrange.gestures.republished
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+        let grew = await waitUntil(timeout: .seconds(2)) { arrange.gestures.republished > before }
+        #expect(grew, "screensDidWake did not re-publish the gesture state")
+        arrange.stopTap()
+        #expect(!arrange.isGestureTapRunning, "stopTap left the gesture tap running")
     }
 }

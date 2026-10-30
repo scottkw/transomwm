@@ -88,6 +88,7 @@ import os
     public var isGestureTapRunning: Bool { gestureTap.isRunning }
     /// The last start attempt was refused (the Debug line tells "unavailable" from "not running").
     public private(set) var gestureTapFailedToStart = false
+    var isRectZoomActive: Bool { zoomInput.isBandActive }
 
     public init(
         system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, zoomEnabled: Bool = false
