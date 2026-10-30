@@ -1,17 +1,17 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 5
-status: executing
-stopped_at: Completed 05-07-PLAN.md
-last_updated: "2026-10-30T05:06:42.704Z"
+status: verifying
+stopped_at: Completed 05-08-PLAN.md
+last_updated: "2026-10-30T18:06:18.928Z"
 last_activity: 2026-10-28
 last_activity_desc: Phase 5 execution started
-state_head: 95e1679925a787ec49b6c304940b9b2797a4fe87
+state_head: f57cf23acd372b66c94d66209f77c159058a2e14
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 67
-  completed_plans: 66
+  completed_plans: 67
   percent: 44
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 Phase: 5 — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-28 — Phase 5 execution started
 
 Progress: [████░░░░░░] 44%
@@ -117,6 +117,7 @@ Progress: [████░░░░░░] 44%
 | Phase 05 P05 | 65 min | 2 tasks | 7 files |
 | Phase 05 P06 | 15 min | 2 tasks | 3 files |
 | Phase 05 P07 | 56 min | 3 tasks | 15 files |
+| Phase 05 P08 | ~6h | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -308,6 +309,9 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-07: multitouch drives a pinch only while Trackpad Zoom in or out is off (TrackpadPinch pref); the tap still does all consuming (C4)
 - [Phase 05]: 05-07: multitouch pinch ownership reuses GestureTapRules.decide on a synthetic zoom-began at the pointer
 - [Phase 05]: 05-07: MultitouchCanary per OS build + app version: arm before device list, clear after 2 s of frames or clean stop
+- [Phase 05]: 05-08: multitouch crash canary armed for the whole multitouch run, cleared only at a clean stop; any crash with zoom on disables multitouch for that OS build + app version until privateCanary.Multitouch is deleted
+- [Phase 05]: 05-08: multitouch frames cross to main via an os_unfair_lock buffer + DispatchSourceUserDataAdd (G-01 fix), never a closure behind generic lock state
+- [Phase 05]: 05-08: phase UAT closed with core items on hardware; items 7, 8, 10, 11, 14, 20, 21, 24 skipped by user decision (automated cover only); no GestureTuning change
 
 ### Quick Tasks Completed
 
@@ -348,8 +352,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-30T05:06:42.414Z
-Stopped at: Completed 05-07-PLAN.md
+Last session: 2026-10-30T18:06:18.434Z
+Stopped at: Completed 05-08-PLAN.md
 Resume file: None
 
 ## Deferred Verification
