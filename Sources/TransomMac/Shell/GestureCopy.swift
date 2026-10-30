@@ -33,6 +33,9 @@ nonisolated public enum GestureCopy {
         }
     }
 
+    /// Shown under G4 only while it reads "off after a crash" (WR-08).
+    public static let multitouchBackOnItem = "Turn Multitouch Back On"
+
     // MARK: G2 Gestures taken
 
     public static func takenLine(taken: Int, timeouts: Int) -> String {

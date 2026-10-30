@@ -131,7 +131,8 @@ public final class CapabilitySession: Sendable {
 /// Crash canary for MultitouchSupport (RESEARCH Pattern 6): its layouts are reverse-documented and can change with any
 /// macOS update. `arm()` before the first risky call of a session, `clear()` only at a clean stop (zoom off,
 /// quit). A canary still set at the next launch means that launch died with multitouch running: multitouch stays off
-/// while the OS build and app version are the same, and is retried once either changes.
+/// while the OS build and app version are the same, and is retried once either changes. Any crash or forced quit while
+/// multitouch ran trips it, so the user can also turn it back on from the Debug menu (`turnBackOn`, WR-08).
 public struct MultitouchCanary {
     public static let key = "privateCanary.Multitouch"
 
@@ -145,8 +146,15 @@ public struct MultitouchCanary {
         self.appVersion = appVersion
     }
 
-    /// Decided once per launch, before any multitouch device is touched.
-    public static let tripped = MultitouchCanary().isTripped()
+    /// Decided once per launch, before any multitouch device is touched; only `turnBackOn` changes it later.
+    private static let trippedState = OSAllocatedUnfairLock(initialState: MultitouchCanary().isTripped())
+    public static var tripped: Bool { trippedState.withLock { $0 } }
+
+    /// Debug ▸ Turn Multitouch Back On (WR-08): clears the canary, and multitouch is available again in this launch.
+    public static func turnBackOn(_ canary: MultitouchCanary = MultitouchCanary()) {
+        canary.clear()
+        trippedState.withLock { $0 = false }
+    }
 
     public func arm() {
         defaults.set(["osBuild": osBuild, "appVersion": appVersion, "started": Date()], forKey: Self.key)

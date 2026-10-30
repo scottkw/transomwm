@@ -1,6 +1,7 @@
 import AppKit
 import TransomEngine
 import TransomModel
+import TransomPrivate
 import os
 
 /// The thin MainActor shell around `Arranger` (RESEARCH Pattern 1). It is the only reader of `system.events`
@@ -90,6 +91,12 @@ import os
     public var isMultitouchRunning: Bool { gestures.multitouch.isRunning }
     /// The Debug G4 value.
     public var multitouchStatus: GestureCopy.Multitouch { gestures.multitouch.status }
+    /// Debug ▸ Turn Multitouch Back On (WR-08): forgets a tripped crash canary; with gestures running, the trackpads open
+    /// at once, otherwise at the next gesture tap start.
+    public func turnMultitouchBackOn() {
+        MultitouchCanary.turnBackOn()
+        if gestures.isActive { gestures.multitouch.start() }
+    }
     /// The last start attempt was refused (the Debug line tells "unavailable" from "not running").
     public private(set) var gestureTapFailedToStart = false
     var isRectZoomActive: Bool { zoomInput.isBandActive }

@@ -293,6 +293,10 @@ import os
         showSetup()
     }
 
+    @objc private func turnMultitouchBackOn() {
+        arrange.turnMultitouchBackOn()
+    }
+
     @objc private func openShortcuts() {
         shortcutsWindow.show()
     }
@@ -326,7 +330,13 @@ import os
         let gestures = arrange.gestures
         submenu.addItem(Self.info(GestureCopy.takenLine(taken: gestures.taken, timeouts: gestures.timeouts)))
         submenu.addItem(Self.info(gestures.lastGesture.map(Self.lastGestureLine) ?? GestureCopy.lastGestureNone))
-        submenu.addItem(Self.info(GestureCopy.multitouchLine(arrange.multitouchStatus)))
+        let multitouch = arrange.multitouchStatus
+        submenu.addItem(Self.info(GestureCopy.multitouchLine(multitouch)))
+        if multitouch == .offAfterCrash {
+            let retry = NSMenuItem(title: GestureCopy.multitouchBackOnItem, action: #selector(turnMultitouchBackOn), keyEquivalent: "")
+            retry.target = self
+            submenu.addItem(retry)
+        }
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item

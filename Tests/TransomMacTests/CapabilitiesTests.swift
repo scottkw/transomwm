@@ -60,6 +60,18 @@ import Testing
         #expect(defaults.object(forKey: MultitouchCanary.key) == nil)
     }
 
+    /// WR-08: the Debug menu's way back after a trip clears the canary, and multitouch is no longer tripped this launch.
+    @Test func turningMultitouchBackOnClearsTheCanary() {
+        let defaults = fresh()
+        let canary = MultitouchCanary(defaults: defaults, osBuild: "26B123", appVersion: "1.0 (1)")
+        canary.arm()
+        #expect(canary.isTripped())
+        MultitouchCanary.turnBackOn(canary)
+        #expect(defaults.object(forKey: MultitouchCanary.key) == nil)
+        #expect(!canary.isTripped())
+        #expect(!MultitouchCanary.tripped)
+    }
+
     @Test func clearRemovesTheKey() {
         let defaults = fresh()
         let canary = MultitouchCanary(defaults: defaults, osBuild: "26B123", appVersion: "1.0 (1)")
