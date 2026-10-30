@@ -191,8 +191,13 @@ nonisolated final class GestureTap: @unchecked Sendable {
             let box = Unmanaged<GestureTapBox>.fromOpaque(refcon).takeUnretainedValue()
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 if let port = box.port { CGEvent.tapEnable(tap: port, enable: true) }
-                // Never resume a half-seen sequence.
-                box.latch = .none
+                // Never resume a half-seen sequence: main resolves the open ones now, and a taken one's tail is still
+                // swallowed (WR-05), since its events after the gap are no start.
+                for case var summary? in [box.pan, box.pinch] {
+                    summary.endedByTimeout = true
+                    box.continuation.yield(.ended(summary))
+                }
+                box.latch = box.latch.orphaned()
                 box.pan = nil
                 box.pinch = nil
                 box.counters.withLock {

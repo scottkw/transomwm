@@ -269,6 +269,26 @@ private let gesture = GestureEventFields.gestureType
         #expect(latch.pan?.orphan == false)
     }
 
+    /// WR-05: what the tap keeps when macOS re-enables it mid-gesture. A taken pan or pinch keeps swallowing its tail
+    /// with no samples; a passing one is dropped, so its tail stays the app's.
+    @Test func aReEnabledTapOrphansTakenSequencesAndDropsPassingOnes() {
+        var latch = GestureTapRules.Latch.none
+        #expect(isConsume(decide(&latch, phase: 1, flags: option, t: 0)))
+        #expect(pinch(&latch, 1, flags: [], t: 0) == .pass)
+        latch = latch.orphaned()
+        #expect(latch.pan?.orphan == true && latch.pinch == nil)
+        #expect(decide(&latch, phase: 2, t: 0.1) == .consume(nil))
+        #expect(decide(&latch, phase: 4, t: 0.2) == .consume(nil))
+        #expect(pinch(&latch, 2, flags: [], t: 0.1) == .pass)
+
+        var pinching = GestureTapRules.Latch.none
+        #expect(isConsume(pinch(&pinching, 1, t: 0)))
+        pinching = pinching.orphaned()
+        #expect(pinch(&pinching, 2, flags: [], t: 0.1) == .consume(nil))
+        #expect(pinch(&pinching, 4, flags: [], t: 0.2) == .consume(nil))
+        #expect(pinching == .none)
+    }
+
     @Test func quietAfterFingersUpOrphansTheLatchButFingersDownQuietKeepsIt() {
         var latch = GestureTapRules.Latch.none
         #expect(isConsume(decide(&latch, phase: 1, flags: option, t: 0)))
