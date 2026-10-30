@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 current_phase: 5
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-10-29T23:51:58.690Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-10-30T00:12:08.933Z"
 last_activity: 2026-10-28
 last_activity_desc: Phase 5 execution started
-state_head: de81080b03e336f1738d9dd31819d54e68c50163
+state_head: 16eb5ca21af1a2d57c625de91bc78d4e678338f9
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 67
-  completed_plans: 61
+  completed_plans: 62
   percent: 44
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 5 — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-10-28 — Phase 5 execution started
 
@@ -112,6 +112,7 @@ Progress: [████░░░░░░] 44%
 | Phase 04 P08 | 21 min | 3 tasks | 12 files |
 | Phase 05 P01 | 23h43m | 3 tasks | 8 files |
 | Phase 05 P02 | 10min | 2 tasks | 15 files |
+| Phase 05 P03 | 16min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -292,6 +293,10 @@ Recent decisions affecting current work:
 - [Phase 05]: C5: host has built-in trackpad only; Magic Trackpad and reconnect UAT items are N/A
 - [Phase 05]: 05-02: C2 applied kind-agnostically: a never-started sequence with no phase 1/2 or no motion ends silently; a started gesture always gets exactly one .ended
 - [Phase 05]: 05-02: fingers-down timeout ends as a cancel; a pending fingers-up pan release decides after momentumWait and is endedByTimeout only when polled past 0.3 s
+- [Phase 05]: 05-03 C1: a taken pinch takes every type-29 sub-type except the 61/62 envelopes
+- [Phase 05]: 05-03: a taken pan does not take type-29 companions (sub-types 0/6/32); host showed nothing moved
+- [Phase 05]: 05-03: E-04 sender filter on (field 87 = AppleMultitouchDevice registry ID); trustsTargetPID stays false (C3)
+- [Phase 05]: 05-03: gesture tap exists only while zoom is on and the mouse tap runs (updateGestureTap)
 
 ### Quick Tasks Completed
 
@@ -332,8 +337,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-29T23:51:58.227Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-10-30T00:12:08.649Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
 
 ## Deferred Verification

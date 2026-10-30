@@ -257,7 +257,7 @@ Plans:
   3. Gestures Transom handles never reach the app under the pointer, while ordinary pinch and scroll inside apps keep working
   4. Gestures keep working after sleep/wake and after the trackpad disconnects and reconnects; if the private multitouch API is unavailable Transom falls back and still launches
 
-**Plans:** 2/8 plans executed
+**Plans:** 3/8 plans executed
 
 Plans:
 **Wave 1**
@@ -265,7 +265,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 and the spike decision)*
 - [x] 05-02-PLAN.md — Engine: GestureRecognizer (pinch, pan, flick, overscroll, timeouts) from traces; non-committing previewMove/stillMove/gestureTarget
-- [ ] 05-03-PLAN.md — Product gesture tap under the zoom switch, GestureController, trackpad senders and hot-plug, wake re-publish, VM leak tests
+- [x] 05-03-PLAN.md — Product gesture tap under the zoom switch, GestureController, trackpad senders and hot-plug, wake re-publish, VM leak tests
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-04-PLAN.md — Live follow on the stage: snap through zoomTo/settle, spring back, pan, capture swap, Reduce Motion
@@ -365,7 +365,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
-| 5. Gestures | 2/8 | In Progress | - |
+| 5. Gestures | 3/8 | In Progress | - |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |

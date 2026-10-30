@@ -82,8 +82,8 @@
 
 - [ ] **GEST-01**: ⌥-pinch on the trackpad zooms in and out anywhere
 - [ ] **GEST-02**: ⌥-two-finger pan moves the view
-- [ ] **GEST-03**: Pinch and pan on bare desktop work without ⌥
-- [ ] **GEST-04**: Gestures keep working after sleep/wake and trackpad reconnect, and never leak into the app under the pointer
+- [x] **GEST-03**: Pinch and pan on bare desktop work without ⌥
+- [x] **GEST-04**: Gestures keep working after sleep/wake and trackpad reconnect, and never leak into the app under the pointer
 
 ### Overview, Spaces & Displays
 
@@ -213,8 +213,8 @@ Populated by the roadmapper on 2026-10-23.
 | ZOOM-13 | Phase 4 | Complete |
 | GEST-01 | Phase 5 | Pending |
 | GEST-02 | Phase 5 | Pending |
-| GEST-03 | Phase 5 | Pending |
-| GEST-04 | Phase 5 | Pending |
+| GEST-03 | Phase 5 | Complete |
+| GEST-04 | Phase 5 | Complete |
 | OVER-01 | Phase 6 | Pending |
 | OVER-02 | Phase 6 | Pending |
 | OVER-03 | Phase 6 | Pending |
