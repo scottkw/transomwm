@@ -86,6 +86,28 @@ private let gesture = GestureEventFields.gestureType
         #expect(decide(&latch, phase: 2, t: t + 0.01) == .pass)
     }
 
+    /// WR-02: mayBegin (128) then began (1), as real pans start (recorded-pan-maybegin-start), is one sequence: decided
+    /// once, one start time, the reason on the first sample only. A began after a finished mayBegin is a new start.
+    @Test func mayBeginThenBeganIsOneSequence() {
+        var latch = GestureTapRules.Latch.none
+        let surface = Surface(.wallpaper)
+        guard case .consume(let first?) = decide(&latch, phase: 128, t: 0, surface: surface) else { Issue.record("mayBegin not taken"); return }
+        #expect(first.reason == .wallpaper)
+        guard case .consume(let began?) = decide(&latch, phase: 1, t: 0.0002, surface: surface) else { Issue.record("began not taken"); return }
+        #expect(began.reason == nil && began.phase == 1)
+        #expect(isConsume(decide(&latch, phase: 2, t: 0.01, surface: surface)))
+        #expect(latch.pan?.started == 0)
+        #expect(isConsume(decide(&latch, phase: 4, t: 0.02, surface: surface)))
+        #expect(surface.calls == 1)
+        // A began after the mayBegin was continued, or after it was cancelled, decides afresh.
+        #expect(decide(&latch, phase: 1, t: 0.03, surface: Surface(.window)) == .pass)
+        #expect(latch.pan?.started == 0.03)
+        latch = .none
+        #expect(isConsume(decide(&latch, phase: 128, t: 0, surface: surface)))
+        #expect(isConsume(decide(&latch, phase: 8, t: 0.01, surface: surface)))
+        #expect(decide(&latch, phase: 1, t: 0.02, surface: Surface(.window)) == .pass)
+    }
+
     @Test func optionPressedAfterBeganPassesTheWholeSequence() {
         var latch = GestureTapRules.Latch.none
         #expect(decide(&latch, phase: 1) == .pass)

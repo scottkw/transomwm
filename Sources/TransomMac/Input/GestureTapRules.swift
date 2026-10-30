@@ -105,6 +105,8 @@ public nonisolated enum GestureTapRules {
         public var optionHeld: Bool
         public var passReason: PassReason?
         public var reason: GestureSample.Reason?
+        /// Only its mayBegin (128) seen so far: the began (1) that follows continues it, not a new sequence (WR-02).
+        public var mayBeginOnly = false
     }
 
     /// One slot per kind, so a scroll cancelled by a starting pinch never disturbs the pinch's latch.
@@ -193,7 +195,9 @@ public nonisolated enum GestureTapRules {
         if input.type == CGEventType.scrollWheel.rawValue {
             // Discrete wheels and unphased scrolls are never a trackpad gesture (E-04).
             guard input.isContinuous, input.scrollPhase != 0 || input.momentumPhase != 0 else { return .pass }
-            let first = input.scrollPhase == 128 || input.scrollPhase == 1
+            // A pan that starts with mayBegin then began is one sequence, decided once (recorded-pan-maybegin-start).
+            let continuesMayBegin = input.scrollPhase == 1 && latch.pan?.mayBeginOnly == true
+            let first = (input.scrollPhase == 128 || input.scrollPhase == 1) && !continuesMayBegin
             if first {
                 latch.pan = start(.pan, input, state: state, surface: surface)
             } else if latch.pan == nil {
@@ -201,6 +205,7 @@ public nonisolated enum GestureTapRules {
             }
             guard var sequence = latch.pan else { return .pass }
             sequence.lastEvent = now
+            sequence.mayBeginOnly = input.scrollPhase == 128
             if input.scrollPhase == 4 { sequence.fingersUp = true }
             let ends = input.momentumPhase == 3 || input.scrollPhase == 8
             latch.pan = ends ? nil : sequence
