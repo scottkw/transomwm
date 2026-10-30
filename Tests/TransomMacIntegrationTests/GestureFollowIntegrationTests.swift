@@ -89,6 +89,18 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
         return target
     }
 
+    /// Zooms to a docked window's leaf that has a horizontal neighbour: fingers left show the area to the right, fingers
+    /// right the left.
+    func zoomToAViewWithANeighbour() async throws -> (edge: Edge, target: ViewTarget) {
+        for ref in refs {
+            try await zoom(to: .node(try #require(arrange.arranger.leafNode(of: ref))))
+            for edge in [Edge.right, .left] {
+                if let target = target(.pan(edge), at: center(visible)) { return (edge, target) }
+            }
+        }
+        throw FixtureError(description: "no docked window has a horizontal neighbour")
+    }
+
     /// Hotkey-style zoom to `target`, waited out.
     func zoom(to target: ViewTarget) async throws {
         await arrange.zoom(to: target, displayUUID: uuid)
@@ -220,38 +232,33 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
     @Test(.timeLimit(.minutes(1)))
     func anOptionPanPastAThirdMovesToTheNeighbour() async throws {
         try await withDesk { desk in
-            // A view with a horizontal neighbour: fingers left show the area to the right, fingers right the left.
-            var found: (edge: Edge, target: ViewTarget)?
-            for ref in desk.refs where found == nil {
-                try await desk.zoom(to: .node(try #require(desk.arrange.arranger.leafNode(of: ref))))
-                for edge in [Edge.right, .left] where found == nil {
-                    found = desk.target(.pan(edge), at: center(desk.visible)).map { (edge, $0) }
-                }
-            }
-            let (edge, expected) = try #require(found, "no docked window has a horizontal neighbour")
+            let (edge, expected) = try await desk.zoomToAViewWithANeighbour()
             let total = (edge == .right ? -0.4 : 0.4) * desk.visible.width
             #expect(try await post(pan(total, momentum: true), at: center(desk.visible), downstream: desk.downstream) == 0)
             #expect(await desk.idle(), "the stage never revealed")
             #expect(desk.view == expected, "pan \(edge) went to \(desk.view), not \(expected)")
+            // The momentum tail after the release must not overwrite the outcome.
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .moved(expected))
         }
     }
 
     @Test(.timeLimit(.minutes(1)))
     func aShortPanSpringsBack() async throws {
         try await withDesk { desk in
-            let leaf = try #require(desk.arrange.arranger.leafNode(of: desk.refs[0]))
-            try await desk.zoom(to: .node(leaf))
-            let total = -0.1 * desk.visible.width
+            let (edge, _) = try await desk.zoomToAViewWithANeighbour()
+            let before = desk.view
+            let total = (edge == .right ? -0.1 : 0.1) * desk.visible.width
             let survived = try await post(pan(total, momentum: false), at: center(desk.visible), gap: .milliseconds(100), downstream: desk.downstream)
             #expect(survived == 0)
             #expect(await waitUntil(timeout: .seconds(1)) { desk.arrange.zoomController?.isIdle ?? true }, "the stage stayed up")
-            #expect(desk.view == .node(leaf))
-            let outcome = desk.arrange.gestures.lastGesture?.outcome
-            #expect(outcome == .sprangBack || outcome == .refused(.noArea(.right)), "outcome \(String(describing: outcome))")
+            #expect(desk.view == before)
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .sprangBack)
         }
     }
 
-    /// GEST-03: no ⌥, the pointer over the Desktop tile's empty wallpaper.
+    /// GEST-03: no ⌥, the pointer over bare wallpaper: the Desktop tile's empty area, else (the VM's own TextEdit, Notes
+    /// and Finder windows may cover the whole visible frame, and only fixture windows may be touched) any bare wallpaper
+    /// on the display, such as the band behind the Dock.
     @Test(.timeLimit(.minutes(1)))
     func aNoOptionPinchOnWallpaperZooms() async throws {
         try await withDesk { desk in
@@ -259,14 +266,18 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
             let desktop = try #require(try Planner.plan(desk: tree, area: desk.visible, gap: 8, mins: [:]).desktopRect)
             let list = try #require(CGWindowList.onScreenFrontToBack())
             let bounds = CGDisplayBounds(CGMainDisplayID())
+            let screen = Rect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: bounds.height)
             var point: CGPoint?
-            for x in stride(from: desktop.minX + 8, to: desktop.maxX - 8, by: 8) where point == nil {
-                for y in stride(from: desktop.minY + 8, to: desktop.maxY - 8, by: 8) where point == nil {
-                    let p = CGPoint(x: x, y: y)
-                    if GestureTapRules.surface(at: p, in: list, excludingPID: getpid(), display: bounds) == .wallpaper { point = p }
+            for area in [desktop, screen] where point == nil {
+                for x in stride(from: area.minX + 8, to: area.maxX - 8, by: 8) where point == nil {
+                    for y in stride(from: area.minY + 8, to: area.maxY - 8, by: 8) where point == nil {
+                        let p = CGPoint(x: x, y: y)
+                        if GestureTapRules.surface(at: p, in: list, excludingPID: getpid(), display: bounds) == .wallpaper { point = p }
+                    }
                 }
             }
-            let wallpaper = try #require(point, "no bare wallpaper in the Desktop tile \(desktop)")
+            let wallpaper = try #require(point, "no bare wallpaper on the display")
+            print("wallpaper pinch at \(wallpaper), Desktop tile \(desktop)")
             #expect(try await post(pinch(1.2, flags: []), at: wallpaper, downstream: desk.downstream) == 0)
             #expect(await desk.idle(), "the stage never revealed")
             #expect(desk.view != .home, "a no-⌥ pinch on the wallpaper did not zoom in")

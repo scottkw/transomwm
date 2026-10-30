@@ -50,6 +50,8 @@ import os
         var refusal: Navigator.Refusal?
         /// The stage is up for this gesture.
         var shown = false
+        /// Released; kept until the tap ends the sequence, so its momentum tail starts no new judgement.
+        var ended = false
     }
     private var follow: Follow?
     /// Polls the recognizer while a gesture is open: a released pan decides within `momentumWait` (05-02).
@@ -281,10 +283,10 @@ import os
         let update = gesture.recognizer.timeout(now: .greatestFiniteMagnitude)
         follow = gesture
         apply(update)
-        if follow?.seq == seq {  // never started (spike C2 noise): nothing to resolve
-            follow = nil
+        if follow?.ended != true {  // never started (spike C2 noise): nothing to resolve
             lastGesture = LastGesture(seq: seq, kind: gesture.kind, direction: nil, outcome: .tooSmall)
         }
+        follow = nil
     }
 
     private func apply(_ update: GestureRecognizer.Update?) {
@@ -311,7 +313,7 @@ import os
             }
             followFrame(gesture, direction)
         case .ended(let release):
-            follow = nil
+            follow?.ended = true
             recognizerTimer.cancel()
             let outcome: Outcome =
                 if release.tooSmall { .tooSmall } else if release.passedThreshold, let target = gesture.target { .moved(target) } else {
