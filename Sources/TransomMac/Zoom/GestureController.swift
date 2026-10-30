@@ -256,6 +256,7 @@ import os
             follow = Follow(
                 seq: seq, kind: sample.kind, recognizer: GestureRecognizer(kind: sample.kind == .pinch ? .pinch : .pan, viewSize: size),
                 uuid: display.uuid, pointer: pointer, first: sample.timestamp)
+            controller?.endPick(reason: "gesture")  // a taken gesture is a Transom command (UI-SPEC Surface 2)
         }
         guard var gesture = follow, gesture.seq == seq else { return }
         let update = gesture.recognizer.feed(
@@ -298,8 +299,8 @@ import os
             aim(&gesture, direction)
             // No target (refused, UI-SPEC Surface 3): the current view's still tile set overscrolls and springs back.
             let preview = gesture.target.flatMap { controller.arranger.previewMove(to: $0, displayUUID: gesture.uuid) }
-            if controller.zoomController?.isIdle ?? true, let move = preview ?? controller.arranger.stillMove(displayUUID: gesture.uuid) {
-                // A busy display (a move or settle running, E-03) is Task 2's.
+            // A display that is busy (a move or settle running) is taken over by ZoomController (E-03).
+            if let move = preview ?? controller.arranger.stillMove(displayUUID: gesture.uuid) {
                 gesture.shown = controller.beginFollow(move, gesture: Self.kindText(gesture.kind))
             }
             follow = gesture

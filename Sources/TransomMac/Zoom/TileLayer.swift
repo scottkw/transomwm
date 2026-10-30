@@ -95,6 +95,16 @@ nonisolated final class TileLayer: CALayer {
     /// Where the tile is on screen now: its presentation rect while it animates.
     var currentRect: CGRect { presentation()?.frame ?? frame }
 
+    /// Stops where it is on screen now (E-03): the presentation frame and opacity become the model's. Call with actions
+    /// disabled.
+    func freeze() {
+        let rect = currentRect, opacity = presentation()?.opacity ?? self.opacity
+        removeAllAnimations()
+        picture.removeAllAnimations()
+        set(rect)
+        self.opacity = opacity
+    }
+
     /// Moves from `from` to `to` with one curve; a snapshot's picture goes on from where it is to its aspect-fill frame at
     /// the new size. `from` is the tile's start rect, or its presentation rect for a retarget.
     func move(from: CGRect, to: CGRect, duration: Double, timing: CAMediaTimingFunction) {

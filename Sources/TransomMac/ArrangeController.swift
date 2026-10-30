@@ -604,6 +604,11 @@ import os
         return zoom
     }
 
+    /// Pick mode ends (a taken gesture, 05-05).
+    func endPick(reason: String) { zoomInput.endPick(reason: reason) }
+    /// Pick mode is on (tests).
+    var isPicking: Bool { zoomInput.isPicking }
+
     /// The stage a gesture follows on (05-04), made with zoom on like a move's.
     func followStage() -> ZoomController { zoom() }
 

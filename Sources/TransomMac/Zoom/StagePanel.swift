@@ -49,6 +49,12 @@ public final class StagePanel: NSPanel {
     private var tiles: [StageTile] = []
     /// Chosen when a move starts (Reduce Motion), kept by its retargets.
     private var crossfade = false
+    /// Where a follow's lerp starts when it is not a tile's start rect: where the tile was when the follow's tile set last
+    /// changed (a reversal, or a takeover, E-03). Spring back still returns to the start rect.
+    private var followFrom: [UInt32: CGRect] = [:]
+    /// Bumped when a gesture takes the stage over: completions scheduled before (a spring back's fade, a fade's order-out)
+    /// no longer fire.
+    private var generation = 0
     /// A click on a tile, by its window ID (Surface 5: retargets the camera). A click on the backdrop is swallowed.
     var onTileClick: ((UInt32) -> Void)?
 
@@ -110,6 +116,7 @@ public final class StagePanel: NSPanel {
         CATransaction.setDisableActions(true)
         for layer in Array(layers.values) + leaving { layer.removeFromSuperlayer() }
         leaving = []
+        followFrom = [:]
         self.tiles = tiles
         layers = Dictionary(tiles.map { ($0.id, makeTile($0, at: $0.start)) }, uniquingKeysWith: { first, _ in first })
         CATransaction.commit()
@@ -171,11 +178,59 @@ public final class StagePanel: NSPanel {
 
     // MARK: Follow (05-04, UI-SPEC Surfaces 1, 2 and 4)
 
-    /// A gesture's stage: in at once with every tile at its start rect. `crossfade` (Reduce Motion) is kept for the snap's
-    /// retarget, as a move's is.
+    /// A gesture's stage: in at once with every tile at its start rect, or, already up (a takeover, E-03), on from where
+    /// each tile is. `crossfade` (Reduce Motion) is kept for the snap's retarget, as a move's is.
     public func beginFollow(tiles: [StageTile], crossfade: Bool) {
-        show(tiles: tiles)
+        if isVisible { refollow(tiles: tiles, finishingDropped: true) } else { show(tiles: tiles) }
         self.crossfade = crossfade
+    }
+
+    /// A gesture takes the stage over mid-move (E-03): every tile stops at its presentation frame, a running fade is
+    /// cancelled, and completions already scheduled no longer fire. Leaving tiles finish on their way off screen.
+    public func freezeAtPresentation() {
+        generation += 1
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            animator().alphaValue = 1
+        }
+        alphaValue = 1
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for layer in layers.values { layer.freeze() }
+        CATransaction.commit()
+    }
+
+    /// The follow's tile set changes (a reversal, or a takeover): every tile goes on from where it is now, a new one from
+    /// its start rect, and the lerp runs from there, so nothing jumps (UI-SPEC Surface 1, E-03). Tiles the new set drops
+    /// are removed (a reversal's are at their off-screen start), or with `finishingDropped` (a takeover's leaving tiles)
+    /// go on to their old end, as a retarget's do.
+    public func refollow(tiles new: [StageTile], finishingDropped: Bool = false) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        var next: [UInt32: TileLayer] = [:]
+        followFrom = [:]
+        for tile in new where next[tile.id] == nil {
+            let old = layers.removeValue(forKey: tile.id)
+            let from = old.map { $0.currentRect.offsetBy(dx: frame.minX, dy: frame.minY) } ?? tile.start
+            old?.removeFromSuperlayer()
+            next[tile.id] = makeTile(tile, at: from)
+            followFrom[tile.id] = from
+        }
+        for tile in tiles {
+            guard let layer = layers.removeValue(forKey: tile.id) else { continue }
+            if finishingDropped {
+                layer.move(from: layer.currentRect, to: localRect(tile.end), duration: Self.moveDuration, timing: Self.moveTiming)
+                leaving.append(layer)
+            } else {
+                layer.removeFromSuperlayer()
+            }
+        }
+        for layer in layers.values { layer.removeFromSuperlayer() }
+        layers = next
+        tiles = new
+        CATransaction.commit()
+        alphaValue = 1
+        orderFrontRegardless()
     }
 
     /// One frame of finger tracking, set at once (no animation between samples): every tile at `followRect`.
@@ -183,7 +238,8 @@ public final class StagePanel: NSPanel {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for tile in tiles {
-            layers[tile.id]?.set(localRect(Self.followRect(start: tile.start, end: tile.end, t: t, scale: scale, anchor: anchor, offset: offset)))
+            let start = followFrom[tile.id] ?? tile.start
+            layers[tile.id]?.set(localRect(Self.followRect(start: start, end: tile.end, t: t, scale: scale, anchor: anchor, offset: offset)))
         }
         CATransaction.commit()
     }
@@ -201,10 +257,14 @@ public final class StagePanel: NSPanel {
     /// Motion) the stage just fades out over a move, nothing moving. The real windows never moved, so nothing settles.
     public func springBack(fade: Bool, completion: @escaping @MainActor () -> Void) {
         guard !fade else { return fadeOut(duration: Self.moveDuration, completion: completion) }
+        let started = generation
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         CATransaction.setCompletionBlock { [weak self] in
-            MainActor.assumeIsolated { self?.fadeOut(completion: completion) }
+            MainActor.assumeIsolated {
+                guard let self, self.generation == started else { return }  // taken over (E-03)
+                self.fadeOut(completion: completion)
+            }
         }
         for tile in tiles {
             guard let layer = layers[tile.id] else { continue }
@@ -230,14 +290,19 @@ public final class StagePanel: NSPanel {
 
     /// Fades the whole stage out, then orders it out. Window alpha rather than layer opacity: the panel is opaque, so
     /// transparent content would show black instead of the windows underneath.
+    /// A gesture taking the stage over meanwhile (E-03) cancels both the order-out and `completion`.
     public func fadeOut(duration: Double = StagePanel.revealFade, completion: (@MainActor () -> Void)? = nil) {
+        let started = generation
         NSAnimationContext.runAnimationGroup { context in
             context.duration = duration
             animator().alphaValue = 0
         } completionHandler: { [weak self] in
             MainActor.assumeIsolated {
-                self?.orderOut(nil)
-                self?.alphaValue = 1
+                if let self {
+                    guard self.generation == started else { return }
+                    self.orderOut(nil)
+                    self.alphaValue = 1
+                }
                 completion?()
             }
         }

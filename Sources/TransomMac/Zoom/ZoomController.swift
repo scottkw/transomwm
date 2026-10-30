@@ -67,6 +67,9 @@ import os
 
     private var stages: [String: StagePanel] = [:]
     private var active: [String: Active] = [:]
+    /// E-03: the move a gesture took over, by display, until the gesture commits (superseded) or springs back (it goes
+    /// on from where it was, settling exactly once).
+    private var interrupted: [String: Active] = [:]
     private var revealTimers: [String: WakeTimer] = [:]
     private let capture = SnapshotCapture()
     /// The permission seen at the last move start (nil before the first), and whether the revoke and failing lines were
@@ -91,6 +94,7 @@ import os
             logger.info("retarget \(command, privacy: .public)\(String(describing: current.move.to), privacy: .public) → \(String(describing: move.to), privacy: .public) during \(current.phase.rawValue, privacy: .public)")
             let phase = current.phase
             current.gesture = nil
+            interrupted[uuid] = nil  // a newer pending move: the interrupted one's settle is stale
             current.move = move
             current.settle = settle
             current.tracker = nil
@@ -126,11 +130,23 @@ import os
 
     /// A taken gesture left its dead zone: the stage orders in at once over the real windows with cached snapshots or
     /// fallback tiles, never waiting for a capture; windows with no snapshot are captured and swapped in as they come.
-    /// False when the display is busy or has no screen.
+    /// A display that is busy (E-03) is taken over: its tiles stop where they are and follow from there, and the running
+    /// move is kept as `interrupted`. False when the display has no screen.
     @discardableResult func beginFollow(_ move: CameraMove, gesture: String) -> Bool {
         let uuid = move.displayUUID
-        guard active[uuid] == nil, let stage = stage(for: uuid) else { return false }
+        guard let stage = stage(for: uuid) else { return false }
         let style = Self.followStyle(reduceMotion: reduceMotion())
+        if let old = active[uuid] {
+            logger.info("retarget gesture \(gesture, privacy: .public) during \(old.phase.rawValue, privacy: .public)")
+            revealTimers[uuid]?.cancel()
+            stage.freezeAtPresentation()
+            // The newest pending move is the base: one queued behind a fade, else the running one. A gesture's own spring
+            // back owes no settle.
+            var base = old.queued.map { Active(move: $0.move, settle: $0.settle, phase: .capturing) } ?? (old.gesture == nil ? old : nil)
+            // Taken again during a takeover's spring back: the move still resumes as it was found first.
+            if let earlier = interrupted[uuid], earlier.move.id == base?.move.id { base?.phase = earlier.phase }
+            interrupted[uuid] = base
+        }
         active[uuid] = Active(move: move, settle: { _ in }, phase: .following, gesture: gesture, springBackFade: style.springBackFade)
         stage.beginFollow(tiles: tiles(for: move, images: [:]), crossfade: style.snapCrossfade)
         bringNoticesFront()
@@ -165,13 +181,22 @@ import os
         let uuid = move.displayUUID
         guard isFollowing(uuid) else { return }
         active[uuid]?.move = move
-        stages[uuid]?.show(tiles: tiles(for: move, images: [:]))
+        stages[uuid]?.refollow(tiles: tiles(for: move, images: [:]))
     }
 
     /// Released short of the threshold: tiles go back to their start rects and the stage fades. No engine call, no write,
     /// no history, no reveal.
+    /// After a takeover (E-03) the tiles go back to the interrupted move's view instead, and that move goes on.
     func springBack(displayUUID uuid: String) {
         guard var current = active[uuid], current.phase == .following else { return }
+        if var old = interrupted[uuid] {
+            let id = old.move.id
+            old.phase = .moving  // the way back is a retarget; `resume` restores what the move was doing
+            active[uuid] = old
+            guard let stage = stages[uuid] else { return resume(uuid, id) }
+            stage.retarget(to: tiles(for: old.move, images: [:])) { [weak self] in self?.resume(uuid, id) }
+            return
+        }
         current.phase = .revealing  // a move asked for meanwhile waits for the fade, as in a reveal
         active[uuid] = current
         let done: @MainActor () -> Void = { [weak self] in
@@ -183,6 +208,28 @@ import os
         }
         guard let stage = stages[uuid] else { return done() }
         stage.springBack(fade: current.springBackFade, completion: done)
+    }
+
+    /// A takeover's spring back ended: the interrupted move goes on as the gesture found it. A move that had not settled
+    /// settles now, once (T-05-16: camera.pending never strands); one settling waits for its read-backs; one revealing fades.
+    private func resume(_ uuid: String, _ id: UInt64) {
+        guard let old = interrupted[uuid], old.move.id == id, var current = active[uuid], current.move.id == id, current.phase == .moving
+        else { return }
+        interrupted[uuid] = nil
+        switch old.phase {
+        case .settling:
+            current.phase = .settling
+            active[uuid] = current
+            armReveal(uuid)
+        case .revealing:
+            current.phase = .revealing
+            active[uuid] = current
+            let move = current.move
+            guard let stage = stages[uuid] else { return finishReveal(uuid, move) }
+            stage.fadeOut { [weak self] in self?.finishReveal(uuid, move) }
+        case .capturing, .moving, .following:
+            current.settle(id)
+        }
     }
 
     /// The settle's writes are about to go out: the reveal waits for each one's read-back + 50 ms, or the 1500 ms cap.
@@ -207,6 +254,12 @@ import os
     /// A read-back came in (`frameApplied`).
     func frameApplied(_ id: WindowIdentity) {
         let now = ContinuousClock.now
+        // A settle a gesture interrupted still counts its read-backs, so its reveal waits only for what is left.
+        for (uuid, var old) in interrupted where old.waiting.remove(id) != nil {
+            old.tracker?.applied(id, at: now)
+            old.lastReturn = now
+            interrupted[uuid] = old
+        }
         for (uuid, var current) in active where current.tracker != nil {
             guard current.waiting.remove(id) != nil else { continue }
             current.tracker?.applied(id, at: now)
@@ -224,6 +277,7 @@ import os
             stage.orderOut(nil)
             stages[uuid] = nil
             active[uuid] = nil
+            interrupted[uuid] = nil
             revealTimers[uuid]?.cancel()
         }
     }
@@ -338,6 +392,7 @@ import os
         }
         stages = [:]
         active = [:]
+        interrupted = [:]
         explainerRetry.cancel()
     }
 

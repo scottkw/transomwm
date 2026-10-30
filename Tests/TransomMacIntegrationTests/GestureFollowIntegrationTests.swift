@@ -365,4 +365,67 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
             #expect(desk.arrange.gestures.lastGesture?.outcome == .refused(.nothingToZoomIn))
         }
     }
+
+    // MARK: Gestures during a move (E-03) and pick mode (05-05)
+
+    /// From a leaf view, a hotkey Zoom Out One Level is started and a gesture is posted at once, while it is in flight.
+    /// Returns the step-out's target and the pinch-in target from it (both read while the move is pending).
+    private func stepOutThenPinch(_ desk: Desk, _ total: Double) async throws -> (step: ViewTarget, pinchIn: ViewTarget?, busy: Bool) {
+        let leaf = try #require(desk.arrange.arranger.leafNode(of: desk.refs[0]))
+        try await desk.zoom(to: .node(leaf))
+        let point = center(desk.tiles[0])
+        CGWarpMouseCursorPosition(point)
+        try await Task.sleep(for: .milliseconds(300))
+        await desk.arrange.dispatch(.camera(.stepOut))
+        let step = try #require(desk.arrange.arranger.camera.pending[desk.uuid]?.target, "the step-out did not start")
+        let pinchIn = desk.target(.pinchIn, at: point)
+        let busy = !(desk.arrange.zoomController?.isIdle ?? true)
+        let survived = try await post(pinch(total), at: point, warp: false, downstream: desk.downstream)
+        #expect(survived == 0, "pinch events reached the app")
+        #expect(await desk.idle(), "the stage never revealed")
+        return (step, pinchIn, busy)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aGestureDuringAHotkeyMoveRetargetsWithoutStranding() async throws {
+        try await withDesk { desk in
+            let (step, pinchIn, busy) = try await stepOutThenPinch(desk, 1.2)
+            let expected = try #require(pinchIn, "no pinch-in target from the step-out's target")
+            #expect(busy, "the step-out was not in flight when the gesture began")
+            #expect(expected != step)
+            #expect(desk.view == expected, "the gesture went to \(desk.view), not one level in from \(step) (\(expected))")
+            #expect(desk.arrange.arranger.camera.pending.isEmpty, "a pending move stranded")
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .moved(expected))
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aSpringBackDuringAMoveLetsThatMoveSettle() async throws {
+        try await withDesk { desk in
+            let leaf = try #require(desk.arrange.arranger.leafNode(of: desk.refs[0]))
+            let (step, _, busy) = try await stepOutThenPinch(desk, 0.1)
+            #expect(busy, "the step-out was not in flight when the gesture began")
+            #expect(desk.view == step, "the interrupted step-out did not settle: \(desk.view)")
+            #expect(desk.arrange.arranger.camera.pending.isEmpty, "a pending move stranded")
+            #expect(desk.arrange.arranger.camera.histories[desk.uuid]?.back.last?.target == .node(leaf), "the step-out pushed no history")
+            #expect(desk.arrange.gestures.lastGesture?.outcome == .sprangBack)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aGestureEndsPickMode() async throws {
+        try await withDesk { desk in
+            let leaf = try #require(desk.arrange.arranger.leafNode(of: desk.refs[0]))
+            try await desk.zoom(to: .node(leaf))
+            CGWarpMouseCursorPosition(center(desk.visible))
+            try await Task.sleep(for: .milliseconds(300))
+            await desk.arrange.dispatch(.camera(.zoomOutAll))
+            #expect(await desk.idle(), "the zoom-out never revealed")
+            try #require(await waitUntil(timeout: .seconds(1)) { desk.arrange.isPicking }, "no pick mode after Zoom Out to All Windows")
+            let survived = try await post(pinch(0.2), at: center(desk.tiles[0]), gap: .milliseconds(100), downstream: desk.downstream)
+            #expect(survived == 0)
+            #expect(!desk.arrange.isPicking, "a taken gesture left pick mode on")
+            #expect(await desk.idle(), "the stage stayed up")
+        }
+    }
 }

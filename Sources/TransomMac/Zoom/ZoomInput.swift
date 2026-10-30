@@ -49,6 +49,7 @@ import os
         var hovered: UInt32?
     }
     private var pick: Pick?
+    var isPicking: Bool { pick != nil }
     /// The Zoom Out to All Windows / Zoom Out One Level move whose reveal starts pick mode.
     private var pickMove: UInt64?
 
