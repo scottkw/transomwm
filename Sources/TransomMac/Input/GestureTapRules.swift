@@ -71,7 +71,9 @@ public nonisolated enum PointerSurface: Equatable, Sendable { case window, wallp
 
 /// The gesture tap's consume rules (D-04, D-05, D-06, E-04, E-05; RESEARCH Pattern 2). Pure, like `ZoomTapRules`: a
 /// sequence is decided once, at its first event, and that decision holds through momentum end. Every new start decides
-/// afresh and a quiet latch expires, so a lost end can never swallow later scrolling (Pitfall 4).
+/// afresh and a quiet latch expires, so a lost end can never swallow a later gesture (Pitfall 4). A taken latch that
+/// expires leaves an orphan that swallows only its own tail, which has no start, so the app never gets part of a
+/// gesture Transom took (D-06, WR-03).
 public nonisolated enum GestureTapRules {
     /// Scroll (22) and kCGSEventGesture (29). Never 1 << 30: that is Dock control (Pitfall 1).
     public static let mask: CGEventMask = (1 << CGEventType.scrollWheel.rawValue) | (1 << GestureEventFields.gestureType)
@@ -107,6 +109,9 @@ public nonisolated enum GestureTapRules {
         public var reason: GestureSample.Reason?
         /// Only its mayBegin (128) seen so far: the began (1) that follows continues it, not a new sequence (WR-02).
         public var mayBeginOnly = false
+        /// Taken, then its latch expired or the tap was re-enabled: it swallows the rest of its sequence with no
+        /// samples (main has already resolved the stage), until its end or the next start of its kind (WR-03, WR-05).
+        public var orphan = false
     }
 
     /// One slot per kind, so a scroll cancelled by a starting pinch never disturbs the pinch's latch.
@@ -114,6 +119,9 @@ public nonisolated enum GestureTapRules {
         public var pan: Sequence?
         public var pinch: Sequence?
         public static let none = Latch()
+
+        /// After the tap was re-enabled mid-gesture (WR-05): taken sequences become orphans, passing ones go.
+        public func orphaned() -> Latch { Latch(pan: GestureTapRules.orphaned(pan), pinch: GestureTapRules.orphaned(pinch)) }
     }
 
     public enum Decision: Equatable, Sendable {
@@ -189,8 +197,9 @@ public nonisolated enum GestureTapRules {
         _ input: Input, state: GestureTapState, latch: inout Latch, surface: (CGPoint) -> PointerSurface
     ) -> Decision {
         let now = input.timestamp
-        if let pan = latch.pan, isExpired(pan, now: now) { latch.pan = nil }
-        if let pinch = latch.pinch, isExpired(pinch, now: now) { latch.pinch = nil }
+        if let pan = latch.pan, isExpired(pan, now: now) { latch.pan = orphaned(pan) }
+        let stalePinch = latch.pinch.map { isExpired($0, now: now) } ?? false
+        if stalePinch { latch.pinch = orphaned(latch.pinch) }
 
         if input.type == CGEventType.scrollWheel.rawValue {
             // Discrete wheels and unphased scrolls are never a trackpad gesture (E-04).
@@ -210,7 +219,7 @@ public nonisolated enum GestureTapRules {
             let ends = input.momentumPhase == 3 || input.scrollPhase == 8
             latch.pan = ends ? nil : sequence
             guard sequence.consuming else { return .pass }
-            return .consume(sample(input, kind: .pan, reason: first ? sequence.reason : nil))
+            return .consume(sequence.orphan ? nil : sample(input, kind: .pan, reason: first ? sequence.reason : nil))
         }
 
         guard input.type == GestureEventFields.gestureType else { return .pass }
@@ -234,12 +243,22 @@ public nonisolated enum GestureTapRules {
         // before zoom began) also sees the end one; passing them left nothing stuck on the host (A4 held).
         let envelope = input.hidType == GestureEventFields.hidGestureStarted || input.hidType == GestureEventFields.hidGestureEnded
         guard sequence.consuming, !envelope else { return .pass }
+        // An orphan takes its zoom tail, and the other sub-types only while zoom traffic is recent (WR-04).
+        if sequence.orphan { return zoom || !stalePinch ? .consume(nil) : .pass }
         return .consume(zoom ? sample(input, kind: .pinch, reason: first ? sequence.reason : nil) : nil)
     }
 
     /// Whether `decide` drops this latched sequence at an event at `now`.
     public static func isExpired(_ sequence: Sequence, now: Double) -> Bool {
         now - sequence.lastEvent > (sequence.fingersUp ? quietTimeout : fingersDownTimeout)
+    }
+
+    /// What an expired or interrupted latch leaves: a taken sequence becomes an orphan, a passing one is dropped.
+    public static func orphaned(_ sequence: Sequence?) -> Sequence? {
+        guard var sequence, sequence.consuming else { return nil }
+        sequence.orphan = true
+        sequence.mayBeginOnly = false
+        return sequence
     }
 
     /// The decision at a sequence's first event (RESEARCH Pattern 2, steps 1-3).

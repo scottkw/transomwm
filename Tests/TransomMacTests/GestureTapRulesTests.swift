@@ -231,22 +231,55 @@ private let gesture = GestureEventFields.gestureType
         #expect(isConsume(decide(&latch, phase: 2, flags: option, t: 0.01)))
         // No end, then 2.1 s of nothing: a fresh plain scroll passes, and so does a stray changed.
         #expect(decide(&latch, phase: 1, t: 2.11) == .pass)
+        // A plain scroll's stray changed after a passing latch expired is the app's.
         latch = .none
-        #expect(isConsume(decide(&latch, phase: 1, flags: option, t: 0)))
+        #expect(decide(&latch, phase: 1, t: 0) == .pass)
         #expect(decide(&latch, phase: 2, t: 2.11) == .pass)
         #expect(latch.pan?.passReason == .midSequence)
     }
 
-    @Test func quietAfterFingersUpEndsTheLatchButFingersDownQuietKeepsIt() {
+    /// WR-03 (UAT item 10): fingers resting over 2 s mid-gesture, then moving on. The taken latch becomes an orphan that
+    /// swallows the rest of the gesture with no samples (main resolved the stage at 2.05 s), momentum included, until
+    /// its end; the next start decides afresh.
+    @Test func aTakenGestureResumedAfterALongRestNeverLeaksItsTail() {
+        var latch = GestureTapRules.Latch.none
+        #expect(isConsume(decide(&latch, phase: 1, flags: option, t: 0)))
+        #expect(isConsume(decide(&latch, phase: 2, flags: option, t: 0.01)))
+        #expect(decide(&latch, phase: 2, t: 2.5) == .consume(nil))
+        #expect(latch.pan?.orphan == true)
+        #expect(decide(&latch, phase: 2, t: 5.0) == .consume(nil), "a second long rest still swallows")
+        #expect(decide(&latch, phase: 4, t: 5.01) == .consume(nil))
+        for (i, momentum) in [Int64(1), 2, 3].enumerated() { #expect(decide(&latch, momentum: momentum, t: 5.6 + Double(i) * 0.01) == .consume(nil)) }
+        #expect(latch.pan == nil)
+        #expect(decide(&latch, phase: 1, t: 6) == .pass)
+
+        latch = .none
+        #expect(isConsume(pinch(&latch, 1, t: 0)))
+        #expect(pinch(&latch, 2, flags: [], t: 2.5) == .consume(nil))
+        #expect(latch.pinch?.orphan == true)
+        #expect(pinch(&latch, 2, hid: GestureEventFields.hidRotate, flags: [], t: 2.6) == .consume(nil), "C1 inside the orphan")
+        #expect(pinch(&latch, 0, hid: GestureEventFields.hidGestureEnded, flags: [], t: 2.7) == .pass)
+        #expect(pinch(&latch, 4, flags: [], t: 2.8) == .consume(nil))
+        #expect(latch.pinch == nil)
+        // A new start replaces an orphan.
+        #expect(isConsume(decide(&latch, phase: 1, flags: option, t: 10)))
+        #expect(decide(&latch, phase: 2, t: 12.5) == .consume(nil))
+        guard case .consume(let fresh?) = decide(&latch, phase: 1, flags: option, t: 12.6) else { Issue.record("new start not taken"); return }
+        #expect(fresh.reason == .optionHeld)
+        #expect(latch.pan?.orphan == false)
+    }
+
+    @Test func quietAfterFingersUpOrphansTheLatchButFingersDownQuietKeepsIt() {
         var latch = GestureTapRules.Latch.none
         #expect(isConsume(decide(&latch, phase: 1, flags: option, t: 0)))
         // Resting fingers mid-pan for 1 s keeps consuming (UAT item 10).
         #expect(isConsume(decide(&latch, phase: 2, t: 1.0)))
         #expect(isConsume(decide(&latch, phase: 4, t: 1.01)))
         #expect(latch.pan?.fingersUp == true)
-        // 0.31 s of quiet after lift: the late momentum is the app's (as a stray, never taken).
-        #expect(decide(&latch, momentum: 1, t: 1.33) == .pass)
-        #expect(latch.pan?.passReason == .midSequence)
+        // 0.31 s of quiet after lift: late momentum of a taken pan is still swallowed, with no sample (WR-03).
+        #expect(decide(&latch, momentum: 1, t: 1.33) == .consume(nil))
+        #expect(latch.pan?.orphan == true)
+        #expect(decide(&latch, phase: 1, t: 1.4) == .pass)
     }
 
     @Test func aStrayChangedPassesAndKeepsPassing() {
