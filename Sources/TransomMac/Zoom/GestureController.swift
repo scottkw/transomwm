@@ -93,6 +93,8 @@ import os
     private var trackers: [Int: TwoFingerTracker] = [:]
     private var multitouchPinch: (seq: UInt64, number: Int, reason: GestureSample.Reason?, location: CGPoint, first: Double, frames: Int)?
     private var multitouchCount = 0
+    /// Tap sequences shut out by a multitouch pinch, ignored until their end (WR-10).
+    private var suppressed: Set<UInt64> = []
     /// Multitouch sequences never collide with the tap's, which count up from 1.
     private static let multitouchSeqBase: UInt64 = 1 << 62
 
@@ -143,6 +145,7 @@ import os
         multitouch.stop()
         trackers = [:]
         multitouchPinch = nil
+        suppressed = []
         watcher?.stop()
         watcher = nil
         for observer in wakeObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
@@ -233,6 +236,7 @@ import os
                 timeoutTimer.cancel()
                 current = nil
             }
+            suppressed.remove(summary.seq)
             guard loggedByTimer.remove(summary.seq) == nil else { return }
             if summary.taken { finishFollow(summary.seq) }
             logEnd(summary)
@@ -242,6 +246,7 @@ import os
     /// No event for the latch's timeout: the tap drops the latch at its next event, but the line is due now. Quiet after
     /// lift is a normal end; quiet with fingers down is a release by timeout.
     private func expire(_ seq: UInt64) {
+        suppressed.remove(seq)
         guard let gesture = current, gesture.seq == seq else { return }
         current = nil
         loggedByTimer.insert(seq)
@@ -288,7 +293,8 @@ import os
     private func feed(_ sample: GestureSample, seq: UInt64) {
         if follow?.seq != seq {
             // A multitouch pinch under way keeps the stage; the tap still consumes what it took (C4).
-            if let open = follow, open.seq >= Self.multitouchSeqBase, open.started, !open.ended { return }
+            let ownedByMultitouch = follow.map { $0.seq >= Self.multitouchSeqBase && $0.started && !$0.ended } ?? false
+            if Self.dropsSample(seq, ownedByMultitouch: ownedByMultitouch, suppressed: &suppressed) { return }
             if let old = follow?.seq { finishFollow(old) }
             let pointer = Point(x: sample.location.x, y: sample.location.y)
             guard let display = controller?.arranger.displays.first(where: { $0.frame.contains(pointer) }) else { return }
@@ -306,6 +312,14 @@ import os
         follow = gesture
         apply(update)
         pollRecognizer(seq)
+    }
+
+    /// WR-10: a sample of another sequence is dropped while a started multitouch pinch owns the stage, and so is the rest
+    /// of that sequence, until its end: tap events trail multitouch by ~63 ms (05-SPIKE M4), so its late samples must not
+    /// open a new follow once the pinch has ended.
+    nonisolated static func dropsSample(_ seq: UInt64, ownedByMultitouch: Bool, suppressed: inout Set<UInt64>) -> Bool {
+        if ownedByMultitouch { suppressed.insert(seq) }
+        return suppressed.contains(seq)
     }
 
     private func pollRecognizer(_ seq: UInt64) {

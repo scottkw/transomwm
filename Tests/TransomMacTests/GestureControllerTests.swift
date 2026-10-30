@@ -16,6 +16,17 @@ struct GestureControllerTests {
         .ended(GestureTapSummary(seq: seq, kind: .pan, taken: true, optionHeld: true, startedAt: 0, endedAt: 0))
     }
 
+    /// WR-10: a tap sequence shut out by a multitouch pinch stays out after the pinch ends, until its own end.
+    @Test func aSequenceShutOutByAMultitouchPinchStaysOutUntilItsEnd() {
+        var suppressed: Set<UInt64> = []
+        #expect(!GestureController.dropsSample(7, ownedByMultitouch: false, suppressed: &suppressed))
+        #expect(GestureController.dropsSample(7, ownedByMultitouch: true, suppressed: &suppressed))
+        #expect(GestureController.dropsSample(7, ownedByMultitouch: false, suppressed: &suppressed), "a late sample after the pinch ended")
+        #expect(!GestureController.dropsSample(8, ownedByMultitouch: false, suppressed: &suppressed), "a new sequence")
+        suppressed.remove(7)  // its .ended
+        #expect(!GestureController.dropsSample(7, ownedByMultitouch: false, suppressed: &suppressed))
+    }
+
     /// WR-09: gestures are disarmed while Turn Off Zoom moves home, as while paused.
     @Test func turningZoomOffDisarmsGestures() {
         #expect(GestureController.disarmReason(ready: true, paused: false, turningOff: true, busy: false) == .zoomPaused)
