@@ -266,7 +266,7 @@ New Debug submenu lines go **directly after Phase 4's "Snapshot cache: …" line
 transom-gesture-spike tap-consume · macOS 27.0.1 (26A434) · 2026-10-29 14:02:11
 Label: safari alt builtin
 Accessibility: granted · Input Monitoring: granted · Post events: granted
-Trackpads: built-in (family 110, registry 0x10000049a) · Magic Trackpad (family {f}, registry 0x1000007f3)
+Trackpads: built-in (family 110, registry 0x10000049a)
 Recording 30 s to .build/spike/gesture-tap-consume-20261029-140211/out.jsonl
 Press Control-C to stop early.
 ```
@@ -289,7 +289,7 @@ Listen-only subcommands use the same wording with "Input Monitoring" and the mat
 | `tap-consume` (passed) | `14:02:19.330  pan    –  Safari (pid 512)  passed: window under pointer  callback p50 3 µs · p99 9 µs` |
 | `mt-stream` | `14:03:02.011  built-in  2 touches  ids 1,2  states 4,4  frame Δt 8.3 ms  callback thread: background` (one line per second, not per frame) |
 | `compare` | `14:04:10.500  pinch  first MT frame leads first tap event by 22 ms` |
-| `rescan` | `14:05:31.002  removed Magic Trackpad (registry 0x1000007f3)` · `14:05:36.870  added Magic Trackpad · first frame after 640 ms` |
+| `rescan` | `14:05:31.002  wake` · `14:05:31.642  first frame after wake 640 ms` (an external trackpad would also print `removed …` / `added …` lines; the host has the built-in trackpad only, 05-SPIKE C5) |
 | `mt-devices` | one block per device: `built-in · family 110 · device id … · registry … · surface {w} × {h} mm · driver type …`, then the `dlsym` table as `MTDeviceCreateList  found` / `missing` |
 
 `–` means no modifier. Modifier glyphs are ⌥, ⌃, ⌘, ⇧ in that order.
@@ -316,7 +316,7 @@ The CLI **prints readings next to their gate thresholds but never prints PASS or
 
 ## Surface 7 — User checklists (D-08)
 
-The user runs these on their own Mac. Wording is fixed here so the agent can paste it into `05-SPIKE.md` and `05-UAT.md` unchanged. Each item says what to do and what should happen. The user answers each with **"pass"** or with what they saw instead. Items marked **(both)** are run on the built-in trackpad and on the Magic Trackpad.
+The user runs these on their own Mac. Wording is fixed here so the agent can paste it into `05-SPIKE.md` and `05-UAT.md` unchanged. Each item says what to do and what should happen. The user answers each with **"pass"** or with what they saw instead. Items marked **(both)** were meant for every trackpad on the Mac; this Mac has the built-in trackpad only (05-SPIKE C5), so they run on the built-in trackpad.
 
 ### Spike gate checklist (with `transom-gesture-spike`, Transom not running)
 
@@ -325,16 +325,16 @@ Before you start: give your terminal app Accessibility (System Settings ▸ Priv
 1. **(both)** Run `tap-listen --seconds 60 --label "surfaces {trackpad}"`. Pinch 10 times and two-finger scroll 10 times over each of: a Safari page, a PDF in Preview, a Finder window, bare wallpaper, and one app in full screen. *Expected: one line per gesture appears for every pinch and scroll.*
 2. **(both)** Run `tap-consume --seconds 60 --require-alt --label "consume {trackpad}"`. Hold ⌥ and repeat item 1 over Safari and Preview. *Expected: the page neither zooms nor scrolls, including after you lift your fingers. Then, without ⌥, pinch and scroll once: the page zooms and scrolls normally.*
 3. Turn off System Settings ▸ Trackpad ▸ Scroll & Zoom ▸ "Zoom in or out". Run `tap-listen --seconds 30 --label "pinch setting off"` and pinch 10 times. Turn the setting back on. *Report: did any pinch lines appear?*
-4. Run `mt-stream --seconds 30 --label "system gestures"`. While it runs, swipe between Spaces with three fingers 10 times and open Mission Control 10 times. *Expected: every swipe and Mission Control works.*
+4. Run `mt-stream --seconds 30 --label "system gestures"`. While it runs, swipe between Spaces with four fingers (or ⌃← / ⌃→) 10 times and open Mission Control 10 times. *Expected: every swipe and Mission Control works.*
 5. Run `rescan --seconds 120 --label "sleep"`. Choose Apple menu ▸ Sleep, wake the Mac, then pinch. *Expected: lines for the wake and for touches after it.*
-6. Run `rescan --seconds 120 --label "reconnect"`. Turn the Magic Trackpad off and on (or turn Bluetooth off and on), then pinch on it. *Expected: "removed" and "added" lines, then touches.*
+6. **N/A** (05-SPIKE C5): reconnecting an external trackpad can't be tested on a Mac with only the built-in trackpad.
 7. Run `compare --seconds 30 --label "latency"` and pinch and pan 10 times each.
 
 Then tell the agent where the `out.jsonl` files are (the CLI prints each path), plus your answers.
 
 ### Phase UAT checklist (Transom running, zoom on)
 
-Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview among them. Run each item on **(both)** trackpads where marked.
+Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview among them. Items marked **(both)** run on the built-in trackpad, the only one on this Mac.
 
 1. **(both)** Hold ⌥ over Safari and pinch your fingers apart slowly. *Expected: the screen follows your fingers toward the tile under them. Let go past halfway: it finishes zooming in and the real windows are in place. Safari's page did not zoom.*
 2. **(both)** Hold ⌥ and pinch your fingers together. *Expected: it zooms back out one level. Let go before halfway: it springs back and nothing changes.*
@@ -343,14 +343,14 @@ Set up first: at least 4 windows docked, with a Safari page and a PDF in Preview
 5. Hold ⌥ and make one long pinch, fingers fully apart. *Expected: it goes in exactly one level, resisting past that. Pinch again to go one more level.*
 6. Without ⌥, pinch and scroll over bare wallpaper. *Expected: zoom and pan work. Without ⌥ over a window: the app zooms and scrolls as usual, and Transom does nothing.*
 7. Hold ⌃ and scroll, and hold ⌘ and pinch, over Safari. *Expected: Transom does nothing; Safari or macOS behaves as it does without Transom.* If you use the Accessibility "scroll gesture with modifier keys to zoom", check it still works.
-8. Scroll with a mouse wheel or Magic Mouse while holding ⌥. *Expected: the app scrolls; Transom does nothing.*
+8. Scroll with a mouse wheel or Magic Mouse while holding ⌥. *Expected: the app scrolls; Transom does nothing.* N/A if you have no USB or Bluetooth mouse.
 9. Press ⌃⌥⌘-Comma (Zoom Out One Level) to zoom out and, while it is still moving, ⌥-pinch apart. *Expected: the motion carries on from where it was, without a jump.*
 10. Mid-scroll with ⌥, rest your fingers still for a second, then keep scrolling and lift. *Expected: no scroll reaches Safari at any point.*
 11. Turn on System Settings ▸ Accessibility ▸ Display ▸ Reduce motion. Repeat items 1 and 2. *Expected: the screen still follows your fingers, but the finish is a fade, not a zoom.* Turn it off again.
 12. Turn on VoiceOver (⌘F5). Repeat item 1, then pinch apart fully on a single window. *Expected: you hear "Showing …" after the first, and "Nothing to zoom in to" after the second.* Turn VoiceOver off.
 13. Status menu ▸ Turn Off Zoom. ⌥-pinch and ⌥-scroll over Safari. *Expected: Safari zooms and scrolls as if Transom weren't running.* Turn zoom back on.
 14. Sleep the Mac, wake it, then ⌥-pinch. *Expected: it works first time.*
-15. Turn the Magic Trackpad off and on, then ⌥-pinch on it. *Expected: it works within a couple of seconds.*
+15. **N/A** (05-SPIKE C5): reconnecting an external trackpad can't be tested on a Mac with only the built-in trackpad.
 16. Open the status menu ▸ Debug. *Expected: "Gestures: on, …", a "Gestures taken" count, and "Last gesture" matching your last gesture.*
 
 ---
@@ -428,7 +428,7 @@ Voice unchanged from Phase 4: plain, second person, sentence case for body text 
 | Release | snap by threshold, snap by flick, spring back, refused with announcement, refused silently (sub-threshold), never left the dead zone (no stage), ended by timeout (decided as a release), Reduce Motion snap crossfade, Reduce Motion spring-back fade |
 | Concurrency | gesture during a Phase 4 move, during a settle, right after a snap (second pinch), during pick mode (ends it), during a rect zoom or drag (passes) |
 | Pass-through | zoom off (no tap), paused, not ready, full screen, not a desk display, no ⌥ over a window / menu / popover, ⌥ with ⌃ or ⌘, mouse wheel and Magic Mouse, ⌥ pressed mid-gesture, rotate and smart zoom |
-| Lifecycle | sleep and wake, display change, Space change, Magic Trackpad off and on, tap disabled and re-enabled, tap failed to start, multitouch canary (only if shipped) |
+| Lifecycle | sleep and wake, display change, Space change, tap disabled and re-enabled, tap failed to start, multitouch canary (only if shipped) |
 | Debug | each G1 value, G2 none / n / with timeouts, G3 none / moved / sprang back / refusal / too small, G4 (only if shipped) |
 | Spike CLI | header, permission failure, per-gesture lines per subcommand, summary with gate readings, Control-C early stop, `--seconds` cap |
 
@@ -454,7 +454,7 @@ Applicable state considerations resolved: 14 covered, 9 backstop, 0 unresolved. 
 | populated | Reduce Motion | ✅ covered | Follow unchanged; snap is a 250 ms crossfade; spring back is a 250 ms stage fade |
 | zero-one-many | Debug G2 and G4 counts | ✅ covered | G2 puts the number after a colon; G4 branches "1 trackpad" / "{n} trackpads" / "no trackpad found" |
 | long-text | Spike CLI per-gesture lines | ✅ covered | One line per gesture, never per event; `mt-stream` one line per second |
-| populated | Leak-free ⌥ pinch and pan in Safari and Preview, momentum included | 🧪 backstop | Spike gate T2 and UAT items 1–3 on both trackpads |
+| populated | Leak-free ⌥ pinch and pan in Safari and Preview, momentum included | 🧪 backstop | Spike gate T2 and UAT items 1–3 on the built-in trackpad |
 | populated | Resting fingers mid-pan don't release the latch into the app | 🧪 backstop | UAT item 10 |
 | populated | Follow feel and thresholds (dead zone, ½ level, ⅓ pan, flicks, overscroll 0.55) | 🧪 backstop | UAT items 1–5; constants only in `GestureTuning` |
 | populated | Pinch-in target under the pinch point, not the focused window | 🧪 backstop | UAT item 1 ("toward the tile under them") |
@@ -462,7 +462,7 @@ Applicable state considerations resolved: 14 covered, 9 backstop, 0 unresolved. 
 | populated | Reduce Motion follow plus crossfade snap | 🧪 backstop | UAT item 11 |
 | populated | VoiceOver reveal and refusal announcements | 🧪 backstop | UAT item 12 |
 | populated | ⌃ / ⌘ chords and mouse wheels pass through | 🧪 backstop | UAT items 7–8 (E-04, E-05) |
-| populated | Sleep/wake and Magic Trackpad reconnect | 🧪 backstop | Spike items 5–6, UAT items 14–15 |
+| populated | Sleep/wake | 🧪 backstop | Spike item 5, UAT item 14 (external-trackpad reconnect, spike item 6 and UAT item 15, is N/A: 05-SPIKE C5) |
 
 ---
 
