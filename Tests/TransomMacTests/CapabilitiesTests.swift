@@ -1,3 +1,4 @@
+import Foundation
 import TransomPrivate
 import Testing
 
@@ -10,6 +11,7 @@ import Testing
         (["TransomApp", "--disable-private"], [], []),
         (["TransomApp", "--disable-private=Spaces"], [.spaces], []),
         (["TransomApp", "--disable-private=AXWindowID,Spaces"], [.axWindowID, .spaces], []),
+        (["TransomApp", "--disable-private=Multitouch"], [.multitouch], []),
     ] as [([String], Set<Capability>, [String])])
     func disablePrivateTakesOnlyKnownNames(arguments: [String], disabled: Set<Capability>, unknown: [String]) {
         let parsed = Capabilities.parseDisabled(arguments)
@@ -18,13 +20,71 @@ import Testing
     }
 
     @Test func everyCapabilityIsReported() {
-        #expect(Capability.allCases.map(\.rawValue) == ["AXWindowID", "Spaces"])
+        #expect(Capability.allCases.map(\.rawValue) == ["AXWindowID", "Spaces", "Multitouch"])
         #expect(Set(Capabilities.report().keys) == Set(Capability.allCases))
     }
 
     @Test func eachCapabilityNamesItsOwnFallback() {
         #expect(Capability.axWindowID.fallback == "matching by frame")
         #expect(Capability.spaces.fallback == "single Space")
+        #expect(Capability.multitouch.fallback == "trackpad gestures from system events")
+    }
+}
+
+/// The multitouch crash canary, on a private defaults suite: no device is listed or opened here.
+@Suite struct MultitouchCanaryTests {
+    private func fresh() -> UserDefaults {
+        let name = "transom.canary.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
+    @Test func noCanaryIsNotTripped() {
+        #expect(!MultitouchCanary(defaults: fresh(), osBuild: "26B123", appVersion: "1.0 (1)").isTripped())
+    }
+
+    @Test func aLeftoverCanaryForTheSameBuildAndVersionTripsAndStays() {
+        let defaults = fresh()
+        MultitouchCanary(defaults: defaults, osBuild: "26B123", appVersion: "1.0 (1)").arm()
+        let next = MultitouchCanary(defaults: defaults, osBuild: "26B123", appVersion: "1.0 (1)")
+        #expect(next.isTripped())
+        #expect(next.isTripped(), "stays off until the build or version changes")
+    }
+
+    @Test(arguments: [("26C5", "1.0 (1)"), ("26B123", "1.1 (2)")])
+    func aNewBuildOrVersionClearsTheCanaryAndRetries(build: String, version: String) {
+        let defaults = fresh()
+        MultitouchCanary(defaults: defaults, osBuild: "26B123", appVersion: "1.0 (1)").arm()
+        #expect(!MultitouchCanary(defaults: defaults, osBuild: build, appVersion: version).isTripped())
+        #expect(defaults.object(forKey: MultitouchCanary.key) == nil)
+    }
+
+    /// WR-08: the Debug menu's way back after a trip clears the canary, and multitouch is no longer tripped this launch.
+    @Test func turningMultitouchBackOnClearsTheCanary() {
+        let defaults = fresh()
+        let canary = MultitouchCanary(defaults: defaults, osBuild: "26B123", appVersion: "1.0 (1)")
+        canary.arm()
+        #expect(canary.isTripped())
+        MultitouchCanary.turnBackOn(canary)
+        #expect(defaults.object(forKey: MultitouchCanary.key) == nil)
+        #expect(!canary.isTripped())
+        #expect(!MultitouchCanary.tripped)
+    }
+
+    @Test func clearRemovesTheKey() {
+        let defaults = fresh()
+        let canary = MultitouchCanary(defaults: defaults, osBuild: "26B123", appVersion: "1.0 (1)")
+        canary.arm()
+        #expect(defaults.dictionary(forKey: MultitouchCanary.key)?["osBuild"] as? String == "26B123")
+        canary.clear()
+        #expect(defaults.object(forKey: MultitouchCanary.key) == nil)
+        #expect(!canary.isTripped())
+    }
+
+    @Test func theCurrentOSBuildIsRead() {
+        #expect(MultitouchCanary.currentOSBuild != "?")
+        #expect(!MultitouchCanary.currentOSBuild.isEmpty)
     }
 }
 

@@ -13,7 +13,11 @@ import os
     /// ZOOM-07: the write path (first write to last read-back) of a settle.
     static let settleBudget: Duration = .milliseconds(500)
 
-    enum Phase: String { case capturing, moving, settling, revealing }
+    enum Phase: String {
+        case capturing, moving, settling, revealing
+        /// A gesture's stage tracks the fingers (05-04); nothing is pending in the engine until its release.
+        case following
+    }
     /// What tiles show, for the Debug line (04-05).
     enum CaptureState { case previews, noPermission, failing }
 
@@ -31,6 +35,9 @@ import os
         var counts = (frames: 0, parked: 0, unparked: 0)
         /// A move asked for during the 120 ms reveal fade starts when the fade ends.
         var queued: (move: CameraMove, settle: (UInt64) -> Void)?
+        /// A gesture's stage: its kind for the retarget line, and whether its spring back fades (Reduce Motion).
+        var gesture: String?
+        var springBackFade = false
     }
 
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "camera")
@@ -49,6 +56,10 @@ import os
     var appName: (TransomModel.WindowRef) -> String = { $0.bundleID }
     /// Whether a drag or rubber band is in progress: the explainer waits for it to end.
     var isPointerBusy: () -> Bool = { false }
+    /// Read when a gesture's stage appears (UI-SPEC Surface 4); a seam for tests.
+    var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    /// A gesture's stage sprang back and faded (no reveal): collapsed panels come back.
+    var onFollowEnded: ((_ displayUUID: String) -> Void)?
     private(set) var lastSettle: (ms: Int, windows: Int)?
     private(set) var captureState = CaptureState.noPermission
     var cacheStats: (windows: Int, bytes: Int) { (capture.cache.count, capture.cache.bytes) }
@@ -56,6 +67,9 @@ import os
 
     private var stages: [String: StagePanel] = [:]
     private var active: [String: Active] = [:]
+    /// E-03: the move a gesture took over, by display, until the gesture commits (superseded) or springs back (it goes
+    /// on from where it was, settling exactly once).
+    private var interrupted: [String: Active] = [:]
     private var revealTimers: [String: WakeTimer] = [:]
     private let capture = SnapshotCapture()
     /// The permission seen at the last move start (nil before the first), and whether the revoke and failing lines were
@@ -76,8 +90,11 @@ import os
                 active[uuid] = current
                 return
             }
-            logger.info("retarget \(String(describing: current.move.to), privacy: .public) → \(String(describing: move.to), privacy: .public) during \(current.phase.rawValue, privacy: .public)")
+            let command = current.gesture.map { "gesture \($0) " } ?? ""
+            logger.info("retarget \(command, privacy: .public)\(String(describing: current.move.to), privacy: .public) → \(String(describing: move.to), privacy: .public) during \(current.phase.rawValue, privacy: .public)")
             let phase = current.phase
+            current.gesture = nil
+            interrupted[uuid] = nil  // a newer pending move: the interrupted one's settle is stale
             current.move = move
             current.settle = settle
             current.tracker = nil
@@ -106,6 +123,115 @@ import os
         }
     }
 
+    // MARK: Follow (05-04)
+
+    /// Reduce Motion: the snap crossfades and the spring back is a stage fade; the follow itself always tracks the fingers.
+    nonisolated static func followStyle(reduceMotion: Bool) -> (snapCrossfade: Bool, springBackFade: Bool) { (reduceMotion, reduceMotion) }
+
+    /// A taken gesture left its dead zone: the stage orders in at once over the real windows with cached snapshots or
+    /// fallback tiles, never waiting for a capture; windows with no snapshot are captured and swapped in as they come.
+    /// A display that is busy (E-03) is taken over: its tiles stop where they are and follow from there, and the running
+    /// move is kept as `interrupted`. False when the display has no screen.
+    @discardableResult func beginFollow(_ move: CameraMove, gesture: String) -> Bool {
+        let uuid = move.displayUUID
+        guard let stage = stage(for: uuid) else { return false }
+        let style = Self.followStyle(reduceMotion: reduceMotion())
+        if let old = active[uuid] {
+            logger.info("retarget gesture \(gesture, privacy: .public) during \(old.phase.rawValue, privacy: .public)")
+            revealTimers[uuid]?.cancel()
+            stage.freezeAtPresentation()
+            // The newest pending move is the base: one queued behind a fade, else the running one. A gesture's own spring
+            // back owes no settle.
+            var base = old.queued.map { Active(move: $0.move, settle: $0.settle, phase: .capturing) } ?? (old.gesture == nil ? old : nil)
+            // Taken again during a takeover's spring back: the move still resumes as it was found first.
+            if let earlier = interrupted[uuid], earlier.move.id == base?.move.id { base?.phase = earlier.phase }
+            interrupted[uuid] = base
+        }
+        active[uuid] = Active(move: move, settle: { _ in }, phase: .following, gesture: gesture, springBackFade: style.springBackFade)
+        stage.beginFollow(tiles: tiles(for: move, images: [:]), crossfade: style.snapCrossfade)
+        bringNoticesFront()
+        guard checkPermission() else { return true }
+        let missing = captureRequests(move).filter { capture.cached($0.0) == nil }
+        Task { [weak self] in
+            // shortcut: the batch swaps in together when the last returns (or at 1 s); per-window swaps if UAT shows lag.
+            guard let self, !missing.isEmpty else { return }
+            let images = await self.capture.captureAll(missing, deadline: .seconds(1))
+            self.updateFailing()
+            guard let phase = self.active[uuid]?.phase, phase == .following || phase == .moving else { return }
+            for (id, image) in images { self.stages[uuid]?.setContents(image, for: id) }
+        }
+        return true
+    }
+
+    func isFollowing(_ uuid: String) -> Bool { active[uuid]?.phase == .following }
+
+    /// One sample: tiles at lerp(start, end, t), scaled about the pinch point or moved along the pan's axis by the
+    /// overscroll. `anchor` is the pinch point in global top-left coordinates.
+    func follow(displayUUID uuid: String, state: GestureRecognizer.FollowState, anchor: Point, direction: GestureRecognizer.Direction) {
+        guard isFollowing(uuid), let stage = stages[uuid], let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else { return }
+        // Pan deltas are top-left (natural scrolling): x as is, y flipped for AppKit.
+        let vertical = direction == .pan(.top) || direction == .pan(.bottom)
+        let offset = vertical ? CGVector(dx: 0, dy: -state.overscrollOffset) : CGVector(dx: state.overscrollOffset, dy: 0)
+        stage.follow(t: state.t, scale: state.overscrollScale, anchor: CGPoint(x: anchor.x, y: primaryHeight - anchor.y), offset: offset)
+    }
+
+    /// The gesture reversed past its start: the tile set is rebuilt for the new preview. Tiles are at their start rects
+    /// there (t ≈ 0), so nothing jumps.
+    func refollow(_ move: CameraMove) {
+        let uuid = move.displayUUID
+        guard isFollowing(uuid) else { return }
+        active[uuid]?.move = move
+        stages[uuid]?.refollow(tiles: tiles(for: move, images: [:]))
+    }
+
+    /// Released short of the threshold: tiles go back to their start rects and the stage fades. No engine call, no write,
+    /// no history, no reveal.
+    /// After a takeover (E-03) the tiles go back to the interrupted move's view instead, and that move goes on.
+    func springBack(displayUUID uuid: String) {
+        guard var current = active[uuid], current.phase == .following else { return }
+        if var old = interrupted[uuid] {
+            let id = old.move.id
+            old.phase = .moving  // the way back is a retarget; `resume` restores what the move was doing
+            active[uuid] = old
+            guard let stage = stages[uuid] else { return resume(uuid, id) }
+            stage.retarget(to: tiles(for: old.move, images: [:])) { [weak self] in self?.resume(uuid, id) }
+            return
+        }
+        current.phase = .revealing  // a move asked for meanwhile waits for the fade, as in a reveal
+        active[uuid] = current
+        let done: @MainActor () -> Void = { [weak self] in
+            guard let self else { return }
+            let queued = self.active[uuid]?.queued
+            self.active[uuid] = nil
+            self.onFollowEnded?(uuid)
+            if let queued { self.run(queued.move, settle: queued.settle) }
+        }
+        guard let stage = stages[uuid] else { return done() }
+        stage.springBack(fade: current.springBackFade, completion: done)
+    }
+
+    /// A takeover's spring back ended: the interrupted move goes on as the gesture found it. A move that had not settled
+    /// settles now, once (T-05-16: camera.pending never strands); one settling waits for its read-backs; one revealing fades.
+    private func resume(_ uuid: String, _ id: UInt64) {
+        guard let old = interrupted[uuid], old.move.id == id, var current = active[uuid], current.move.id == id, current.phase == .moving
+        else { return }
+        interrupted[uuid] = nil
+        switch old.phase {
+        case .settling:
+            current.phase = .settling
+            active[uuid] = current
+            armReveal(uuid)
+        case .revealing:
+            current.phase = .revealing
+            active[uuid] = current
+            let move = current.move
+            guard let stage = stages[uuid] else { return finishReveal(uuid, move) }
+            stage.fadeOut { [weak self] in self?.finishReveal(uuid, move) }
+        case .capturing, .moving, .following:
+            current.settle(id)
+        }
+    }
+
     /// The settle's writes are about to go out: the reveal waits for each one's read-back + 50 ms, or the 1500 ms cap.
     func beginSettle(displayUUID uuid: String, moveID: UInt64, writes: [WindowCommand]) {
         guard var current = active[uuid], current.move.id == moveID, current.phase == .moving else { return }
@@ -128,6 +254,12 @@ import os
     /// A read-back came in (`frameApplied`).
     func frameApplied(_ id: WindowIdentity) {
         let now = ContinuousClock.now
+        // A settle a gesture interrupted still counts its read-backs, so its reveal waits only for what is left.
+        for (uuid, var old) in interrupted where old.waiting.remove(id) != nil {
+            old.tracker?.applied(id, at: now)
+            old.lastReturn = now
+            interrupted[uuid] = old
+        }
         for (uuid, var current) in active where current.tracker != nil {
             guard current.waiting.remove(id) != nil else { continue }
             current.tracker?.applied(id, at: now)
@@ -145,6 +277,7 @@ import os
             stage.orderOut(nil)
             stages[uuid] = nil
             active[uuid] = nil
+            interrupted[uuid] = nil
             revealTimers[uuid]?.cancel()
         }
     }
@@ -163,17 +296,20 @@ import os
     /// UI-SPEC step 3: the windows on screen at the start, at the larger of their start and end size (capped at their
     /// own size) in pixels, within 120 ms, four at a time. Skipped without Screen Recording.
     private func captureStart(_ move: CameraMove) async -> [UInt32: CGImage] {
+        let images = await capture.captureAll(captureRequests(move), deadline: SnapshotCapture.moveBudget)
+        updateFailing()
+        return images
+    }
+
+    private func captureRequests(_ move: CameraMove) -> [(CGWindowID, CGSize)] {
         let scale = Displays.screen(uuid: move.displayUUID)?.backingScaleFactor ?? 2
-        let requests = move.tiles.compactMap { tile -> (CGWindowID, CGSize)? in
+        return move.tiles.compactMap { tile -> (CGWindowID, CGSize)? in
             guard tile.kind != .entering, tile.kind != .collapsed, let id = cgWindow(tile.window) else { return nil }
             let native = windowInfo(tile.window.identity)?.frame.size ?? tile.start.size
             let width = min(max(tile.start.width, tile.end.width), native.width)
             let height = min(max(tile.start.height, tile.end.height), native.height)
             return (id, CGSize(width: width * scale, height: height * scale))
         }
-        let images = await capture.captureAll(requests, deadline: SnapshotCapture.moveBudget)
-        updateFailing()
-        return images
     }
 
     /// UI-SPEC steps 4 and 5: the stage orders in instantly with every tile over its window, then the 250 ms move.
@@ -256,6 +392,7 @@ import os
         }
         stages = [:]
         active = [:]
+        interrupted = [:]
         explainerRetry.cancel()
     }
 

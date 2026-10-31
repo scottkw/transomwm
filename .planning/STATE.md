@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 5
-current_phase_name: Gestures
+current_phase: 6
+current_phase_name: Overview, Spaces & Displays
 status: planning
-stopped_at: Phase 4 complete, ready to plan Phase 5
-last_updated: "2026-10-28T21:10:53.170Z"
-last_activity: 2026-10-28
-last_activity_desc: Phase 4 complete, transitioned to Phase 5
-state_head: "0bbfea68588734ccec74bd6171d274aa28d81286"
+stopped_at: Phase 5 complete, ready to plan Phase 6
+last_updated: "2026-10-31T02:27:56.679Z"
+last_activity: 2026-10-30
+last_activity_desc: Phase 5 complete, transitioned to Phase 6
+state_head: e4df333349005e40c452206d00b105cc1ce8bbd4
 progress:
   total_phases: 9
-  completed_phases: 4
-  total_plans: 59
-  completed_plans: 59
-  percent: 44
+  completed_phases: 5
+  total_plans: 67
+  completed_plans: 67
+  percent: 56
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 4 — Zoom Camera
+**Current focus:** Phase 5
 
 ## Current Position
 
-Phase: 5 — Gestures
+Phase: 6 — Overview, Spaces & Displays
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-28 — Phase 4 complete, transitioned to Phase 5
+Last activity: 2026-10-30 — Phase 5 complete, transitioned to Phase 6
 
-Progress: [████░░░░░░] 44%
+Progress: [██████░░░░] 56%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 59
+- Total plans completed: 67
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -49,6 +49,7 @@ Progress: [████░░░░░░] 44%
 | 3 | 26 | - | - |
 | 2 | 19 | - | - |
 | 4 | 8 | - | - |
+| 5 | 8 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -111,6 +112,14 @@ Progress: [████░░░░░░] 44%
 | Phase 04 P06 | 14 min | 3 tasks | 12 files |
 | Phase 4 P07 | 13 min | 3 tasks | 13 files |
 | Phase 04 P08 | 21 min | 3 tasks | 12 files |
+| Phase 05 P01 | 23h43m | 3 tasks | 8 files |
+| Phase 05 P02 | 10min | 2 tasks | 15 files |
+| Phase 05 P03 | 16min | 2 tasks | 12 files |
+| Phase 05 P04 | 15 min | 2 tasks | 8 files |
+| Phase 05 P05 | 65 min | 2 tasks | 7 files |
+| Phase 05 P06 | 15 min | 2 tasks | 3 files |
+| Phase 05 P07 | 56 min | 3 tasks | 15 files |
+| Phase 05 P08 | ~6h | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -284,6 +293,27 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-08: homeTiles() covers only desks whose camera is not at home, so zoom off and home keep the Phase 3 quit plan (the OS can keep a docked window a few points off its tile)
 - [Phase 04]: 04-08: crash and crash-loop relaunches needed no code (camera never persisted); tests pin it
 - [Phase 04]: 04-08: fixed a 04-04 bug where the stage's reveal timer was never stored, so an old settle's cap revealed the next move early
+- [Phase 05]: E-01 = "tap+multitouch": plan 05-07 ships MultitouchSupport; MT supplies pinch when the tap sees no zoom events (C4)
+- [Phase 05]: C1: a consuming pinch latch takes every type-29 event (all sub-types); host leaked sub-type 4 inside taken pinches
+- [Phase 05]: C2: recognizer ignores pan sequences with no phase 1/2 or zero delta (128→8 noise)
+- [Phase 05]: C3: trustsTargetPID stays false (field 40 = frontmost app on real trackpads)
+- [Phase 05]: C5: host has built-in trackpad only; Magic Trackpad and reconnect UAT items are N/A
+- [Phase 05]: 05-02: C2 applied kind-agnostically: a never-started sequence with no phase 1/2 or no motion ends silently; a started gesture always gets exactly one .ended
+- [Phase 05]: 05-02: fingers-down timeout ends as a cancel; a pending fingers-up pan release decides after momentumWait and is endedByTimeout only when polled past 0.3 s
+- [Phase 05]: 05-03 C1: a taken pinch takes every type-29 sub-type except the 61/62 envelopes
+- [Phase 05]: 05-03: a taken pan does not take type-29 companions (sub-types 0/6/32); host showed nothing moved
+- [Phase 05]: 05-03: E-04 sender filter on (field 87 = AppleMultitouchDevice registry ID); trustsTargetPID stays false (C3)
+- [Phase 05]: 05-03: gesture tap exists only while zoom is on and the mouse tap runs (updateGestureTap)
+- [Phase 05]: 05-04: a committed gesture is an ordinary zoomTo whose .cameraMove retargets the .following stage; a released gesture's judgement is kept until the tap ends the sequence
+- [Phase 05]: E-03 follow lerps from the tiles' frozen frames (StagePanel.followFrom); a takeover's spring back retargets to the interrupted move's tiles and resumes it, settling exactly once
+- [Phase 05]: A move queued behind a reveal fade is a gesture takeover's base; stage completions scheduled before a takeover are fenced by a generation counter
+- [Phase 05]: 05-06: pan-only Debug value not shipped (spike item 3 no pinch lines / E-01 tap+multitouch); G3 names a direction-less gesture by its kind
+- [Phase 05]: 05-07: multitouch drives a pinch only while Trackpad Zoom in or out is off (TrackpadPinch pref); the tap still does all consuming (C4)
+- [Phase 05]: 05-07: multitouch pinch ownership reuses GestureTapRules.decide on a synthetic zoom-began at the pointer
+- [Phase 05]: 05-07: MultitouchCanary per OS build + app version: arm before device list, clear after 2 s of frames or clean stop
+- [Phase 05]: 05-08: multitouch crash canary armed for the whole multitouch run, cleared only at a clean stop; any crash with zoom on disables multitouch for that OS build + app version until privateCanary.Multitouch is deleted
+- [Phase 05]: 05-08: multitouch frames cross to main via an os_unfair_lock buffer + DispatchSourceUserDataAdd (G-01 fix), never a closure behind generic lock state
+- [Phase 05]: 05-08: phase UAT closed with core items on hardware; items 7, 8, 10, 11, 14, 20, 21, 24 skipped by user decision (automated cover only); no GestureTuning change
 
 ### Quick Tasks Completed
 
@@ -324,8 +354,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-28T16:38:24.560Z
-Stopped at: Phase 4 complete, ready to plan Phase 5
+Last session: 2026-10-30T18:06:18.434Z
+Stopped at: Phase 5 complete, ready to plan Phase 6
 Resume file: None
 
 ## Deferred Verification

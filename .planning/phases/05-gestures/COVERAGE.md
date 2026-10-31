@@ -1,0 +1,1 @@
+No external API integration: only macOS system frameworks (CoreGraphics event taps, IOKit device notifications, Core Animation, AppKit) and, only if the spike gate ships it, the private MultitouchSupport framework reached by dlopen; no network service, SDK or package is added.

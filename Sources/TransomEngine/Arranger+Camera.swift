@@ -216,14 +216,63 @@ extension Arranger {
         _ = effectiveView(for: key, notes: &notes)
         let current = currentView(uuid, key)
         guard target != current else { return notes + refused("already showing") }
-        let area = display.visibleFrame, mins = learnedMinimums
-        let start: ViewPlan, end: ViewPlan
+        let tiles: [TileMove]
         do throws(LayoutError) {
-            start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
-            end = try ViewPlanner.plan(desk: desk, view: target, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
+            tiles = try planTiles(from: current, to: target, display: display, desk: desk)
         } catch {
             return notes + [.fault("could not plan zoomTo \(target) on \(uuid): \(error)")]
         }
+        camera.nextMoveID += 1
+        camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target, kind: kind, focus: focus)
+        let move = CameraMove(id: camera.nextMoveID, displayUUID: uuid, from: current, to: target, tiles: tiles)
+        return notes + [.cameraMove(move)]
+    }
+
+    /// The move `zoomTo(target)` would emit now, with `id: 0` and no camera state changed (E-03): the gesture follow's
+    /// preview, 60 times a second. Nil when zoomTo would refuse or fail.
+    public func previewMove(to target: ViewTarget, displayUUID uuid: String) -> CameraMove? {
+        guard case let (display, desk, current)? = previewBase(uuid), target != current, Self.exists(target, in: desk.tree),
+            let tiles = try? planTiles(from: current, to: target, display: display, desk: desk)
+        else { return nil }
+        return CameraMove(id: 0, displayUUID: uuid, from: current, to: target, tiles: tiles)
+    }
+
+    /// The current view to itself: each tile starts at its window's tracked frame and ends at its tile. The tile set a
+    /// refused gesture overscrolls (UI-SPEC Surface 1 "no target"); nil under previewMove's guards.
+    public func stillMove(displayUUID uuid: String) -> CameraMove? {
+        guard case let (display, desk, current)? = previewBase(uuid),
+            let tiles = try? planTiles(from: current, to: current, display: display, desk: desk)
+        else { return nil }
+        return CameraMove(id: 0, displayUUID: uuid, from: current, to: current, tiles: tiles)
+    }
+
+    /// Where a gesture in `direction` takes the camera, by Phase 4's rules (D-02, D-03), with no focused leaf so the pinch
+    /// point decides. Never beeps or announces (that is `camera(_:)`'s job); nil when planning throws.
+    public func gestureTarget(_ direction: GestureRecognizer.Direction, displayUUID uuid: String, pointer: Point) -> Result<ViewTarget, Navigator.Refusal>? {
+        let command: CameraCommand =
+            switch direction {
+            case .pinchIn: .stepIn
+            case .pinchOut: .stepOut
+            case .pan(let edge): .pan(edge)
+            }
+        return (try? cameraStep(command, displayUUID: uuid, focused: nil, pointer: pointer))?.map { $0.target }
+    }
+
+    /// zoomTo's guards with no mutation: zoom on, not paused, a desk on the display. `currentView`'s `resolvedView`
+    /// already applies the vanished-node fallback zoomTo commits through `effectiveView`.
+    private func previewBase(_ uuid: String) -> (DisplayInfo, Desk, ViewTarget)? {
+        guard camera.enabled, pauseReasons.isEmpty, !sessionPaused, let display = displays.first(where: { $0.uuid == uuid }),
+            let desk = world[Self.key(display)]
+        else { return nil }
+        return (display, desk, currentView(uuid, Self.key(display)))
+    }
+
+    /// The tiles of a move from `current` to `target`, sorted by window identity: one function for zoomTo and the
+    /// preview, so the committed move is exactly the previewed one.
+    private func planTiles(from current: ViewTarget, to target: ViewTarget, display: DisplayInfo, desk: Desk) throws(LayoutError) -> [TileMove] {
+        let area = display.visibleFrame, mins = learnedMinimums
+        let start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
+        let end = try ViewPlanner.plan(desk: desk, view: target, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
         let before = Self.shown(start, desk), after = Self.shown(end, desk)
         let fromMap = Self.cameraMap(viewRect: Self.viewRect(current, start, area), onto: area)
         let toMap = Self.cameraMap(viewRect: Self.viewRect(target, end, area), onto: area)
@@ -247,11 +296,7 @@ extension Arranger {
             if end.collapsed[window] != nil { tile.kind = .collapsed }
             tiles.append(tile)
         }
-        camera.nextMoveID += 1
-        camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target, kind: kind, focus: focus)
-        let move = CameraMove(
-            id: camera.nextMoveID, displayUUID: uuid, from: current, to: target, tiles: tiles.sorted { $0.window.identity < $1.window.identity })
-        return notes + [.cameraMove(move)]
+        return tiles.sorted { $0.window.identity < $1.window.identity }
     }
 
     /// Commits the pending move's view and writes it; an older, repeated or unknown move does nothing.

@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Window Control** - Accessibility permission, non-blocking window tracking and move/resize, classifier, exclusions, private-API fallback (completed 2026-10-27)
 - [x] **Phase 3: Tiling MVP** - Drag-to-dock nested tiling, reflow, gaps, commands, crash-safe restore; first usable signed release (completed 2026-10-27)
 - [x] **Phase 4: Zoom Camera** - Snapshot overlay stage: zoom out/step/rect zoom, history, click-to-focus, fast settle (completed 2026-10-28)
-- [ ] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop
+- [x] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop (completed 2026-10-30)
 - [ ] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts
 - [ ] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons
 - [ ] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `transom://` commands, layouts restored across restarts and reboots
@@ -257,7 +257,28 @@ Plans:
   3. Gestures Transom handles never reach the app under the pointer, while ordinary pinch and scroll inside apps keep working
   4. Gestures keep working after sleep/wake and after the trackpad disconnects and reconnects; if the private multitouch API is unavailable Transom falls back and still launches
 
-**Plans**: TBD
+**Plans:** 8/8 plans complete
+
+Plans:
+**Wave 1**
+- [x] 05-01-PLAN.md — Gesture spike: transom-gesture-spike CLI on the product's GestureTapRules, VM synthetic half, host checklist; go/no-go and E-01 (does multitouch ship?) checkpoint
+
+**Wave 2** *(blocked on Wave 1 and the spike decision)*
+- [x] 05-02-PLAN.md — Engine: GestureRecognizer (pinch, pan, flick, overscroll, timeouts) from traces; non-committing previewMove/stillMove/gestureTarget
+- [x] 05-03-PLAN.md — Product gesture tap under the zoom switch, GestureController, trackpad senders and hot-plug, wake re-publish, VM leak tests
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 05-04-PLAN.md — Live follow on the stage: snap through zoomTo/settle, spring back, pan, capture swap, Reduce Motion
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 05-05-PLAN.md — Overscroll and refusals (no beep), one level per gesture, gestures during a move (E-03), pick mode and collapsed blocks
+- [x] 05-06-PLAN.md — Debug lines G1-G3 (GestureCopy), conditional "pan only" value
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 05-07-PLAN.md — MultitouchSupport in the product with capability, canary and rescan — only if E-01 = tap+multitouch, else skipped
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 05-08-PLAN.md — Phase gate: full host and VM suites, signed Debug build, the user's 16-item UAT on the built-in trackpad (C5)
 **Research**: Needs phase research. One-day spike comparing MultitouchSupport raw touches against event-tap magnify events (types 29/30, visibility over other apps unverified); verify MT callback struct layout and the macOS 27 `int32_t` return semantics
 **Scope notes**: Own MultitouchSupport shim (port OpenMultitouchSupport headers, don't depend on 4.x), magnify-event fallback, device re-enumeration on wake and hot-plug, per-API crash canary.
 
@@ -344,7 +365,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Window Control | 19/19 | Complete    | 2026-10-27 |
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
-| 5. Gestures | 0/TBD | Not started | - |
+| 5. Gestures | 8/8 | Complete    | 2026-10-30 |
 | 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |

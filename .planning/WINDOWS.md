@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 4
 waived_count: 0
 fixed_count: 2
-total_count: 5
-last_updated: 2026-10-28T16:36:34.074Z
+total_count: 6
+last_updated: 2026-10-30T04:04:53.127Z
 ---
 
 # Broken Windows Ledger
@@ -20,6 +20,7 @@ last_updated: 2026-10-28T16:36:34.074Z
 | 3 | 2 | unrun-verify | Sources/PaneMac/SessionGate.swift |  | 02-09 human-check: real screen lock (30 s) and system sleep (1 min) with 10 windows open; rows survive and footer shows Refreshing after wake (end-of-phase UAT) | open |  | 2026-10-24T17:17:32.790Z |  |
 | 4 | 04 | stub | Sources/TransomMac/Zoom/ZoomInput.swift |  | collapsed blocks are not pick targets until 04-07 gives them panels | fixed |  | 2026-10-28T15:48:11.183Z | 2026-10-28T16:09:06.891Z |
 | 5 | 4 | unrun-verify | Tests/TransomMacIntegrationTests/RecoveryIntegrationTests.swift |  | 04-08 human-check (end-of-phase VM UAT): kill -9 Transom Debug while zoomed then relaunch (no window parked, N2 shows); Safari cmd-shift-click new tab; fn-ctrl-opt-cmd-left pans without macOS tiling; desktop icon vs wallpaper double-click; Reduce Motion crossfade; fallback tiles legible light/dark without Screen Recording; menu above the stage | open |  | 2026-10-28T16:36:34.074Z |  |
+| 6 | 5 | todo | Sources/TransomMac/Zoom/GestureController.swift |  | UI-SPEC Logging 'gesture counters' 60 s debug line not implemented (05-03 handoff, deferred in 05-06) | open |  | 2026-10-30T04:04:53.127Z |  |
 
 ````json
 [
@@ -85,6 +86,19 @@ last_updated: 2026-10-28T16:36:34.074Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-28T16:36:34.074Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 6,
+    "kind": "todo",
+    "phase": "5",
+    "file": "Sources/TransomMac/Zoom/GestureController.swift",
+    "line": null,
+    "description": "UI-SPEC Logging 'gesture counters' 60 s debug line not implemented (05-03 handoff, deferred in 05-06)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-30T04:04:53.127Z",
     "resolved_at": null,
     "milestone": null
   }

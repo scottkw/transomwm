@@ -30,6 +30,8 @@ import os
         var cancelled = false
     }
     private var band: Band?
+    /// A ⌘⇧-drag is in progress: gestures are disarmed meanwhile (UI-SPEC Surface 2).
+    var isBandActive: Bool { band != nil }
     /// The temporary Esc hotkeys while a band is active (ZOOM-12). Each stream registers its Carbon hotkey when it
     /// starts and unregisters when its task is cancelled.
     private var bandEscapes: [Task<Void, Never>] = []
@@ -47,6 +49,7 @@ import os
         var hovered: UInt32?
     }
     private var pick: Pick?
+    var isPicking: Bool { pick != nil }
     /// The Zoom Out to All Windows / Zoom Out One Level move whose reveal starts pick mode.
     private var pickMove: UInt64?
 
@@ -252,6 +255,7 @@ import os
             band = Band(
                 start: event.location, flags: event.flags, clickState: event.clickState, display: display, current: event.location, tiles: tiles,
                 tree: arranger.world[Self.deskKey(display)]?.tree)
+            controller.gestures.publish()
             bandEscapes = Self.escapeModifiers.map { modifiers in
                 Task { [weak self] in
                     for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape, modifiers: modifiers)) where key == .keyDown {
@@ -309,6 +313,7 @@ import os
     private func endBand() {
         guard let current = band else { return }
         band = nil
+        controller?.gestures.publish()
         stopEscapes()
         controller?.previews?.hideBand(on: current.display.uuid)
     }
@@ -388,7 +393,7 @@ import os
     nonisolated static func cgRect(_ rect: Rect) -> CGRect { CGRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height) }
 
     /// The desk shown on `display` (the engine's `Arranger.key`).
-    nonisolated private static func deskKey(_ display: DisplayInfo) -> DeskKey {
+    nonisolated static func deskKey(_ display: DisplayInfo) -> DeskKey {
         DeskKey(displayUUID: display.uuid, spaceID: display.currentSpaceID)
     }
 }

@@ -23,4 +23,40 @@ import Testing
         #expect(arrange.hasZoomController == false)
         #expect(arrange.isZoomEnabled == false)
     }
+
+    /// D-07: with zoom off no gesture tap exists, whatever is dispatched. With zoom on but no `startTap` (as in every
+    /// unit test) there is none either, so unit tests never open a tap on the host.
+    @Test func zoomOffNeverCreatesAGestureTap() async {
+        let off = ArrangeController(system: AXWindowSystem(), zoomEnabled: false)
+        off.beep = {}
+        for source in [CommandSource.hotkey, .menu, .url] {
+            for command in Self.commands { await off.dispatch(.camera(command), from: source) }
+        }
+        #expect(off.isGestureTapRunning == false)
+        #expect(off.gestures.isActive == false)
+
+        let on = ArrangeController(system: AXWindowSystem(), zoomEnabled: true)
+        on.gestures.publish()
+        #expect(on.isGestureTapRunning == false)
+        #expect(on.gestures.isActive == false)
+    }
+
+    /// D-07 (05-07): with zoom off no multitouch device is opened, whatever is dispatched; with zoom on but no running
+    /// gesture tap (every unit test) none is either.
+    @Test func zoomOffOpensNoMultitouchDevice() async {
+        let off = ArrangeController(system: AXWindowSystem(), zoomEnabled: false)
+        off.beep = {}
+        for source in [CommandSource.hotkey, .menu, .url] {
+            for command in Self.commands {
+                await off.dispatch(.camera(command), from: source)
+                #expect(off.isMultitouchRunning == false, "after \(command) from \(source)")
+            }
+        }
+        await off.zoom(to: .home, displayUUID: "main")
+        #expect(off.isMultitouchRunning == false)
+
+        let on = ArrangeController(system: AXWindowSystem(), zoomEnabled: true)
+        on.gestures.publish()
+        #expect(on.isMultitouchRunning == false)
+    }
 }

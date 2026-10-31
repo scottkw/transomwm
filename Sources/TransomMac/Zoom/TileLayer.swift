@@ -74,8 +74,36 @@ nonisolated final class TileLayer: CALayer {
         position = CGPoint(x: rect.midX, y: rect.midY)
     }
 
+    /// Puts the tile at `rect` at once with its snapshot re-fitted (follow mode; the caller disables actions).
+    func set(_ rect: CGRect) {
+        place(rect)
+        if case .snapshot(let image) = content { picture.frame = Self.pictureFrame(image, in: rect.size) }
+    }
+
+    /// Swaps a fallback for a snapshot that came back late (the caller adds the cross-fade).
+    func setSnapshot(_ image: CGImage) {
+        content = .snapshot(image)
+        for layer in sublayers ?? [] { layer.removeFromSuperlayer() }
+        backgroundColor = nil
+        borderWidth = 0
+        cornerRadius = 0
+        picture.contents = image
+        picture.frame = Self.pictureFrame(image, in: bounds.size)
+        addSublayer(picture)
+    }
+
     /// Where the tile is on screen now: its presentation rect while it animates.
     var currentRect: CGRect { presentation()?.frame ?? frame }
+
+    /// Stops where it is on screen now (E-03): the presentation frame and opacity become the model's. Call with actions
+    /// disabled.
+    func freeze() {
+        let rect = currentRect, opacity = presentation()?.opacity ?? self.opacity
+        removeAllAnimations()
+        picture.removeAllAnimations()
+        set(rect)
+        self.opacity = opacity
+    }
 
     /// Moves from `from` to `to` with one curve; a snapshot's picture goes on from where it is to its aspect-fill frame at
     /// the new size. `from` is the tile's start rect, or its presentation rect for a retarget.
