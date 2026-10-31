@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Completed 06-10-PLAN.md
-last_updated: "2026-10-31T21:17:32.602Z"
+stopped_at: Completed 06-11-PLAN.md
+last_updated: "2026-10-31T21:29:40.781Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: 0a41af4e84a2100d194e0b0f4e1f344e369dafc1
+state_head: 94342488003d041379bdfdbfd44e0cd0b7305e4e
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 77
+  completed_plans: 78
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 Last activity: 2026-10-31 — Phase 6 execution started
 
@@ -130,6 +130,7 @@ Progress: [██████░░░░] 56%
 | Phase 6 P08 | 30min | 3 tasks | 13 files |
 | Phase 06 P09 | 14min | 3 tasks | 15 files |
 | Phase 06 P10 | 12min | 3 tasks | 9 files |
+| Phase 06 P11 | 11min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -355,6 +356,10 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-10: Stored takeover originals are cleared only after a matching restore read-back; otherwise kept for the next launch
 - [Phase 06]: 06-10: N10 shows once via a noticed flag in the Mission Control canary; lift clears the canary only when the takeover was on
 - [Phase 06]: 06-10: Carbon hotkeys (F3, ctrl-up, shift-F3) fire while the overview's non-activating key panel is up (VM)
+- [Phase 06]: 06-11: HotKeyBackend seam (LiveHotKeyBackend) - host tests inject FakeHotKeys; no test reaches SkyLight or registers a Carbon hotkey
+- [Phase 06]: 06-11: swipe kept, no SwipeTakeoverTap; only the [swipe kept] alert text ships
+- [Phase 06]: 06-11: Restore macOS Window Settings lifts the takeover through ConflictController.takeover (canRestore true while on; N8 after)
+- [Phase 06]: 06-11: N10 posted in ArrangeController.start after N2/N3; launch-time N11 posted when ArrangeController.takeover is wired
 
 ### Quick Tasks Completed
 
@@ -395,8 +400,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T21:17:31.981Z
-Stopped at: Completed 06-10-PLAN.md
+Last session: 2026-10-31T21:29:40.145Z
+Stopped at: Completed 06-11-PLAN.md
 Resume file: None
 
 ## Deferred Verification
