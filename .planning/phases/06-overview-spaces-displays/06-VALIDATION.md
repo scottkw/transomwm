@@ -23,7 +23,7 @@ created: "2026-10-31"
 | **Config file** | `Package.swift` (new `transom-spaces-spike` VM product per 06-RESEARCH Wave 0) |
 | **Quick run command** | `rm -f .build/X.log && swift test --filter <Suite> > .build/X.log 2>&1; ! grep -q "✘" .build/X.log && grep -E "Test run with [1-9][0-9]* tests? .*passed" .build/X.log` |
 | **Full suite command** | `swift test` (host, headless, includes `scripts/check-no-appkit.sh`); VM: `scripts/vm-live-test.sh <Phase 6 integration suites>` one suite per invocation |
-| **Estimated runtime** | ~06 seconds |
+| **Estimated runtime** | quick filter ~20 s; full host suite ~120 s; VM suites ~6 min each |
 
 ---
 
@@ -32,7 +32,7 @@ created: "2026-10-31"
 - **After every task commit:** Run the quick run command
 - **After every plan wave:** Run the full suite command
 - **Before `/gsd-verify-work`:** Full suite must be green
-- **Max feedback latency:** 06 seconds
+- **Max feedback latency:** 120 seconds
 
 ---
 
@@ -72,7 +72,7 @@ created: "2026-10-31"
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
 - [ ] Wave 0 covers all MISSING references
 - [ ] No watch-mode flags
-- [ ] Feedback latency < 06s
+- [ ] Feedback latency < 120s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** {pending / approved YYYY-MM-DD}
