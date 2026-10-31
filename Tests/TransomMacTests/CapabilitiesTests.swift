@@ -12,6 +12,7 @@ import Testing
         (["TransomApp", "--disable-private=Spaces"], [.spaces], []),
         (["TransomApp", "--disable-private=AXWindowID,Spaces"], [.axWindowID, .spaces], []),
         (["TransomApp", "--disable-private=Multitouch"], [.multitouch], []),
+        (["TransomApp", "--disable-private=SymbolicHotKeys,CoreDock"], [.symbolicHotKeys, .coreDock], []),
     ] as [([String], Set<Capability>, [String])])
     func disablePrivateTakesOnlyKnownNames(arguments: [String], disabled: Set<Capability>, unknown: [String]) {
         let parsed = Capabilities.parseDisabled(arguments)
@@ -20,7 +21,7 @@ import Testing
     }
 
     @Test func everyCapabilityIsReported() {
-        #expect(Capability.allCases.map(\.rawValue) == ["AXWindowID", "Spaces", "Multitouch"])
+        #expect(Capability.allCases.map(\.rawValue) == ["AXWindowID", "Spaces", "Multitouch", "SymbolicHotKeys", "CoreDock"])
         #expect(Set(Capabilities.report().keys) == Set(Capability.allCases))
     }
 
@@ -28,6 +29,8 @@ import Testing
         #expect(Capability.axWindowID.fallback == "matching by frame")
         #expect(Capability.spaces.fallback == "single Space")
         #expect(Capability.multitouch.fallback == "trackpad gestures from system events")
+        #expect(Capability.symbolicHotKeys.fallback == "Mission Control keys unchanged")
+        #expect(Capability.coreDock.fallback == "beep instead of Mission Control")
     }
 }
 

@@ -6,6 +6,8 @@ public enum Capability: String, CaseIterable, Sendable {
     case axWindowID = "AXWindowID"
     case spaces = "Spaces"
     case multitouch = "Multitouch"
+    case symbolicHotKeys = "SymbolicHotKeys"
+    case coreDock = "CoreDock"
 
     /// What Transom does instead while the capability is off.
     public var fallback: String {
@@ -13,6 +15,7 @@ public enum Capability: String, CaseIterable, Sendable {
         case .axWindowID: "matching by frame"
         case .spaces: "single Space"
         case .multitouch: "trackpad gestures from system events"
+        case .symbolicHotKeys, .coreDock: ""
         }
     }
 }
@@ -58,6 +61,7 @@ public enum Capabilities {
         case .axWindowID: AXWindowID.function != nil
         case .spaces: SkyLightSpaces.isLoaded
         case .multitouch: MultitouchSupport.isLoaded && !MultitouchCanary.tripped
+        case .symbolicHotKeys, .coreDock: false
         }
     })
 
