@@ -73,6 +73,7 @@ public enum TransomMacApp {
         let conflictController = ConflictController(store: CFPreferencesStore(domain: ConflictPolicy.domain))
         conflictController.setStageManagerPaused = { on in Task { await arrangeController.setPaused(.stageManager, on) } }
         conflictController.post = { arrangeController.post($0) }
+        conflictController.takeover = takeover
         conflictController.isDragging = { arrangeController.arranger.isDragging }
         conflictController.presentAlert = { [unowned conflictController] in conflictController.showModelessAlert($0) }
         let controller = StatusItemController(

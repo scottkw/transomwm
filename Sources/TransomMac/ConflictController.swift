@@ -198,13 +198,17 @@ import os
         poll()
     }
 
-    /// Restore macOS Window Settings is enabled only with something recorded.
-    var canRestore: Bool { !originals.isEmpty }
+    /// Restore macOS Window Settings also turns the Mission Control takeover off (Surface 5); set by the app.
+    var takeover: MissionControlTakeover?
+
+    /// Restore macOS Window Settings is enabled only with something recorded, or while the takeover is on.
+    var canRestore: Bool { !originals.isEmpty || takeover?.isOn == true }
 
     /// Writes every recorded original back (deleting keys that were absent), forgets them and shows N8 (D-21). The
     /// features this turns back on raise no alert.
     func restore() {
         guard canRestore else { return }
+        if takeover?.isOn == true { takeover?.setPreference(false) }
         restoredByTransom = Set(Conflict.allCases.filter { ConflictPolicy.keys(for: $0).contains(where: originals.keys.contains) })
         for (key, value) in ConflictPolicy.restoreWrites(originals: originals).sorted(by: { $0.key < $1.key }) { store.set(key, value) }
         originals = [:]

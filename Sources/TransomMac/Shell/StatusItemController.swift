@@ -111,6 +111,7 @@ import os
     /// hotkey when the menu closes (KeyboardShortcuts' `setShortcut` note, RESEARCH Pattern 9).
     func menuWillOpen(_ menu: NSMenu) {
         arrange.overviewController?.interrupt(reason: .menu)  // Surface 1: the status menu opening interrupts the overview
+        arrange.takeover?.checkDrift()  // a Mission Control shortcut turned back on in System Settings is taken again
         KeyboardShortcuts.disable(Hotkeys.entries.map(\.name))
     }
 

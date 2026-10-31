@@ -69,7 +69,7 @@ nonisolated extension Notice: QueueableNotice {
             .displaysDisconnected(names: names + more, windows: windows + moreWindows)
         // A newer Float All or Arrange All result replaces the older one: its count is the current one.
         case (.lostRoom, _), (.finderNoWindow, _), (.floatedAll, _), (.arrangeLeftovers, _), (.crashRecovered, _), (.crashLoop, _), (.restored, _),
-            (.turnOffFailed, _), (.settingsRestored, _), (.displaysDisconnected, _): nil
+            (.turnOffFailed, _), (.settingsRestored, _), (.displaysDisconnected, _), (.takeoverCrashed, _), (.takeoverApplyFailed, _): nil
         }
     }
 }

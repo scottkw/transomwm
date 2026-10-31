@@ -90,7 +90,13 @@ import os
     private(set) var overviewController: OverviewController?
     /// The Mission Control takeover (06-10), set by the app; nil in tests that don't own one.
     var takeover: MissionControlTakeover? {
-        didSet { takeover?.onTrigger = { [weak self] in Task { await self?.missionControlKey() } } }
+        didSet {
+            guard let takeover else { return }
+            takeover.onTrigger = { [weak self] in Task { await self?.missionControlKey() } }
+            takeover.post = { [weak self] in self?.post($0) }
+            takeover.announce = { postAnnouncement($0) }
+            if takeover.state == .offApplyFailed { post(.takeoverApplyFailed) }  // the launch apply ran before this wiring
+        }
     }
     /// The last overview's open time, tiles and snapshots (Debug S6); kept across zoom off.
     private(set) var lastOverview: (ms: Int, windows: Int, snapshots: Int)?
@@ -183,6 +189,7 @@ import os
         fedCompleteInventory = inventory.initialRefreshComplete
         await run(arranger.handle(.inventory(inventory), now: .now))
         await settleIfLaunchArrangementChanged()
+        takeover?.postCrashNotice()  // after the launch's N2/N3, so it queues behind them
         system.onDisplaysSettling = { [weak self] in
             guard let self else { return }
             self.overviewController?.interrupt(reason: .displayChange)
@@ -1021,7 +1028,8 @@ import os
         case .lostRoom(let windows): windows.first.flatMap { arranger.windows[$0.identity]?.displayUUID }
         // N12 belongs on the display that received the windows: the main display (UI-SPEC Surface 6).
         case .displaysDisconnected: arranger.displays.first?.uuid
-        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored: nil
+        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored, .takeoverCrashed,
+            .takeoverApplyFailed: nil
         }
     }
 

@@ -71,6 +71,8 @@ struct LiveHotKeyBackend: HotKeyBackend {
     private(set) var pendingCrashNotice = false
     /// A taken chord was pressed (after the drift check).
     var onTrigger: () -> Void = {}
+    /// Queues a toast (N10, N11); set by ArrangeController.
+    var post: (Notice) -> Void = { _ in }
     /// A VoiceOver announcement; set by ArrangeController.
     var announce: (String) -> Void = { _ in }
 
@@ -173,6 +175,13 @@ struct LiveHotKeyBackend: HotKeyBackend {
         return .custom(KeyboardShortcuts.Shortcut(carbonKeyCode: Int(value.keyCode), carbonModifiers: carbon).description)
     }
 
+    /// N10 once, after the launch's crash notices (N2/N3) so it queues behind them.
+    func postCrashNotice() {
+        guard pendingCrashNotice else { return }
+        post(.takeoverCrashed)
+        crashNoticeShown()
+    }
+
     func crashNoticeShown() {
         pendingCrashNotice = false
         canary.markNoticed()
@@ -238,6 +247,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
             restore(originals)
             self.state = .offApplyFailed
             log.error("takeover apply failed: read-back \(String(describing: state), privacy: .public); originals restored")
+            post(.takeoverApplyFailed)
             return false
         }
     }

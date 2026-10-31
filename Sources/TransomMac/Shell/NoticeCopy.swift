@@ -36,6 +36,10 @@ nonisolated public enum NoticeCopy {
                 "\(names.count) displays were disconnected, so "
                     + (count == 1 ? "1 window from them is" : "\(count) windows from them are") + " floating here until you reconnect them."
             }
+        case .takeoverCrashed:
+            "Transom quit unexpectedly, so Mission Control has its keys back. Choose Replace Mission Control in the Transom menu to use them for the overview again."
+        case .takeoverApplyFailed:
+            "Couldn't take over Mission Control's keys, so Mission Control works as before."
         case .crashRecovered(let unplaced):
             "Transom quit unexpectedly. Your windows are back on screen and your layout is restored."
                 + (unplaced == 0 ? ""
@@ -49,15 +53,18 @@ nonisolated public enum NoticeCopy {
         switch notice {
         case .lostRoom, .floatedAll, .arrangeLeftovers: "macwindow"
         case .finderNoWindow: "info.circle"
-        case .crashRecovered, .crashLoop: "lifepreserver"
+        case .crashRecovered, .crashLoop, .takeoverCrashed: "lifepreserver"
         case .restored, .settingsRestored: "checkmark.circle"
-        case .turnOffFailed: "exclamationmark.triangle.fill"
+        case .turnOffFailed, .takeoverApplyFailed: "exclamationmark.triangle.fill"
         case .displaysDisconnected: "display"
         }
     }
 
-    /// N7's glyph is the one systemOrange use in Phase 3 (UI-SPEC colour); every other glyph is secondary.
+    /// N7 and N11 (a macOS setting change that failed on read-back) use systemOrange; every other glyph is secondary.
     public static func isWarning(_ notice: Notice) -> Bool {
-        if case .turnOffFailed = notice { true } else { false }
+        switch notice {
+        case .turnOffFailed, .takeoverApplyFailed: true
+        default: false
+        }
     }
 }
