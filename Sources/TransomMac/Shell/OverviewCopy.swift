@@ -19,4 +19,33 @@ nonisolated public enum OverviewCopy {
         case .visited(let visited): "Spaces: \(visited) visited since launch"
         }
     }
+
+    // MARK: S2-S4 Displays
+
+    public enum DisplaysLine: Equatable, Sendable {
+        /// `arrangement` is `ArrangementID.shortHash`, the value the `displays` log lines print.
+        case settled(displays: Int, arrangement: String)
+        /// Within the 1.5 s debounce (D-11).
+        case settling
+        /// SessionGate holds a change until wake or unlock.
+        case waitingForWake
+    }
+
+    public static func displaysLine(_ line: DisplaysLine) -> String {
+        switch line {
+        case .settled(let displays, let arrangement): "Displays: \(displays), arrangement \(arrangement)"
+        case .settling: "Displays: settling\u{2026}"
+        case .waitingForWake: "Displays: waiting for wake"
+        }
+    }
+
+    public static func savedArrangementsLine(_ count: Int) -> String {
+        count == 0 ? "Saved arrangements: none yet" : "Saved arrangements: \(count)"
+    }
+
+    public static func dormantDesksLine(desks: Int, awayDisplays: Int) -> String {
+        if desks == 0 { "Dormant desks: none" } else if awayDisplays == 1 { "Dormant desks: \(desks) (1 display away)" } else {
+            "Dormant desks: \(desks) (\(awayDisplays) displays away)"
+        }
+    }
 }

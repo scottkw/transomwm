@@ -82,6 +82,33 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(!NoticeCopy.isWarning(.settingsRestored))
     }
 
+    @Test func displaysDisconnectedIsN12WithOneDisplayAndOneOrSeveralWindows() {
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["DELL U2723QE"], windows: 1), appName: { _ in "" })
+            == "\u{201C}DELL U2723QE\u{201D} was disconnected, so 1 window from it is floating here until you reconnect it.")
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["DELL U2723QE"], windows: 3), appName: { _ in "" })
+            == "\u{201C}DELL U2723QE\u{201D} was disconnected, so 3 windows from it are floating here until you reconnect it.")
+    }
+
+    @Test func displaysDisconnectedIsN12WithSeveralDisplays() {
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["A", "B"], windows: 4), appName: { _ in "" })
+            == "2 displays were disconnected, so 4 windows from them are floating here until you reconnect them.")
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["A", "B"], windows: 1), appName: { _ in "" })
+            == "2 displays were disconnected, so 1 window from them is floating here until you reconnect them.")
+    }
+
+    @Test func aLongDisplayNameIsTruncatedTo32Characters() {
+        let name = String(repeating: "d", count: 40)
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: [name], windows: 1), appName: { _ in "" })
+            == "\u{201C}\(String(repeating: "d", count: 32))\u{2026}\u{201D} was disconnected, so 1 window from it is floating here until you reconnect it.")
+    }
+
+    @Test func displaysDisconnectedUsesTheDisplayGlyphAndIsNoWarning() {
+        let notice = Notice.displaysDisconnected(names: ["A"], windows: 1)
+        #expect(NoticeCopy.glyph(for: notice) == "display")
+        #expect(!NoticeCopy.isWarning(notice))
+        #expect(!notice.isCrashNotice)
+    }
+
     @Test func settingsRestoredIsN8() {
         #expect(NoticeCopy.text(for: .settingsRestored, appName: { _ in "" }) == "macOS window settings restored.")
         #expect(NoticeCopy.glyph(for: .settingsRestored) == "checkmark.circle")

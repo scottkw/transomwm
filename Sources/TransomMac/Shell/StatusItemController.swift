@@ -337,6 +337,16 @@ import os
                 .counts(spaces: snapshot.spaceCount, displays: snapshot.displays.count, shared: !snapshot.separateSpaces)
             } else { .visited(system.visitedSpaces) }
         submenu.addItem(Self.info(OverviewCopy.spacesLine(spaces)))
+        let arranger = arrange.arranger
+        let displays: OverviewCopy.DisplaysLine =
+            switch system.settlerState {
+            case .idle: .settled(displays: arranger.displays.count, arrangement: arranger.arrangement.shortHash)
+            case .settling: .settling
+            case .waitingForWake: .waitingForWake
+            }
+        submenu.addItem(Self.info(OverviewCopy.displaysLine(displays)))
+        submenu.addItem(Self.info(OverviewCopy.savedArrangementsLine(arranger.layoutSets.all.count)))
+        submenu.addItem(Self.info(OverviewCopy.dormantDesksLine(desks: arranger.dormantDeskCount, awayDisplays: arranger.awayDisplayCount)))
         if multitouch == .offAfterCrash {
             let retry = NSMenuItem(title: GestureCopy.multitouchBackOnItem, action: #selector(turnMultitouchBackOn), keyEquivalent: "")
             retry.target = self

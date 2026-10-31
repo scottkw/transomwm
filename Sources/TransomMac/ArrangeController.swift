@@ -845,12 +845,37 @@ import os
     private func displaysSettled() async {
         let inventory = await system.inventory()
         let id = ArrangementID(inventory.displays.map(\.uuid))
-        let known = id == arranger.arrangement || arranger.layoutSets[id] != nil
+        let stored = id == arranger.arrangement ? nil : arranger.layoutSets[id]
+        let known = stored != nil || id == arranger.arrangement
         displaysLog.info(
             "arrangement \(id.shortHash, privacy: .public): \(inventory.displays.count, privacy: .public) displays (\(id.displayUUIDs.joined(separator: ", "), privacy: .public)), \(known ? "known" : "new", privacy: .public)")
+        let before = Set(arranger.displays.map(\.uuid)), after = Set(id.displayUUIDs)
+        let leaving = Dictionary(uniqueKeysWithValues: before.subtracting(after).map { ($0, deskWindows(on: $0)) })
         await run(arranger.handle(.displaysSettled(id, names: system.displayNames, inventory: inventory), now: .now))
+        for (uuid, windows) in leaving.sorted(by: { $0.key < $1.key }) {
+            let floated = windows.filter { arranger.windows[$0.identity] != nil && arranger.isFloating($0) }
+            let target = floated.first.flatMap { arranger.windows[$0.identity]?.displayUUID } ?? "none"
+            displaysLog.info(
+                "display \(uuid, privacy: .public) gone: \(self.deskCount(on: uuid), privacy: .public) desks dormant, \(floated.count, privacy: .public) windows floated on \(target, privacy: .public)")
+        }
+        for uuid in after.subtracting(before).sorted() {
+            let returned = deskWindows(on: uuid).filter { arranger.windows[$0.identity]?.displayUUID == uuid }.count
+            displaysLog.info(
+                "display \(uuid, privacy: .public) back: \(self.deskCount(on: uuid), privacy: .public) desks woken, \(returned, privacy: .public) windows returned")
+        }
+        if let stored {
+            let placed = Set(stored.world.desks.values.flatMap { $0.tree.windows }.map(\.identity)).filter { arranger.windows[$0] != nil }.count
+            displaysLog.info("applied layout set for arrangement \(id.shortHash, privacy: .public): \(placed, privacy: .public) windows placed")
+        }
         onInventory?(inventory)
     }
+
+    /// The windows the desks of display `uuid` hold, docked or floating.
+    private func deskWindows(on uuid: String) -> [TransomModel.WindowRef] {
+        arranger.world.desks.filter { $0.key.displayUUID == uuid }.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }
+    }
+
+    private func deskCount(on uuid: String) -> Int { arranger.world.desks.keys.filter { $0.displayUUID == uuid }.count }
 
     /// Launched on other displays than the layout was saved on: once the saved layout is re-attached, a settle stores
     /// it under its own arrangement and applies the live arrangement's set, if one is known (06-04 hand-off).
@@ -881,12 +906,13 @@ import os
         }
     }
 
-    /// The display the toast belongs on: the first named window's.
+    /// The display the toast belongs on: the first named window's, or N12's main display.
     private func displayUUID(of notice: Notice) -> String? {
         switch notice {
         case .lostRoom(let windows): windows.first.flatMap { arranger.windows[$0.identity]?.displayUUID }
-        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored,
-            .displaysDisconnected: nil
+        // N12 belongs on the display that received the windows: the main display (UI-SPEC Surface 6).
+        case .displaysDisconnected: arranger.displays.first?.uuid
+        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored: nil
         }
     }
 

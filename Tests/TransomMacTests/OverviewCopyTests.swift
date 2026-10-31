@@ -1,7 +1,7 @@
 import TransomMac
 import Testing
 
-/// UI-SPEC Surface 7: the S1 Spaces Debug line.
+/// UI-SPEC Surface 7: the S1-S4 Debug lines.
 @Suite struct OverviewCopyTests {
     @Test(arguments: [
         (OverviewCopy.SpacesLine.counts(spaces: 3, displays: 1, shared: false), "Spaces: 3 on 1 display"),
@@ -11,5 +11,30 @@ import Testing
     ])
     func theSpacesLineMatchesTheContract(line: OverviewCopy.SpacesLine, expected: String) {
         #expect(OverviewCopy.spacesLine(line) == expected)
+    }
+
+    @Test(arguments: [
+        (OverviewCopy.DisplaysLine.settled(displays: 2, arrangement: "3f9a"), "Displays: 2, arrangement 3f9a"),
+        (.settled(displays: 1, arrangement: "0b12"), "Displays: 1, arrangement 0b12"),
+        (.settling, "Displays: settling\u{2026}"),
+        (.waitingForWake, "Displays: waiting for wake"),
+    ])
+    func theDisplaysLineMatchesTheContract(line: OverviewCopy.DisplaysLine, expected: String) {
+        #expect(OverviewCopy.displaysLine(line) == expected)
+    }
+
+    @Test func theSavedArrangementsLineSaysNoneYetForZero() {
+        #expect(OverviewCopy.savedArrangementsLine(0) == "Saved arrangements: none yet")
+        #expect(OverviewCopy.savedArrangementsLine(2) == "Saved arrangements: 2")
+    }
+
+    @Test(arguments: [
+        (0, 0, "Dormant desks: none"),
+        (1, 1, "Dormant desks: 1 (1 display away)"),
+        (3, 1, "Dormant desks: 3 (1 display away)"),
+        (4, 2, "Dormant desks: 4 (2 displays away)"),
+    ])
+    func theDormantDesksLineHasExplicitBranches(desks: Int, away: Int, expected: String) {
+        #expect(OverviewCopy.dormantDesksLine(desks: desks, awayDisplays: away) == expected)
     }
 }

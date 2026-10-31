@@ -71,6 +71,15 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(queue.expire(at: t0 + .seconds(32)) == .hide)
     }
 
+    /// Two N12s within the toast's lifetime merge into the several-displays form.
+    @Test func twoDisplaysDisconnectedNoticesMergeNamesAndWindows() {
+        let first = Notice.displaysDisconnected(names: ["A"], windows: 2)
+        #expect(first.merged(with: .displaysDisconnected(names: ["B"], windows: 1)) == .displaysDisconnected(names: ["A", "B"], windows: 3))
+        var queue = NoticeQueue<Notice>()
+        _ = queue.post(first, at: t0)
+        #expect(queue.post(.displaysDisconnected(names: ["B"], windows: 1), at: t0 + .seconds(1)) == .show(.displaysDisconnected(names: ["A", "B"], windows: 3)))
+    }
+
     /// N2 (plan 14) is a real crash notice: 10 s on screen, and a later N1 waits behind it.
     @Test func crashRecoveredStaysTenSecondsAndALaterNoticeQueuesBehindIt() {
         var queue = NoticeQueue<Notice>()

@@ -29,10 +29,13 @@ nonisolated public enum NoticeCopy {
         case .settingsRestored:
             "macOS window settings restored."
         case .displaysDisconnected(let names, let count):
-            // UI-SPEC Surface 6 N12; 06-05 adds the merge and its tests.
-            "\(names.count == 1 ? "\u{201C}\(names[0].count > 32 ? names[0].prefix(32) + "\u{2026}" : names[0])\u{201D} was" : "\(names.count) displays were") disconnected, so "
-                + (count == 1 ? "1 window from \(names.count == 1 ? "it" : "them") is" : "\(count) windows from \(names.count == 1 ? "it" : "them") are")
-                + " floating here until you reconnect \(names.count == 1 ? "it" : "them")."
+            if names.count == 1 {
+                "\u{201C}\(MenuCopy.truncatedAppName(names[0]))\u{201D} was disconnected, so "
+                    + (count == 1 ? "1 window from it is" : "\(count) windows from it are") + " floating here until you reconnect it."
+            } else {
+                "\(names.count) displays were disconnected, so "
+                    + (count == 1 ? "1 window from them is" : "\(count) windows from them are") + " floating here until you reconnect them."
+            }
         case .crashRecovered(let unplaced):
             "Transom quit unexpectedly. Your windows are back on screen and your layout is restored."
                 + (unplaced == 0 ? ""
