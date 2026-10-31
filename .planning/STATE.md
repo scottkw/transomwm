@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Completed 06-09-PLAN.md
-last_updated: "2026-10-31T21:00:08.597Z"
+stopped_at: Completed 06-10-PLAN.md
+last_updated: "2026-10-31T21:17:32.602Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: 2cb077a1e1f0c296494843cc21303fbf8f00471f
+state_head: 0a41af4e84a2100d194e0b0f4e1f344e369dafc1
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 76
+  completed_plans: 77
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
-Plan: 10 of 12
+Plan: 11 of 12
 Status: Ready to execute
 Last activity: 2026-10-31 — Phase 6 execution started
 
@@ -129,6 +129,7 @@ Progress: [██████░░░░] 56%
 | Phase 6 P07 | 18min | 3 tasks | 11 files |
 | Phase 6 P08 | 30min | 3 tasks | 13 files |
 | Phase 06 P09 | 14min | 3 tasks | 15 files |
+| Phase 06 P10 | 12min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -350,6 +351,10 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-09: App-switch interruption comes from NSWorkspace app activation, not .windowFocused (⌘-Tab sends no focus change; a window opening while open fades its tile in)
 - [Phase 06]: 06-09: A parked/collapsed overview pick waits out the overview close, then zooms to Navigator.target(leafNode) with focus at settle; paused = focus only
 - [Phase 06]: 06-09: Overview live updates rebuild the layout and diff tiles; strip and empty capsule not rebuilt (shortcut)
+- [Phase 06]: 06-10: Takeover taken IDs are 32 (only while on), 108 and 113 (spike); 34 allowed but not taken; D-08 IDs rejected
+- [Phase 06]: 06-10: Stored takeover originals are cleared only after a matching restore read-back; otherwise kept for the next launch
+- [Phase 06]: 06-10: N10 shows once via a noticed flag in the Mission Control canary; lift clears the canary only when the takeover was on
+- [Phase 06]: 06-10: Carbon hotkeys (F3, ctrl-up, shift-F3) fire while the overview's non-activating key panel is up (VM)
 
 ### Quick Tasks Completed
 
@@ -390,8 +395,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T21:00:07.706Z
-Stopped at: Completed 06-09-PLAN.md
+Last session: 2026-10-31T21:17:31.981Z
+Stopped at: Completed 06-10-PLAN.md
 Resume file: None
 
 ## Deferred Verification
