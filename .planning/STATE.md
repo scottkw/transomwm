@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Completed 06-07-PLAN.md
-last_updated: "2026-10-31T19:44:21.084Z"
+stopped_at: Completed 06-08-PLAN.md
+last_updated: "2026-10-31T20:39:44.427Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: 13ab0236e463dbfe63b843e0c8213077037e6daf
+state_head: 31dd928c72197611f434e71b3fefa95f682140f7
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 74
+  completed_plans: 75
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
-Plan: 8 of 12
+Plan: 9 of 12
 Status: Ready to execute
 Last activity: 2026-10-31 — Phase 6 execution started
 
@@ -127,6 +127,7 @@ Progress: [██████░░░░] 56%
 | Phase 06 P05 | 20min | 2 tasks | 11 files |
 | Phase 6 P06 | 20 min | 3 tasks | 23 files |
 | Phase 6 P07 | 18min | 3 tasks | 11 files |
+| Phase 6 P08 | 30min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -343,6 +344,8 @@ Recent decisions affecting current work:
 - [Phase 6]: 06-07: posted Space-switch chords keep the fn bit (getter flags verbatim, ⇧⌃⌥⌘+fn); keyUp posted with empty flags so no modifier stays down
 - [Phase 6]: 06-07: switch confirmation polls SkyLightSpaces.currentSpace for 1 s; ArrangeController stays the only system.events reader
 - [Phase 6]: 06-07: snapshot eviction on destroy stays in ZoomController.windowClosed (shared cache), not duplicated in OverviewController
+- [Phase 6]: 06-08: overview keys come from a non-activating key panel (Rule 4, user 2026-10-31); macOS 15 drops modifier-less Return/Tab/Space Carbon hotkeys; other keys are ignored while open
+- [Phase 6]: 06-08: integration tests pump AppKit events inside a nested run loop (dispatchAppKitEvents); AppKit tracking-area CFRunLoopStop otherwise exits the test helper with 0
 
 ### Quick Tasks Completed
 
@@ -383,8 +386,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T19:44:20.742Z
-Stopped at: Completed 06-07-PLAN.md
+Last session: 2026-10-31T20:39:43.829Z
+Stopped at: Completed 06-08-PLAN.md
 Resume file: None
 
 ## Deferred Verification
