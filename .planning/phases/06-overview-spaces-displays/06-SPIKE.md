@@ -30,8 +30,8 @@
 | A7 G-03-9 ghost | Closed Safari window's element answers **invalidElement (-25202)**; the lingering CG entry was **not reproduced** (gone within 1 s, 2 runs) | ghost |
 | Hidden windows' Spaces | Minimised: **[3]**; ⌘H-hidden app: **[3]**; hidden native tab: **[]** (empty) | ghost |
 | A8 reboot | **UUIDs and numeric IDs both unchanged** across `tart stop`/`tart run` (1 and 3); current Space resets to Desktop 1 | reboot diff |
-| Swipe (D-05) | Not run (user, host only) | below |
-| Schema decision | Awaiting the user | below |
+| Swipe (D-05) | **skip → kept**: the user skipped the host check; the four-finger swipe stays with macOS ([swipe kept]) | below |
+| Schema decision | **schema-2** (user, 2026-10-31) | below |
 
 ## spaces-dump
 
@@ -163,8 +163,10 @@ swift build --product transom-spaces-spike && .build/debug/transom-spaces-spike 
 
 Phase 1 (10 s) listens to Dock-control events (type 30) while you swipe up, left and right. Phase 2 (about 17 s) runs only if one field separates swipe-up from horizontal swipes, and then consumes only swipe-up events while you swipe up, left, right, up. The tap goes away when the command ends. Reply with the printed `out.jsonl` path and whether swipe-up did nothing while left/right still switched Spaces, or "skip".
 
-**Verdict:**
+**Verdict:** skip → kept. The user replied "skip" on 2026-10-31; swipe-check was not run. UI copy uses the [swipe kept] variant, and 06-11 does not create `SwipeTakeoverTap.swift`.
 
 ## Schema decision
 
-**Decision:**
+**Decision:** schema-2
+
+The user chose it on 2026-10-31: bump layout.json to schema 2. Schema-1 files migrate in memory on first load and are saved as 2; a downgraded (schema-1) Transom then refuses to overwrite the file (T-03-18), so layout sets and the Space-UUID table are never silently dropped. Plan 06-03 implements it.
