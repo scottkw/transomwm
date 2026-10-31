@@ -27,6 +27,17 @@ import os
     private var pauseCount = 0
     private var displays: [DisplayInfo] = []
     private var screenObserver: (any NSObjectProtocol)?
+    /// D-11: display changes reach the Arranger as settling, then settled after 1.5 s of quiet, never while paused.
+    private lazy var settler = DisplaySettler(
+        isPaused: { [weak self] in self?.paused ?? false },
+        onSettling: { [weak self] in self?.displaysSettling() },
+        onSettled: { [weak self] in self?.onDisplaysSettled?() })
+    /// Set by ArrangeController: the Arranger's `.displaysSettling` and `.displaysSettled` inputs.
+    public var onDisplaysSettling: (() -> Void)?
+    public var onDisplaysSettled: (() -> Void)?
+    var settlerState: DisplaySettler.State { settler.state }
+    /// `NSScreen.localizedName` by display UUID, merged at each read so a display that left keeps its name (N12).
+    public private(set) var displayNames: [String: String] = [:]
     /// `NSWorkspace.activeSpaceDidChangeNotification`: marks every app's next full update `spaceChanged` (02-17).
     private var spaceObserver: (any NSObjectProtocol)?
     private var spaceSwitches = SpaceSwitchMarks()
@@ -104,6 +115,8 @@ import os
         // Per-element timeouts do not reach equal or child elements (Pitfall 1), so set the global one.
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
         displays = Displays.current()
+        displayNames = Displays.localizedNames()
+        settler.observeReconfiguration()
         refreshSpaces(force: true)
         visitSpaceSoon()  // the Space shown at launch is visited too
         let scheduler = RefreshScheduler(
@@ -597,6 +610,8 @@ import os
             self.logger.notice("session resumed after a full refresh")
             self.continuation.yield(.sessionPaused(false))
             self.scheduler?.startSweep()
+            // A display change held while paused settles a full quiet period from here, against a fresh inventory.
+            self.settler.sessionResumed()
         }
     }
 
@@ -647,9 +662,17 @@ import os
     private func displaysDidChange() {
         // Read now, so the inventory the Arranger re-plans against already has the new visible frames (TILE-03).
         displays = Displays.current()
+        displayNames.merge(Displays.localizedNames()) { $1 }
         refreshSpaces()
+        settler.touch()
         continuation.yield(.displaysChanged)
         scheduler?.scheduleAll(after: .milliseconds(500))
+    }
+
+    /// Names are read before the Arranger hears of the change, while a leaving display may still be listed.
+    private func displaysSettling() {
+        displayNames.merge(Displays.localizedNames()) { $1 }
+        onDisplaysSettling?()
     }
 
     /// The app's bundle ID, or `unbundled:<executable name>` for a bare executable; nil (logged) when neither exists.

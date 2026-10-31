@@ -10,6 +10,9 @@ import os
 @MainActor public final class ArrangeController {
     private let system: AXWindowSystem
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "arrange")
+    private let displaysLog = Logger(subsystem: "com.eightabyte.transom", category: "displays")
+    /// The saved arrangement differs from the live displays: one settle runs once the saved layout is re-attached.
+    private var launchSettlePending = false
     /// One debug line per press and per release (WR-03); see them with `log stream --level debug`.
     private let dragLog = Logger(subsystem: "com.eightabyte.transom", category: "drag")
     /// What the press has seen so far: dragged tap events, and the first and last CG samples of the frame poll.
@@ -159,13 +162,28 @@ import os
             }
             if let saved = store.contents {
                 let world = rekeyed(saved)
-                await run(arranger.handle(.restore(world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap), now: .now))
+                await run(arranger.handle(
+                    .restore(
+                        world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap, arrangement: saved.arrangement,
+                        layoutSets: saved.layoutSets),
+                    now: .now))
+                launchSettlePending = !saved.arrangement.isUnknown && saved.arrangement != ArrangementID(inventory.displays.map(\.uuid))
             }
             // This launch's session record (cleanExit false) goes down at once, with the saved layout still in it.
             write()
         }
         fedCompleteInventory = inventory.initialRefreshComplete
         await run(arranger.handle(.inventory(inventory), now: .now))
+        await settleIfLaunchArrangementChanged()
+        system.onDisplaysSettling = { [weak self] in
+            guard let self else { return }
+            // Synchronous, so no inventory from the change itself is fed before the Arranger is settling.
+            let effects = self.arranger.handle(.displaysSettling, now: .now)
+            Task { await self.run(effects) }
+        }
+        system.onDisplaysSettled = { [weak self] in
+            Task { await self?.displaysSettled() }
+        }
         if zoomEnabled { await run(arranger.handle(.zoomEnabled(true), now: .now)) }
         onInventory?(inventory)
         Task { [weak self, system] in
@@ -192,12 +210,13 @@ import os
                 // every complete inventory until a saved layout is re-attached, since it waits for an unlocked session
                 // and a usable CG list (SAFE-06, CR-03), and a changed CG list while a saved window is dormant, whose
                 // `liveWindows` prunes the ones that closed (G-03-8).
+                // New displays arrive through `.displaysSettled` (D-11); nothing is fed while they settle.
                 var feed = (self.arranger.awaitsRestore || !self.fedCompleteInventory) && inventory.initialRefreshComplete
-                if case .displaysChanged = event { feed = true }
                 if case .liveWindowsChanged = event, self.arranger.hasDormantWindows { feed = true }
-                if feed {
+                if feed, !self.arranger.settling {
                     self.fedCompleteInventory = self.fedCompleteInventory || inventory.initialRefreshComplete
                     await self.run(self.arranger.handle(.inventory(inventory), now: .now))
+                    await self.settleIfLaunchArrangementChanged()
                 }
                 self.onInventory?(inventory)
             }
@@ -812,15 +831,34 @@ import os
         let uuids = (store.contents?.spaceMap ?? [:]).merging(system.spacesSnapshot?.uuidByID ?? [:]) { _, live in live }
         let file = LayoutFile(
             world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session,
-            arrangement: ArrangementID(Displays.current().map(\.uuid)),
-            // shortcut: passed through unchanged until 06-04 hands layout sets to the Arranger.
-            layoutSets: store.contents?.layoutSets ?? [],
+            arrangement: snapshot.arrangement, layoutSets: snapshot.layoutSets,
             spaces: SpaceRekey.table(for: snapshot.world, uuids: uuids))
         do {
             try store.save(file)
         } catch {
             logger.error("could not save \(LayoutStore.fileName, privacy: .public): \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// Displays are quiet again (D-11): the Arranger gets the new arrangement, the names captured before any display
+    /// left, and a fresh inventory.
+    private func displaysSettled() async {
+        let inventory = await system.inventory()
+        let id = ArrangementID(inventory.displays.map(\.uuid))
+        let known = id == arranger.arrangement || arranger.layoutSets[id] != nil
+        displaysLog.info(
+            "arrangement \(id.shortHash, privacy: .public): \(inventory.displays.count, privacy: .public) displays (\(id.displayUUIDs.joined(separator: ", "), privacy: .public)), \(known ? "known" : "new", privacy: .public)")
+        await run(arranger.handle(.displaysSettled(id, names: system.displayNames, inventory: inventory), now: .now))
+        onInventory?(inventory)
+    }
+
+    /// Launched on other displays than the layout was saved on: once the saved layout is re-attached, a settle stores
+    /// it under its own arrangement and applies the live arrangement's set, if one is known (06-04 hand-off).
+    private func settleIfLaunchArrangementChanged() async {
+        guard launchSettlePending, !arranger.awaitsRestore else { return }
+        launchSettlePending = false
+        await run(arranger.handle(.displaysSettling, now: .now))
+        await displaysSettled()
     }
 
     /// Shows or hides the toast as the queue says, and schedules the visible notice's expiry.
