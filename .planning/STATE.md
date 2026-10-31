@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-10-31T18:27:03.392Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-10-31T18:46:19.462Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: 4fc6e5c609065d60acc548098a5af1bd69087975
+state_head: e059dfea403fb8b811b8a57cc17fc642cbbce6ac
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 70
+  completed_plans: 71
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
 Last activity: 2026-10-31 — Phase 6 execution started
 
@@ -123,6 +123,7 @@ Progress: [██████░░░░] 56%
 | Phase 6 P01 | 2h21m | 3 tasks | 17 files |
 | Phase 6 P02 | 12min | 2 tasks | 14 files |
 | Phase 06 P03 | 30min | 2 tasks | 9 files |
+| Phase 06 P04 | 45min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -326,6 +327,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-03: layout.json schema 2 implemented with in-memory v1 migration (LayoutFileV1); World.currentSchemaVersion stays 1
 - [Phase 06]: 06-03: re-key table at restore = live uuidByID overlaid by the file's spaces table (file wins); write keeps dormant desks' loaded UUIDs
 - [Phase 06]: 06-03: a stale Space ID equal to a live Space's (or a second desk aiming at a claimed key) is quarantined and dropped, logged
+- [Phase 06]: 06-04: user action wins at desk level; desks holding a user-placed window are kept over a stored layout set
+- [Phase 06]: 06-04: every display settle claims windows by their desk's display, so the layout wins over where macOS left a window
+- [Phase 06]: 06-04: a weight change is not a placement; undo history resets on a known arrangement switch
 
 ### Quick Tasks Completed
 
@@ -366,8 +370,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T18:27:02.859Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-10-31T18:46:18.929Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification

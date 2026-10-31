@@ -47,7 +47,7 @@ key-decisions:
   - "A weight change (grow/shrink, gap drag) is not a placement: it stays with its arrangement's set"
   - "Undo history resets on a known arrangement switch (same as launch restore)"
   - "The current arrangement is initialised from the first inventory's displays when no restore set it"
-requirements-completed: [OVER-05, OVER-06]
+requirements-completed: []  # OVER-04..06 hold in the Engine; not marked until 06-05 wires the shell inputs (as 06-03 did)
 duration: ~45min
 completed: 2026-10-31
 ---
