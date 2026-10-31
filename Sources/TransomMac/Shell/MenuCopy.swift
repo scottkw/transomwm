@@ -61,6 +61,7 @@ nonisolated public enum MenuCopy {
         case .pan(let edge): direction(edge)  // the Move View submenu's items
         case .frameWindow: "Frame Focused Window"
         case .frameDesktop: "Frame Desktop"
+        case .overview: "Show Overview"
         }
     }
 

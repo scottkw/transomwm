@@ -182,6 +182,7 @@ extension Arranger {
     /// Moves `displayUUID`'s camera as `command` asks, or refuses with a beep, the announcement and a log line.
     mutating func camera(_ command: CameraCommand, displayUUID uuid: String, focused: WindowRef?, pointer: Point?) -> [ArrangerEffect] {
         guard camera.enabled else { return [.info("zoom off: \(command) ignored")] }
+        guard command != .overview else { return [.fault("overview reached the Arranger; the shell handles it")] }
         do throws(LayoutError) {
             switch try cameraStep(command, displayUUID: uuid, focused: focused, pointer: pointer) {
             case .success(let step): return zoomTo(step.target, displayUUID: uuid, kind: step.kind)
@@ -292,6 +293,8 @@ extension Arranger {
         case .frameDesktop:
             guard desk.tree.isDesktopHidden == false else { return .failure(.desktopHidden) }
             return toggle(Navigator.target(.desktop, in: desk.tree))
+        case .overview:
+            return .failure(.notReady)  // never a camera step: `camera` faults first and the shell decides availability
         }
     }
 }

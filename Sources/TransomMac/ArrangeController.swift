@@ -86,6 +86,8 @@ import os
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
     private(set) var zoomController: ZoomController?
     var hasZoomController: Bool { zoomController != nil }
+    /// The overview (06-06), made on the first Show Overview; never with zoom off.
+    private(set) var overviewController: OverviewController?
     /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
     private lazy var zoomInput = ZoomInput(controller: self, tap: tap)
     /// The gesture session tap (05-03): runs only while zoom is on and the mouse tap runs (D-07).
@@ -193,17 +195,23 @@ import os
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
                 if case .spaceChanged = event {
                     self.zoomInput.endPick(reason: "space changed")
+                    self.overviewController?.interrupt(reason: "space changed")
                     self.gestures.republish(reason: "space change")
                 }
                 // Back at the keyboard (⌘-Tab, a Dock click): pick mode's Esc hotkey must not keep Esc from that app (WR-02).
-                if case .windowFocused = event { self.zoomInput.endPick(reason: "focus changed") }
+                if case .windowFocused = event {
+                    self.zoomInput.endPick(reason: "focus changed")
+                    self.overviewController?.interrupt(reason: "focus changed")
+                }
                 if case .displaysChanged = event {
                     self.zoomInput.endPick(reason: "displays changed")
+                    self.overviewController?.displaysChanged()
                     self.zoomController?.displaysChanged()
                     self.zoomInput.publish()  // a move whose display went away never reveals
                     self.gestures.republish(reason: "display change")
                 }
                 if case .windowDestroyed(let window) = event { self.zoomController?.windowClosed(window) }
+                if case .sessionPaused(true) = event { self.overviewController?.interrupt(reason: "session paused") }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
                 // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does
@@ -492,6 +500,7 @@ import os
             refuse()
             return
         }
+        if command != .camera(.overview) { overviewController?.interrupt(reason: "command") }
         if case .camera(let camera) = command {
             await dispatchCamera(camera, from: source)
             return
@@ -513,6 +522,14 @@ import os
             return
         }
         let context = commandContext()
+        if case .overview = camera {  // the shell's: it needs no pointer display and is allowed while paused
+            guard context.ready else {
+                let refusal = Navigator.Refusal.notReady
+                let effects: [ArrangerEffect] = [.beep, .announce(refusal.announcement), .info("refused \(camera): \(refusal)")]
+                return await run(source == .url ? effects.filter { $0 != .beep && $0 != .announce(refusal.announcement) } : effects)
+            }
+            return toggleOverview(trigger: String(describing: source))
+        }
         let pointer = pointerDisplay()
         var effects: [ArrangerEffect]
         if let uuid = pointer.uuid, context.ready {
@@ -637,6 +654,28 @@ import os
         return zoom
     }
 
+    private func overview() -> OverviewController {
+        if let overviewController { return overviewController }
+        let overview = OverviewController(
+            arranger: { [unowned self] in self.arranger }, spaces: { [unowned self] in self.system.spacesSnapshot }, zoom: { [unowned self] in self.zoom() })
+        overview.onClosed = { [weak self] in
+            guard let self else { return }
+            for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
+        }
+        overviewController = overview
+        return overview
+    }
+
+    /// Opens or closes the overview with pick mode ended and the collapsed panels hidden (they would sit above it).
+    private func toggleOverview(trigger: String) {
+        let overview = overview()
+        if !overview.isOpen {
+            zoomInput.endPick(reason: "overview")
+            for display in arranger.displays { collapsedPanels.hide(on: display.uuid) }
+        }
+        overview.toggle(trigger: trigger)
+    }
+
     /// Pick mode ends (a taken gesture, 05-05).
     func endPick(reason: String) { zoomInput.endPick(reason: reason) }
     /// Pick mode is on (tests).
@@ -719,6 +758,8 @@ import os
         let effects = arranger.handle(.zoomEnabled(false), now: .now)
         let floated = effects.reduce(0) { count, effect in if case .notice(.lostRoom(let windows)) = effect { count + windows.count } else { count } }
         await run(effects)
+        overviewController?.displaysChanged()  // closes it and drops its panels
+        overviewController = nil
         zoomController?.purge()
         zoomController = nil
         Hotkeys.setZoomHotkeys(enabled: false)

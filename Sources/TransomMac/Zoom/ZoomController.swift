@@ -396,6 +396,19 @@ import os
         explainerRetry.cancel()
     }
 
+    // MARK: Overview (06-06)
+
+    /// The overview's one-shot captures, through the same permission check, budget and cache as a move's (06 UI-SPEC
+    /// Surface 1 Snapshots). Empty without Screen Recording.
+    func overviewImages(_ requests: [(CGWindowID, CGSize)]) async -> [UInt32: CGImage] {
+        guard checkPermission(), !requests.isEmpty else { return [:] }
+        let images = await capture.captureAll(requests, deadline: SnapshotCapture.moveBudget)
+        updateFailing()
+        return images
+    }
+
+    func cachedSnapshot(_ id: CGWindowID) -> CGImage? { capture.cached(id) }
+
     // MARK: Screen Recording (UI-SPEC Surface 2)
 
     /// Read at every move start. The state is logged the first time and on every change; a revoke once per session,
@@ -489,13 +502,13 @@ import os
     }
 
     /// A collapsed window's block: app colour and icon, no title.
-    private func collapsedBlock(_ window: TransomModel.WindowRef) -> TileLayer.Content {
+    func collapsedBlock(_ window: TransomModel.WindowRef) -> TileLayer.Content {
         let app = NSRunningApplication(processIdentifier: window.pid)
         return .collapsed(color: AppColor.color(forBundleID: window.bundleID, icon: app?.icon), icon: app?.icon)
     }
 
     /// App colour, app icon, and the AX title (the app name when it has none).
-    private func fallback(_ window: TransomModel.WindowRef) -> TileLayer.Content {
+    func fallback(_ window: TransomModel.WindowRef) -> TileLayer.Content {
         let app = NSRunningApplication(processIdentifier: window.pid)
         let name = app?.localizedName ?? window.bundleID
         return .fallback(
@@ -509,7 +522,7 @@ import os
     }
 
     /// The CG window a window shows (its visible tab); nil for a synthetic ID, which has none.
-    private func cgWindow(_ window: TransomModel.WindowRef) -> CGWindowID? {
+    func cgWindow(_ window: TransomModel.WindowRef) -> CGWindowID? {
         let id = windowInfo(window.identity)?.visibleMemberID ?? window.windowID
         return id < WindowIdentity.syntheticIDBase ? id : nil
     }

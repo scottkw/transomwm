@@ -17,7 +17,7 @@ import Testing
             "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight", "snapMaximize", "snapCenter",
             "arrangeAll", "floatAll", "restoreAll",
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
-            "frameDesktop",
+            "frameDesktop", "showOverview",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
             .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
@@ -27,6 +27,7 @@ import Testing
             .arrangeAll, .floatAll, .restoreAll,
             .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
             .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
+            .camera(.overview),
         ])
     }
 
@@ -47,6 +48,8 @@ import Testing
             .init(.leftBracket, modifiers: base), .init(.rightBracket, modifiers: base), .init(.home, modifiers: base),
             .init(.end, modifiers: base), .init(.pageUp, modifiers: base), .init(.pageDown, modifiers: base),
             .init(.m, modifiers: base), .init(.g, modifiers: base),
+            // 06 UI-SPEC Surface 4: Show Overview
+            .init(.a, modifiers: base),
         ]
         #expect(Hotkeys.entries.map(\.name.defaultShortcut) == expected)
     }
@@ -78,13 +81,15 @@ import Testing
         #expect(spec.isSubset(of: Set(Hotkeys.entries.map(\.name.rawValue))))
     }
 
-    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs; 33 + 11 = 44 (Surface 8).
-    @Test func theZoomNamesAreExactlyTheUISpecEleven() {
+    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, plus Show Overview (06 UI-SPEC Surface 4), which
+    /// zoom off disables with them; 33 + 12 = 45.
+    @Test func theZoomNamesAreTheUISpecElevenPlusShowOverview() {
         let zoom = [
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow", "frameDesktop",
+            "showOverview",
         ]
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 44)
+        #expect(Hotkeys.entries.count == 45)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
     }
 
