@@ -27,7 +27,9 @@ public struct OverviewSelection: Equatable, Sendable {
     }
 
     /// Moves the selection as `key` asks; at an edge nothing changes (no beep: repeat-safe).
-    public mutating func move(_ key: OverviewKey, in layout: OverviewLayout) {
+    public mutating func reselect(afterRemoving window: WindowRef, in layout: OverviewLayout) {}
+
+    public mutating func move(_ key: OverviewKey, in layout: OverviewLayout, focused: WindowRef? = nil) {
         guard case .tile(let window)? = selected, let display = layout.displays.first(where: { $0.uuid == self.display }),
             let from = display.tiles.first(where: { $0.window == window }),
             let next = Self.nearest(from: from.rect, toward: key, among: display.tiles.filter { $0.window != window })
