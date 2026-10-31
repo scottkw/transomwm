@@ -15,7 +15,8 @@ public enum Capability: String, CaseIterable, Sendable {
         case .axWindowID: "matching by frame"
         case .spaces: "single Space"
         case .multitouch: "trackpad gestures from system events"
-        case .symbolicHotKeys, .coreDock: ""
+        case .symbolicHotKeys: "Mission Control keys unchanged"
+        case .coreDock: "beep instead of Mission Control"
         }
     }
 }
@@ -61,7 +62,8 @@ public enum Capabilities {
         case .axWindowID: AXWindowID.function != nil
         case .spaces: SkyLightSpaces.isLoaded
         case .multitouch: MultitouchSupport.isLoaded && !MultitouchCanary.tripped
-        case .symbolicHotKeys, .coreDock: false
+        case .symbolicHotKeys: SymbolicHotKeys.isLoaded
+        case .coreDock: CoreDock.isLoaded
         }
     })
 

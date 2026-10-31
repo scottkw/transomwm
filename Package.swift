@@ -33,7 +33,11 @@ let package = Package(
         .executableTarget(name: "transom-dump", dependencies: ["TransomMac", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(name: "transom-zoom-spike", dependencies: ["TransomMac", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(name: "transom-gesture-spike", dependencies: ["TransomMac", "TransomPrivate", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
-        .executableTarget(name: "transom-spaces-spike", dependencies: ["TransomMac", "TransomPrivate", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
+        .executableTarget(
+            name: "transom-spaces-spike",
+            dependencies: ["TransomMac", "TransomPrivate", "TransomEngine", .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts")],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
         .target(name: "TransomTestSupport", dependencies: ["TransomEngine"]),
         .testTarget(name: "TransomModelTests", dependencies: ["TransomModel"]),
         .testTarget(name: "TransomEngineTests", dependencies: ["TransomEngine", "TransomTestSupport"], exclude: ["Fixtures"]),
