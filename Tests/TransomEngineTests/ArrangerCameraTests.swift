@@ -249,6 +249,21 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         #expect(tiles == [a.identity: home[a], b.identity: home[b], c.identity: home[c]].compactMapValues { $0 })
     }
 
+    /// 06-06: the overview's main area on a zoomed display is the home view, never the parked frames.
+    @Test func homeViewIsNilAtHomeAndTheHomeTilesWhileZoomed() async throws {
+        var harness = try await threeDocked()
+        let home = await frames(harness)
+        await harness.send(.zoomEnabled(true))
+        #expect(harness.arranger.homeView(on: "main") == nil)
+        let move = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+
+        let view = try #require(harness.arranger.homeView(on: "main"))
+
+        #expect(view.frames[a] == home[a] && view.frames[b] == home[b] && view.frames[c] == home[c])
+        #expect(view.collapsed.isEmpty)
+    }
+
     @Test func tilesAreSortedByIdentity() async throws {
         var harness = try await threeDocked()
         await harness.send(.zoomEnabled(true))

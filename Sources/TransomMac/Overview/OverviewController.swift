@@ -52,8 +52,15 @@ import os
         let opened = generation
         let started = ContinuousClock.now
         let arranger = arranger()
-        let inputs = Self.inputs(arranger, spaces: spaces(), frontToBack: CGWindowList.onScreenFrontToBack())
-        let layout = OverviewLayout(displays: inputs)
+        let snapshot = spaces()
+        let inputs = Self.inputs(arranger, spaces: snapshot, frontToBack: CGWindowList.onScreenFrontToBack())
+        for input in inputs where input.spaces.count > OverviewLayout.maxSpaces {
+            logger.notice("display \(input.uuid, privacy: .public) lists \(input.spaces.count, privacy: .public) Spaces; the strip shows 16")
+        }
+        let message = NSAttributedString(string: OverviewCopy.noWindows, attributes: [.font: NSFont.systemFont(ofSize: 13)]).size()
+        let layout = OverviewLayout(
+            displays: inputs, stripShown: snapshot != nil, separateSpaces: snapshot?.separateSpaces ?? true,
+            emptyCapsuleSize: Size(width: ceil(message.width) + 16, height: 24))
         let zoom = zoom()
         var requests: [(CGWindowID, CGSize)] = []
         for display in layout.displays {
@@ -70,11 +77,14 @@ import os
         Task { [weak self] in
             let images = await zoom.overviewImages(requests)
             guard let self, self.isOpen, self.generation == opened else { return }
-            self.show(layout, arranger: arranger, images: images, trigger: trigger, started: started)
+            self.show(layout, inputs: inputs, arranger: arranger, images: images, trigger: trigger, started: started)
         }
     }
 
-    private func show(_ layout: OverviewLayout, arranger: Arranger, images: [UInt32: CGImage], trigger: String, started: ContinuousClock.Instant) {
+    private func show(
+        _ layout: OverviewLayout, inputs: [OverviewDisplayInput], arranger: Arranger, images: [UInt32: CGImage], trigger: String,
+        started: ContinuousClock.Instant
+    ) {
         guard let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else { return }
         func appKit(_ rect: Rect) -> CGRect {
             let r = Coordinates.appKit(fromTopLeft: rect, primaryHeight: primaryHeight)
@@ -82,19 +92,21 @@ import os
         }
         let zoom = zoom()
         var snapshots = 0, fallbacks = 0
+        func image(_ window: TransomModel.WindowRef) -> CGImage? { zoom.cgWindow(window).flatMap { images[$0] ?? zoom.cachedSnapshot($0) } }
         for display in layout.displays {
-            guard let panel = panel(for: display.uuid) else { continue }
+            guard let panel = panel(for: display.uuid), let input = inputs.first(where: { $0.uuid == display.uuid }) else { continue }
+            let collapsed = arranger.homeView(on: display.uuid)?.collapsed ?? [:]
             let tiles = display.tiles.map { tile in
-                let cg = zoom.cgWindow(tile.window)
-                let image = cg.flatMap { images[$0] ?? zoom.cachedSnapshot($0) }
-                if image == nil { fallbacks += 1 } else { snapshots += 1 }
+                let picture = image(tile.window)
+                if picture == nil { fallbacks += 1 } else { snapshots += 1 }
                 let real = arranger.windows[tile.window.identity]?.frame ?? tile.rect
-                return StageTile(
-                    id: cg ?? tile.window.windowID, start: appKit(real), end: appKit(tile.rect),
-                    content: image.map { .snapshot($0) } ?? zoom.fallback(tile.window))
+                let content: TileLayer.Content =
+                    collapsed[tile.window] != nil ? zoom.collapsedBlock(tile.window) : picture.map { .snapshot($0) } ?? zoom.fallback(tile.window)
+                return StageTile(id: zoom.cgWindow(tile.window) ?? tile.window.windowID, start: appKit(real), end: appKit(tile.rect), content: content)
             }
             if panel.isVisible { panel.freezeAtPresentation() }  // a close still fading: cancel its order-out
             panel.show(tiles: tiles)
+            panel.showOverview(overlay(display, input: input, image: image, appKit: appKit))
             panel.animate {}
             shown[display.uuid] = tiles
         }
@@ -115,6 +127,7 @@ import os
                 panel.fadeOut(duration: StagePanel.moveDuration)
                 continue
             }
+            panel.clearOverview()
             let back = tiles.map { StageTile(id: $0.id, start: $0.end, end: $0.start, content: $0.content) }
             panel.retarget(to: back) { [weak self, weak panel] in
                 guard self?.generation == closed else { return }
@@ -157,14 +170,44 @@ import os
         return panel
     }
 
+    /// The strip (thumbnails, mini tiles, labels) and the empty-message capsule of one display.
+    private func overlay(
+        _ display: OverviewDisplayLayout, input: OverviewDisplayInput, image: (TransomModel.WindowRef) -> CGImage?, appKit: (Rect) -> CGRect
+    ) -> OverviewOverlay {
+        let zoom = zoom()
+        let thumbnails = display.thumbnails.map { thumb in
+            let space = input.spaces.first { $0.id == thumb.spaceID }
+            let label: String
+            if space?.kind == .fullScreen {
+                let windows = input.hiddenSpaceWindows[thumb.spaceID] ?? []
+                let apps = windows.compactMap { NSRunningApplication(processIdentifier: $0.window.pid)?.localizedName }
+                label = OverviewCopy.fullScreenLabel(apps.reduce(into: []) { if !$0.contains($1) { $0.append($1) } })
+            } else {
+                label = space.map { OverviewCopy.desktopLabel($0.index) } ?? ""
+            }
+            let radius = max(2, TileLayer.cornerRadius * thumb.rect.width / max(1, input.visibleFrame.width))
+            // Mini tiles show only snapshots already cached (D-03): never a capture of a hidden Space.
+            let minis = thumb.miniTiles.map { mini in
+                OverviewOverlay.Mini(
+                    rect: appKit(mini.rect), content: image(mini.window).map { .snapshot($0) } ?? zoom.collapsedBlock(mini.window), radius: radius)
+            }
+            return OverviewOverlay.Thumbnail(
+                rect: appKit(thumb.rect), labelRect: appKit(thumb.labelRect), label: label, isCurrent: thumb.isCurrent, minis: minis)
+        }
+        return OverviewOverlay(thumbnails: thumbnails, emptyMessage: display.emptyCapsule.map { (appKit($0), OverviewCopy.noWindows) })
+    }
+
     // MARK: Inputs
 
-    /// Each display's shown windows on its current Space, back to front: tracked, not excluded, present, on that Space
-    /// and on screen now (the CG list leaves out minimised and hidden windows). Without a CG list every such window counts.
+    /// Each display's inputs. Shown windows: tracked, not excluded, present, on the current Space and on screen now (the
+    /// CG list leaves out minimised and hidden windows), back to front; without a CG list every such window counts. A
+    /// zoomed display adds its home view. Other Spaces' windows come from their stored desks, planned, and the tracked
+    /// windows' own Space sets for full-screen Spaces: no AX reads (D-14).
     static func inputs(_ arranger: Arranger, spaces: SpacesSnapshot?, frontToBack: [CGWindowEntry]?) -> [OverviewDisplayInput] {
         let depth = frontToBack.map { list in Dictionary(list.enumerated().map { ($1.windowID, $0) }, uniquingKeysWith: { first, _ in first }) }
         return arranger.displays.enumerated().map { index, display in
-            let current = display.currentSpaceID
+            let list = spaces?.displays.first { $0.displayUUID == display.uuid }
+            let current = list?.current ?? display.currentSpaceID
             let shown = arranger.windows.values.compactMap { info -> (WindowInfo, Int)? in
                 guard info.displayUUID == display.uuid, !info.isExcluded, info.state == .present else { return nil }
                 if let current, let on = info.spaces, !on.contains(current) { return nil }
@@ -173,11 +216,30 @@ import os
                 return depth[id].map { (info, $0) }
             }
             .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.window.identity < $1.0.window.identity }  // deepest (back) first
-            let fullScreen = spaces?.displays.first { $0.displayUUID == display.uuid }
-                .flatMap { list in list.spaces.first { $0.id == list.current } }?.kind == .fullScreen
+            var hidden: [UInt64: [OverviewWindow]] = [:]
+            for space in list?.spaces ?? [] where space.id != current {
+                hidden[space.id] = space.kind == .fullScreen
+                    ? arranger.windows.values.filter { $0.spaces?.contains(space.id) == true }.sorted { $0.window.identity < $1.window.identity }
+                        .map { OverviewWindow(window: $0.window, frame: $0.frame) }
+                    : plannedWindows(arranger, key: DeskKey(displayUUID: display.uuid, spaceID: space.id), area: display.visibleFrame)
+            }
+            let homeView = arranger.homeView(on: display.uuid)
             return OverviewDisplayInput(
-                uuid: display.uuid, visibleFrame: display.visibleFrame, isMain: index == 0, isFullScreen: fullScreen, current: current,
-                windows: shown.map { OverviewWindow(window: $0.0.window, frame: $0.0.frame) })
+                uuid: display.uuid, visibleFrame: display.visibleFrame, isMain: index == 0,
+                isFullScreen: list?.spaces.first { $0.id == current }?.kind == .fullScreen, spaces: list?.spaces ?? [], current: current,
+                windows: shown.map { OverviewWindow(window: $0.0.window, frame: $0.0.frame) },
+                home: (homeView?.frames ?? [:]).merging(homeView?.collapsed ?? [:]) { first, _ in first }, hiddenSpaceWindows: hidden)
         }
+    }
+
+    /// A hidden Space's windows: its docked windows at their planned tiles, then its present floaters at their frames.
+    private static func plannedWindows(_ arranger: Arranger, key: DeskKey, area: Rect) -> [OverviewWindow] {
+        guard let desk = arranger.world[key] else { return [] }
+        let planned = (try? Planner.plan(desk: desk, area: area, gap: arranger.gap, mins: [:]).frames) ?? [:]
+        let docked = desk.tree.windows.compactMap { window in planned[window].map { OverviewWindow(window: window, frame: $0) } }
+        let floating = desk.desktop.windows.filter { $0.state == .present }.compactMap { floater in
+            (planned[floater.window] ?? arranger.windows[floater.window.identity]?.frame).map { OverviewWindow(window: floater.window, frame: $0) }
+        }
+        return docked + floating
     }
 }

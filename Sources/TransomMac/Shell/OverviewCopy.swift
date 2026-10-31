@@ -48,4 +48,17 @@ nonisolated public enum OverviewCopy {
             "Dormant desks: \(desks) (\(awayDisplays) displays away)"
         }
     }
+
+    // MARK: Overlay
+
+    /// A desktop Space's label, numbered in strip order per display.
+    public static func desktopLabel(_ index: Int) -> String { "Desktop \(index)" }
+
+    /// A full-screen Space's label: its app, or both apps of a split full-screen Space; names truncated (32 + "…").
+    public static func fullScreenLabel(_ apps: [String]) -> String {
+        apps.prefix(2).map(MenuCopy.truncatedAppName).joined(separator: " and ")
+    }
+
+    /// The main area of a current Space with no shown windows.
+    public static let noWindows = "No windows on this desktop"
 }

@@ -37,4 +37,22 @@ import Testing
     func theDormantDesksLineHasExplicitBranches(desks: Int, away: Int, expected: String) {
         #expect(OverviewCopy.dormantDesksLine(desks: desks, awayDisplays: away) == expected)
     }
+
+    // MARK: Overlay (06 UI-SPEC Copywriting Contract)
+
+    @Test func desktopLabelsAreNumbered() {
+        #expect(OverviewCopy.desktopLabel(1) == "Desktop 1")
+        #expect(OverviewCopy.desktopLabel(12) == "Desktop 12")
+    }
+
+    @Test func fullScreenLabelsNameTheAppOrBothApps() {
+        #expect(OverviewCopy.fullScreenLabel(["Safari"]) == "Safari")
+        #expect(OverviewCopy.fullScreenLabel(["Safari", "Notes"]) == "Safari and Notes")
+        let long = String(repeating: "x", count: 40)
+        #expect(OverviewCopy.fullScreenLabel([long]) == String(repeating: "x", count: 32) + "\u{2026}")
+    }
+
+    @Test func theEmptyCapsuleCopy() {
+        #expect(OverviewCopy.noWindows == "No windows on this desktop")
+    }
 }

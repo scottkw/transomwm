@@ -41,10 +41,26 @@ public struct OverviewDisplayInput: Equatable, Sendable {
     }
 }
 
-/// A main-area tile: the window and its rect in the overview.
+/// A main-area or mini tile: the window and its rect in the overview.
 public struct OverviewTile: Equatable, Sendable {
     public var window: WindowRef
     public var rect: Rect
+}
+
+/// One Space's thumbnail in the strip, its label capsule 8 pt below, and its windows as mini tiles (back to front).
+public struct ThumbnailLayout: Equatable, Sendable {
+    public var rect: Rect
+    public var labelRect: Rect
+    public var spaceID: UInt64
+    public var isCurrent: Bool
+    public var miniTiles: [OverviewTile]
+}
+
+/// What a point in the overview hits (the empty-message capsule is never an item).
+public enum OverviewItem: Equatable, Sendable {
+    case tile(WindowRef)
+    case miniTile(WindowRef, space: UInt64)
+    case thumbnail(space: UInt64)
 }
 
 /// One display's overview geometry, top-left global points.
@@ -55,31 +71,102 @@ public struct OverviewDisplayLayout: Equatable, Sendable {
     public var scale: Double
     /// Back to front, as the input's windows.
     public var tiles: [OverviewTile]
+    /// The strip's band across the top of the visibleFrame; nil when the strip is hidden on this display.
+    public var stripBand: Rect?
+    public var thumbnails: [ThumbnailLayout]
+    /// Centred in the main area when the current Space shows no windows.
+    public var emptyCapsule: Rect?
 }
 
 /// The overview's pure geometry (06 UI-SPEC Spacing Scale, Surfaces 1-2): every rect the panels draw.
 public struct OverviewLayout: Equatable, Sendable {
     public static let margin = 24.0
+    public static let gap = 16.0
+    public static let labelGap = 8.0
+    public static let labelHeight = 21.0
+    public static let thumbnailMin = 32.0
+    public static let thumbnailClampLow = 64.0
+    public static let thumbnailClampHigh = 112.0
+    /// macOS allows at most 16 Spaces per display, so the strip never scrolls.
+    public static let maxSpaces = 16
 
     /// Displays showing a full-screen Space get no layout (no panel).
     public let displays: [OverviewDisplayLayout]
 
-    public init(displays inputs: [OverviewDisplayInput], stripShown: Bool = false, separateSpaces: Bool = true) {
-        displays = inputs.filter { !$0.isFullScreen }.map(Self.layout)
+    /// `stripShown` is the Spaces lookup working (D-15); with `separateSpaces` off only the `isMain` display has a strip
+    /// (D-12). `emptyCapsuleSize` is the measured "No windows on this desktop" capsule.
+    public init(
+        displays inputs: [OverviewDisplayInput], stripShown: Bool = false, separateSpaces: Bool = true, emptyCapsuleSize: Size = Size(width: 0, height: 0)
+    ) {
+        displays = inputs.filter { !$0.isFullScreen }.map { input in
+            Self.layout(input, strip: stripShown && (separateSpaces || input.isMain) && !input.spaces.isEmpty, capsule: emptyCapsuleSize)
+        }
     }
 
-    private static func layout(_ input: OverviewDisplayInput) -> OverviewDisplayLayout {
-        let visible = input.visibleFrame
-        let area = Rect(
-            x: visible.x + margin, y: visible.y + margin, width: max(0, visible.width - 2 * margin), height: max(0, visible.height - 2 * margin))
-        let scale = visible.width > 0 && visible.height > 0 ? min(area.width / visible.width, area.height / visible.height) : 0
-        let originX = area.midX - visible.width * scale / 2, originY = area.midY - visible.height * scale / 2
-        let tiles = input.windows.map { window in
-            let r = input.home[window.window] ?? window.frame
-            return OverviewTile(
-                window: window.window,
-                rect: Rect(x: originX + (r.x - visible.x) * scale, y: originY + (r.y - visible.y) * scale, width: r.width * scale, height: r.height * scale))
+    /// The front-most item under `point`: the strip first (it is drawn above), then main-area tiles front to back.
+    public func item(at point: Point) -> OverviewItem? {
+        for display in displays {
+            for thumb in display.thumbnails where thumb.rect.contains(point) {
+                if let mini = thumb.miniTiles.last(where: { $0.rect.contains(point) }) { return .miniTile(mini.window, space: thumb.spaceID) }
+                return .thumbnail(space: thumb.spaceID)
+            }
+            if let tile = display.tiles.last(where: { $0.rect.contains(point) }) { return .tile(tile.window) }
         }
-        return OverviewDisplayLayout(uuid: input.uuid, mainArea: area, scale: scale, tiles: tiles)
+        return nil
+    }
+
+    /// `rect` (in `from`) scaled uniformly by `scale` into the box at `origin`.
+    private static func map(_ rect: Rect, from: Rect, scale: Double, origin: Point) -> Rect {
+        Rect(
+            x: origin.x + (rect.x - from.x) * scale, y: origin.y + (rect.y - from.y) * scale, width: rect.width * scale, height: rect.height * scale)
+    }
+
+    private static func layout(_ input: OverviewDisplayInput, strip: Bool, capsule: Size) -> OverviewDisplayLayout {
+        let visible = input.visibleFrame
+        let aspect = visible.height > 0 ? visible.width / visible.height : 1
+        let spaces = Array(input.spaces.prefix(maxSpaces))
+        var height = min(max(visible.height * 0.12, thumbnailClampLow), thumbnailClampHigh)
+        let count = Double(spaces.count)
+        let available = visible.width - 2 * margin - (count - 1) * gap
+        if strip, count * height * aspect > available { height = max(thumbnailMin, available / count / aspect) }
+        let width = height * aspect
+        let band = strip ? gap + height + labelGap + labelHeight + gap : 0
+
+        let top = strip ? band : margin
+        let area = Rect(
+            x: visible.x + margin, y: visible.y + top, width: max(0, visible.width - 2 * margin), height: max(0, visible.height - top - margin))
+        let scale = visible.width > 0 && visible.height > 0 ? min(area.width / visible.width, area.height / visible.height) : 0
+        let origin = Point(x: area.midX - visible.width * scale / 2, y: area.midY - visible.height * scale / 2)
+        let tiles = input.windows.map { window in
+            OverviewTile(window: window.window, rect: map(input.home[window.window] ?? window.frame, from: visible, scale: scale, origin: origin))
+        }
+
+        var thumbnails: [ThumbnailLayout] = []
+        if strip {
+            let row = count * width + (count - 1) * gap
+            let thumbScale = visible.width > 0 ? width / visible.width : 0
+            for (i, space) in spaces.enumerated() {
+                let rect = Rect(x: visible.midX - row / 2 + Double(i) * (width + gap), y: visible.y + gap, width: width, height: height)
+                let isCurrent = space.id == input.current
+                let windows = isCurrent ? input.windows : input.hiddenSpaceWindows[space.id] ?? []
+                let minis: [OverviewTile]
+                if space.kind == .fullScreen {
+                    minis = windows.first.map { [OverviewTile(window: $0.window, rect: rect)] } ?? []
+                } else {
+                    minis = windows.map { window in
+                        let frame = isCurrent ? input.home[window.window] ?? window.frame : window.frame
+                        return OverviewTile(window: window.window, rect: map(frame, from: visible, scale: thumbScale, origin: rect.origin))
+                    }
+                }
+                thumbnails.append(ThumbnailLayout(
+                    rect: rect, labelRect: Rect(x: rect.x, y: rect.maxY + labelGap, width: width, height: labelHeight), spaceID: space.id,
+                    isCurrent: isCurrent, miniTiles: minis))
+            }
+        }
+        let empty = input.windows.isEmpty
+            ? Rect(x: area.midX - capsule.width / 2, y: area.midY - capsule.height / 2, width: capsule.width, height: capsule.height) : nil
+        return OverviewDisplayLayout(
+            uuid: input.uuid, mainArea: area, scale: scale, tiles: tiles, stripBand: strip ? Rect(x: visible.x, y: visible.y, width: visible.width, height: band) : nil,
+            thumbnails: thumbnails, emptyCapsule: empty)
     }
 }

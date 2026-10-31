@@ -23,6 +23,26 @@ public struct StageTile {
     }
 }
 
+/// The overview's strip and empty-message capsule (06 UI-SPEC Surfaces 1-2), drawn above the tiles. AppKit global rects.
+struct OverviewOverlay {
+    struct Mini {
+        var rect: CGRect
+        var content: TileLayer.Content
+        /// 12 pt × the thumbnail's scale, at least 2 pt (fallback minis only).
+        var radius: CGFloat
+    }
+    struct Thumbnail {
+        var rect: CGRect
+        var labelRect: CGRect
+        /// Empty: no label capsule.
+        var label: String
+        var isCurrent: Bool
+        var minis: [Mini]
+    }
+    var thumbnails: [Thumbnail] = []
+    var emptyMessage: (rect: CGRect, text: String)?
+}
+
 /// Re-resolves the tiles' colours when the appearance changes, and takes every click on the stage.
 private final class StageContentView: NSView {
     var onAppearanceChange: () -> Void = {}
@@ -41,6 +61,9 @@ public final class StagePanel: NSPanel {
     public static let revealFade = 0.12
 
     private let backdrop = CALayer()
+    /// The overview's strip and capsule, above every tile; rebuilt on appearance change.
+    private let overlay = CALayer()
+    private var overlaySpec: OverviewOverlay?
     /// The tiles moving toward `tiles`' end rects (with a crossfade, the end set fading in), by window ID.
     private var layers: [UInt32: TileLayer] = [:]
     /// Layers on their way out: a crossfade's start set, or tiles a retarget dropped. Removed at the next show.
@@ -89,6 +112,9 @@ public final class StagePanel: NSPanel {
             view.effectiveAppearance.performAsCurrentDrawingAppearance { backdrop.backgroundColor = NSColor.windowBackgroundColor.cgColor }
         }
         view.layer?.addSublayer(backdrop)
+        overlay.frame = view.bounds
+        overlay.zPosition = 1
+        view.layer?.addSublayer(overlay)
         view.onAppearanceChange = { [weak self] in self?.resolveColors() }
         view.onMouseDown = { [weak self] point in
             guard let self, let id = self.layers.first(where: { $0.value.currentRect.contains(point) })?.key else { return }
@@ -103,6 +129,86 @@ public final class StagePanel: NSPanel {
     private func resolveColors() {
         guard let appearance = contentView?.effectiveAppearance else { return }
         for layer in Array(layers.values) + leaving { layer.resolveColors(appearance) }
+        if let overlaySpec { buildOverlay(overlaySpec) }
+    }
+
+    // MARK: Overview (06-06)
+
+    /// Draws the overview's strip and capsule, fading in 0→1 over `duration` (opacity only, also under Reduce Motion).
+    func showOverview(_ spec: OverviewOverlay, duration: Double = StagePanel.moveDuration) {
+        overlaySpec = spec
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        buildOverlay(spec)
+        CATransaction.commit()
+        fade(overlay, from: 0, to: 1, duration: duration)
+    }
+
+    /// Fades the strip and capsule out over `duration`; they are rebuilt on the next `showOverview`.
+    func clearOverview(duration: Double = StagePanel.moveDuration) {
+        overlaySpec = nil
+        fade(overlay, to: 0, duration: duration)
+    }
+
+    private func buildOverlay(_ spec: OverviewOverlay) {
+        overlay.sublayers?.forEach { $0.removeFromSuperlayer() }
+        guard let appearance = contentView?.effectiveAppearance else { return }
+        let ring: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.85
+        let scale = backingScaleFactor
+        appearance.performAsCurrentDrawingAppearance {
+            for thumb in spec.thumbnails {
+                let layer = CALayer()
+                layer.frame = localRect(thumb.rect)
+                layer.masksToBounds = true
+                layer.cornerRadius = 8
+                layer.contentsGravity = .resizeAspectFill
+                if let wallpaper = backdrop.contents { layer.contents = wallpaper } else { layer.backgroundColor = NSColor.windowBackgroundColor.cgColor }
+                for mini in thumb.minis {
+                    let rect = mini.rect.offsetBy(dx: -thumb.rect.minX, dy: -thumb.rect.minY)
+                    let tile = TileLayer(mini.content, rect: rect, endSize: rect.size, appearance: appearance, scale: scale)
+                    if case .snapshot = mini.content {} else { tile.cornerRadius = mini.radius }
+                    layer.addSublayer(tile)
+                }
+                // The border goes on top of the minis: the current Space's 2 pt labelColor, else 1 pt separator.
+                let border = CALayer()
+                border.frame = layer.bounds
+                border.cornerRadius = 8
+                border.borderWidth = thumb.isCurrent ? 2 : 1
+                border.borderColor = thumb.isCurrent ? NSColor.labelColor.withAlphaComponent(ring).cgColor : NSColor.separatorColor.cgColor
+                layer.addSublayer(border)
+                overlay.addSublayer(layer)
+                if !thumb.label.isEmpty {
+                    overlay.addSublayer(capsule(
+                        thumb.label, in: localRect(thumb.labelRect), font: .systemFont(ofSize: 11, weight: thumb.isCurrent ? .semibold : .regular),
+                        color: .labelColor))
+                }
+            }
+            if let message = spec.emptyMessage {
+                overlay.addSublayer(capsule(message.text, in: localRect(message.rect), font: .systemFont(ofSize: 13), color: .secondaryLabelColor))
+            }
+        }
+    }
+
+    /// An opaque one-line capsule: windowBackgroundColor, 1 pt separator border, text centred with 8 / 4 pt padding,
+    /// truncated in the middle. Call inside the appearance's drawing scope.
+    private func capsule(_ text: String, in rect: CGRect, font: NSFont, color: NSColor) -> CALayer {
+        let layer = CALayer()
+        layer.frame = rect
+        layer.cornerRadius = rect.height / 2
+        layer.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        layer.borderWidth = 1
+        layer.borderColor = NSColor.separatorColor.cgColor
+        let label = CATextLayer()
+        label.frame = layer.bounds.insetBy(dx: 8, dy: 4)
+        label.string = text
+        label.font = font
+        label.fontSize = font.pointSize
+        label.foregroundColor = color.cgColor
+        label.alignmentMode = .center
+        label.truncationMode = .middle
+        label.contentsScale = backingScaleFactor
+        layer.addSublayer(label)
+        return layer
     }
 
     public override var canBecomeKey: Bool { false }
