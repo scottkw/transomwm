@@ -154,6 +154,12 @@ import Testing
         #expect(announced.isEmpty, "N11 tells the user; no on announcement")
         #expect(backend.registered.isEmpty, "no chord caught while macOS keeps it")
         #expect(Self.s5(takeover) == "Mission Control takeover: off, couldn't apply")
+        // WR-03: the preference goes off with it, so the menu can turn it on again and the next launch stays quiet.
+        #expect(!takeover.preferenceOn)
+        let next = Self.takeover(defaults, backend)
+        next.post = { posted.append($0) }
+        next.launchRestore()
+        #expect(next.state == .off && posted == [.takeoverApplyFailed], "N11 repeated at the next launch")
     }
 
     @Test func aCrashLastLaunchPostsN10OnceAndO2TurnsItBackOnWithoutTheAlert() {

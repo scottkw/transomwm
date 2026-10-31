@@ -251,6 +251,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
             let state = readBack(ids)
             restore(originals)
             self.state = .offApplyFailed
+            defaults.set(false, forKey: Self.enabledKey)  // WR-03: O2 can turn it on again; N11 does not repeat every launch
             log.error("takeover apply failed: read-back \(String(describing: state), privacy: .public); originals restored")
             post(.takeoverApplyFailed)
             return false
