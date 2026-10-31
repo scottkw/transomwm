@@ -18,9 +18,14 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
             return nil
         }
         // Only the takeover's own IDs: the value decides which system shortcuts get switched on (trust boundary).
-        return Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in
-            Int32(key).flatMap { TakeoverPolicy.candidateIDs.contains($0) ? ($0, value) : nil }
-        })
+        // Only canonical keys ("32", never "032" or "+32"), so no two keys parse to one ID (WR-01).
+        let pairs = stored.compactMap { key, value in
+            Int32(key).flatMap { String($0) == key && TakeoverPolicy.candidateIDs.contains($0) ? ($0, value) : nil }
+        }
+        if pairs.count != stored.count {
+            Logger(subsystem: "com.eightabyte.transom", category: "missionControl").error("takeover originals: ignored \(stored.count - pairs.count) unknown or non-canonical keys")
+        }
+        return Dictionary(uniqueKeysWithValues: pairs)
     }
 
     func setOriginals(_ originals: [Int32: Bool]) {

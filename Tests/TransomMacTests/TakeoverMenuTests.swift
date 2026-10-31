@@ -200,6 +200,14 @@ import Testing
         #expect(!conflicts.canRestore)
     }
 
+    /// WR-01: hand-edited originals with keys that parse to one ID ("32", "032", "+32") are read, not a crash at launch.
+    @Test func nonCanonicalOriginalKeysAreIgnoredNotATrap() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        defaults.set(["32": true, "032": false, "+32": false, "108": true, "999": true], forKey: UserDefaultsTakeoverStore.key)
+        #expect(UserDefaultsTakeoverStore(defaults: defaults).originals == [32: true, 108: true])
+    }
+
     @Test func driftIsDisabledAgainAndTheOriginalsStay() {
         let (defaults, cleanUp) = Self.defaults()
         defer { cleanUp() }
