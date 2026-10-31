@@ -113,6 +113,8 @@ public actor FakeWindowSystem: WindowSystem {
     private var spaceSwitches = SpaceSwitchMarks()
     /// Closed windows whose CG entry lingers (G-03-9), with the Space set it reports.
     private var lingering: [UInt32: Set<UInt64>] = [:]
+    /// Displays `unplug` removed: where each was in the list, the display it moved its windows to, and those windows.
+    private var unplugged: [String: (index: Int, display: DisplayInfo, target: String, windows: [UInt32])] = [:]
 
     public init(now: ContinuousClock.Instant = .now) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -260,6 +262,39 @@ public actor FakeWindowSystem: WindowSystem {
     /// The displays every later observation and `inventory()` report.
     public func setDisplays(_ displays: [DisplayInfo]) {
         self.displays = displays
+    }
+
+    /// macOS unplugging display `uuid` (A6): it leaves the display list, every window on it moves onto `target` at the
+    /// same offset from the visible frame's top-left (clamped inside), and its Spaces move under `target` keeping their
+    /// numeric IDs (a window's `space` is unchanged). Each moved window's app is refreshed, so the tracker re-reports
+    /// it on `target`, then `.displaysChanged` is yielded.
+    public func unplug(_ uuid: String, movingSpacesTo target: String) {
+        guard let index = displays.firstIndex(where: { $0.uuid == uuid }), let to = displays.first(where: { $0.uuid == target }) else { return }
+        let gone = displays[index]
+        let moved = windows.values.filter { $0.inCGList && Coordinates.displayUUID(for: $0.frame, among: displays) == uuid }.map(\.id).sorted()
+        displays.remove(at: index)
+        for id in moved { update(id) { $0.frame = Self.carry($0.frame, from: gone.visibleFrame, to: to.visibleFrame) } }
+        unplugged[uuid] = (index, gone, target, moved)
+        refreshMoved(moved)
+    }
+
+    /// `unplug` reversed: the display comes back where it was in the list, and the windows macOS moved off it (still
+    /// open) move back from wherever they now are on the target, at the same offset.
+    public func plug(_ uuid: String) {
+        guard let off = unplugged.removeValue(forKey: uuid), let from = displays.first(where: { $0.uuid == off.target }) else { return }
+        displays.insert(off.display, at: min(off.index, displays.count))
+        let back = off.windows.filter { windows[$0]?.inCGList == true }
+        for id in back { update(id) { $0.frame = Self.carry($0.frame, from: from.visibleFrame, to: off.display.visibleFrame) } }
+        refreshMoved(back)
+    }
+
+    private func refreshMoved(_ ids: [UInt32]) {
+        for pid in Set(ids.compactMap { windows[$0]?.pid }).sorted() { refresh(pid: pid) }
+        continuation.yield(.displaysChanged)
+    }
+
+    private static func carry(_ frame: Rect, from: Rect, to: Rect) -> Rect {
+        Planner.clamp(Rect(x: to.minX + frame.minX - from.minX, y: to.minY + frame.minY - from.minY, width: frame.width, height: frame.height), into: to)
     }
 
     /// Lock blanking (D-14): the CG list is empty and every AX read fails with -25204, or with `axInvalid` AXWindows

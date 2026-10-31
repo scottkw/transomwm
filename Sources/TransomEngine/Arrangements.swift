@@ -43,6 +43,58 @@ public struct LayoutSet: Codable, Equatable, Sendable {
     }
 }
 
+/// The stored layout sets (D-09), sorted by arrangement as layout.json keeps them, at most `limit`: storing one more
+/// drops the least recently used.
+public struct LayoutSets: Equatable, Sendable {
+    public static let limit = LayoutFile.maxLayoutSets
+    public private(set) var all: [LayoutSet] = []
+
+    public init(_ sets: [LayoutSet] = []) {
+        for set in sets { store(set.world, for: set.arrangement, at: set.lastUsed) }
+    }
+
+    public subscript(id: ArrangementID) -> LayoutSet? { all.first { $0.arrangement == id } }
+
+    /// Stores `world` as `id`'s set, replacing any older one.
+    public mutating func store(_ world: World, for id: ArrangementID, at date: Date) {
+        all.removeAll { $0.arrangement == id }
+        all.append(LayoutSet(arrangement: id, world: world, lastUsed: date))
+        if all.count > Self.limit, let oldest = all.indices.min(by: { (all[$0].lastUsed, all[$0].arrangement) < (all[$1].lastUsed, all[$1].arrangement) }) {
+            all.remove(at: oldest)
+        }
+        all.sort { $0.arrangement < $1.arrangement }
+    }
+
+    /// Removes and returns `id`'s set: it becomes the current layout.
+    public mutating func take(_ id: ArrangementID) -> LayoutSet? {
+        all.firstIndex { $0.arrangement == id }.map { all.remove(at: $0) }
+    }
+}
+
+/// What a settled display change does (OVER-06, UI-SPEC Surface 6).
+public enum ArrangementSwitch: Equatable, Sendable {
+    /// The same displays (rearranged, re-scaled, or a sleep/wake): tiles re-plan to the new frames.
+    case same
+    /// An arrangement seen before: its stored set is applied.
+    case known(LayoutSet)
+    /// Never seen: the current layouts carry over, a vanished display's desks go dormant.
+    case new
+
+    public static func decide(from current: ArrangementID, to next: ArrangementID, sets: LayoutSets) -> ArrangementSwitch {
+        if next == current { return .same }
+        return sets[next].map(ArrangementSwitch.known) ?? .new
+    }
+
+    /// Where windows floated from a vanished display go (D-10): each at its own size, 24 pt right of and below the one
+    /// before, the first at `start` (the receiving Desktop tile's top-left), clamped inside `visible`.
+    public static func cascade(frames: [Rect], from start: Point, in visible: Rect) -> [Rect] {
+        frames.enumerated().map { index, frame in
+            let offset = 24 * Double(index)
+            return Planner.clamp(Rect(x: start.x + offset, y: start.y + offset, width: frame.width, height: frame.height), into: visible)
+        }
+    }
+}
+
 /// A saved desk's runtime Space ID with the Space's durable UUID (D-13); an empty macOS uuid is `default:<displayUUID>`.
 public struct SavedSpace: Codable, Equatable, Sendable {
     public var id: UInt64
