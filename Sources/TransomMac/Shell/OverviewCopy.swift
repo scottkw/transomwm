@@ -68,7 +68,11 @@ nonisolated public enum OverviewCopy {
     public static let shortcutsZoomFooter = "With Replace Mission Control on, the Mission Control keys also show the overview."
 
     /// Show Overview refused: every display is in full screen.
-    public static let fullScreenRefusal = "The overview isn't available in full screen"
+    public static let refusedFullScreen = "The overview isn't available in full screen"
+    public static let refusedNotReady = ""
+
+    public enum Interruption: String, Sendable { case command, menu, spaceChange, displayChange, sleep, appSwitch }
+    public static func interruptedLog(_ reason: Interruption) -> String { "" }
 
     /// A pick's Space switch did not land within 1 s (Surface 2): the desktop's number, or a full-screen Space's app.
     public static func couldNotSwitch(desktop index: Int) -> String { "Couldn't switch to \(desktopLabel(index))" }

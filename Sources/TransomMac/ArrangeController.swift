@@ -699,7 +699,7 @@ import os
         }
         guard !overview.toggle(trigger: String(describing: source)) else { return }
         for display in arranger.displays { collapsedPanels.fadeIn(on: display.uuid) }
-        let text = OverviewCopy.fullScreenRefusal
+        let text = OverviewCopy.refusedFullScreen
         await run(source == .url ? [.info("refused overview: full screen")] : [.beep, .announce(text), .info("refused overview: full screen")])
     }
 

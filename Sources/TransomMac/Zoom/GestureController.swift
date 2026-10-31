@@ -188,7 +188,7 @@ import os
     }
 
     /// Why the tap is not armed. Turn Off Zoom's move home counts as paused: a gesture must not take it over (WR-09).
-    nonisolated static func disarmReason(ready: Bool, paused: Bool, turningOff: Bool, busy: Bool) -> GestureTapState.DisarmReason? {
+    nonisolated static func disarmReason(ready: Bool, paused: Bool, turningOff: Bool, busy: Bool, overviewOpen: Bool = false) -> GestureTapState.DisarmReason? {
         !ready ? .notReady : paused || turningOff ? .zoomPaused : busy ? .rectZoomOrDrag : nil
     }
 
@@ -495,7 +495,7 @@ import os
 
     /// UI-SPEC Logging's ⌥ pass reasons. A sequence decided without ⌥ (window, overlay, mid-sequence) that later had ⌥
     /// down is "⌥ pressed mid-gesture".
-    private static func optionPassText(_ reason: GestureTapRules.PassReason?) -> String {
+    nonisolated static func optionPassText(_ reason: GestureTapRules.PassReason?) -> String {
         switch reason {
         case .disarmed(.notReady): "not ready"
         case .disarmed(.rectZoomOrDrag): "rect zoom or drag in progress"

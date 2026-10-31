@@ -54,7 +54,7 @@ import Testing
 
     @Test func theEmptyCapsuleCopy() {
         #expect(OverviewCopy.noWindows == "No windows on this desktop")
-        #expect(OverviewCopy.fullScreenRefusal == "The overview isn't available in full screen")
+        #expect(OverviewCopy.refusedFullScreen == "The overview isn't available in full screen")
     }
 
     @Test func aFailedSpaceSwitchNamesTheDesktopOrTheApp() {
@@ -65,5 +65,20 @@ import Testing
     @Test func aSelectedWindowShowsItsTitleElseItsAppName() {
         #expect(OverviewCopy.titleOrApp(title: "Notes.txt", app: "TextEdit") == "Notes.txt")
         #expect(OverviewCopy.titleOrApp(title: "", app: "TextEdit") == "TextEdit")
+    }
+
+    // MARK: Availability and interruptions (Surface 1, Logging)
+
+    @Test func refusalsMatchTheContract() {
+        #expect(OverviewCopy.refusedFullScreen == "The overview isn't available in full screen")
+        #expect(OverviewCopy.refusedNotReady == "Transom needs Accessibility access")
+    }
+
+    @Test(arguments: [
+        (OverviewCopy.Interruption.command, "interrupted: command"), (.menu, "interrupted: menu"), (.spaceChange, "interrupted: space change"),
+        (.displayChange, "interrupted: display change"), (.sleep, "interrupted: sleep"), (.appSwitch, "interrupted: app switch"),
+    ])
+    func interruptionsAreLoggedByReason(reason: OverviewCopy.Interruption, expected: String) {
+        #expect(OverviewCopy.interruptedLog(reason) == expected)
     }
 }
