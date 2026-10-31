@@ -90,7 +90,7 @@ import os
     private(set) var overviewController: OverviewController?
     /// The Mission Control takeover (06-10), set by the app; nil in tests that don't own one.
     var takeover: MissionControlTakeover? {
-        didSet { takeover?.onTrigger = { [weak self] in Task { await self?.dispatch(.camera(.overview)) } } }
+        didSet { takeover?.onTrigger = { [weak self] in Task { await self?.missionControlKey() } } }
     }
     /// The last overview's open time, tiles and snapshots (Debug S6); kept across zoom off.
     private(set) var lastOverview: (ms: Int, windows: Int, snapshots: Int)?
@@ -706,16 +706,40 @@ import os
     /// sit above it); gestures are disarmed while it is open. Every display in full screen refuses: a beep and an
     /// announcement, or from a URL only a log line.
     private func toggleOverview(from source: CommandSource) async {
+        guard !toggleOverview(trigger: String(describing: source)) else { return }
+        let text = OverviewCopy.refusedFullScreen
+        await run(source == .url ? [.info("refused overview: full screen")] : [.beep, .announce(text), .info("refused overview: full screen")])
+    }
+
+    /// False, with nothing shown, when it could not open.
+    private func toggleOverview(trigger: String) -> Bool {
         let overview = overview()
-        let opening = !overview.isOpen
-        if opening {
+        if !overview.isOpen {
             zoomInput.reset(reason: "overview")
             for display in arranger.displays { collapsedPanels.hide(on: display.uuid) }
         }
-        guard !overview.toggle(trigger: String(describing: source)) else { return gestures.publish() }
+        guard !overview.toggle(trigger: trigger) else {
+            gestures.publish()
+            return true
+        }
         for display in arranger.displays { collapsedPanels.fadeIn(on: display.uuid) }
-        let text = OverviewCopy.refusedFullScreen
-        await run(source == .url ? [.info("refused overview: full screen")] : [.beep, .announce(text), .info("refused overview: full screen")])
+        return false
+    }
+
+    /// A taken Mission Control chord (Surface 5): dismisses or opens the overview; when it can't open, macOS Mission
+    /// Control through CoreDock; without CoreDock, beep and the overview refusal.
+    func missionControlKey() async {
+        let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
+        let ready = commandContext().ready
+        let coreDock = Capabilities.isAvailable(.coreDock)
+        var action = TakeoverPolicy.trigger(overviewOpen: overviewController?.isOpen == true, canOpen: zoomEnabled && ready, coreDockAvailable: coreDock)
+        if action == .dismiss || action == .open {
+            if toggleOverview(trigger: "missionControlKey") { return log.info("mission control key → overview") }
+            action = TakeoverPolicy.trigger(overviewOpen: false, canOpen: false, coreDockAvailable: coreDock)
+        }
+        if action == .missionControl, CoreDock.send(CoreDock.missionControl) { return log.info("mission control key → macOS Mission Control") }
+        log.info("mission control key → refused")
+        await run([.beep, .announce(ready ? OverviewCopy.refusedFullScreen : OverviewCopy.refusedNotReady)])
     }
 
     /// Pick mode ends (a taken gesture, 05-05).
@@ -764,6 +788,7 @@ import os
         guard on else {
             guard zoomEnabled, !turningOff else { return }
             turningOff = true
+            takeover?.zoomChanged(on: false)  // F3 goes back to macOS at once, not after the home moves
             gestures.publish()
             zoomInput.reset(reason: "zoom off")
             for display in arranger.displays {
@@ -785,6 +810,7 @@ import os
         updateGestureTap(reason: "")
         await run(arranger.handle(.zoomEnabled(true), now: .now))
         Hotkeys.setZoomHotkeys(enabled: true)
+        takeover?.zoomChanged(on: true)
         postAnnouncement(ZoomCopy.zoomOnAnnouncement)
         cameraLog.info("zoom on")
     }

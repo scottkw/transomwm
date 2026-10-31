@@ -41,16 +41,83 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
 
     enum LiftReason { case toggleOff, zoomOff, restoreSettings, quit }
 
+    /// Replace Mission Control (off by default, D-06). Only the menu toggle (06-11) and tests write it; no URL.
+    static let enabledKey = "takeover.enabled"
+
     private(set) var state: State = .off
-    /// A taken chord was pressed.
+    /// The canary tripped at launch and N10 has not shown for it yet (06-11 posts it, then calls `crashNoticeShown`).
+    private(set) var pendingCrashNotice = false
+    /// A taken chord was pressed (after the drift check).
     var onTrigger: () -> Void = {}
 
+    private let defaults: UserDefaults
     private let store: UserDefaultsTakeoverStore
+    private let canary: MissionControlCanary
+    private var zoomOn: Bool
     private var keyTasks: [Task<Void, Never>] = []
     private let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, zoomOn: Bool) {
+        self.defaults = defaults
+        self.zoomOn = zoomOn
         store = UserDefaultsTakeoverStore(defaults: defaults)
+        canary = MissionControlCanary(defaults: defaults)
+    }
+
+    var preferenceOn: Bool { defaults.bool(forKey: Self.enabledKey) }
+
+    /// OVER-03, before the Arranger starts: stored originals mean the last run did not lift, so they are restored
+    /// first; then a tripped canary keeps the takeover off, otherwise the preference, capability and zoom decide.
+    func launchRestore() {
+        let actions = TakeoverPolicy.launch(
+            store: store, canaryTripped: canary.isTripped(), crashNoticed: canary.noticed, preferenceOn: preferenceOn, zoomOn: zoomOn,
+            available: Capabilities.isAvailable(.symbolicHotKeys))
+        for action in actions {
+            switch action {
+            case .restore(let originals):
+                restore(originals)
+                log.notice("restored originals from last run (unclean exit)")
+            case .stayOff: state = .offAfterCrash
+            case .queueCrashNotice: pendingCrashNotice = true
+            case .off: state = .off
+            case .unavailable: state = .unavailable
+            case .liftedForZoom: state = .liftedForZoom
+            case .apply: apply()
+            }
+        }
+    }
+
+    /// The menu toggle: on clears a tripped canary and applies (or waits for zoom); off lifts.
+    func setPreference(_ on: Bool) {
+        defaults.set(on, forKey: Self.enabledKey)
+        guard on else { return lift(reason: .toggleOff) }
+        canary.turnBackOn()
+        pendingCrashNotice = false
+        if zoomOn { apply() } else { state = .liftedForZoom }
+    }
+
+    func crashNoticeShown() {
+        pendingCrashNotice = false
+        canary.markNoticed()
+    }
+
+    /// Zoom off lifts the takeover (the preference stays); zoom on re-applies it silently when the preference is on.
+    func zoomChanged(on: Bool) {
+        zoomOn = on
+        if !on {
+            if case .on = state { lift(reason: .zoomOff) }
+        } else if state == .liftedForZoom, preferenceOn {
+            apply()
+        }
+    }
+
+    /// A taken hotkey found enabled again (System Settings, A11) is disabled again; the stored originals stay.
+    func checkDrift() {
+        guard case .on(let keys) = state else { return }
+        let drifted = TakeoverPolicy.drift(taken: keys, enabledNow: Dictionary(uniqueKeysWithValues: keys.map { ($0, SymbolicHotKeys.isEnabled($0) ?? false) }))
+        guard !drifted.isEmpty else { return }
+        for id in drifted { SymbolicHotKeys.setEnabled(id, false) }
+        log.info("takeover drift: disabled \(Self.describe(drifted), privacy: .public) again")
     }
 
     /// The stored originals (tests and the Debug line).
@@ -80,6 +147,7 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
         switch TakeoverPolicy.afterReadBack(readBack(ids), store: store) {
         case .applied:
             state = .on(keys: ids)
+            canary.arm()
             keyTasks = shortcuts.map { shortcut in
                 let events = KeyboardShortcuts.events(for: shortcut)  // registers here, not when the task first runs
                 return Task { [weak self] in
@@ -101,6 +169,7 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
     func lift(reason: LiftReason) {
         keyTasks.forEach { $0.cancel() }  // KeyboardShortcuts unregisters on its next main-actor turn; `state` gates triggers until then
         keyTasks = []
+        if case .on = state { canary.clear() }  // a tripped canary stays until the user turns the takeover on again
         state = reason == .zoomOff ? .liftedForZoom : .off
         let originals = TakeoverPolicy.lift(store: store)
         guard !originals.isEmpty else { return }
@@ -110,6 +179,7 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
 
     private func triggered() {
         guard case .on = state else { return }
+        checkDrift()
         onTrigger()
     }
 
