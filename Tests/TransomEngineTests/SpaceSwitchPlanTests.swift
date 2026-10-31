@@ -56,10 +56,11 @@ struct SpaceSwitchPlanTests {
         #expect(SpaceSwitchPlan.plan(from: 2, to: 0, target: desktop(1), hotkeys: none) == Array(repeating: Chord(keyCode: 123, flags: ctrlFn), count: 2))
     }
 
-    @Test func disabledMoveHotkeysMeanTheDefaultChords() {
+    /// WR-07: macOS ignores a disabled hotkey's chord (06-SPIKE), so a posted ⌃→ would only reach the frontmost app.
+    @Test func disabledMoveHotkeysMeanNoRoute() {
         let off = table([79: (false, 0, 0x8_0000), 81: (false, 0, 0x8_0000)])
-        #expect(SpaceSwitchPlan.plan(from: 0, to: 1, target: desktop(2), hotkeys: off) == [SpaceSwitchPlan.moveRight])
-        #expect(SpaceSwitchPlan.plan(from: 1, to: 0, target: desktop(1), hotkeys: off) == [SpaceSwitchPlan.moveLeft])
+        #expect(SpaceSwitchPlan.plan(from: 0, to: 1, target: desktop(2), hotkeys: off).isEmpty)
+        #expect(SpaceSwitchPlan.plan(from: 1, to: 0, target: desktop(1), hotkeys: off).isEmpty)
     }
 
     @Test func noDeltaNoChords() {

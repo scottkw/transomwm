@@ -17,8 +17,8 @@ public enum SpaceSwitchPlan {
     static let fn: UInt32 = 0x80_0000
     /// ⇧ ⌃ ⌥ ⌘ and fn: the NX device-independent bits a hotkey's chord is made of, posted as the same CGEventFlags bits.
     static let chordBits: UInt32 = 0x2_0000 | 0x4_0000 | 0x8_0000 | 0x10_0000 | fn
-    /// ⌃← and ⌃→ with fn: macOS's default "Move left/right a space", used when the getter is missing or the user turned
-    /// those hotkeys off.
+    /// ⌃← and ⌃→ with fn: macOS's default "Move left/right a space", used when the getter is missing. A hotkey the user
+    /// turned off gets no chord: macOS ignores it, so it would only reach the frontmost app (WR-07).
     public static let moveLeft = Chord(keyCode: 123, flags: 0x84_0000)
     public static let moveRight = Chord(keyCode: 124, flags: 0x84_0000)
     /// Symbolic hotkey IDs: "Move left a space", "Move right a space", "Switch to Desktop 1" (n is 118 + n − 1).
@@ -32,7 +32,8 @@ public enum SpaceSwitchPlan {
     public typealias HotKey = (enabled: Bool, keyCode: UInt16, modifiers: UInt32)
 
     /// The chords that go from index `from` to index `to` in the display's ordered Spaces list (none when equal): the
-    /// user's enabled "Switch to Desktop n" once for a desktop with n ≤ 16, else "Move left/right a space" |Δ| times.
+    /// user's enabled "Switch to Desktop n" once for a desktop with n ≤ 16, else "Move left/right a space" |Δ| times;
+    /// none either when that move hotkey is turned off (no route).
     public static func plan(from: Int, to: Int, target: SpaceInfo, hotkeys: (Int32) -> HotKey?) -> [Chord] {
         let delta = to - from
         guard delta != 0 else { return [] }
@@ -41,8 +42,10 @@ public enum SpaceSwitchPlan {
         {
             return [direct]
         }
-        let move = delta > 0 ? chord(hotkeys(moveRightID)) ?? moveRight : chord(hotkeys(moveLeftID)) ?? moveLeft
-        return Array(repeating: move, count: abs(delta))
+        guard let hotkey = hotkeys(delta > 0 ? moveRightID : moveLeftID) else {
+            return Array(repeating: delta > 0 ? moveRight : moveLeft, count: abs(delta))
+        }
+        return chord(hotkey).map { Array(repeating: $0, count: abs(delta)) } ?? []
     }
 
     /// The NX modifiers as CGEventFlags: the chord bits kept, fn included; everything else dropped.

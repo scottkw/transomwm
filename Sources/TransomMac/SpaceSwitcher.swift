@@ -4,7 +4,7 @@ import TransomPrivate
 import os
 
 /// Switches a display to another Space by posting the user's own Mission Control chords (06-RESEARCH Pattern 3), then
-/// waits up to 1 s for SkyLight to report the change. Never writes SkyLight Space state; hotkeys are only read.
+/// waits up to 1 s (plus 400 ms per further chord) for SkyLight to report the change. Never writes SkyLight Space state; hotkeys are only read.
 @MainActor final class SpaceSwitcher {
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "spaces")
     private let spaces: () -> SpacesSnapshot?
@@ -15,7 +15,7 @@ import os
     }
 
     /// True once `display` shows `space` (at once when it already does); false when there is no route or the Space has
-    /// not changed within 1 s.
+    /// not changed in time.
     func switchTo(space: UInt64, on display: String) async -> Bool {
         guard let list = spaces()?.displays.first(where: { $0.displayUUID == display }),
             let current = SkyLightSpaces.currentSpace(displayUUID: display) ?? list.current,
@@ -24,18 +24,24 @@ import os
             logger.notice("switch to space \(space, privacy: .public) failed: not listed on display \(display, privacy: .public)")
             return false
         }
+        guard from != to else { return true }
         let chords = SpaceSwitchPlan.plan(from: from, to: to, target: list.spaces[to], hotkeys: Self.hotkey)
-        guard !chords.isEmpty else { return true }
+        guard !chords.isEmpty else {
+            logger.notice("switch to space \(space, privacy: .public) failed: the Move left/right a space shortcut is off")
+            return false
+        }
         let method = chords.map { "\($0.keyCode)" }.joined(separator: ",")
         logger.info("switch to space \(space, privacy: .public) via keys \(method, privacy: .public)")
         await Self.waitForInputUp()
         for chord in chords { Self.post(chord) }
-        let deadline = ContinuousClock.now + Self.timeout
+        // Each further chord animates one more Space (WR-07).
+        let wait = Self.timeout + .milliseconds(400) * (chords.count - 1)
+        let deadline = ContinuousClock.now + wait
         while ContinuousClock.now < deadline {
             if SkyLightSpaces.currentSpace(displayUUID: display) == space { return true }
             try? await Task.sleep(for: .milliseconds(20))
         }
-        logger.notice("switch to space \(space, privacy: .public) failed after 1 s")
+        logger.notice("switch to space \(space, privacy: .public) failed after \(wait, privacy: .public)")
         return false
     }
 
