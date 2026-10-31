@@ -119,6 +119,22 @@ extension Harness {
         #expect(grown.width * grown.height > tileA.width * tileA.height)
     }
 
+    /// OVER-04 empty edge: with the lookup off every window joins the display's one desk, and no Space gets its own.
+    @Test func withTheLookupOffEveryWindowIsOnTheDisplaysOneDesk() async throws {
+        var harness = Harness()
+        await harness.fake.setDisplays([display(space: nil)])
+        await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await harness.fake.open(.standard(id: 1, pid: pid, frame: frameA, space: 1))
+        await harness.fake.open(.standard(id: 2, pid: pid, frame: frameB, space: 2))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        await harness.send(.command(.dock, focused: a))
+        await harness.send(.command(.dock, focused: b))
+        #expect(harness.arranger.deskKey(of: a) == desk(nil) && harness.arranger.deskKey(of: b) == desk(nil))
+        #expect(Set(harness.arranger.world.desks.keys) == [desk(nil)])
+    }
+
     @Test func theFakesSpaceSwitchMovesEveryDisplaysCurrentSpace() async {
         let harness = await Harness.onSpaceOne(dock: false)
         await harness.fake.showSpace(4, notifies: false)
