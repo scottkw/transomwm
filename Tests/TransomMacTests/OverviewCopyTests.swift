@@ -54,5 +54,6 @@ import Testing
 
     @Test func theEmptyCapsuleCopy() {
         #expect(OverviewCopy.noWindows == "No windows on this desktop")
+        #expect(OverviewCopy.fullScreenRefusal == "The overview isn't available in full screen")
     }
 }

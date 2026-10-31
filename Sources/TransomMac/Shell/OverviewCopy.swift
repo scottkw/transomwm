@@ -62,6 +62,9 @@ nonisolated public enum OverviewCopy {
     /// The Shortcuts window's Zoom-section footer (Surface 4).
     public static let shortcutsZoomFooter = "With Replace Mission Control on, the Mission Control keys also show the overview."
 
+    /// Show Overview refused: every display is in full screen.
+    public static let fullScreenRefusal = "The overview isn't available in full screen"
+
     /// The main area of a current Space with no shown windows.
     public static let noWindows = "No windows on this desktop"
 }

@@ -528,7 +528,7 @@ import os
                 let effects: [ArrangerEffect] = [.beep, .announce(refusal.announcement), .info("refused \(camera): \(refusal)")]
                 return await run(source == .url ? effects.filter { $0 != .beep && $0 != .announce(refusal.announcement) } : effects)
             }
-            return toggleOverview(trigger: String(describing: source))
+            return await toggleOverview(from: source)
         }
         let pointer = pointerDisplay()
         var effects: [ArrangerEffect]
@@ -667,13 +667,18 @@ import os
     }
 
     /// Opens or closes the overview with pick mode ended and the collapsed panels hidden (they would sit above it).
-    private func toggleOverview(trigger: String) {
+    /// Every display in full screen refuses: a beep and an announcement, or from a URL only a log line.
+    private func toggleOverview(from source: CommandSource) async {
         let overview = overview()
-        if !overview.isOpen {
+        let opening = !overview.isOpen
+        if opening {
             zoomInput.endPick(reason: "overview")
             for display in arranger.displays { collapsedPanels.hide(on: display.uuid) }
         }
-        overview.toggle(trigger: trigger)
+        guard !overview.toggle(trigger: String(describing: source)) else { return }
+        for display in arranger.displays { collapsedPanels.fadeIn(on: display.uuid) }
+        let text = OverviewCopy.fullScreenRefusal
+        await run(source == .url ? [.info("refused overview: full screen")] : [.beep, .announce(text), .info("refused overview: full screen")])
     }
 
     /// Pick mode ends (a taken gesture, 05-05).

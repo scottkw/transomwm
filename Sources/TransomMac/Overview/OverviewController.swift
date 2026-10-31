@@ -38,18 +38,19 @@ import os
     /// The tiles on that display's open panel (tests).
     func tileCount(display uuid: String) -> Int { isOpen ? shown[uuid]?.count ?? 0 : 0 }
 
-    /// Show Overview while open dismisses it.
-    func toggle(trigger: String) {
-        if isOpen { dismiss(reason: "toggle") } else { open(trigger: trigger) }
+    /// Show Overview while open dismisses it. False when it could not open (every display is in full screen).
+    @discardableResult func toggle(trigger: String) -> Bool {
+        guard !isOpen else {
+            dismiss(reason: "toggle")
+            return true
+        }
+        return open(trigger: trigger)
     }
 
     /// Captures the current-Space windows (≤ 120 ms), then shows every panel with each tile over its window and moves the
-    /// tiles to their overview rects.
-    func open(trigger: String) {
-        guard !isOpen else { return }
-        isOpen = true
-        generation += 1
-        let opened = generation
+    /// tiles to their overview rects. False, with nothing shown, when no display can have a panel.
+    @discardableResult func open(trigger: String) -> Bool {
+        guard !isOpen else { return true }
         let started = ContinuousClock.now
         let arranger = arranger()
         let snapshot = spaces()
@@ -61,6 +62,10 @@ import os
         let layout = OverviewLayout(
             displays: inputs, stripShown: snapshot != nil, separateSpaces: snapshot?.separateSpaces ?? true,
             emptyCapsuleSize: Size(width: ceil(message.width) + 16, height: 24))
+        guard !layout.displays.isEmpty else { return false }
+        isOpen = true
+        generation += 1
+        let opened = generation
         let zoom = zoom()
         var requests: [(CGWindowID, CGSize)] = []
         for display in layout.displays {
@@ -79,6 +84,7 @@ import os
             guard let self, self.isOpen, self.generation == opened else { return }
             self.show(layout, inputs: inputs, arranger: arranger, images: images, trigger: trigger, started: started)
         }
+        return true
     }
 
     private func show(
