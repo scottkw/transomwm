@@ -158,7 +158,8 @@ import os
                 }
             }
             if let saved = store.contents {
-                await run(arranger.handle(.restore(saved.world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap), now: .now))
+                let world = rekeyed(saved)
+                await run(arranger.handle(.restore(world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap), now: .now))
             }
             // This launch's session record (cleanExit false) goes down at once, with the saved layout still in it.
             write()
@@ -776,12 +777,45 @@ import os
         write(cleanExit: true)
     }
 
+    /// D-13: the saved World with each desk moved to its Space's current ID, before `.restore`. A Space the file's table
+    /// lacks (every Space of a migrated schema-1 file) is taken as unchanged since the save: the same-login assumption
+    /// (RESEARCH Pattern 2). With the Spaces lookup off the desks keep their saved IDs.
+    private func rekeyed(_ saved: LayoutFile) -> World {
+        guard let live = system.spacesSnapshot else {
+            logger.info("spaces lookup off: \(LayoutStore.fileName, privacy: .public) desks keep their saved Space IDs")
+            return saved.world
+        }
+        let table = live.uuidByID.merging(saved.spaceMap) { _, saved in saved }
+        do {
+            let result = try SpaceRekey.rekey(saved.world, saved: table, current: live.idByUUID)
+            logger.info(
+                "\(LayoutStore.fileName, privacy: .public) migrated: \(result.rekeyed, privacy: .public) desks re-keyed by Space UUID, \(result.unmatched.count, privacy: .public) unmatched kept dormant")
+            for key in result.quarantined {
+                let space = key.spaceID.map(String.init) ?? "none"
+                logger.error(
+                    "\(LayoutStore.fileName, privacy: .public) desk on display \(key.displayUUID, privacy: .public) space \(space, privacy: .public) quarantined: its Space is gone and the ID now names another")
+            }
+            return result.world
+        } catch {
+            // Unreachable for a decoded World (same windows and IDs); restoring it unchanged keeps the layout.
+            logger.error("could not re-key \(LayoutStore.fileName, privacy: .public) desks: \(String(describing: error), privacy: .public); keeping saved Space IDs")
+            return saved.world
+        }
+    }
+
     private func write(cleanExit: Bool = false) {
         guard let store else { return }
         let snapshot = arranger.snapshot
         let session = SessionRecord(
             cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal, survivedMinute: survivedMinute)
-        let file = LayoutFile(world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session)
+        // Live Space UUIDs win; a dormant desk's Space (not live now) keeps the UUID it was loaded with (D-13).
+        let uuids = (store.contents?.spaceMap ?? [:]).merging(system.spacesSnapshot?.uuidByID ?? [:]) { _, live in live }
+        let file = LayoutFile(
+            world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session,
+            arrangement: ArrangementID(Displays.current().map(\.uuid)),
+            // shortcut: passed through unchanged until 06-04 hands layout sets to the Arranger.
+            layoutSets: store.contents?.layoutSets ?? [],
+            spaces: SpaceRekey.table(for: snapshot.world, uuids: uuids))
         do {
             try store.save(file)
         } catch {
