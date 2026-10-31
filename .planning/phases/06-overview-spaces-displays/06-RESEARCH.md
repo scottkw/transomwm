@@ -602,19 +602,23 @@ CGDisplayRegisterReconfigurationCallback({ _, flags, userInfo in
 | A11 | System Settings can re-enable a taken hotkey behind Transom's back | Pitfall 8 | Drift check costs little either way |
 | A12 | Identical external displays can share or swap UUIDs | Pitfall 13 | Wrong layout set applied. Logged; treated as a new arrangement |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact takeover ID set beyond `[32, 108]`.**
    - Known: 34 = ⌃⇧↑ and 109–117 = keycode 160 with modifiers (F3).
    - Unclear: which of them open Mission Control versus Show Desktop, application windows or settings.
    - Recommendation: the VM spike posts each chord with only 32/108 disabled and records which still opens Mission Control. Take only the Mission Control ones.
+   - **RESOLVED:** 06-01 Task 2 (`hotkeys` subcommand) measures 34/113 in the VM and records the set in 06-SPIKE.md "Takeover ID set". 06-10 always takes 32 and 108, adds 34/113 only where the spike shows they still open Mission Control, and never touches 33, 35, 79-82, 115 or 117 (D-08).
 2. **Does D-15's co-visibility map feed desks?**
    - Known: D-15 says build it and hide the strip; desks today are per display with the lookup off.
    - Unclear: whether the user expects per-Space layouts without SkyLight.
    - Recommendation: Debug-only (Pattern 8). Ask in plan review if in doubt; per-Space desks on clustered IDs are the riskier reading.
+   - **RESOLVED:** Debug-only. 06-02 Task 2 builds `CoVisibilitySpaces` with session-only synthetic IDs that feed only the Debug "Spaces: {v} visited since launch" line; a grep gate keeps them out of Arranger, World and LayoutFile. With the lookup off there is one desk per display (spaceID nil) and the strip is hidden (06-06), matching D-15.
 3. **Merge rule detail for "user action wins" on arrangement switch.**
    - Recommendation: track `userPlacedSinceSwitch: Set<WindowIdentity>`, filled by undoable edits (`World.edit` callers) after the last switch. Remove those windows from the stored World before reattach. Unit-test with FakeWindowSystem `setDisplays`.
+   - **RESOLVED:** adopted as written in 06-04 Task 2: the Arranger records `userPlacedSinceSwitch` for every window an undoable `World.edit` touches after the last switch, clears it on each `.displaysSettled`, and on a known arrangement removes those windows from the stored set (close path, throwaway history) before `LayoutRestore.reattach`. Scenario-tested on FakeWindowSystem `unplug`/`plug`.
 4. **Behaviour on macOS 14.** Neither VM nor host runs 14. A `ghcr.io/cirruslabs/macos-sonoma-vanilla` VM could cover it (not present locally). Otherwise, accept 15.7.7 (VM) plus 27.2 (host) as evidence.
+   - **RESOLVED:** accept VM 15.7.7 plus host 27.2 as evidence for this phase. The macOS 14 gap is recorded as a flagged assumption in 06-01 and as a known gap in 06-12's 06-UAT.md.
 
 ## Environment Availability
 
