@@ -429,10 +429,14 @@ public struct Arranger: Sendable {
         let old = arrangement
         settling = false
         preChangeWorld = nil
-        arrangement = id
         defer { userPlacedSinceSwitch = [] }
-        // The launch re-attach has not run yet: the first usable inventory still does it, against these displays.
-        guard pendingRestore == nil else { return process(.inventory(inventory), now: now) }
+        // WR-09: the launch re-attach has not run yet. It runs first, under the saved arrangement, against these displays;
+        // once it has, this settles from the saved arrangement to `id` (storing the saved layout, applying a known set).
+        guard pendingRestore == nil else {
+            let effects = process(.inventory(inventory), now: now)
+            return pendingRestore == nil ? effects + displaysSettled(id, names: names, inventory: inventory, now: now) : effects
+        }
+        arrangement = id
         let uuids = inventory.displays.map(\.uuid)
         var effects: [ArrangerEffect] = []
         // CR-01: while the saved layout is unattached, layout.json still holds it and its sets: none is stored or taken.

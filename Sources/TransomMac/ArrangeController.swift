@@ -976,6 +976,9 @@ import os
         let before = Set(arranger.displays.map(\.uuid)), after = Set(id.displayUUIDs)
         let leaving = Dictionary(uniqueKeysWithValues: before.subtracting(after).map { ($0, deskWindows(on: $0)) })
         await run(arranger.handle(.displaysSettled(id, names: system.displayNames, inventory: inventory), now: .now))
+        // WR-09: a settle after the re-attach has handled the launch; while the restore still waits, the launch settle
+        // stays armed only if the live displays differ from the saved arrangement.
+        launchSettlePending = arranger.awaitsRestore && !arranger.arrangement.isUnknown && arranger.arrangement != id
         for (uuid, windows) in leaving.sorted(by: { $0.key < $1.key }) {
             let floated = windows.filter { arranger.windows[$0.identity] != nil && arranger.isFloating($0) }
             let target = floated.first.flatMap { arranger.windows[$0.identity]?.displayUUID } ?? "none"

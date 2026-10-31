@@ -278,6 +278,30 @@ extension Harness {
         #expect(after.layoutSets == saved.layoutSets, "the stored layout sets changed")
     }
 
+    /// WR-09: a settle that arrives while the launch restore still waits re-attaches the saved layout under its own
+    /// arrangement, stores it as that arrangement's set, then applies the live arrangement's stored set.
+    @Test func aSettleDuringThePendingRestoreStoresTheSavedLayoutAndAppliesTheLiveSet() async throws {
+        var (harness, _) = try await docked(onL: [1], onD: [2, 3])
+        _ = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        let saved = harness.arranger.snapshot
+        try #require(saved.arrangement == ArrangementID(["L"]) && saved.layoutSets.map(\.arrangement) == [ArrangementID(["D", "L"])])
+
+        harness.arranger = Arranger()
+        _ = harness.arranger.handle(
+            .restore(saved.world, homeFrames: saved.homeFrames, wantedFrames: saved.wantedFrames, arrangement: saved.arrangement, layoutSets: saved.layoutSets),
+            now: harness.now)
+        _ = await harness.displayChange { await $0.plug("D") }
+
+        #expect(!harness.arranger.awaitsRestore)
+        #expect(harness.arranger.arrangement == ArrangementID(["D", "L"]))
+        // Floating windows are re-homed to the displays they are on now (as in the launch settle), so the set is compared
+        // by L's docked layout.
+        let stored = try #require(harness.arranger.layoutSets[ArrangementID(["L"])]?.world, "the saved layout was not stored under its own arrangement")
+        #expect(stored[deskL]?.tree == saved.world[deskL]?.tree)
+        #expect(harness.arranger.layoutSets[ArrangementID(["D", "L"])] == nil, "the live arrangement's set was not applied")
+        #expect(harness.arranger.world[deskD]?.tree.windows == [ref(2), ref(3)])
+    }
+
     /// Debug S4: desks whose display is away, and how many displays those are.
     @Test func dormantDesksAreCountedWhileTheirDisplayIsAway() async throws {
         var (harness, _) = try await docked(onL: [1], onD: [2, 3])
