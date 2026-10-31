@@ -217,6 +217,9 @@ import os
         case 53: dismiss(reason: "esc")  // Esc
         case 123: move(.left)
         case 124: move(.right)
+        case 125: move(.down)
+        case 126: move(.up)
+        case 48: move(event.modifierFlags.contains(.shift) ? .backTab : .tab)
         case 36, 76: pickSelection()  // Return, keypad Enter
         default: break
         }
@@ -224,7 +227,13 @@ import os
 
     private func move(_ key: OverviewKey) {
         guard isOpen, let layout else { return }
-        selection.move(key, in: layout)
+        selection.move(key, in: layout, focused: focused())
+    }
+
+    /// A window closed while open: if it was selected, the selection moves to the nearest remaining item.
+    func windowClosed(_ window: TransomModel.WindowRef) {
+        guard isOpen, let layout else { return }
+        selection.reselect(afterRemoving: window, in: layout)
     }
 
     /// Return: picks the selected item.

@@ -211,7 +211,10 @@ import os
                     self.zoomInput.publish()  // a move whose display went away never reveals
                     self.gestures.republish(reason: "display change")
                 }
-                if case .windowDestroyed(let window) = event { self.zoomController?.windowClosed(window) }
+                if case .windowDestroyed(let window) = event {
+                    self.zoomController?.windowClosed(window)
+                    self.overviewController?.windowClosed(window)
+                }
                 if case .sessionPaused(true) = event { self.overviewController?.interrupt(reason: "session paused") }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
