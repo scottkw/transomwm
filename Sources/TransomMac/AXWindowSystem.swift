@@ -30,6 +30,13 @@ import os
     /// `NSWorkspace.activeSpaceDidChangeNotification`: marks every app's next full update `spaceChanged` (02-17).
     private var spaceObserver: (any NSObjectProtocol)?
     private var spaceSwitches = SpaceSwitchMarks()
+    private let spacesLogger = Logger(subsystem: "com.eightabyte.transom", category: "spaces")
+    /// The latest Spaces list, nil while the lookup is off: refreshed at start and on Space and display changes.
+    public private(set) var spacesSnapshot: SpacesSnapshot?
+    /// D-15, lookup off only: Spaces visited since launch, for the Debug line. Never reaches a desk.
+    private var coVisibility = CoVisibilitySpaces()
+    private var coVisibilityTask: Task<Void, Never>?
+    public var visitedSpaces: Int { coVisibility.visitedCount }
     private var registry: AppRegistry?
     private var scheduler: RefreshScheduler?
     /// False while the registry starts the apps already running, which are not "launched".
@@ -74,6 +81,7 @@ import os
         for thread in threads.values { thread.stop() }
         for probe in probes.values { probe.cancel() }
         resumeTask?.cancel()
+        coVisibilityTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
         hintContinuation.finish()
@@ -96,6 +104,8 @@ import os
         // Per-element timeouts do not reach equal or child elements (Pitfall 1), so set the global one.
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
         displays = Displays.current()
+        refreshSpaces(force: true)
+        visitSpaceSoon()  // the Space shown at launch is visited too
         let scheduler = RefreshScheduler(
             refresh: { [weak self] pid in await self?.refresh(pid: pid) },
             refreshAll: { [weak self] in await self?.refreshAll() }
@@ -465,7 +475,9 @@ import os
                     reportedMinimums[info.window.identity] = minimum
                     onLearnedMinimum?(info.window.bundleID, minimum)
                 }
-            case .windowDestroyed(let ref): reportedMinimums[ref.identity] = nil
+            case .windowDestroyed(let ref):
+                reportedMinimums[ref.identity] = nil
+                coVisibility.forget(windowID: ref.windowID)
             case .windowRekeyed(let from, let info):
                 // Every per-window record follows the new ID; the minimum it carries was reported or seeded already.
                 let pid = from.pid
@@ -594,13 +606,48 @@ import os
         let old = Dictionary(displays.map { ($0.uuid, $0.currentSpaceID) }, uniquingKeysWith: { first, _ in first })
         displays = Displays.current()
         for display in displays where old[display.uuid] != .some(display.currentSpaceID) {
+            let from = old[display.uuid].flatMap { $0 }.map(String.init) ?? "unknown"
+            let to = display.currentSpaceID.map(String.init) ?? "unknown"
+            spacesLogger.info("space \(from, privacy: .public) → \(to, privacy: .public) on display \(display.uuid, privacy: .public)")
             continuation.yield(.spaceChanged(displayUUID: display.uuid, spaceID: display.currentSpaceID))
+        }
+        refreshSpaces()
+        visitSpaceSoon()
+    }
+
+    /// Lookup off: once a Space settles, the on-screen windows per display are one visit (D-15). Latest wins.
+    private func visitSpaceSoon() {
+        guard spacesSnapshot == nil else { return }
+        coVisibilityTask?.cancel()
+        coVisibilityTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, let self, let list = CGWindowList.onScreenFrontToBack() else { return }
+            let windows = list.filter { $0.layer == 0 }
+            for display in self.displays {
+                let ids = windows.filter { Coordinates.displayUUID(for: $0.bounds, among: self.displays) == display.uuid }.map(\.windowID)
+                self.coVisibility.visit(display: display.uuid, windowIDs: Set(ids))
+            }
+        }
+    }
+
+    /// Re-reads the Spaces list, logging the lookup state at start (`force`) and whenever it turns on or off.
+    private func refreshSpaces(force: Bool = false) {
+        let wasOff = spacesSnapshot == nil
+        spacesSnapshot = SpacesProvider.snapshot()
+        guard force || wasOff != (spacesSnapshot == nil) else { return }
+        if let snapshot = spacesSnapshot {
+            let separate = snapshot.separateSpaces ? "yes" : "no"
+            spacesLogger.info(
+                "spaces lookup: available, \(snapshot.spaceCount, privacy: .public) spaces, separate per display: \(separate, privacy: .public)")
+        } else {
+            spacesLogger.info("spaces lookup off: using co-visibility map")
         }
     }
 
     private func displaysDidChange() {
         // Read now, so the inventory the Arranger re-plans against already has the new visible frames (TILE-03).
         displays = Displays.current()
+        refreshSpaces()
         continuation.yield(.displaysChanged)
         scheduler?.scheduleAll(after: .milliseconds(500))
     }

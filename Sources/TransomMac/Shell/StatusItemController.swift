@@ -332,6 +332,11 @@ import os
         submenu.addItem(Self.info(gestures.lastGesture.map(Self.lastGestureLine) ?? GestureCopy.lastGestureNone))
         let multitouch = arrange.multitouchStatus
         submenu.addItem(Self.info(GestureCopy.multitouchLine(multitouch)))
+        let spaces: OverviewCopy.SpacesLine =
+            if let snapshot = system.spacesSnapshot {
+                .counts(spaces: snapshot.spaceCount, displays: snapshot.displays.count, shared: !snapshot.separateSpaces)
+            } else { .visited(system.visitedSpaces) }
+        submenu.addItem(Self.info(OverviewCopy.spacesLine(spaces)))
         if multitouch == .offAfterCrash {
             let retry = NSMenuItem(title: GestureCopy.multitouchBackOnItem, action: #selector(turnMultitouchBackOn), keyEquivalent: "")
             retry.target = self

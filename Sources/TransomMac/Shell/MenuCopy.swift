@@ -130,7 +130,7 @@ nonisolated public enum MenuCopy {
     public static func tapItem(running: Bool) -> String { running ? tapRunning : tapOff }
 
     public static func spacesItem(available: Bool) -> String {
-        available ? "Spaces lookup: available" : "Spaces lookup: off, single Space"
+        available ? "Spaces lookup: available" : "Spaces lookup: off, using Spaces visited since launch"
     }
 
     /// Names over 32 graphemes become their first 32 plus "…", so menu width stays bounded.
