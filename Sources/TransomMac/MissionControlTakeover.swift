@@ -111,8 +111,11 @@ struct LiveHotKeyBackend: HotKeyBackend {
         for action in actions {
             switch action {
             case .restore(let originals):
-                restore(originals)
-                log.notice("restored originals from last run (unclean exit)")
+                if restore(originals) {
+                    log.notice("restored originals from last run (unclean exit)")
+                } else {
+                    log.error("Mission Control shortcuts still off after the launch restore; Restore macOS Window Settings retries it")
+                }
             case .stayOff: state = .offAfterCrash
             case .queueCrashNotice: pendingCrashNotice = true
             case .off: state = .off
@@ -209,6 +212,13 @@ struct LiveHotKeyBackend: HotKeyBackend {
         guard !drifted.isEmpty else { return }
         for id in drifted { backend.setEnabled(id, false) }
         log.info("takeover drift: disabled \(Self.describe(drifted), privacy: .public) again")
+    }
+
+    /// Restore macOS Window Settings with the takeover off (WR-02): retries a launch or lift restore macOS refused, so
+    /// the shortcuts need not wait for the next launch.
+    func retryRestore() {
+        guard !isOn, let originals = store.originals, !originals.isEmpty else { return }
+        if restore(originals) { log.notice("takeover originals restored on retry") }
     }
 
     /// The stored originals (tests and the Debug line).

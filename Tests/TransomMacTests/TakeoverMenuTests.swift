@@ -214,6 +214,27 @@ import Testing
         #expect(UserDefaultsTakeoverStore(defaults: defaults).originals == [32: true, 108: true])
     }
 
+    /// WR-02: a launch restore macOS refused leaves the shortcuts off; Restore macOS Window Settings retries it in-session.
+    @Test func restoreMacOSWindowSettingsRetriesAFailedLaunchRestore() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let backend = FakeHotKeys()
+        Self.takeover(defaults, backend).setPreference(true)  // dropped without a lift: the process "died"
+        backend.stuck = [32]  // the launch restore of 32 does not take
+        let takeover = Self.takeover(defaults, backend)
+        takeover.launchRestore()
+        #expect(backend.enabled[32] == false && takeover.storedOriginals == [32: true, 108: true])
+
+        let conflicts = ConflictController(store: MemoryPreferences(), defaults: defaults, osMajor: 14, readBackDelay: .zero)
+        conflicts.takeover = takeover
+        #expect(conflicts.canRestore, "Restore must be offered while the shortcuts are stuck off")
+        backend.stuck = []
+        conflicts.restore()
+        #expect(backend.enabled == [32: true, 108: true])
+        #expect(takeover.storedOriginals == nil)
+        #expect(!conflicts.canRestore)
+    }
+
     @Test func driftIsDisabledAgainAndTheOriginalsStay() {
         let (defaults, cleanUp) = Self.defaults()
         defer { cleanUp() }
