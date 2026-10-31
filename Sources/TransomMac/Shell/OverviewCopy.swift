@@ -86,17 +86,45 @@ nonisolated public enum OverviewCopy {
 
     // MARK: Announcements (Accessibility)
 
-    public static func openedAnnouncement(windows: Int, displays: Int) -> String { "" }
-    public static func tileAnnouncement(app: String, title: String) -> String { "" }
-    public static func miniTileAnnouncement(app: String, title: String, desktop: Int) -> String { "" }
-    public static func thumbnailAnnouncement(desktop: Int, current: Bool, windows: Int) -> String { "" }
-    public static func thumbnailAnnouncement(fullScreenApp app: String) -> String { "" }
-    public static func displayPrefix(_ display: String, _ item: String) -> String { "" }
-    public static let closedAnnouncement = ""
+    /// "Overview, 5 windows" · "Overview, 1 window" · "Overview, no windows", plus " on {d} displays" with several.
+    public static func openedAnnouncement(windows: Int, displays: Int) -> String {
+        let count = windows == 0 ? "no windows" : windows == 1 ? "1 window" : "\(windows) windows"
+        return "Overview, \(count)" + (displays > 1 ? " on \(displays) displays" : "")
+    }
+
+    /// A main-area tile: "“{App}”, {title}", the title left out when empty.
+    public static func tileAnnouncement(app: String, title: String) -> String {
+        "\u{201C}\(app)\u{201D}" + (title.isEmpty ? "" : ", \(title)")
+    }
+
+    /// A mini tile: "“{App}”, {title}, Desktop {n}".
+    public static func miniTileAnnouncement(app: String, title: String, desktop: Int) -> String {
+        tileAnnouncement(app: app, title: title) + ", " + desktopLabel(desktop)
+    }
+
+    /// A desktop thumbnail: "Desktop {n}, current", else its window count.
+    public static func thumbnailAnnouncement(desktop: Int, current: Bool, windows: Int) -> String {
+        let detail = current ? "current" : windows == 0 ? "no windows" : windows == 1 ? "1 window" : "\(windows) windows"
+        return "\(desktopLabel(desktop)), \(detail)"
+    }
+
+    /// A full-screen Space's thumbnail: "“{App}”, full screen".
+    public static func thumbnailAnnouncement(fullScreenApp app: String) -> String { "\u{201C}\(app)\u{201D}, full screen" }
+
+    /// Selection moved to another display: "“{Display}”: " then the item.
+    public static func displayPrefix(_ display: String, _ item: String) -> String { "\u{201C}\(display)\u{201D}: \(item)" }
+
+    public static let closedAnnouncement = "Overview closed"
 
     // MARK: S6 Last overview
 
-    public static func lastOverviewLine(_ last: (ms: Int, windows: Int, snapshots: Int)?) -> String { "" }
+    /// "Last overview: none yet" · "Last overview: {ms} ms to open, {n} windows, {s} snapshots" (1 window / 1 snapshot).
+    public static func lastOverviewLine(_ last: (ms: Int, windows: Int, snapshots: Int)?) -> String {
+        guard let last else { return "Last overview: none yet" }
+        let windows = last.windows == 1 ? "1 window" : "\(last.windows) windows"
+        let snapshots = last.snapshots == 1 ? "1 snapshot" : "\(last.snapshots) snapshots"
+        return "Last overview: \(last.ms) ms to open, \(windows), \(snapshots)"
+    }
 
     /// The main area of a current Space with no shown windows.
     public static let noWindows = "No windows on this desktop"

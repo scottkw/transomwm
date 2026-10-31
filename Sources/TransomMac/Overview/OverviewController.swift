@@ -37,8 +37,17 @@ import os
     private var shown: [String: [StageTile]] = [:]
     /// The one selection across every display (D-04), drawn as it changes.
     private(set) var selection = OverviewSelection() {
-        didSet { if selection != oldValue { markSelection() } }
+        didSet {
+            guard selection != oldValue else { return }
+            markSelection()
+            announceSelection(from: oldValue)
+        }
     }
+    /// The latest selection announcement waiting for its 150 ms slot (nil: none waiting).
+    private var queuedAnnouncement: String?
+    private let announcementTimer = WakeTimer()
+    /// Fires when an open animation ends: trigger-to-end time, tiles and snapshots (Debug S6).
+    var onOpened: ((ms: Int, windows: Int, snapshots: Int)) -> Void = { _ in }
     /// Each open panel's strip as built, so a selected mini tile's label swap can be undone.
     private var overlays: [String: OverviewOverlay] = [:]
     /// The thumbnail whose label shows a selected mini tile's title.
@@ -114,6 +123,9 @@ import os
         }
         self.layout = layout
         let zoom = zoom()
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion  // read at each open
+        let opened = generation
+        var timed = false
         var snapshots = 0, fallbacks = 0
         func image(_ window: TransomModel.WindowRef) -> CGImage? { zoom.cgWindow(window).flatMap { images[$0] ?? zoom.cachedSnapshot($0) } }
         for display in layout.displays {
@@ -132,21 +144,35 @@ import os
             let strip = overlay(display, input: input, image: image, appKit: appKit)
             overlays[display.uuid] = strip
             panel.showOverview(strip)
-            panel.animate {}
+            // Reduce Motion: the real-frame tiles fade out as the overview fades in, nothing moving (Surface 1 Motion).
+            let first = !timed
+            timed = true
+            panel.animate(crossfade: reduceMotion) { [weak self] in
+                guard first, let self, self.generation == opened else { return }
+                self.opened(trigger: trigger, started: started, displays: layout.displays.count, snapshots: snapshots, fallbacks: fallbacks)
+            }
             shown[display.uuid] = tiles
         }
         swappedLabel = nil
-        selection = OverviewSelection.initial(layout: layout, focused: focused(), pointer: pointer())  // drawn by didSet
+        selection = OverviewSelection.initial(layout: layout, focused: focused(), pointer: pointer())  // drawn by didSet, not announced
         takeKeys()
+        postAnnouncement(OverviewCopy.openedAnnouncement(windows: snapshots + fallbacks, displays: layout.displays.count))
+    }
+
+    /// The open animation ended: `{ms}` runs from the trigger to here (Debug S6 and the open log line).
+    private func opened(trigger: String, started: ContinuousClock.Instant, displays: Int, snapshots: Int, fallbacks: Int) {
         let ms = Int((ContinuousClock.now - started) / .milliseconds(1))
         logger.info(
-            "open \(trigger, privacy: .public): \(layout.displays.count, privacy: .public) displays, \(snapshots + fallbacks, privacy: .public) tiles, \(snapshots, privacy: .public) snapshots, \(fallbacks, privacy: .public) fallback, \(ms, privacy: .public) ms"
+            "open \(trigger, privacy: .public): \(displays, privacy: .public) displays, \(snapshots + fallbacks, privacy: .public) tiles, \(snapshots, privacy: .public) snapshots, \(fallbacks, privacy: .public) fallback, \(ms, privacy: .public) ms"
         )
+        onOpened((ms, snapshots + fallbacks, snapshots))
     }
 
     /// Esc, Show Overview again: the reverse of open, then the stage fades out. No window command: nothing moved.
-    func dismiss(reason: String) {
+    /// A pick says nothing extra (`announce` false): VoiceOver reads the focused window itself.
+    func dismiss(reason: String, announce: Bool = true) {
         guard close(log: "dismiss: \(reason)") else { return }
+        if announce { postAnnouncement(OverviewCopy.closedAnnouncement) }
         let closed = generation
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         for (uuid, tiles) in shown {
@@ -181,8 +207,17 @@ import os
         generation += 1
         releaseKeys()
         selection = OverviewSelection()
+        queuedAnnouncement = nil
+        announcementTimer.cancel()
         logger.info("\(log, privacy: .public)")
         onClosed()
+        // Without Screen Recording, the Phase 4 explainer may show once, after the stage has gone, never during it.
+        let closed = generation
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(StagePanel.moveDuration + StagePanel.revealFade))
+            guard let self, !self.isOpen, self.generation == closed else { return }
+            self.zoom().offerExplainerAfterOverview()
+        }
         return true
     }
 
@@ -372,6 +407,45 @@ import os
         panels[label.display]?.updateOverview(strip)
     }
 
+    /// VoiceOver hears where the selection went, the latest one per 150 ms (holding an arrow queues no backlog). The
+    /// initial selection is not announced: "Overview, {n} windows" is.
+    private func announceSelection(from old: OverviewSelection) {
+        guard isOpen, old.selected != nil, let text = selectionText(changedDisplay: old.display != selection.display) else { return }
+        let idle = queuedAnnouncement == nil
+        queuedAnnouncement = text
+        guard idle else { return }
+        announcementTimer.set(.now + .milliseconds(150)) { [weak self] in
+            guard let self, let text = self.queuedAnnouncement else { return }
+            self.queuedAnnouncement = nil
+            postAnnouncement(text)
+        }
+    }
+
+    /// The Accessibility table's words for the selected item, after the display's name when Tab changed display.
+    private func selectionText(changedDisplay: Bool) -> String? {
+        guard let item = selection.selected, let uuid = selection.display, let display = layout?.displays.first(where: { $0.uuid == uuid }) else {
+            return nil
+        }
+        let spaceInfo = { (id: UInt64) in self.spaces()?.displays.first { $0.displayUUID == uuid }?.spaces.first { $0.id == id } }
+        let text: String
+        switch item {
+        case .tile(let window):
+            text = OverviewCopy.tileAnnouncement(app: appName(window), title: window.titleHint)
+        case .miniTile(let window, let space):
+            text = OverviewCopy.miniTileAnnouncement(app: appName(window), title: window.titleHint, desktop: spaceInfo(space)?.index ?? 0)
+        case .thumbnail(let space):
+            guard let index = display.thumbnails.firstIndex(where: { $0.spaceID == space }) else { return nil }
+            let thumb = display.thumbnails[index]
+            if spaceInfo(space)?.kind == .fullScreen {
+                text = OverviewCopy.thumbnailAnnouncement(fullScreenApp: overlays[uuid]?.thumbnails[index].label ?? "")
+            } else {
+                text = OverviewCopy.thumbnailAnnouncement(desktop: spaceInfo(space)?.index ?? 0, current: thumb.isCurrent, windows: thumb.miniTiles.count)
+            }
+        }
+        guard changedDisplay, let name = Displays.screen(uuid: uuid)?.localizedName else { return text }
+        return OverviewCopy.displayPrefix(name, text)
+    }
+
     private func appName(_ window: TransomModel.WindowRef) -> String {
         NSRunningApplication(processIdentifier: window.pid)?.localizedName ?? window.bundleID
     }
@@ -405,7 +479,7 @@ import os
         }
         guard let display = layout.displays.first(where: { $0.thumbnails.contains { $0.spaceID == space } }) else { return }
         if display.thumbnails.first(where: { $0.spaceID == space })?.isCurrent == true {
-            dismiss(reason: "current space")
+            dismiss(reason: "current space", announce: false)
             if let window { Task { await focusWindow(window) } }
             return
         }
@@ -427,7 +501,7 @@ import os
         let hidden = arranger.homeView(on: display.uuid).map { $0.collapsed[window] != nil || arranger.isParked(window) } ?? false
         logger.info("pick window \(window.windowID, privacy: .public) on space \(space, privacy: .public) (\(hidden ? "camera move" : "same space", privacy: .public))")
         panels[display.uuid]?.bringToFront(zoom().cgWindow(window) ?? window.windowID)
-        dismiss(reason: "pick")
+        dismiss(reason: "pick", announce: false)
         guard hidden else {
             Task { await focusWindow(window) }
             return

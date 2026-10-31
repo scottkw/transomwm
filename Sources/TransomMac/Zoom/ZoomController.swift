@@ -456,6 +456,10 @@ import os
         }
     }
 
+    /// The overview closed and its stage has faded: the first overview without Screen Recording counts as the first move
+    /// (06 Surface 1 Snapshots), so the explainer may show now, never during the overview.
+    func offerExplainerAfterOverview() { offerExplainer() }
+
     /// The first move without Screen Recording asks once, after its reveal, never during a move, drag or rubber band.
     /// The flag is saved when the alert appears, so it never shows again (no re-prompt loop, T-04-15).
     private func offerExplainer() {

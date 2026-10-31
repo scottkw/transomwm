@@ -88,6 +88,8 @@ import os
     var hasZoomController: Bool { zoomController != nil }
     /// The overview (06-06), made on the first Show Overview; never with zoom off.
     private(set) var overviewController: OverviewController?
+    /// The last overview's open time, tiles and snapshots (Debug S6); kept across zoom off.
+    private(set) var lastOverview: (ms: Int, windows: Int, snapshots: Int)?
     /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
     private lazy var zoomInput = ZoomInput(controller: self, tap: tap)
     /// The gesture session tap (05-03): runs only while zoom is on and the mouse tap runs (D-07).
@@ -674,6 +676,7 @@ import os
             for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
             self.gestures.publish()  // armed again
         }
+        overview.onOpened = { [weak self] stats in self?.lastOverview = stats }
         overview.onSwitchFailed = { [weak self] text in Task { await self?.run([.beep, .announce(text)]) } }
         overview.focused = { [weak self] in self?.commandContext().focused }
         // AX lists a window only while its Space shows: read the app again before focusing (06-SPIKE, AX after switch).

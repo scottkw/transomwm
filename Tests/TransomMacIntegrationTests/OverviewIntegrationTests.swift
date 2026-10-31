@@ -47,6 +47,8 @@ import Testing
         #expect(overview.tileCount(display: main) >= 2)
         try await Task.sleep(for: .milliseconds(400))  // past the 250 ms move
         #expect(try await frames() == before, "the real windows moved while the overview was open")
+        let last = arrange.lastOverview
+        #expect((last?.windows ?? 0) >= 2 && (last?.ms ?? 0) >= 250, "Debug S6 did not record the open: \(String(describing: last))")
 
         await arrange.dispatch(.camera(.overview))
         #expect(!overview.isOpen, "Show Overview again did not close it")

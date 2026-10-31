@@ -348,6 +348,8 @@ import os
         submenu.addItem(Self.info(OverviewCopy.displaysLine(displays)))
         submenu.addItem(Self.info(OverviewCopy.savedArrangementsLine(arranger.layoutSets.all.count)))
         submenu.addItem(Self.info(OverviewCopy.dormantDesksLine(desks: arranger.dormantDeskCount, awayDisplays: arranger.awayDisplayCount)))
+        // S6 (S5, the Mission Control takeover, goes between S4 and S6 when 06-11 adds it).
+        submenu.addItem(Self.info(OverviewCopy.lastOverviewLine(arrange.lastOverview)))
         if multitouch == .offAfterCrash {
             let retry = NSMenuItem(title: GestureCopy.multitouchBackOnItem, action: #selector(turnMultitouchBackOn), keyEquivalent: "")
             retry.target = self
