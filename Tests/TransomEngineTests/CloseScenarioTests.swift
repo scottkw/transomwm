@@ -183,6 +183,21 @@ private func blank(_ fake: FakeWindowSystem, gate: Bool, axInvalid: Bool = false
         #expect(destroyed(await drain(fake.events)).contains(ref(1)))
     }
 
+    /// WR-10: a terminated app's tab group whose members all linger on no Space closes; the ghost tabs never keep it.
+    @Test func aTerminatedAppsGhostTabGroupCloses() async {
+        let fake = FakeWindowSystem()
+        await fake.setSpacesAvailable(true)
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await fake.tabGroup(ids: [1, 2], frame: Rect(x: 10, y: 25, width: 400, height: 300), pid: pid, visible: 1, space: 1)
+        await fake.refreshAll()
+        await fake.terminate(pid: pid)
+        await fake.lingerInCG(1, spaces: [])
+        await fake.lingerInCG(2, spaces: [])
+        await fake.refreshAll()
+        #expect(destroyed(await drain(fake.events)).contains(ref(1)))
+        #expect(await fake.windowInfo(ref(1)) == nil)
+    }
+
     /// 02-14: a hidden native tab reports no Space; its group stays tracked whole.
     @Test func aHiddenTabWithNoSpaceStaysTrackedOverFiveRefreshes() async throws {
         let fake = FakeWindowSystem()

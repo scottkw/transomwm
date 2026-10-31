@@ -367,7 +367,8 @@ public struct WindowTracker: Sendable {
                 // The shown tab closed but others are still in the CG list: the group lives on, and the next
                 // listed tab rebinds it. It closes only when its last member is gone.
                 tabGroups.memberClosed(shown, pid: pid)
-                let remaining = tabGroups.members(of: identity).intersection(inCG)
+                // A dead app's member on no Space is a ghost too (G-03-9, WR-10); an alive app's hidden tabs have no Space.
+                let remaining = tabGroups.members(of: identity).intersection(inCG).filter { app == .alive || context.windowSpaces?[$0] != [] }
                 if !remaining.isEmpty {
                     guard var info = windows[identity], info.tabCount != remaining.count else { continue }
                     info.tabCount = remaining.count
