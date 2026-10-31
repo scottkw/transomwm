@@ -229,7 +229,7 @@ The main area always shows the home-view layout: with the camera at home (the us
 
 **Initial selection** when the overview opens: the focused window if it is shown; else the main-area tile under the pointer; else the largest main-area tile on the pointer's display; else that display's current-Space thumbnail; else the first display (left to right) with a main-area tile.
 
-**Keys while the overview is open.** Heard through temporary Carbon hotkeys registered only while the overview is open, exactly like Phase 4's pick-mode Esc, so the keys never reach the app behind and the event tap mask stays mouse-only (T-03-28). Unregistered the moment the overview closes. Not rebindable; not in the Shortcuts window.
+**Keys while the overview is open.** While the overview is open, one of its stage panels is the key window without activating Transom (a non-activating panel that can become key only while the overview is open), so the keys never reach the app behind and the event tap mask stays mouse-only (T-03-28). Every close path releases key focus, and the previously frontmost app gets keys again. Not rebindable; not in the Shortcuts window. (changed 2026-10-31: macOS 15 does not deliver modifier-less Return/Tab/Space Carbon hotkeys; user chose key panel)
 
 | Key | Action |
 |---|---|
@@ -238,7 +238,7 @@ The main area always shows the home-view layout: with the camera at home (the us
 | Return (and keypad Enter) | Pick the selected item: a tile → go to the window; a mini tile → switch Space and focus; a thumbnail → switch to that Space (current Space: dismiss) |
 | Esc | Dismiss |
 | The Show Overview hotkey, or F3 / ⌃↑ with the takeover on | Dismiss |
-| Any other key | Not heard by Transom; reaches the frontmost app as usual. The overview stays open |
+| Any other key | Ignored while the overview is open, like Mission Control: it does not reach the app behind, nothing beeps, and the overview stays open |
 
 **Selected-window title capsule.** A selected **snapshot** tile in the main area shows a title capsule centred horizontally, 8pt above the tile's bottom edge, inside the tile (Body, middle-truncated, max width tile width − 32pt). If the tile is shorter than the capsule + 16pt, the capsule sits 8pt below the tile instead, clamped inside the main area. A selected **fallback** tile shows no extra capsule: it already has its own (no duplicated controls). AX titles only, never `kCGWindowName`; an empty title shows the app name.
 
@@ -546,7 +546,7 @@ Wording is fixed so the agent can paste it into `06-UAT.md`. Each item says what
 | 03-UI-SPEC.md (via code) | Toast N1–N9 numbering, glyph and systemOrange rule; conflict-alert style (question message, plain informative text, default button + "Not Now"); Restore macOS Window Settings |
 | Code (read 2026-10-31) | `Hotkeys.swift` (free ⌃⌥⌘ letters A, L, Q, T, V, W, Y; `zoomNames` from `.camera`), `MenuCopy.spacesItem` ("Spaces lookup: off, single Space"), `ConflictCopy`, `NoticeCopy`, `GestureCopy` canary line, `ZoomCopy`, `StatusItemController` Debug order, `Command` / `CameraCommand`, `TransomURL.commands` |
 | Local verification (2026-10-31, macOS 27.2) | SF Symbol `display` resolves; `com.apple.symbolichotkeys` has no ⌃⌥⌘ entry (⌃⌥⌘A free); Mission Control entries 32/34 absent from the plist (macOS defaults in force) |
-| Discretion (this spec) | ⌃⌥⌘A; overview as part of zoom (hidden with zoom off, allowed while paused); main area = home-view layout; strip geometry, 8pt thumbnail radius, current-Space marker (labelColor border + semibold), outset selection ring; labels "Desktop {n}"; Space click closes the overview; mini tiles pointer-only; Tab across displays; temporary Carbon keys; title capsule on the selected snapshot tile; background capture after a Space visit; Mission Control fallback via CoreDock when the overview can't open; takeover lifted while zoom is off and by Restore macOS Window Settings; N10–N12 copy; N12 only when windows float, re-plug and arrangement switches silent; Debug S1–S6; log categories; announcements; hardware checklist wording |
+| Discretion (this spec) | ⌃⌥⌘A; overview as part of zoom (hidden with zoom off, allowed while paused); main area = home-view layout; strip geometry, 8pt thumbnail radius, current-Space marker (labelColor border + semibold), outset selection ring; labels "Desktop {n}"; Space click closes the overview; mini tiles pointer-only; Tab across displays; overview keys through a non-activating key panel; title capsule on the selected snapshot tile; background capture after a Space visit; Mission Control fallback via CoreDock when the overview can't open; takeover lifted while zoom is off and by Restore macOS Window Settings; N10–N12 copy; N12 only when windows float, re-plug and arrangement switches silent; Debug S1–S6; log categories; announcements; hardware checklist wording |
 | User input | none (every product decision is locked in CONTEXT; the orchestrator asked for no questions) |
 
 ---

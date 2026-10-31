@@ -1,5 +1,4 @@
 import AppKit
-import KeyboardShortcuts
 import TransomEngine
 import TransomModel
 import TransomPrivate
@@ -25,6 +24,8 @@ import os
     var focusWindow: (TransomModel.WindowRef) async -> Void = { _ in }
     /// A pick's Space switch did not land within 1 s: beep and announce this text.
     var onSwitchFailed: (String) -> Void = { _ in }
+    /// The frontmost app's focused tracked window: the initial selection when it is shown.
+    var focused: () -> TransomModel.WindowRef? = { nil }
     /// A press that travels this far before release is a drag, not a click (D-16).
     static let dragThreshold: CGFloat = 4
 
@@ -32,7 +33,8 @@ import os
     private var panels: [String: StagePanel] = [:]
     /// Each open panel's tiles: start = the real frame, end = the overview rect (AppKit coordinates).
     private var shown: [String: [StageTile]] = [:]
-    private var escape: Task<Void, Never>?
+    /// The one selection across every display (D-04).
+    private(set) var selection = OverviewSelection()
     /// Bumped on every open and close, so a capture or animation finishing late never acts on a newer state.
     private var generation = 0
     /// The open overview's geometry, for hit-testing clicks.
@@ -85,11 +87,6 @@ import os
         let opened = generation
         let zoom = zoom()
         let requests = Self.requests(layout.displays, zoom: zoom)
-        escape = Task { [weak self] in
-            for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape)) where key == .keyDown {
-                self?.dismiss(reason: "esc")
-            }
-        }
         Task { [weak self] in
             let images = await zoom.overviewImages(requests)
             guard let self, self.isOpen, self.generation == opened else { return }
@@ -108,6 +105,7 @@ import os
             return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
         }
         self.layout = layout
+        selection = OverviewSelection.initial(layout: layout, focused: focused(), pointer: pointer())
         let zoom = zoom()
         var snapshots = 0, fallbacks = 0
         func image(_ window: TransomModel.WindowRef) -> CGImage? { zoom.cgWindow(window).flatMap { images[$0] ?? zoom.cachedSnapshot($0) } }
@@ -128,6 +126,7 @@ import os
             panel.animate {}
             shown[display.uuid] = tiles
         }
+        takeKeys()
         let ms = Int((ContinuousClock.now - started) / .milliseconds(1))
         logger.info(
             "open \(trigger, privacy: .public): \(layout.displays.count, privacy: .public) displays, \(snapshots + fallbacks, privacy: .public) tiles, \(snapshots, privacy: .public) snapshots, \(fallbacks, privacy: .public) fallback, \(ms, privacy: .public) ms"
@@ -166,8 +165,8 @@ import os
         guard isOpen else { return false }
         isOpen = false
         generation += 1
-        escape?.cancel()
-        escape = nil
+        releaseKeys()
+        selection = OverviewSelection()
         logger.info("dismiss: \(reason, privacy: .public)")
         onClosed()
         return true
@@ -185,8 +184,60 @@ import os
         guard let screen = Displays.screen(uuid: uuid) else { return nil }
         let panel = StagePanel(screen: screen)
         panel.onOverviewClick = { [weak self] point, travel in self?.click(at: point, travel: travel) }
+        panel.onKey = { [weak self] event in self?.key(event) }
         panels[uuid] = panel
         return panel
+    }
+
+    // MARK: Keys and selection (06-08)
+
+    /// While open, one panel is key without activating Transom, so the overview keys never reach the app behind and the
+    /// event tap stays mouse-only (T-03-28). macOS 15 does not deliver modifier-less Return, Tab or Space as Carbon
+    /// hotkeys, so these are not hotkeys (06-08 Rule 4 deviation).
+    private func takeKeys() {
+        let uuid = selection.display ?? layout?.displays.first?.uuid
+        guard isOpen, let panel = uuid.flatMap({ panels[$0] }) ?? panels.values.first(where: \.isVisible) else { return }
+        panel.takesKeys = true
+        panel.makeKey()
+    }
+
+    /// Every close path: no panel may become key again, and the key one stops acting on keys at once. It hands key back
+    /// to the frontmost app when it orders out at the end of its fade.
+    private func releaseKeys() {
+        for panel in panels.values { panel.takesKeys = false }
+    }
+
+    /// True while an overview panel is key (tests: keys must go back to the frontmost app after every close).
+    var holdsKeys: Bool { panels.values.contains { $0.isKeyWindow } }
+
+    /// The overview keys (06 UI-SPEC Surface 3); any other key does nothing while open.
+    private func key(_ event: NSEvent) {
+        guard isOpen else { return }
+        switch event.keyCode {
+        case 53: dismiss(reason: "esc")  // Esc
+        case 123: move(.left)
+        case 124: move(.right)
+        case 36, 76: pickSelection()  // Return, keypad Enter
+        default: break
+        }
+    }
+
+    private func move(_ key: OverviewKey) {
+        guard isOpen, let layout else { return }
+        selection.move(key, in: layout)
+    }
+
+    /// Return: picks the selected item.
+    private func pickSelection() {
+        guard isOpen, let item = selection.selected else { return }
+        pick(item)
+    }
+
+    /// The pointer in top-left global points.
+    private func pointer() -> Point? {
+        guard let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else { return nil }
+        let location = NSEvent.mouseLocation
+        return Point(x: location.x, y: primaryHeight - location.y)
     }
 
     // MARK: Picks (06-07)
@@ -198,14 +249,14 @@ import os
         pick(item)
     }
 
-    /// Picks a strip item. Another Space's thumbnail switches there; a mini tile on another Space switches there, then
-    /// focuses its window. The current Space's thumbnail dismisses, and its mini tile focuses that window. Main-area tiles
-    /// are picked by 06-08/06-09.
+    /// Picks an item. A main-area tile focuses and raises its window as the reverse animation starts. Another Space's
+    /// thumbnail switches there; a mini tile on another Space switches there, then focuses its window. The current
+    /// Space's thumbnail dismisses, and its mini tile focuses that window.
     func pick(_ item: OverviewItem) {
         guard isOpen, let layout else { return }
         let space: UInt64, window: TransomModel.WindowRef?
         switch item {
-        case .tile: return
+        case .tile(let picked): return pickOnCurrentSpace(picked, in: layout)
         case .thumbnail(let id): (space, window) = (id, nil)
         case .miniTile(let picked, let id): (space, window) = (id, picked)
         }
@@ -221,6 +272,16 @@ import os
             logger.info("pick space \(space, privacy: .public)")
         }
         switchAway(to: space, on: display.uuid, then: window)
+    }
+
+    /// A shown window: the reverse animation starts with its tile on top (the order once it is raised), and it gets focus.
+    private func pickOnCurrentSpace(_ window: TransomModel.WindowRef, in layout: OverviewLayout) {
+        guard let display = layout.displays.first(where: { $0.tiles.contains { $0.window == window } }) else { return }
+        let space = arranger().displays.first { $0.uuid == display.uuid }?.currentSpaceID ?? 0
+        logger.info("pick window \(window.windowID, privacy: .public) on space \(space, privacy: .public) (same space)")
+        panels[display.uuid]?.bringToFront(zoom().cgWindow(window) ?? window.windowID)
+        dismiss(reason: "pick")
+        Task { await focusWindow(window) }
     }
 
     /// The stage fades out (120 ms), then the display switches to `space` and `window` gets focus. A switch that does not

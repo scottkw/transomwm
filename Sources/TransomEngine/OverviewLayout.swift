@@ -66,6 +66,8 @@ public enum OverviewItem: Equatable, Sendable {
 /// One display's overview geometry, top-left global points.
 public struct OverviewDisplayLayout: Equatable, Sendable {
     public var uuid: String
+    /// The display's visibleFrame: which display the pointer is on, and the left-to-right display order.
+    public var visibleFrame: Rect
     public var mainArea: Rect
     /// The uniform scale from the visibleFrame into the main area.
     public var scale: Double
@@ -166,7 +168,7 @@ public struct OverviewLayout: Equatable, Sendable {
         let empty = input.windows.isEmpty
             ? Rect(x: area.midX - capsule.width / 2, y: area.midY - capsule.height / 2, width: capsule.width, height: capsule.height) : nil
         return OverviewDisplayLayout(
-            uuid: input.uuid, mainArea: area, scale: scale, tiles: tiles, stripBand: strip ? Rect(x: visible.x, y: visible.y, width: visible.width, height: band) : nil,
+            uuid: input.uuid, visibleFrame: visible, mainArea: area, scale: scale, tiles: tiles, stripBand: strip ? Rect(x: visible.x, y: visible.y, width: visible.width, height: band) : nil,
             thumbnails: thumbnails, emptyCapsule: empty)
     }
 }

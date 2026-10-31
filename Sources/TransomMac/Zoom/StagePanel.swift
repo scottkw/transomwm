@@ -52,7 +52,7 @@ private final class StageContentView: NSView {
     var onMouseUp: (CGPoint, CGPoint) -> Void = { _, _ in }
     private var pressedAt: CGPoint?
     override func viewDidChangeEffectiveAppearance() { onAppearanceChange() }
-    // The panel is never key, so the first click must reach the view.
+    // The panel is not key before a click (and the camera stage never is), so the first click must reach the view.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
         press(event)
@@ -69,9 +69,9 @@ private final class StageContentView: NSView {
     }
 }
 
-/// The camera stage (UI-SPEC Surface 1): one never-key panel per display covering its whole frame, shown only while
-/// the camera moves and until settle. An opaque wallpaper backdrop hides the real windows moving underneath; the tiles
-/// are the only thing that animates. Hidden from screen capture, so Transom's own snapshots never see it (T-04-02).
+/// The camera stage (UI-SPEC Surface 1): one panel per display covering its whole frame, key only for an open overview,
+/// shown only while the camera moves and until settle. An opaque wallpaper backdrop hides the real windows moving
+/// underneath; the tiles are the only thing that animates. Hidden from screen capture, so Transom's own snapshots never see it (T-04-02).
 public final class StagePanel: NSPanel {
     public static let moveDuration = 0.25
     public static let revealFade = 0.12
@@ -233,8 +233,17 @@ public final class StagePanel: NSPanel {
         return layer
     }
 
-    public override var canBecomeKey: Bool { false }
+    /// Orders one tile above the others (a picked window, raised as the stage reverses), below the overlay.
+    func bringToFront(_ id: UInt32) { layers[id]?.zPosition = 0.5 }
+
+    /// Only an open overview's panel takes keys, without activating Transom (non-activating panel); never the camera stage.
+    var takesKeys = false
+    /// A key press while this panel is key (the open overview).
+    var onKey: ((NSEvent) -> Void)?
+    public override var canBecomeKey: Bool { takesKeys }
     public override var canBecomeMain: Bool { false }
+    /// Every key goes to `onKey`; keys it ignores are dropped without a beep (like Mission Control).
+    public override func keyDown(with event: NSEvent) { onKey?(event) }
 
     public var isShown: Bool { isVisible }
 

@@ -665,6 +665,7 @@ import os
             for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
         }
         overview.onSwitchFailed = { [weak self] text in Task { await self?.run([.beep, .announce(text)]) } }
+        overview.focused = { [weak self] in self?.commandContext().focused }
         // AX lists a window only while its Space shows: read the app again before focusing (06-SPIKE, AX after switch).
         overview.focusWindow = { [weak self] window in
             guard let self else { return }
