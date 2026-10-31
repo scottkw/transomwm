@@ -105,6 +105,9 @@ public struct OverviewLayout: Equatable, Sendable {
         }
     }
 
+    /// A layout already made, with tiles changed while the overview is open (06-09 live updates).
+    public init(laidOut displays: [OverviewDisplayLayout]) { self.displays = displays }
+
     /// The front-most item under `point`: the strip first (it is drawn above), then main-area tiles front to back.
     public func item(at point: Point) -> OverviewItem? {
         for display in displays {

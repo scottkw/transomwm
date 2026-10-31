@@ -146,7 +146,7 @@ import os
 
     /// Esc, Show Overview again: the reverse of open, then the stage fades out. No window command: nothing moved.
     func dismiss(reason: String) {
-        guard close(reason: reason) else { return }
+        guard close(log: "dismiss: \(reason)") else { return }
         let closed = generation
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         for (uuid, tiles) in shown {
@@ -165,27 +165,30 @@ import os
         shown = [:]
     }
 
-    /// A Space, display, focus or session change, or another command: the stage fades out at once.
-    func interrupt(reason: String) {
-        guard close(reason: reason) else { return }
+    /// A Space, display, focus or session change, the status menu, or another command: the stage fades out over 120 ms
+    /// at once, with no reverse animation (also under Reduce Motion).
+    func interrupt(reason: OverviewCopy.Interruption) { fadeAway(log: OverviewCopy.interruptedLog(reason)) }
+
+    private func fadeAway(log: String) {
+        guard close(log: log) else { return }
         for uuid in shown.keys { panels[uuid]?.fadeOut() }
         shown = [:]
     }
 
-    private func close(reason: String) -> Bool {
+    private func close(log: String) -> Bool {
         guard isOpen else { return false }
         isOpen = false
         generation += 1
         releaseKeys()
         selection = OverviewSelection()
-        logger.info("dismiss: \(reason, privacy: .public)")
+        logger.info("\(log, privacy: .public)")
         onClosed()
         return true
     }
 
     /// Displays changed: every panel is made again on the next open (a display may have changed size or gone).
     func displaysChanged() {
-        interrupt(reason: "displays changed")
+        interrupt(reason: .displayChange)
         for panel in panels.values { panel.orderOut(nil) }
         panels = [:]
     }
@@ -242,10 +245,57 @@ import os
         selection.move(key, in: layout, focused: focused())
     }
 
-    /// A window closed while open: if it was selected, the selection moves to the nearest remaining item.
+    /// A window closed while open: its tile fades out and, if it was selected, the selection moves to the nearest
+    /// remaining item.
     func windowClosed(_ window: TransomModel.WindowRef) {
         guard isOpen, let layout else { return }
         selection.reselect(afterRemoving: window, in: layout)
+        windowsChanged()
+    }
+
+    /// While open, windows opened or closed: the layout is made again from the Arranger as it is now. A tile new to it
+    /// fades in over 120 ms at its overview rect, a tile gone from it fades out over 120 ms; every other tile, the strip
+    /// and the empty capsule stay as they are.
+    /// shortcut: the strip and the empty capsule are not rebuilt; rebuild them if a live change there turns out to matter.
+    func windowsChanged() {
+        guard isOpen, let old = layout, let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else { return }
+        let snapshot = spaces()
+        let arranger = arranger()
+        let inputs = Self.inputs(arranger, spaces: snapshot, frontToBack: CGWindowList.onScreenFrontToBack())
+        let new = OverviewLayout(
+            displays: inputs, stripShown: snapshot != nil, separateSpaces: snapshot?.separateSpaces ?? true, emptyCapsuleSize: Size(width: 0, height: 0))
+        func appKit(_ rect: Rect) -> CGRect {
+            let r = Coordinates.appKit(fromTopLeft: rect, primaryHeight: primaryHeight)
+            return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+        }
+        let zoom = zoom()
+        var displays: [OverviewDisplayLayout] = []
+        for display in old.displays {
+            guard let panel = panels[display.uuid], let fresh = new.displays.first(where: { $0.uuid == display.uuid }) else {
+                displays.append(display)
+                continue
+            }
+            let kept = display.tiles.filter { tile in fresh.tiles.contains { $0.window == tile.window } }
+            let added = fresh.tiles.filter { tile in !display.tiles.contains { $0.window == tile.window } }
+            guard kept.count != display.tiles.count || !added.isEmpty else {
+                displays.append(display)
+                continue
+            }
+            let id = { (window: TransomModel.WindowRef) in zoom.cgWindow(window) ?? window.windowID }
+            let removed = display.tiles.filter { tile in !kept.contains { $0.window == tile.window } }.map { id($0.window) }
+            let addedTiles = added.map { tile in
+                let content = zoom.cgWindow(tile.window).flatMap { zoom.cachedSnapshot($0) }.map { TileLayer.Content.snapshot($0) } ?? zoom.fallback(tile.window)
+                let real = arranger.windows[tile.window.identity]?.frame ?? tile.rect
+                return StageTile(id: id(tile.window), start: appKit(real), end: appKit(tile.rect), content: content)
+            }
+            panel.fadeTiles(adding: addedTiles, removing: removed)
+            shown[display.uuid] = (shown[display.uuid] ?? []).filter { !removed.contains($0.id) } + addedTiles
+            var updated = display
+            updated.tiles = kept + added  // the same order as `shown`, which markSelection indexes
+            displays.append(updated)
+        }
+        layout = OverviewLayout(laidOut: displays)
+        logger.info("live update: \(displays.reduce(0) { $0 + $1.tiles.count }, privacy: .public) tiles")
     }
 
     /// Return: picks the selected item.
@@ -393,7 +443,7 @@ import os
     /// The stage fades out (120 ms), then the display switches to `space` and `window` gets focus. A switch that does not
     /// land within 1 s beeps and announces (Surface 2); the overview is closed by then.
     private func switchAway(to space: UInt64, on display: String, then window: TransomModel.WindowRef?) {
-        interrupt(reason: "pick")
+        fadeAway(log: "dismiss: pick")
         let refusal = refusal(for: space, on: display)
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(StagePanel.revealFade))

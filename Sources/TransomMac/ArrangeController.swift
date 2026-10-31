@@ -179,6 +179,7 @@ import os
         await settleIfLaunchArrangementChanged()
         system.onDisplaysSettling = { [weak self] in
             guard let self else { return }
+            self.overviewController?.interrupt(reason: .displayChange)
             // Synchronous, so no inventory from the change itself is fed before the Arranger is settling.
             let effects = self.arranger.handle(.displaysSettling, now: .now)
             Task { await self.run(effects) }
@@ -195,15 +196,12 @@ import os
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
                 if case .spaceChanged(let uuid, let space) = event {
                     self.zoomInput.endPick(reason: "space changed")
-                    self.overviewController?.interrupt(reason: "space changed")
+                    self.overviewController?.interrupt(reason: .spaceChange)
                     if self.zoomEnabled { self.overview().spaceDidSettle(display: uuid, space: space) }  // D-03 visit capture
                     self.gestures.republish(reason: "space change")
                 }
                 // Back at the keyboard (⌘-Tab, a Dock click): pick mode's Esc hotkey must not keep Esc from that app (WR-02).
-                if case .windowFocused = event {
-                    self.zoomInput.endPick(reason: "focus changed")
-                    self.overviewController?.interrupt(reason: "focus changed")
-                }
+                if case .windowFocused = event { self.zoomInput.endPick(reason: "focus changed") }
                 if case .displaysChanged = event {
                     self.zoomInput.endPick(reason: "displays changed")
                     self.overviewController?.displaysChanged()
@@ -215,7 +213,12 @@ import os
                     self.zoomController?.windowClosed(window)
                     self.overviewController?.windowClosed(window)
                 }
-                if case .sessionPaused(true) = event { self.overviewController?.interrupt(reason: "session paused") }
+                if case .sessionPaused(true) = event { self.overviewController?.interrupt(reason: .sleep) }
+                // A tile fades in or out; the CG list catches a new window that was not on screen yet at its creation.
+                switch event {
+                case .windowCreated, .liveWindowsChanged: self.overviewController?.windowsChanged()
+                default: break
+                }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
                 // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does
@@ -290,6 +293,9 @@ import os
                 // ⌘-Tab sends no focused-window change, so pick mode must also end here (G-04-12).
                 if app?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
                     self?.zoomInput.endPick(reason: "app activated")
+                    // The frontmost app changed (⌘-Tab, the Dock). Not on a focus change inside the app: a window that
+                    // opens while the overview is open takes focus and fades its tile in instead (Surface 1 While open).
+                    self?.overviewController?.interrupt(reason: .appSwitch)
                 }
                 self?.watchdogTick()
             }
@@ -504,7 +510,7 @@ import os
             refuse()
             return
         }
-        if command != .camera(.overview) { overviewController?.interrupt(reason: "command") }
+        if command != .camera(.overview) { overviewController?.interrupt(reason: .command) }
         if case .camera(let camera) = command {
             await dispatchCamera(camera, from: source)
             return
@@ -522,15 +528,15 @@ import os
     /// only logs; with zoom off a URL is ignored and logged (its hotkeys are disabled then, D-D).
     private func dispatchCamera(_ camera: CameraCommand, from source: CommandSource) async {
         guard zoomEnabled else {
+            if camera == .overview { logger.info("refused overview: zoom off") }
             if source == .url { zoomInputLog.info("url \(String(describing: camera), privacy: .public) ignored: zoom off") }
             return
         }
         let context = commandContext()
         if case .overview = camera {  // the shell's: it needs no pointer display and is allowed while paused
             guard context.ready else {
-                let refusal = Navigator.Refusal.notReady
-                let effects: [ArrangerEffect] = [.beep, .announce(refusal.announcement), .info("refused \(camera): \(refusal)")]
-                return await run(source == .url ? effects.filter { $0 != .beep && $0 != .announce(refusal.announcement) } : effects)
+                let text = OverviewCopy.refusedNotReady
+                return await run(source == .url ? [.info("refused overview: not ready")] : [.beep, .announce(text), .info("refused overview: not ready")])
             }
             return await toggleOverview(from: source)
         }
@@ -666,6 +672,7 @@ import os
         overview.onClosed = { [weak self] in
             guard let self else { return }
             for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
+            self.gestures.publish()  // armed again
         }
         overview.onSwitchFailed = { [weak self] text in Task { await self?.run([.beep, .announce(text)]) } }
         overview.focused = { [weak self] in self?.commandContext().focused }
@@ -688,16 +695,17 @@ import os
         return overview
     }
 
-    /// Opens or closes the overview with pick mode ended and the collapsed panels hidden (they would sit above it).
-    /// Every display in full screen refuses: a beep and an announcement, or from a URL only a log line.
+    /// Opens or closes the overview with pick mode and any rubber band ended and the collapsed panels hidden (they would
+    /// sit above it); gestures are disarmed while it is open. Every display in full screen refuses: a beep and an
+    /// announcement, or from a URL only a log line.
     private func toggleOverview(from source: CommandSource) async {
         let overview = overview()
         let opening = !overview.isOpen
         if opening {
-            zoomInput.endPick(reason: "overview")
+            zoomInput.reset(reason: "overview")
             for display in arranger.displays { collapsedPanels.hide(on: display.uuid) }
         }
-        guard !overview.toggle(trigger: String(describing: source)) else { return }
+        guard !overview.toggle(trigger: String(describing: source)) else { return gestures.publish() }
         for display in arranger.displays { collapsedPanels.fadeIn(on: display.uuid) }
         let text = OverviewCopy.refusedFullScreen
         await run(source == .url ? [.info("refused overview: full screen")] : [.beep, .announce(text), .info("refused overview: full screen")])

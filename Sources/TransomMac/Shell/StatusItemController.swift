@@ -108,6 +108,7 @@ import os
     /// A chord pressed while the menu is open runs its menu item once, instead of being buffered and fired again by the
     /// hotkey when the menu closes (KeyboardShortcuts' `setShortcut` note, RESEARCH Pattern 9).
     func menuWillOpen(_ menu: NSMenu) {
+        arrange.overviewController?.interrupt(reason: .menu)  // Surface 1: the status menu opening interrupts the overview
         KeyboardShortcuts.disable(Hotkeys.entries.map(\.name))
     }
 

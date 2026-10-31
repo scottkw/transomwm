@@ -69,10 +69,16 @@ nonisolated public enum OverviewCopy {
 
     /// Show Overview refused: every display is in full screen.
     public static let refusedFullScreen = "The overview isn't available in full screen"
-    public static let refusedNotReady = ""
+    /// Show Overview refused: Accessibility is not ready (the Phase 4 text).
+    public static let refusedNotReady = "Transom needs Accessibility access"
 
-    public enum Interruption: String, Sendable { case command, menu, spaceChange, displayChange, sleep, appSwitch }
-    public static func interruptedLog(_ reason: Interruption) -> String { "" }
+    /// What closed the overview at once, with no reverse animation (Surface 1 Motion "Interrupted").
+    public enum Interruption: String, Sendable {
+        case command, menu, spaceChange = "space change", displayChange = "display change", sleep, appSwitch = "app switch"
+    }
+
+    /// The overview log line for an interruption.
+    public static func interruptedLog(_ reason: Interruption) -> String { "interrupted: \(reason.rawValue)" }
 
     /// A pick's Space switch did not land within 1 s (Surface 2): the desktop's number, or a full-screen Space's app.
     public static func couldNotSwitch(desktop index: Int) -> String { "Couldn't switch to \(desktopLabel(index))" }

@@ -318,6 +318,26 @@ public final class StagePanel: NSPanel {
         return layer
     }
 
+    /// While the overview is open, windows opened or closed: new tiles fade in at their end rects and the removed ones
+    /// fade out, both over the reveal fade (opacity only, so the same under Reduce Motion).
+    func fadeTiles(adding added: [StageTile], removing removed: [UInt32]) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for id in removed {
+            guard let layer = layers.removeValue(forKey: id) else { continue }
+            fade(layer, to: 0, duration: Self.revealFade)
+            leaving.append(layer)
+        }
+        tiles.removeAll { removed.contains($0.id) }
+        for tile in added where layers[tile.id] == nil {
+            let layer = makeTile(tile, at: tile.end)
+            fade(layer, from: 0, to: 1, duration: Self.revealFade)
+            layers[tile.id] = layer
+            tiles.append(tile)
+        }
+        CATransaction.commit()
+    }
+
     /// Orders one tile above the others (a picked window, raised as the stage reverses), below the overlay.
     func bringToFront(_ id: UInt32) { layers[id]?.zPosition = 0.5 }
 

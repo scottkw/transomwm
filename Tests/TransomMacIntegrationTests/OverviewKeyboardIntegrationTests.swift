@@ -121,7 +121,7 @@ import Testing
         try await keysReturn("toggle", letter: "c", key: 8)
 
         try await open("interrupt")
-        overview.interrupt(reason: "test")  // a Space switch, focus change, command or session pause
+        overview.interrupt(reason: .command)  // a Space switch, focus change, command or session pause
         try await keysReturn("interrupt", letter: "d", key: 2)
 
         try await open("displays changed")

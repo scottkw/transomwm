@@ -152,4 +152,44 @@ import Testing
         let focused = await pump { ((try? await fixture.send("frontmost")) ?? []).contains("frontmost index=1") }
         #expect(focused, "window 1 did not get focus at settle")
     }
+
+    /// Surface 1 While open: a window that opens while the overview is open gets a tile (fading in), one that closes
+    /// loses it (fading out), and neither closes the overview.
+    @Test(.timeLimit(.minutes(1)))
+    func windowsOpeningAndClosingWhileOpenUpdateTheTiles() async throws {
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
+        defer { fixture.terminate() }
+        let fixturePID = fixture.pid
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        await system.start()
+        let arrange = ArrangeController(system: system, zoomEnabled: true)
+        defer { withExtendedLifetime(arrange) {} }
+        await arrange.start()
+        func pump(timeout: Duration = .seconds(3), until done: () async -> Bool) async -> Bool {
+            await waitUntil(timeout: timeout) {
+                dispatchAppKitEvents()
+                return await done()
+            }
+        }
+        func trackedCount() -> Int { arrange.arranger.windows.values.filter { $0.window.pid == fixturePID }.count }
+        try #require(await waitUntil(timeout: .seconds(3)) { trackedCount() == 2 }, "the fixture windows were never tracked")
+        try await Task.sleep(for: .milliseconds(500))  // past the arrange
+        let main = try #require(arrange.arranger.displays.first?.uuid)
+
+        await arrange.dispatch(.camera(.overview))
+        let overview = try #require(arrange.overviewController)
+        try #require(await pump { overview.isOpen && overview.tileCount(display: main) == 2 }, "the overview did not open with 2 tiles")
+
+        _ = try await fixture.send("open standard")
+        let added = await pump { trackedCount() == 3 && overview.tileCount(display: main) == 3 }
+        #expect(added, "the new window got no tile: \(overview.tileCount(display: main)) tiles, open \(overview.isOpen)")
+        #expect(overview.isOpen, "a window opening closed the overview")
+
+        _ = try await fixture.send("close 2")
+        let removed = await pump { overview.tileCount(display: main) == 2 }
+        #expect(removed, "the closed window kept its tile: \(overview.tileCount(display: main)) tiles, open \(overview.isOpen)")
+        #expect(overview.isOpen, "a window closing closed the overview")
+        await arrange.dispatch(.camera(.overview))
+        #expect(!overview.isOpen)
+    }
 }
