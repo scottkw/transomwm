@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-10-31T18:46:19.462Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-10-31T18:56:47.498Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: e059dfea403fb8b811b8a57cc17fc642cbbce6ac
+state_head: a90c10dfeede47961f70e792f5ff74468b937ecf
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 71
+  completed_plans: 72
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 Last activity: 2026-10-31 — Phase 6 execution started
 
@@ -124,6 +124,7 @@ Progress: [██████░░░░] 56%
 | Phase 6 P02 | 12min | 2 tasks | 14 files |
 | Phase 06 P03 | 30min | 2 tasks | 9 files |
 | Phase 06 P04 | 45min | 2 tasks | 9 files |
+| Phase 06 P05 | 20min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -330,6 +331,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-04: user action wins at desk level; desks holding a user-placed window are kept over a stored layout set
 - [Phase 06]: 06-04: every display settle claims windows by their desk's display, so the layout wins over where macOS left a window
 - [Phase 06]: 06-04: a weight change is not a placement; undo history resets on a known arrangement switch
+- [Phase 06]: 06-05: Display settler resume restart runs after AXWindowSystem's post-resume full refresh, so a held change settles against a fresh unpaused inventory
+- [Phase 06]: 06-05: Launch settle waits for the saved layout's re-attach (not straight after .restore), so the saved World is stored under its own arrangement and a known live set applies
+- [Phase 06]: 06-05: Display names merged, never replaced, so a display that already left keeps its N12 name
 
 ### Quick Tasks Completed
 
@@ -370,8 +374,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T18:46:18.929Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-10-31T18:56:46.946Z
+Stopped at: Completed 06-05-PLAN.md
 Resume file: None
 
 ## Deferred Verification
