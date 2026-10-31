@@ -400,9 +400,9 @@ import os
 
     /// The overview's one-shot captures, through the same permission check, budget and cache as a move's (06 UI-SPEC
     /// Surface 1 Snapshots). Empty without Screen Recording.
-    func overviewImages(_ requests: [(CGWindowID, CGSize)]) async -> [UInt32: CGImage] {
+    func overviewImages(_ requests: [(CGWindowID, CGSize)], deadline: Duration = SnapshotCapture.moveBudget) async -> [UInt32: CGImage] {
         guard checkPermission(), !requests.isEmpty else { return [:] }
-        let images = await capture.captureAll(requests, deadline: SnapshotCapture.moveBudget)
+        let images = await capture.captureAll(requests, deadline: deadline)
         updateFailing()
         return images
     }

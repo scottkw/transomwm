@@ -193,9 +193,10 @@ import os
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
-                if case .spaceChanged = event {
+                if case .spaceChanged(let uuid, let space) = event {
                     self.zoomInput.endPick(reason: "space changed")
                     self.overviewController?.interrupt(reason: "space changed")
+                    if self.zoomEnabled { self.overview().spaceDidSettle(display: uuid, space: space) }  // D-03 visit capture
                     self.gestures.republish(reason: "space change")
                 }
                 // Back at the keyboard (⌘-Tab, a Dock click): pick mode's Esc hotkey must not keep Esc from that app (WR-02).

@@ -106,6 +106,13 @@ import Testing
             return reply.contains("frontmost index=0")
         }
         #expect(focused, "the picked window is not focused: \(reply)")
+        // D-03: 1 s after the change settles, the visit's windows are captured into the cache (Screen Recording only).
+        if SnapshotCapture.isGranted() {
+            let cached = await waitUntil(timeout: .seconds(4)) { arrange.zoomController?.cachedSnapshot(id) != nil }
+            #expect(cached, "the visit to Space \(second) did not capture window \(id)")
+        } else {
+            print("OverviewSpaceSwitchIntegrationTests: no Screen Recording grant, visit capture not checked")
+        }
         try await returnToFirst()
     }
 }

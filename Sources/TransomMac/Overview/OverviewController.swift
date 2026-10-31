@@ -2,6 +2,7 @@ import AppKit
 import KeyboardShortcuts
 import TransomEngine
 import TransomModel
+import TransomPrivate
 import os
 
 /// The overview (OVER-01, D-01, D-02, 06 UI-SPEC Surface 1): one stage panel per display not showing a full-screen
@@ -36,6 +37,9 @@ import os
     private var generation = 0
     /// The open overview's geometry, for hit-testing clicks.
     private var layout: OverviewLayout?
+    /// Per display: the capture waiting for its Space change to settle, and the Space whose visit was captured (D-03).
+    private var visitTasks: [String: Task<Void, Never>] = [:]
+    private var capturedVisit: [String: UInt64] = [:]
 
     init(
         arranger: @escaping () -> Arranger, spaces: @escaping () -> SpacesSnapshot?, zoom: @escaping () -> ZoomController, switcher: SpaceSwitcher
@@ -80,13 +84,7 @@ import os
         generation += 1
         let opened = generation
         let zoom = zoom()
-        var requests: [(CGWindowID, CGSize)] = []
-        for display in layout.displays {
-            let scale = Displays.screen(uuid: display.uuid)?.backingScaleFactor ?? 2
-            for tile in display.tiles {
-                if let id = zoom.cgWindow(tile.window) { requests.append((id, CGSize(width: tile.rect.width * scale, height: tile.rect.height * scale))) }
-            }
-        }
+        let requests = Self.requests(layout.displays, zoom: zoom)
         escape = Task { [weak self] in
             for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape)) where key == .keyDown {
                 self?.dismiss(reason: "esc")
@@ -272,6 +270,51 @@ import os
                 rect: appKit(thumb.rect), labelRect: appKit(thumb.labelRect), label: label, isCurrent: thumb.isCurrent, minis: minis)
         }
         return OverviewOverlay(thumbnails: thumbnails, emptyMessage: display.emptyCapsule.map { (appKit($0), OverviewCopy.noWindows) })
+    }
+
+    // MARK: Snapshots of a visit (D-03)
+
+    /// A display now shows `space`: 1 s after the change settles (latest change wins), the windows it shows are captured
+    /// once into the snapshot cache, so the strip has real previews of this Space after the user leaves it. A repeated
+    /// change to the Space already captured on this visit does nothing.
+    func spaceDidSettle(display uuid: String, space: UInt64?) {
+        guard let space, capturedVisit[uuid] != space else { return }
+        capturedVisit[uuid] = nil
+        visitTasks[uuid]?.cancel()
+        visitTasks[uuid] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, let self else { return }
+            await self.captureVisit(display: uuid, space: space)
+        }
+    }
+
+    /// Only the on-screen windows of the Space the display shows now, at their main-area size × backing scale; never a
+    /// window on a hidden Space (D-03), so nothing without a CG on-screen list. Screen Recording is checked by the capture.
+    private func captureVisit(display uuid: String, space: UInt64) async {
+        let snapshot = spaces()
+        guard (snapshot?.displays.first { $0.displayUUID == uuid }?.current ?? SkyLightSpaces.currentSpace(displayUUID: uuid)) == space,
+            let onScreen = CGWindowList.onScreenFrontToBack()
+        else { return }
+        let input = Self.inputs(arranger(), spaces: snapshot, frontToBack: onScreen).filter { $0.uuid == uuid }
+        let layout = OverviewLayout(
+            displays: input, stripShown: snapshot != nil, separateSpaces: snapshot?.separateSpaces ?? true, emptyCapsuleSize: Size(width: 0, height: 0))
+        let zoom = zoom()
+        let images = await zoom.overviewImages(Self.requests(layout.displays, zoom: zoom), deadline: Self.visitBudget)
+        capturedVisit[uuid] = space
+        logger.info("space \(space, privacy: .public) captured \(images.count, privacy: .public) windows after visit")
+    }
+
+    /// A background capture has no one waiting: it may take longer than an open's 120 ms.
+    static let visitBudget = Duration.seconds(2)
+
+    /// One capture per shown tile, at its overview size × the display's backing scale.
+    private static func requests(_ displays: [OverviewDisplayLayout], zoom: ZoomController) -> [(CGWindowID, CGSize)] {
+        displays.flatMap { display in
+            let scale = Displays.screen(uuid: display.uuid)?.backingScaleFactor ?? 2
+            return display.tiles.compactMap { tile in
+                zoom.cgWindow(tile.window).map { ($0, CGSize(width: tile.rect.width * scale, height: tile.rect.height * scale)) }
+            }
+        }
     }
 
     // MARK: Inputs
