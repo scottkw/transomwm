@@ -49,11 +49,11 @@ public enum Displays {
         NSScreen.screens.first { screen in displayID(screen).flatMap(Self.uuid) == uuid }
     }
 
-    private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
+    static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 
-    private static func uuid(_ id: CGDirectDisplayID) -> String? {
+    static func uuid(_ id: CGDirectDisplayID) -> String? {
         guard let uuid = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue() else { return nil }
         return CFUUIDCreateString(nil, uuid) as String?
     }

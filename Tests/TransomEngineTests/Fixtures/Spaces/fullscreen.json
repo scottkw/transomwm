@@ -1,0 +1,12 @@
+[
+  {
+    "Display Identifier": "37D8832A-2D66-02CA-B9F7-8F30A301B230",
+    "Current Space": {"ManagedSpaceID": 12, "id64": 12, "type": 4, "uuid": "F4E3D2C1-4444-4555-8666-B77788889999"},
+    "Spaces": [
+      {"ManagedSpaceID": 3, "id64": 3, "type": 0, "uuid": "7A041E06-6227-4718-86AD-2EF8A8D6E7DA"},
+      {"ManagedSpaceID": 12, "id64": 12, "type": 4, "uuid": "F4E3D2C1-4444-4555-8666-B77788889999"},
+      {"ManagedSpaceID": 13, "id64": 13, "type": 2, "uuid": "D5C4B3A2-5555-4666-8777-C88899990000"},
+      {"ManagedSpaceID": 4, "id64": 4, "type": 0, "uuid": "EF244C48-0D4C-4A55-9A0A-3C1B2A5E6F71"}
+    ]
+  }
+]

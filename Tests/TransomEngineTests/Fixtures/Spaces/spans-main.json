@@ -1,0 +1,10 @@
+[
+  {
+    "Display Identifier": "Main",
+    "Current Space": {"ManagedSpaceID": 2, "id64": 2, "type": 0, "uuid": "B1F0C2D3-1111-4222-8333-944455556666"},
+    "Spaces": [
+      {"ManagedSpaceID": 1, "id64": 1, "type": 0, "uuid": "A0E9B1C2-1111-4222-8333-944455556666"},
+      {"ManagedSpaceID": 2, "id64": 2, "type": 0, "uuid": "B1F0C2D3-1111-4222-8333-944455556666"}
+    ]
+  }
+]
