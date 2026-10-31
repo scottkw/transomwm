@@ -295,7 +295,42 @@ Plans:
   4. Unplugging and re-plugging a display, or sleeping and waking the Mac, restores that display's layout, with "Displays have separate Spaces" both on and off
   5. Transom remembers a layout set per display arrangement and switches to the matching one automatically when a laptop is docked or undocked
 
-**Plans**: TBD
+**Plans:** 12 plans
+
+Plans:
+**Wave 1**
+- [ ] 06-01-PLAN.md — Spaces spike: SpacesProvider tracer, SymbolicHotKeys/CoreDock shims, VM probes (hotkeys, abort persistence, switch, ghost, reboot diff); schema-door decision and host swipe check
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 06-02-PLAN.md — Spaces runtime: G-03-9 close rows, D-14 tests, co-visibility fallback (Debug only), Debug Spaces lines
+- [ ] 06-03-PLAN.md — layout.json schema 2: Space-UUID table and re-key on load, v1 migration, arrangement value types
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 06-04-PLAN.md — Engine display settling and per-arrangement layout sets: dormant desks, re-plug restore, user-action-wins merge, N12
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 06-05-PLAN.md — Shell display settling: 1.5 s debounce, SessionGate hold, layout sets saved, N12 copy, Debug S2-S4
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 06-06-PLAN.md — Overview tracer: Show Overview (⌃⌥⌘A, menu, URL, Shortcuts row), per-display panels, full OverviewLayout geometry
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 06-07-PLAN.md — Strip clicks and Space switching with the user's chords, mini-tile picks, background capture per Space visit
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 06-08-PLAN.md — Selection and keyboard: OverviewSelection, temporary Carbon keys, hover, rings, title capsule
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 06-09-PLAN.md — Overview polish: parked-window picks, refusals, interruptions, live updates, Reduce Motion, announcements, Debug S6
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 06-10-PLAN.md — Mission Control takeover engine: TakeoverPolicy, crash-safe apply/lift, launch restore, canary, keys open the overview
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 06-11-PLAN.md — Takeover UI: Replace Mission Control toggle, explanation alert, N10/N11, Restore hook, Debug S5, swipe variant per spike
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 06-12-PLAN.md — Phase gate: full host suite, each VM suite, signed Debug build, 06-UAT.md hardware checklist
 **UI hint**: yes
 **Research**: Needs phase research. Verify SkyLight signatures, Space-UUID stability across reboots and macOS updates, and symbolic-hotkey state after deliberate crash tests
 **Scope notes**: Read-only SkyLight `SpacesProvider` with a single-Space fallback; skip dirty desks while their Space is hidden; orphan/dormant desks on unplug re-attached by display UUID; debounced display reconfiguration; Mission Control takeover is opt-in with a restore watchdog. The read-only SkyLight Spaces lookup (`SkyLightSpaces`, capability `Spaces`, single-Space fallback) landed in Phase 2 (02-14), so Phase 6 builds its `SpacesProvider` on it rather than re-adding it. When the Spaces lookup is unavailable, build a public-API fallback map of window→Space by co-visibility between `NSWorkspace.activeSpaceDidChangeNotification` events, so same-frame tab groups on different Spaces stay separate (closes phase 2 known limit: C5 single-Space merge; covers only Spaces visited since launch). Also closes deferred G-03-9: a window whose only CG entry has no Space (Safari keeps closed windows' entries for minutes) must count as closed, not alive (see .planning/debug/g-03-9-closed-safari-lingers.md).
@@ -366,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
-| 6. Overview, Spaces & Displays | 0/TBD | Not started | - |
+| 6. Overview, Spaces & Displays | 0/12 | Not started | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |
