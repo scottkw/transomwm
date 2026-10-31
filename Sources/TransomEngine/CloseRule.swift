@@ -40,7 +40,9 @@ public enum CloseDecision: Equatable, Sendable {
 /// | active  | alive      | valid                      | absent  | recheck (transient)               |
 /// | active  | alive      | valid, listed              | present | state(.present)                   |
 public enum CloseRule {
-    public static func decide(sessionActive: Bool, app: AppLiveness, ax: AXWindowFact, inCGList: Bool, isKnownTabMember: Bool) -> CloseDecision {
+    public static func decide(
+        sessionActive: Bool, app: AppLiveness, ax: AXWindowFact, inCGList: Bool, cgSpacesKnownEmpty: Bool, isKnownTabMember: Bool
+    ) -> CloseDecision {
         guard sessionActive else { return .noChange }
         switch (app, ax, inCGList) {
         case (.terminated, _, false): return .closed

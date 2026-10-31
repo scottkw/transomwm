@@ -353,7 +353,7 @@ public struct WindowTracker: Sendable {
             let shown = windows[identity]?.visibleMemberID ?? identity.windowID
             let decision = CloseRule.decide(
                 sessionActive: context.sessionActive, app: app, ax: fact(shown),
-                inCGList: inCG.contains(shown), isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid)
+                inCGList: inCG.contains(shown), cgSpacesKnownEmpty: false, isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid)
             )
             if decision == .recheck { rechecks[identity, default: 0] += 1 } else { rechecks[identity] = nil }
             switch decision {

@@ -9,6 +9,7 @@ struct CloseRow: Sendable, CustomTestStringConvertible {
     var app: AppLiveness = .alive
     let ax: AXWindowFact
     let inCGList: Bool
+    var knownEmpty = false
     var tabMember = false
     let expected: CloseDecision
 
@@ -40,6 +41,16 @@ private let rows: [CloseRow] = [
     CloseRow(name: "other failure, CG absent", ax: .otherFailure, inCGList: false, expected: .noChange),
     CloseRow(name: "paused overrides terminated, CG absent", sessionActive: false, app: .terminated, ax: .timedOut, inCGList: false, expected: .noChange),
     CloseRow(name: "paused overrides invalid, CG absent", sessionActive: false, ax: .invalidElement, inCGList: false, expected: .noChange),
+    // G-03-9: a CG entry whose Space set is known and empty is a ghost, unless the window is a known tab member.
+    CloseRow(name: "invalid, CG present, no Space", ax: .invalidElement, inCGList: true, knownEmpty: true, expected: .closed),
+    CloseRow(name: "invalid, CG present, no Space, tab member", ax: .invalidElement, inCGList: true, knownEmpty: true, tabMember: true, expected: .state(.absent)),
+    CloseRow(name: "terminated, CG present, no Space", app: .terminated, ax: .timedOut, inCGList: true, knownEmpty: true, expected: .closed),
+    CloseRow(name: "valid, minimised, no Space", ax: valid(minimized: true), inCGList: true, knownEmpty: true, expected: .state(.absent)),
+    CloseRow(name: "valid, app hidden, no Space", ax: valid(appHidden: true), inCGList: true, knownEmpty: true, expected: .state(.absent)),
+    CloseRow(name: "valid, unlisted, no Space", ax: valid(listed: false), inCGList: true, knownEmpty: true, expected: .noChange),
+    CloseRow(name: "timeout, CG present, no Space", ax: .timedOut, inCGList: true, knownEmpty: true, expected: .noChange),
+    CloseRow(name: "paused overrides invalid, no Space", sessionActive: false, ax: .invalidElement, inCGList: true, knownEmpty: true, expected: .noChange),
+    CloseRow(name: "paused overrides terminated, no Space", sessionActive: false, app: .terminated, ax: .timedOut, inCGList: true, knownEmpty: true, expected: .noChange),
 ]
 
 private let identity = WindowIdentity(windowID: 100, pid: 42, bundleID: "com.example.app")
@@ -49,7 +60,8 @@ private let t0 = ContinuousClock.now
     @Test(arguments: rows)
     func theTableDecides(row: CloseRow) {
         let decision = CloseRule.decide(
-            sessionActive: row.sessionActive, app: row.app, ax: row.ax, inCGList: row.inCGList, isKnownTabMember: row.tabMember
+            sessionActive: row.sessionActive, app: row.app, ax: row.ax, inCGList: row.inCGList, cgSpacesKnownEmpty: row.knownEmpty,
+            isKnownTabMember: row.tabMember
         )
         #expect(decision == row.expected)
     }
@@ -57,10 +69,10 @@ private let t0 = ContinuousClock.now
     @Test func noSingleSourceEverCloses() {
         // AX alone (invalid but still listed by CG) and CG alone (absent but AX valid or silent) never close.
         for ax in [valid(), valid(listed: false), .timedOut, .otherFailure] {
-            #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: ax, inCGList: false, isKnownTabMember: false) != .closed)
+            #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: ax, inCGList: false, cgSpacesKnownEmpty: false, isKnownTabMember: false) != .closed)
         }
-        #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: .invalidElement, inCGList: true, isKnownTabMember: false) != .closed)
-        #expect(CloseRule.decide(sessionActive: true, app: .terminated, ax: .timedOut, inCGList: true, isKnownTabMember: false) != .closed)
+        #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: .invalidElement, inCGList: true, cgSpacesKnownEmpty: false, isKnownTabMember: false) != .closed)
+        #expect(CloseRule.decide(sessionActive: true, app: .terminated, ax: .timedOut, inCGList: true, cgSpacesKnownEmpty: false, isKnownTabMember: false) != .closed)
     }
 
     @Test func aClosedIdentityIsContainedForJustUnder60s() {

@@ -108,6 +108,17 @@ extension Harness {
         #expect(setFrames(await harness.refresh()).isEmpty)
     }
 
+    /// G-03-9 end to end: a closed window whose CG entry lingers with no Space leaves the World and its neighbour reflows.
+    @Test func aGhostWithNoSpaceClosesAndItsNeighbourFillsTheSpace() async throws {
+        var harness = await Harness.onSpaceOne()
+        let tileA = try #require(await harness.frame(a))
+        await harness.fake.lingerInCG(2, spaces: [])
+        let effects = await harness.refresh()
+        #expect(harness.arranger.world[desk(1)]?.contains(b) == false)
+        let grown = try #require(setFrames(effects)[a], "the neighbour did not reflow")
+        #expect(grown.width * grown.height > tileA.width * tileA.height)
+    }
+
     @Test func theFakesSpaceSwitchMovesEveryDisplaysCurrentSpace() async {
         let harness = await Harness.onSpaceOne(dock: false)
         await harness.fake.showSpace(4, notifies: false)

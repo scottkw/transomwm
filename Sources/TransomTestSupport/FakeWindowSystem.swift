@@ -111,6 +111,8 @@ public actor FakeWindowSystem: WindowSystem {
     private var selectedTabs: [UInt32: UInt32] = [:]
     /// Space-switch notifications, consumed per app as `AXWindowSystem` does.
     private var spaceSwitches = SpaceSwitchMarks()
+    /// Closed windows whose CG entry lingers (G-03-9), with the Space set it reports.
+    private var lingering: [UInt32: Set<UInt64>] = [:]
 
     public init(now: ContinuousClock.Instant = .now) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -271,10 +273,22 @@ public actor FakeWindowSystem: WindowSystem {
 
     /// The window closed: AX says invalid and it left the CG list.
     public func close(_ id: UInt32) {
+        lingering[id] = nil
         update(id) {
             $0.axValid = false
             $0.inCGList = false
         }
+    }
+
+    /// The window closed but WindowServer keeps its CG entry (G-03-9): AX says invalid (-25202), and while Spaces are
+    /// available the entry reports `spaces`, until `close` clears it.
+    public func lingerInCG(_ id: UInt32, spaces: Set<UInt64>) {
+        update(id) {
+            $0.axValid = false
+            $0.listedInAX = false
+            $0.onScreen = false
+        }
+        lingering[id] = spaces
     }
 
     /// The process quit, as NSWorkspace reports it. Its windows stay in the CG list until a test removes them
@@ -375,7 +389,8 @@ public actor FakeWindowSystem: WindowSystem {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
         let windowSpaces: [UInt32: Set<UInt64>]? = spacesAvailable ? Dictionary(uniqueKeysWithValues: windows.values.filter { $0.inCGList && !locked }.compactMap { window in
-            window.space.map { (window.id, isHiddenTab(window) && !hiddenTabsReportSpace ? Set<UInt64>() : [$0]) }
+            if let spaces = lingering[window.id] { return (window.id, spaces) }
+            return window.space.map { (window.id, isHiddenTab(window) && !hiddenTabsReportSpace ? Set<UInt64>() : [$0]) }
         }) : nil
         return ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !(locked && lockGate),
                                   initialSweep: !initialSweepDone, now: clock, windowSpaces: windowSpaces,
