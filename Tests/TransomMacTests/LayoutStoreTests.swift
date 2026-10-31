@@ -65,6 +65,22 @@ private func sampleFile() throws -> LayoutFile {
         #expect(fresh.contents == file)
     }
 
+    /// WR-04: a backup is a byte-for-byte, owner-only copy beside the file, and a later one never replaces it.
+    @Test func aBackupCopiesTheFileAndKeepsEarlierBackups() throws {
+        let dir = Directory()
+        let store = LayoutStore(directory: dir.url)
+        #expect(!store.backUp("pre-rekey"), "no file, no backup")
+        try store.save(try sampleFile())
+        let original = try Data(contentsOf: dir.file)
+        #expect(store.backUp("pre-rekey", at: Date(timeIntervalSince1970: 100)))
+        #expect(store.backUp("pre-rekey", at: Date(timeIntervalSince1970: 200)))
+        for seconds in [100, 200] {
+            let copy = dir.url.appending(path: "\(LayoutStore.fileName).pre-rekey-\(seconds)")
+            #expect(try Data(contentsOf: copy) == original)
+            #expect(try FileManager.default.attributesOfItem(atPath: copy.path)[.posixPermissions] as? Int == 0o600)
+        }
+    }
+
     @Test func titlesAreNeverWritten() throws {
         let dir = Directory()
         try LayoutStore(directory: dir.url).save(try sampleFile())

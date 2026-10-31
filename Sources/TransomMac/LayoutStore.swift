@@ -71,6 +71,22 @@ public enum LayoutStoreError: Error, Equatable {
         return true
     }
 
+    /// Copies layout.json to `layout.json.<label>-<unix seconds>` (owner-only, as the original), so desks the next save
+    /// drops can still be recovered by hand (WR-04). A timestamp per copy, so no earlier backup is replaced. False when
+    /// there is no file or the copy failed (logged).
+    @discardableResult
+    public func backUp(_ label: String, at date: Date = .now) -> Bool {
+        let copy = directory.appending(path: "\(Self.fileName).\(label)-\(Int(date.timeIntervalSince1970))")
+        do {
+            try FileManager.default.copyItem(at: file, to: copy)
+            Self.logger.notice("backed up \(Self.fileName, privacy: .public) to \(copy.lastPathComponent, privacy: .public)")
+            return true
+        } catch {
+            Self.logger.error("could not back up \(Self.fileName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
     /// Size cap on the whole file, then a version probe, then the full decode (schema 1 through `LayoutFileV1`, each
     /// World's own validation), then `LayoutFile.validate()`, then every home frame and wanted frame (Persistence.swift's
     /// order). The session record has no field to check beyond its decode.

@@ -924,10 +924,16 @@ import os
             let (result, layoutSets, setsQuarantined) = try SpaceRekey.rekey(saved, live: live)
             logger.info(
                 "\(LayoutStore.fileName, privacy: .public) migrated: \(result.rekeyed, privacy: .public) desks re-keyed by Space UUID, \(result.unmatched.count, privacy: .public) unmatched kept dormant")
-            for key in result.quarantined + setsQuarantined {
+            let quarantined = result.quarantined + setsQuarantined
+            for key in quarantined {
                 let space = key.spaceID.map(String.init) ?? "none"
                 logger.error(
                     "\(LayoutStore.fileName, privacy: .public) desk on display \(key.displayUUID, privacy: .public) space \(space, privacy: .public) quarantined: its Space is gone and the ID now names another")
+            }
+            // WR-04: the launch write drops quarantined desks, so the file is copied first; with no copy nothing is dropped.
+            if !quarantined.isEmpty, store?.backUp("pre-rekey") != true {
+                logger.error("no backup of \(LayoutStore.fileName, privacy: .public): keeping saved Space IDs rather than drop \(quarantined.count, privacy: .public) desks")
+                return (saved.world, saved.layoutSets)
             }
             return (result.world, layoutSets)
         } catch {
