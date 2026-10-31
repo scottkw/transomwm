@@ -1,7 +1,8 @@
 ---
 phase: "6"
 slug: "overview-spaces-displays"
-status: draft
+status: approved
+reviewed_at: 2026-10-31
 shadcn_initialized: false
 preset: none
 created: "2026-10-31"
@@ -266,7 +267,7 @@ The main area always shows the home-view layout: with the camera at home (the us
 
 With **zoom off** the section is unchanged from Phase 4: only "Zoom" and "Turn On Zoom". O1 and O2 are not rendered.
 
-**Shortcuts window.** One new row, **first in the Zoom section**: `KeyboardShortcuts.Recorder("Show Overview", name: .showOverview)`. That makes 45 recorder rows. The Zoom section gains a footer (Label role, `.foregroundStyle(.secondary)`): **"With Replace Mission Control on, the Mission Control key and Control-Up Arrow also show the overview."** The Mission Control keys themselves are not recorder rows: they are macOS's, and Transom only borrows them. Restore Defaults also resets `showOverview`.
+**Shortcuts window.** One new row, **first in the Zoom section**: `KeyboardShortcuts.Recorder("Show Overview", name: .showOverview)`. That makes 45 recorder rows. The Zoom section gains a footer (Label role, `.foregroundStyle(.secondary)`): **"With Replace Mission Control on, the Mission Control keys also show the overview."** The Mission Control keys themselves are not recorder rows: they are macOS's, and Transom only borrows them. Restore Defaults also resets `showOverview`.
 
 ---
 
@@ -387,7 +388,7 @@ Voice unchanged from Phase 4: plain, second person, sentence case for body text 
 | Overview item | "Show Overview" |
 | Takeover toggle | "Replace Mission Control" · disabled: "Replace Mission Control (unavailable)" |
 | Shortcuts row | "Show Overview" |
-| Shortcuts Zoom footer | "With Replace Mission Control on, the Mission Control key and Control-Up Arrow also show the overview." |
+| Shortcuts Zoom footer | "With Replace Mission Control on, the Mission Control keys also show the overview." |
 | Debug | Surface 7 tables |
 
 **Alert copy.** Surface 5 (message, two informative variants, `{Keys}` branches, buttons "Replace Mission Control" / "Not Now").
@@ -552,12 +553,12 @@ Wording is fixed so the agent can paste it into `06-UAT.md`. Each item says what
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS (footer FLAG fixed)
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-10-31
