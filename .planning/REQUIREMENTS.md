@@ -87,7 +87,7 @@
 
 ### Overview, Spaces & Displays
 
-- [ ] **OVER-01**: Overview shows every window on every display, with Spaces along the top; clicking a window goes to it
+- [x] **OVER-01**: Overview shows every window on every display, with Spaces along the top; clicking a window goes to it
 - [ ] **OVER-02**: User can opt in to having Mission Control's swipe and shortcut open Transom's overview instead
 - [ ] **OVER-03**: If Transom crashes while replacing Mission Control, the system shortcuts are restored on next launch
 - [ ] **OVER-04**: Each display (and each Space) keeps its own layout
@@ -215,7 +215,7 @@ Populated by the roadmapper on 2026-10-23.
 | GEST-02 | Phase 5 | Complete |
 | GEST-03 | Phase 5 | Complete |
 | GEST-04 | Phase 5 | Complete |
-| OVER-01 | Phase 6 | Pending |
+| OVER-01 | Phase 6 | Complete |
 | OVER-02 | Phase 6 | Pending |
 | OVER-03 | Phase 6 | Pending |
 | OVER-04 | Phase 6 | Pending |

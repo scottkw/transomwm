@@ -295,7 +295,7 @@ Plans:
   4. Unplugging and re-plugging a display, or sleeping and waking the Mac, restores that display's layout, with "Displays have separate Spaces" both on and off
   5. Transom remembers a layout set per display arrangement and switches to the matching one automatically when a laptop is docked or undocked
 
-**Plans:** 8/12 plans executed
+**Plans:** 9/12 plans executed
 
 Plans:
 **Wave 1**
@@ -321,7 +321,7 @@ Plans:
 - [x] 06-08-PLAN.md — Selection and keyboard: OverviewSelection, keys through a non-activating key panel (changed from Carbon keys 2026-10-31), hover, rings, title capsule
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 06-09-PLAN.md — Overview polish: parked-window picks, refusals, interruptions, live updates, Reduce Motion, announcements, Debug S6
+- [x] 06-09-PLAN.md — Overview polish: parked-window picks, refusals, interruptions, live updates, Reduce Motion, announcements, Debug S6
 
 **Wave 9** *(blocked on Wave 8 completion)*
 - [ ] 06-10-PLAN.md — Mission Control takeover engine: TakeoverPolicy, crash-safe apply/lift, launch restore, canary, keys open the overview
@@ -401,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
-| 6. Overview, Spaces & Displays | 8/12 | In Progress | - |
+| 6. Overview, Spaces & Displays | 9/12 | In Progress | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |
