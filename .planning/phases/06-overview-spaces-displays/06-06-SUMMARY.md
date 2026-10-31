@@ -55,7 +55,7 @@ key-decisions:
   - "Show Overview's availability lives in Arranger.availability: zoom on and ready, allowed while paused, no pointer display needed"
   - "The overview has its own StagePanel per display (not ZoomController's), sharing ZoomController's snapshot cache and tile contents"
   - "Hidden-Space mini tiles come from Planner.plan over the stored desk (docked) plus present floaters' frames; full-screen Spaces from tracked windows whose Space set holds that Space"
-requirements-completed: [OVER-01]
+requirements-completed: []  # OVER-01's "clicking a window goes to it" lands in 06-07..06-09 (same as 06-01/06-02)
 duration: ~20min
 completed: 2026-10-31
 metrics:

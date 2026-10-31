@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Completed 06-05-PLAN.md
-last_updated: "2026-10-31T18:56:47.498Z"
+stopped_at: Completed 06-06-PLAN.md
+last_updated: "2026-10-31T19:20:35.840Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: a90c10dfeede47961f70e792f5ff74468b937ecf
+state_head: 251a8bc8c14eaf455f09560d4501f377c265680c
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 72
+  completed_plans: 73
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
-Plan: 6 of 12
+Plan: 7 of 12
 Status: Ready to execute
 Last activity: 2026-10-31 — Phase 6 execution started
 
@@ -125,6 +125,7 @@ Progress: [██████░░░░] 56%
 | Phase 06 P03 | 30min | 2 tasks | 9 files |
 | Phase 06 P04 | 45min | 2 tasks | 9 files |
 | Phase 06 P05 | 20min | 2 tasks | 11 files |
+| Phase 6 P06 | 20 min | 3 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -334,6 +335,10 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-05: Display settler resume restart runs after AXWindowSystem's post-resume full refresh, so a held change settles against a fresh unpaused inventory
 - [Phase 06]: 06-05: Launch settle waits for the saved layout's re-attach (not straight after .restore), so the saved World is stored under its own arrangement and a known live set applies
 - [Phase 06]: 06-05: Display names merged, never replaced, so a display that already left keeps its N12 name
+- [Phase 6]: 06-06: Shrink-to-fit stops at the factor that fits (16 Spaces on 1280x800 -> 38.75 pt); 32 pt is only the floor
+- [Phase 6]: 06-06: Show Overview availability lives in Arranger.availability: zoom on and ready, allowed while paused, no pointer display
+- [Phase 6]: 06-06: The overview has its own StagePanel per display and shares ZoomController's snapshot cache and tile contents
+- [Phase 6]: 06-06: Hidden-Space mini tiles come from Planner.plan over stored desks plus present floaters; full-screen Spaces from tracked windows' Space sets
 
 ### Quick Tasks Completed
 
@@ -374,8 +379,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T18:56:46.946Z
-Stopped at: Completed 06-05-PLAN.md
+Last session: 2026-10-31T19:20:35.025Z
+Stopped at: Completed 06-06-PLAN.md
 Resume file: None
 
 ## Deferred Verification
