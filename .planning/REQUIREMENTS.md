@@ -88,7 +88,7 @@
 ### Overview, Spaces & Displays
 
 - [x] **OVER-01**: Overview shows every window on every display, with Spaces along the top; clicking a window goes to it
-- [x] **OVER-02**: User can opt in to having Mission Control's swipe and shortcut open Transom's overview instead
+- [x] **OVER-02**: User can opt in to having Mission Control's shortcut (F3, ⌃↑, ⇧F3) open Transom's overview instead; the four-finger swipe stays with macOS (user decision 2026-10-31, spike-gated D-05)
 - [x] **OVER-03**: If Transom crashes while replacing Mission Control, the system shortcuts are restored on next launch
 - [x] **OVER-04**: Each display (and each Space) keeps its own layout
 - [x] **OVER-05**: Unplugging and re-plugging a display, or sleep/wake, restores that display's layout

@@ -15,6 +15,7 @@ updated: 2026-10-31
 
 - Code: HEAD `a4141f1` (06-12 Task 1; the later 06-12 commits change planning files only).
 - App: `/Users/ken/dev/transomwm/xcode/.xcode-build/Build/Products/Debug/Transom Debug.app`, built by `scripts/build-debug.sh` on 2026-10-31. Developer ID signed, team S2K7P43927, bundle `com.eightabyte.transom.debug`. `codesign --verify --strict` and the designated-requirement check passed. The agent built it and never launched it.
+- **Rebuild first (verifier, 2026-10-31):** this app was built at 16:38, before the ten review fixes (`20111d8`..`cd02991`, 17:00-17:15). Run `scripts/build-debug.sh` again before this pass, so the build under test includes them.
 - Swipe: **kept** (06-SPIKE verdict "skip → kept"). The four-finger swipe stays with macOS, so there is no swipe item.
 
 ## Automated results (2026-10-31)
@@ -50,7 +51,7 @@ VM: Tart `pane-test`, macOS 15.7.7. One suite per `scripts/vm-live-test.sh` run,
 3. Repeat 1 and 2, but dock one of the floated windows on the laptop before re-plugging. *Expected: that window stays where you docked it; the others go home.*
    result: pending
 
-4. Arrange windows differently with the DELL connected, unplug (laptop-only layout), arrange the laptop differently, then plug back in and unplug again. *Expected: each time, each setup comes back exactly as you left it.*
+4. Arrange windows differently with the DELL connected, unplug (laptop-only layout), arrange the laptop differently, then plug back in and unplug again. *Expected: each time, each setup comes back exactly as you left it.* Then (review fixes WR-08/WR-09): unplug the DELL and plug it back in within about a second, before anything moves; and quit Transom with the DELL connected, unplug it, relaunch on the laptop alone. *Expected: each time, the layout for the displays you end up with comes back; no window lands in a tile from the other setup.*
    result: pending
 
 5. Close the lid or sleep the Mac with the DELL connected, unplug it while asleep, wake. *Expected: nothing moves until you're logged in again; then the item 1 behaviour.*
@@ -59,7 +60,7 @@ VM: Tart `pane-test`, macOS 15.7.7. One suite per `scripts/vm-live-test.sh` run,
 6. In System Settings ▸ Desktop & Dock, turn off "Displays have separate Spaces", log out and back in, open the overview. *Expected: the Spaces strip shows on the laptop's main display only; tiling still works on both.* Turn it back on afterwards.
    result: pending
 
-7. With two displays, press ⌃⌥⌘A. *Expected: both displays show their own windows with their own Spaces strip; Tab moves the highlight to the other display; Return goes to the highlighted window.*
+7. With two displays, press ⌃⌥⌘A. *Expected: both displays show their own windows with their own Spaces strip; Tab moves the highlight to the other display; Return goes to the highlighted window.* Then (review finding WR-06): with two desktops on the laptop and one or more on the DELL, pick one of the DELL's other desktops in the DELL's strip, once by click and once by Return. *Expected: the DELL switches to that desktop, not the laptop. Also write down the label the strip shows for it (macOS may number it Desktop 3).*
    result: pending
 
 ## 2. Mission Control takeover (host, macOS 27.2)
@@ -75,7 +76,7 @@ T3. With the takeover on, run `kill -9 $(pgrep -x "Transom Debug")` in Terminal,
 
 ## 3. Backstops and checks left to UAT
 
-B1. Visit Desktop 2, come back, press ⌃⌥⌘A. *Expected: Desktop 2's thumbnail shows real window previews, not app icons.* Click Desktop 2's thumbnail, then reopen and click a mini tile there. *Expected: both land on Desktop 2; the mini-tile window is focused. ⌃ doesn't feel stuck when you type afterwards. With two displays, the switch happens on the display you clicked.*
+B1. First, with windows already on Desktop 2, relaunch Transom on Desktop 1 and press ⌃⌥⌘A without visiting Desktop 2. *Expected: Desktop 2's thumbnail shows its windows (app-icon tiles are fine). Write down if it shows only wallpaper.* Then visit Desktop 2, come back, press ⌃⌥⌘A. *Expected: Desktop 2's thumbnail shows real window previews, not app icons.* Click Desktop 2's thumbnail, then reopen and click a mini tile there. *Expected: both land on Desktop 2; the mini-tile window is focused. ⌃ doesn't feel stuck when you type afterwards. With two displays, the switch happens on the display you clicked.* Then (review fix WR-07): in System Settings ▸ Keyboard ▸ Keyboard Shortcuts ▸ Mission Control, turn off "Move left a space" and "Move right a space", then click another desktop's thumbnail. *Expected: a beep and "Couldn't switch to Desktop {n}"; nothing is typed into the front app. Say whether this is the behaviour you want.* Turn both back on.
    result: pending
 
 B2. With 30+ windows across both displays, press ⌃⌥⌘A. *Expected: it opens without a visible hitch, and Debug "Last overview" reads under 400 ms.*
@@ -96,8 +97,12 @@ B6. Turn on Reduce Motion (System Settings ▸ Accessibility ▸ Display), open 
 B7. With Screen Recording not granted to "Transom Debug", open and close the overview once. *Expected: the Screen Recording explainer appears only after the overview has closed, not while it is open.*
    result: pending
 
+B8. (Review fix WR-10, the running-app half) Dock a Safari window that has three tabs, then close the whole window (⌘⇧W). *Expected: its tile closes and its neighbour fills within a few seconds, even if Safari keeps the closed window around in the background.*
+   result: pending
+
 ## Known gaps
 
 - macOS 14 not tested: evidence is the VM (macOS 15.7.7) and the host (macOS 27.2) (RESEARCH Open Question 4, resolved)
 - N11 ("Couldn't take over Mission Control's keys…") is hard to cause on purpose; unit tests cover it.
+- WR-05 (open, needs design): after a reboot that renumbers Spaces, a desk whose Space is gone can be taken over by a Space created later in the same session. No data is lost; it needs its own task.
 - The VM Esc failure in `OverviewIntegrationTests` (two runs) has no known cause; B3 checks Esc on hardware.
