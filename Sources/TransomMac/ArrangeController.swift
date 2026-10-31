@@ -964,7 +964,10 @@ import os
     /// Displays are quiet again (D-11): the Arranger gets the new arrangement, the names captured before any display
     /// left, and a fresh inventory.
     private func displaysSettled() async {
+        // WR-08: a change that began after this settle was queued gets its own settle; a mid-change inventory decides nothing.
+        guard system.settlerState == .idle else { return }
         let inventory = await system.inventory()
+        guard system.settlerState == .idle else { return }
         let id = ArrangementID(inventory.displays.map(\.uuid))
         let stored = id == arranger.arrangement ? nil : arranger.layoutSets[id]
         let known = stored != nil || id == arranger.arrangement
