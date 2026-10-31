@@ -657,11 +657,13 @@ import os
     private func overview() -> OverviewController {
         if let overviewController { return overviewController }
         let overview = OverviewController(
-            arranger: { [unowned self] in self.arranger }, spaces: { [unowned self] in self.system.spacesSnapshot }, zoom: { [unowned self] in self.zoom() })
+            arranger: { [unowned self] in self.arranger }, spaces: { [unowned self] in self.system.spacesSnapshot }, zoom: { [unowned self] in self.zoom() },
+            switcher: SpaceSwitcher(spaces: { [unowned self] in self.system.spacesSnapshot }))
         overview.onClosed = { [weak self] in
             guard let self else { return }
             for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
         }
+        overview.onSwitchFailed = { [weak self] text in Task { await self?.run([.beep, .announce(text)]) } }
         overviewController = overview
         return overview
     }

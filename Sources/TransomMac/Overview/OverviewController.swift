@@ -16,8 +16,16 @@ import os
     private let spaces: () -> SpacesSnapshot?
     /// The zoom stage's capture, cache and tile contents, shared so the overview and moves use one snapshot cache.
     private let zoom: () -> ZoomController
+    /// Posts the chords that switch Spaces (06-07).
+    private let switcher: SpaceSwitcher
     /// Fires when the overview closes, by any path.
     var onClosed: () -> Void = {}
+    /// Focuses a window picked on another Space, once that Space shows (AX lists it only then).
+    var focusWindow: (TransomModel.WindowRef) async -> Void = { _ in }
+    /// A pick's Space switch did not land within 1 s: beep and announce this text.
+    var onSwitchFailed: (String) -> Void = { _ in }
+    /// A press that travels this far before release is a drag, not a click (D-16).
+    static let dragThreshold: CGFloat = 4
 
     private(set) var isOpen = false
     private var panels: [String: StagePanel] = [:]
@@ -26,11 +34,16 @@ import os
     private var escape: Task<Void, Never>?
     /// Bumped on every open and close, so a capture or animation finishing late never acts on a newer state.
     private var generation = 0
+    /// The open overview's geometry, for hit-testing clicks.
+    private var layout: OverviewLayout?
 
-    init(arranger: @escaping () -> Arranger, spaces: @escaping () -> SpacesSnapshot?, zoom: @escaping () -> ZoomController) {
+    init(
+        arranger: @escaping () -> Arranger, spaces: @escaping () -> SpacesSnapshot?, zoom: @escaping () -> ZoomController, switcher: SpaceSwitcher
+    ) {
         self.arranger = arranger
         self.spaces = spaces
         self.zoom = zoom
+        self.switcher = switcher
     }
 
     /// The displays with an open overview panel (tests).
@@ -96,6 +109,7 @@ import os
             let r = Coordinates.appKit(fromTopLeft: rect, primaryHeight: primaryHeight)
             return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
         }
+        self.layout = layout
         let zoom = zoom()
         var snapshots = 0, fallbacks = 0
         func image(_ window: TransomModel.WindowRef) -> CGImage? { zoom.cgWindow(window).flatMap { images[$0] ?? zoom.cachedSnapshot($0) } }
@@ -172,8 +186,39 @@ import os
         if let panel = panels[uuid] { return panel }
         guard let screen = Displays.screen(uuid: uuid) else { return nil }
         let panel = StagePanel(screen: screen)
+        panel.onOverviewClick = { [weak self] point, travel in self?.click(at: point, travel: travel) }
         panels[uuid] = panel
         return panel
+    }
+
+    // MARK: Picks (06-07)
+
+    /// A released press on a panel (AppKit global point). A drag does nothing (D-16); the backdrop dismisses.
+    private func click(at point: CGPoint, travel: CGFloat) {
+        guard isOpen, travel < Self.dragThreshold, let layout, let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else { return }
+        guard let item = layout.item(at: Point(x: point.x, y: primaryHeight - point.y)) else { return dismiss(reason: "backdrop") }
+        pick(item)
+    }
+
+    /// Picks a strip item: another Space's thumbnail switches there; the current one's dismisses. Main-area tiles are
+    /// picked by 06-08/06-09.
+    func pick(_ item: OverviewItem) {
+        guard isOpen, let layout else { return }
+        guard case .thumbnail(let space) = item else { return }
+        guard let display = layout.displays.first(where: { $0.thumbnails.contains { $0.spaceID == space } }) else { return }
+        if display.thumbnails.first(where: { $0.spaceID == space })?.isCurrent == true { return dismiss(reason: "current space") }
+        logger.info("pick space \(space, privacy: .public)")
+        switchAway(to: space, on: display.uuid)
+    }
+
+    /// The stage fades out (120 ms), then the display switches to `space`. A switch that does not land is refused.
+    private func switchAway(to space: UInt64, on display: String) {
+        interrupt(reason: "pick")
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(StagePanel.revealFade))
+            guard let self else { return }
+            if !(await self.switcher.switchTo(space: space, on: display)) { self.onSwitchFailed("switch to space \(space) failed") }
+        }
     }
 
     /// The strip (thumbnails, mini tiles, labels) and the empty-message capsule of one display.

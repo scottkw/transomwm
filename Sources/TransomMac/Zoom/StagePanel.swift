@@ -47,10 +47,26 @@ struct OverviewOverlay {
 private final class StageContentView: NSView {
     var onAppearanceChange: () -> Void = {}
     var onMouseDown: (CGPoint) -> Void = { _ in }
+    /// A press released: where it went down and where it came up (view coordinates). Left or right button, any
+    /// modifier; the second click of a double-click is not reported, so it never acts twice.
+    var onMouseUp: (CGPoint, CGPoint) -> Void = { _, _ in }
+    private var pressedAt: CGPoint?
     override func viewDidChangeEffectiveAppearance() { onAppearanceChange() }
     // The panel is never key, so the first click must reach the view.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { onMouseDown(convert(event.locationInWindow, from: nil)) }
+    override func mouseDown(with event: NSEvent) {
+        press(event)
+        onMouseDown(convert(event.locationInWindow, from: nil))
+    }
+    override func rightMouseDown(with event: NSEvent) { press(event) }
+    override func mouseUp(with event: NSEvent) { release(event) }
+    override func rightMouseUp(with event: NSEvent) { release(event) }
+    private func press(_ event: NSEvent) { pressedAt = event.clickCount == 1 ? convert(event.locationInWindow, from: nil) : nil }
+    private func release(_ event: NSEvent) {
+        guard let down = pressedAt else { return }
+        pressedAt = nil
+        onMouseUp(down, convert(event.locationInWindow, from: nil))
+    }
 }
 
 /// The camera stage (UI-SPEC Surface 1): one never-key panel per display covering its whole frame, shown only while
@@ -80,6 +96,8 @@ public final class StagePanel: NSPanel {
     private var generation = 0
     /// A click on a tile, by its window ID (Surface 5: retargets the camera). A click on the backdrop is swallowed.
     var onTileClick: ((UInt32) -> Void)?
+    /// The overview's press, on release: where it went down (AppKit global) and how far it travelled (pt).
+    var onOverviewClick: ((CGPoint, CGFloat) -> Void)?
 
     public init(screen: NSScreen) {
         super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -119,6 +137,10 @@ public final class StagePanel: NSPanel {
         view.onMouseDown = { [weak self] point in
             guard let self, let id = self.layers.first(where: { $0.value.currentRect.contains(point) })?.key else { return }
             self.onTileClick?(id)
+        }
+        view.onMouseUp = { [weak self] down, up in
+            guard let self else { return }
+            self.onOverviewClick?(down.applying(.init(translationX: self.frame.minX, y: self.frame.minY)), hypot(up.x - down.x, up.y - down.y))
         }
         colorObserver = NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) {
             [weak self] _ in
