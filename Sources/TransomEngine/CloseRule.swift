@@ -25,14 +25,20 @@ public enum CloseDecision: Equatable, Sendable {
 /// The two-source close rule (D-09, WIN-09). A window closes only when AX (-25202, element gone) or NSWorkspace
 /// (app terminated) agrees with the CG window list (id absent). Verified signals: a closed window answers
 /// -25202 and leaves the CG list; a frozen or killed app answers -25204, so a timeout never closes anything.
+/// "No Space" (`cgSpacesKnownEmpty`) is a CG entry the Spaces lookup answered with an empty set: Safari's closed
+/// windows can linger in the CG list like that (G-03-9). An unknown set (lookup off) is never empty, and hidden tabs
+/// (also no Space) are guarded by the tab-member check first.
 ///
 /// | Session | App        | AX                         | CG      | Decision                          |
 /// |---------|------------|----------------------------|---------|-----------------------------------|
 /// | paused  | any        | any                        | any     | noChange                          |
 /// | active  | terminated | any                        | absent  | closed                            |
+/// | active  | terminated | any                        | present, no Space | closed (G-03-9 ghost)   |
 /// | active  | terminated | any                        | present | recheck (WindowServer lag)        |
 /// | active  | alive      | invalidElement             | absent  | closed                            |
-/// | active  | alive      | invalidElement             | present | recheck (.absent for a tab member)|
+/// | active  | alive      | invalidElement             | present | .absent for a tab member          |
+/// | active  | alive      | invalidElement             | present, no Space | closed (G-03-9 ghost)   |
+/// | active  | alive      | invalidElement             | present | recheck                           |
 /// | active  | alive      | timedOut / otherFailure    | any     | noChange                          |
 /// | active  | alive      | valid, minimised or hidden | any     | state(.absent)                    |
 /// | active  | alive      | valid, fullscreen          | any     | state(.fullscreen)                |
@@ -46,9 +52,9 @@ public enum CloseRule {
         guard sessionActive else { return .noChange }
         switch (app, ax, inCGList) {
         case (.terminated, _, false): return .closed
-        case (.terminated, _, true): return .recheck
+        case (.terminated, _, true): return cgSpacesKnownEmpty ? .closed : .recheck
         case (.alive, .invalidElement, false): return .closed
-        case (.alive, .invalidElement, true): return isKnownTabMember ? .state(.absent) : .recheck
+        case (.alive, .invalidElement, true): return isKnownTabMember ? .state(.absent) : cgSpacesKnownEmpty ? .closed : .recheck
         case (.alive, .timedOut, _), (.alive, .otherFailure, _): return .noChange
         case (.alive, .valid(_, let minimized, let appHidden, _), _) where minimized || appHidden: return .state(.absent)
         case (.alive, .valid(_, _, _, true), _): return .state(.fullscreen)

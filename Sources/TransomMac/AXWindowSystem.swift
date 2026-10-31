@@ -427,7 +427,9 @@ import os
             cgWindows: withSyntheticPresence(cgWindows, shown: shown), displays: displays, sessionActive: !paused,
             initialSweep: initial, now: .now, windowSpaces: windowSpaces, spaceChanged: spaceChanged)
         emit(tracker.ingest(observation, context: context))
-        emit(tracker.recheckTerminated(context: context))
+        var terminatedContext = context
+        terminatedContext.windowSpaces = terminatedSpaces(cgWindows)
+        emit(tracker.recheckTerminated(context: terminatedContext))
         // A new window is withheld until it settles, a close AX reported waits for the CG list to agree, and a window
         // whose ID lookup failed for the first time waits for its own CG entry: refresh again soon.
         if tracker.hasPendingWindows(pid: observation.pid) || tracker.needsQuickRecheck(pid: observation.pid) || observation.identityPending {
@@ -487,10 +489,19 @@ import os
                 guard let self, !self.tracker.knownWindowIDs(pid: pid).isEmpty else { return }
                 guard let cgWindows = CGWindowList.snapshot() else { continue }
                 let context = ObservationContext(
-                    cgWindows: self.withSyntheticPresence(cgWindows), displays: self.displays, sessionActive: !self.paused, now: .now)
+                    cgWindows: self.withSyntheticPresence(cgWindows), displays: self.displays, sessionActive: !self.paused, now: .now,
+                    windowSpaces: self.terminatedSpaces(cgWindows))
                 self.emit(self.tracker.recheckTerminated(context: context))
             }
         }
+    }
+
+    /// The Spaces of terminated apps' windows still in the CG list, so a lingering entry with none closes (G-03-9).
+    /// Nil (unknown) when there are none, or the Spaces lookup is off.
+    private func terminatedSpaces(_ cgWindows: [CGWindowEntry]) -> [UInt32: Set<UInt64>]? {
+        let ids = Set(tracker.terminatedWindowIDs)
+        let present = cgWindows.filter { $0.layer == 0 && ids.contains($0.windowID) }.map(\.windowID)
+        return present.isEmpty ? nil : SkyLightSpaces.spaces(of: present)
     }
 
     /// A hint never decides anything: it only schedules its pid's refresh (D-09). A destroyed notification

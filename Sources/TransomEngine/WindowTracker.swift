@@ -335,6 +335,9 @@ public struct WindowTracker: Sendable {
         return events
     }
 
+    /// The shown window IDs of terminated apps still tracked: the ones the terminated recheck decides.
+    public var terminatedWindowIDs: [UInt32] { terminatedPIDs.sorted().flatMap(knownWindowIDs) }
+
     /// The window IDs of `pid` currently shown (a tab group's visible tab), ascending: the ones its app thread
     /// probes when they leave AXWindows.
     public func knownWindowIDs(pid: Int32) -> [UInt32] {
@@ -353,7 +356,10 @@ public struct WindowTracker: Sendable {
             let shown = windows[identity]?.visibleMemberID ?? identity.windowID
             let decision = CloseRule.decide(
                 sessionActive: context.sessionActive, app: app, ax: fact(shown),
-                inCGList: inCG.contains(shown), cgSpacesKnownEmpty: false, isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid)
+                inCGList: inCG.contains(shown),
+                // nil (lookup off, or not asked) is unknown, never empty.
+                cgSpacesKnownEmpty: inCG.contains(shown) && context.windowSpaces?[shown] == [],
+                isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid)
             )
             if decision == .recheck { rechecks[identity, default: 0] += 1 } else { rechecks[identity] = nil }
             switch decision {
