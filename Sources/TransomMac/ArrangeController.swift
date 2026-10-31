@@ -88,6 +88,10 @@ import os
     var hasZoomController: Bool { zoomController != nil }
     /// The overview (06-06), made on the first Show Overview; never with zoom off.
     private(set) var overviewController: OverviewController?
+    /// The Mission Control takeover (06-10), set by the app; nil in tests that don't own one.
+    var takeover: MissionControlTakeover? {
+        didSet { takeover?.onTrigger = { [weak self] in Task { await self?.dispatch(.camera(.overview)) } } }
+    }
     /// The last overview's open time, tiles and snapshots (Debug S6); kept across zoom off.
     private(set) var lastOverview: (ms: Int, windows: Int, snapshots: Int)?
     /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
