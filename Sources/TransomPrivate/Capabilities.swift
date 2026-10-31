@@ -197,3 +197,52 @@ public struct MultitouchCanary {
         return "\(short) (\(info?["CFBundleVersion"] as? String ?? "?"))"
     }
 }
+
+/// Crash canary for the Mission Control takeover (D-07): a copy of `MultitouchCanary` on its own key. Armed after a
+/// successful apply, cleared on every lift. Still set at launch means the last run died with the takeover on: it stays
+/// off for this OS build and app version until the user turns it on again (`turnBackOn`); another build or version
+/// clears it. `noticed` lets N10 show once per crash.
+public struct MissionControlCanary {
+    public static let key = "privateCanary.MissionControl"
+
+    private let defaults: UserDefaults
+    private let osBuild: String
+    private let appVersion: String
+
+    public init(defaults: UserDefaults = .standard, osBuild: String = MultitouchCanary.currentOSBuild, appVersion: String = MultitouchCanary.currentAppVersion) {
+        self.defaults = defaults
+        self.osBuild = osBuild
+        self.appVersion = appVersion
+    }
+
+    public func arm() {
+        defaults.set(["osBuild": osBuild, "appVersion": appVersion, "started": Date()], forKey: Self.key)
+    }
+
+    public func clear() { defaults.removeObject(forKey: Self.key) }
+
+    /// Replace Mission Control chosen again after a trip.
+    public func turnBackOn() { clear() }
+
+    /// Whether N10 already told the user about this canary.
+    public var noticed: Bool { defaults.dictionary(forKey: Self.key)?["noticed"] as? Bool ?? false }
+
+    public func markNoticed() {
+        guard var left = defaults.dictionary(forKey: Self.key) else { return }
+        left["noticed"] = true
+        defaults.set(left, forKey: Self.key)
+    }
+
+    /// A leftover canary for this build and version trips (logged); one for another build or version is cleared.
+    public func isTripped() -> Bool {
+        guard let left = defaults.dictionary(forKey: Self.key) else { return false }
+        let build = left["osBuild"] as? String ?? "?", version = left["appVersion"] as? String ?? "?"
+        guard build == osBuild, version == appVersion else {
+            clear()
+            return false
+        }
+        Logger(subsystem: "com.eightabyte.transom", category: "missionControl").error(
+            "takeover canary armed: off for build \(build, privacy: .public), version \(version, privacy: .public)")
+        return true
+    }
+}

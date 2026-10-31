@@ -17,7 +17,39 @@ public protocol TakeoverStore: AnyObject {
 /// | apply   | store current states only for IDs not stored yet (never overwrite) → disable each taken ID        |
 /// | read-back | every taken ID disabled → applied (then Carbon keys, canary); any still on or unreadable → applyFailed |
 /// | lift    | restore the stored originals ([] when none) → read back → clear the store only if all match      |
+/// | launch  | stored originals → restore first, whatever follows (OVER-03); then canary tripped → stay off, N10 once; preference off → off; capability off → unavailable; zoom off → lifted for zoom; else apply |
+/// | trigger | overview open → dismiss; can open → open; CoreDock → macOS Mission Control; else refuse (beep)   |
+/// | drift   | a taken ID found enabled again → disable it again, stored originals untouched                     |
 public enum TakeoverPolicy {
+    public enum LaunchAction: Equatable, Sendable {
+        /// Restore, read back, clear the store when all match.
+        case restore([Int32: Bool])
+        case stayOff, queueCrashNotice, off, unavailable, liftedForZoom, apply
+    }
+
+    public enum TriggerAction: Equatable, Sendable {
+        case dismiss, open, missionControl, refuse
+    }
+
+    public static func launch(
+        store: some TakeoverStore, canaryTripped: Bool, crashNoticed: Bool, preferenceOn: Bool, zoomOn: Bool, available: Bool
+    ) -> [LaunchAction] {
+        let restore: [LaunchAction] = store.originals.map { [.restore($0)] } ?? []
+        if canaryTripped { return restore + [.stayOff] + (crashNoticed ? [] : [.queueCrashNotice]) }
+        guard preferenceOn else { return restore + [.off] }
+        guard available else { return restore + [.unavailable] }
+        return restore + [zoomOn ? .apply : .liftedForZoom]
+    }
+
+    public static func trigger(overviewOpen: Bool, canOpen: Bool, coreDockAvailable: Bool) -> TriggerAction {
+        overviewOpen ? .dismiss : canOpen ? .open : coreDockAvailable ? .missionControl : .refuse
+    }
+
+    /// The taken IDs System Settings (or anything else) switched back on while the takeover was on.
+    public static func drift(taken: [Int32], enabledNow: [Int32: Bool]) -> [Int32] {
+        taken.filter { enabledNow[$0] == true }
+    }
+
     public enum ApplyStep: Equatable, Sendable {
         case storeOriginals([Int32: Bool])
         case disable(Int32)
