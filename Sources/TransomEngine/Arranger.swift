@@ -692,6 +692,8 @@ public struct Arranger: Sendable {
         // Paused, only Resume acts; Stage Manager's pause ends through its conflict item, not Resume.
         if command == .togglePause { return pauseReasons != [.stageManager] }
         if command == .restoreAll { return true }  // the way back, so it works while paused (UI-SPEC Surface 1 row 21)
+        // The overview moves no window and needs no pointer display, so it works while paused (06 UI-SPEC Surface 1).
+        if command == .camera(.overview) { return camera.enabled }
         guard pauseReasons.isEmpty else { return false }
         let focused = context.focused
         let trackable = focused.flatMap { windows[$0.identity] }.map { $0.kind == .dockable && !$0.isExcluded } ?? false

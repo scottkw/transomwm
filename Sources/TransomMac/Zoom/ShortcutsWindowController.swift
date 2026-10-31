@@ -8,10 +8,12 @@ enum ShortcutsModel {
     typealias Row = (title: String, name: KeyboardShortcuts.Name)
     /// Double-click a docked window's title bar frames it (Surface 9, read by 04-06's input); default on.
     static let doubleClickKey = "zoomTitleBarDoubleClick"
+    /// The Zoom section's footer (06 UI-SPEC Surface 4).
+    static let zoomFooter = OverviewCopy.shortcutsZoomFooter
 
     static let sections: [(title: String, rows: [Row])] = [
         (ZoomCopy.zoomSection, [
-            .zoomOutAll, .stepOut, .stepIn, .zoomBack, .zoomForward, .panLeft, .panRight, .panUp, .panDown, .frameWindow, .frameDesktop,
+            .showOverview, .zoomOutAll, .stepOut, .stepIn, .zoomBack, .zoomForward, .panLeft, .panRight, .panUp, .panDown, .frameWindow, .frameDesktop,
         ]),
         (MenuCopy.arrangeSection, [
             .dock, .float, .swapPrevious, .undo, .focusLeft, .focusRight, .focusUp, .focusDown, .moveLeft, .moveRight, .moveUp, .moveDown,
@@ -52,12 +54,16 @@ struct ShortcutsView: View {
             Form {
                 ForEach(ShortcutsModel.sections.indices, id: \.self) { index in
                     let section = ShortcutsModel.sections[index]
-                    Section(section.title) {
+                    Section {
                         ForEach(section.rows.indices, id: \.self) { row in
                             let name = section.rows[row].name
                             KeyboardShortcuts.Recorder(section.rows[row].title, name: name)
                                 .shortcutValidation { ShortcutsModel.conflictMessage(for: $0, excluding: name).map { .disallow(reason: $0) } ?? .allow }
                         }
+                    } header: {
+                        Text(section.title)
+                    } footer: {
+                        if section.title == ZoomCopy.zoomSection { Text(ShortcutsModel.zoomFooter).font(.subheadline).foregroundStyle(.secondary) }
                     }
                 }
                 Section {

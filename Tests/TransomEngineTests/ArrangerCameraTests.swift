@@ -249,6 +249,19 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         #expect(tiles == [a.identity: home[a], b.identity: home[b], c.identity: home[c]].compactMapValues { $0 })
     }
 
+    /// 06 UI-SPEC Surface 4 / Surface 1 Availability: Show Overview needs zoom and access, not a display, and works paused.
+    @Test func showOverviewIsAvailableWhilePausedButNotWithoutAccessOrZoom() async throws {
+        var harness = try await threeDocked()
+        let ready = CommandContext(focused: nil, ready: true), notReady = CommandContext(focused: nil, ready: false)
+        #expect(!harness.arranger.availability(.camera(.overview), context: ready), "zoom off")
+        await harness.send(.zoomEnabled(true))
+        #expect(harness.arranger.availability(.camera(.overview), context: ready))
+        #expect(!harness.arranger.availability(.camera(.overview), context: notReady))
+        await harness.send(.setPaused(.user, true))
+        #expect(harness.arranger.availability(.camera(.overview), context: ready))
+        #expect(!harness.arranger.availability(.camera(.zoomOutAll), context: CommandContext(focused: nil, ready: true, displayUUID: "main")))
+    }
+
     /// 06-06: the overview's main area on a zoomed display is the home view, never the parked frames.
     @Test func homeViewIsNilAtHomeAndTheHomeTilesWhileZoomed() async throws {
         var harness = try await threeDocked()

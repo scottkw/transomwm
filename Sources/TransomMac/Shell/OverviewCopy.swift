@@ -59,6 +59,9 @@ nonisolated public enum OverviewCopy {
         apps.prefix(2).map(MenuCopy.truncatedAppName).joined(separator: " and ")
     }
 
+    /// The Shortcuts window's Zoom-section footer (Surface 4).
+    public static let shortcutsZoomFooter = "With Replace Mission Control on, the Mission Control keys also show the overview."
+
     /// The main area of a current Space with no shown windows.
     public static let noWindows = "No windows on this desktop"
 }

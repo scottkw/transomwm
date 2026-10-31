@@ -20,14 +20,15 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
     @Test(arguments: [
         ("zoom-out", CameraCommand.zoomOutAll), ("step-out", .stepOut), ("step-in", .stepIn), ("back", .back), ("forward", .forward),
         ("pan-left", .pan(.left)), ("pan-right", .pan(.right)), ("pan-up", .pan(.top)), ("pan-down", .pan(.bottom)),
-        ("frame-window", .frameWindow), ("frame-desktop", .frameDesktop),
+        ("frame-window", .frameWindow), ("frame-desktop", .frameDesktop), ("overview", .overview),
     ])
     func theZoomCommandsParse(host: String, command: CameraCommand) {
         #expect(parse("transom://\(host)") == .camera(command))
         #expect(parse("transom://\(host)/") == .camera(command))
     }
 
-    @Test(arguments: ["transom://ZOOM-OUT", "transom://zoom-out?x=1", "transom://zoom-out/extra", "transom://zoom-out#f", "transom://zoom-in"])
+    @Test(arguments: ["transom://ZOOM-OUT", "transom://zoom-out?x=1", "transom://zoom-out/extra", "transom://zoom-out#f", "transom://zoom-in", "transom://overview?x=1",
+        "transom://Overview", "transom://show-overview"])
     func malformedZoomURLsAreRejected(_ string: String) {
         #expect(parse(string) == nil)
     }

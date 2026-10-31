@@ -17,6 +17,7 @@ import TransomModel
         .arrangeAll, .floatAll, .restoreAll,
         .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
         .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
+        .camera(.overview),
     ]
 
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
@@ -62,14 +63,14 @@ import TransomModel
         moveViewMenu.submenu = submenu(ZoomCopy.moveViewMenu, Self.edges.map { .camera(.pan($0)) })
     }
 
-    /// The Zoom section (UI-SPEC Surface 6): the header, the camera items, `previews` (nil while Screen Recording is
+    /// The Zoom section (UI-SPEC Surface 6; 06 Surface 4 puts Show Overview first): the header, the camera items, `previews` (nil while Screen Recording is
     /// granted) and `toggle`; with zoom off only the header and Turn On Zoom. Enabled states come from `update`.
     func zoomSection(enabled: Bool, framingWindow: Bool, framingDesktop: Bool, previews: NSMenuItem?, toggle: NSMenuItem) -> [NSMenuItem] {
         toggle.title = enabled ? ZoomCopy.turnOffZoom : ZoomCopy.turnOnZoom
         guard enabled else { return [.sectionHeader(title: ZoomCopy.zoomSection), toggle] }
         item(for: .camera(.frameWindow)).state = framingWindow ? .on : .off
         item(for: .camera(.frameDesktop)).state = framingDesktop ? .on : .off
-        let steps = [CameraCommand.zoomOutAll, .stepOut, .stepIn, .back, .forward].map { item(for: .camera($0)) }
+        let steps = [CameraCommand.overview, .zoomOutAll, .stepOut, .stepIn, .back, .forward].map { item(for: .camera($0)) }
         let frames = [item(for: .camera(.frameWindow)), item(for: .camera(.frameDesktop))]
         return [.sectionHeader(title: ZoomCopy.zoomSection)] + steps + [moveViewMenu] + frames + (previews.map { [$0] } ?? []) + [toggle]
     }
