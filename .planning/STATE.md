@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Phase 6 UI-SPEC approved
-last_updated: "2026-10-31T15:38:59.357Z"
-last_activity: 2026-10-30
-last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: 362f282f34eddb56f94c994bb5a30d68665fc867
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-10-31T18:02:48.470Z"
+last_activity: 2026-10-31
+last_activity_desc: Phase 6 execution started
+state_head: 207fee12d1a1590a8329ae51fe0b3c0450e15b39
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 67
+  completed_plans: 68
   percent: 56
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 5
+**Current focus:** Phase 6 — Overview, Spaces & Displays
 
 ## Current Position
 
-Phase: 6 (Overview, Spaces & Displays) — READY TO EXECUTE
-Plan: Not started
+Phase: 6 (Overview, Spaces & Displays) — EXECUTING
+Plan: 2 of 12
 Status: Ready to execute
-Last activity: 2026-10-30 — Phase 5 complete, transitioned to Phase 6
+Last activity: 2026-10-31 — Phase 6 execution started
 
 Progress: [██████░░░░] 56%
 
@@ -120,6 +120,7 @@ Progress: [██████░░░░] 56%
 | Phase 05 P06 | 15 min | 2 tasks | 3 files |
 | Phase 05 P07 | 56 min | 3 tasks | 15 files |
 | Phase 05 P08 | ~6h | 2 tasks | 7 files |
+| Phase 6 P01 | 2h21m | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -314,6 +315,10 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-08: multitouch crash canary armed for the whole multitouch run, cleared only at a clean stop; any crash with zoom on disables multitouch for that OS build + app version until privateCanary.Multitouch is deleted
 - [Phase 05]: 05-08: multitouch frames cross to main via an os_unfair_lock buffer + DispatchSourceUserDataAdd (G-01 fix), never a closure behind generic lock state
 - [Phase 05]: 05-08: phase UAT closed with core items on hardware; items 7, 8, 10, 11, 14, 20, 21, 24 skipped by user decision (automated cover only); no GestureTuning change
+- [Phase 6]: 06-01: layout.json bumps to schema 2 (user: schema-2); 06-03 implements migration and downgrade refusal
+- [Phase 6]: 06-01: four-finger swipe kept with macOS (user: skip); 06-11 does not create SwipeTakeoverTap.swift
+- [Phase 6]: 06-01: Mission Control takeover disables symbolic hotkeys {32, 108, 113}; disabled state outlives a crash, so launch-time restore is required
+- [Phase 6]: 06-01: posted Space-switch chords must carry the fn flag 0x800000 (06-07)
 
 ### Quick Tasks Completed
 
@@ -354,9 +359,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T14:42:56.837Z
-Stopped at: Phase 6 UI-SPEC approved
-Resume file: .planning/phases/06-overview-spaces-displays/06-UI-SPEC.md
+Last session: 2026-10-31T18:02:47.952Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
 
 ## Deferred Verification
 

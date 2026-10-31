@@ -295,11 +295,11 @@ Plans:
   4. Unplugging and re-plugging a display, or sleeping and waking the Mac, restores that display's layout, with "Displays have separate Spaces" both on and off
   5. Transom remembers a layout set per display arrangement and switches to the matching one automatically when a laptop is docked or undocked
 
-**Plans:** 12 plans
+**Plans:** 1/12 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md — Spaces spike: SpacesProvider tracer, SymbolicHotKeys/CoreDock shims, VM probes (hotkeys, abort persistence, switch, ghost, reboot diff); schema-door decision and host swipe check
+- [x] 06-01-PLAN.md — Spaces spike: SpacesProvider tracer, SymbolicHotKeys/CoreDock shims, VM probes (hotkeys, abort persistence, switch, ghost, reboot diff); schema-door decision and host swipe check
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-02-PLAN.md — Spaces runtime: G-03-9 close rows, D-14 tests, co-visibility fallback (Debug only), Debug Spaces lines
@@ -401,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
-| 6. Overview, Spaces & Displays | 0/12 | Not started | - |
+| 6. Overview, Spaces & Displays | 1/12 | In Progress | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |
