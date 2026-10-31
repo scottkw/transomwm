@@ -81,4 +81,35 @@ import Testing
     func interruptionsAreLoggedByReason(reason: OverviewCopy.Interruption, expected: String) {
         #expect(OverviewCopy.interruptedLog(reason) == expected)
     }
+
+    // MARK: Announcements (Accessibility) and S6
+
+    @Test(arguments: [
+        (0, 1, "Overview, no windows"), (1, 1, "Overview, 1 window"), (5, 1, "Overview, 5 windows"), (5, 2, "Overview, 5 windows on 2 displays"),
+        (1, 2, "Overview, 1 window on 2 displays"),
+    ])
+    func theOpenedAnnouncementCountsWindowsAndDisplays(windows: Int, displays: Int, expected: String) {
+        #expect(OverviewCopy.openedAnnouncement(windows: windows, displays: displays) == expected)
+    }
+
+    @Test func selectionAnnouncementsMatchTheContract() {
+        #expect(OverviewCopy.tileAnnouncement(app: "Safari", title: "Docs") == "\u{201C}Safari\u{201D}, Docs")
+        #expect(OverviewCopy.tileAnnouncement(app: "Safari", title: "") == "\u{201C}Safari\u{201D}")
+        #expect(OverviewCopy.miniTileAnnouncement(app: "Notes", title: "", desktop: 2) == "\u{201C}Notes\u{201D}, Desktop 2")
+        #expect(OverviewCopy.miniTileAnnouncement(app: "Notes", title: "List", desktop: 2) == "\u{201C}Notes\u{201D}, List, Desktop 2")
+        #expect(OverviewCopy.thumbnailAnnouncement(desktop: 2, current: true, windows: 3) == "Desktop 2, current")
+        #expect(OverviewCopy.thumbnailAnnouncement(desktop: 3, current: false, windows: 0) == "Desktop 3, no windows")
+        #expect(OverviewCopy.thumbnailAnnouncement(desktop: 3, current: false, windows: 1) == "Desktop 3, 1 window")
+        #expect(OverviewCopy.thumbnailAnnouncement(desktop: 3, current: false, windows: 4) == "Desktop 3, 4 windows")
+        #expect(OverviewCopy.thumbnailAnnouncement(fullScreenApp: "Safari") == "\u{201C}Safari\u{201D}, full screen")
+        #expect(OverviewCopy.displayPrefix("DELL", "Desktop 1, current") == "\u{201C}DELL\u{201D}: Desktop 1, current")
+        #expect(OverviewCopy.closedAnnouncement == "Overview closed")
+    }
+
+    @Test func theLastOverviewLineHasExplicitBranches() {
+        #expect(OverviewCopy.lastOverviewLine(nil) == "Last overview: none yet")
+        #expect(OverviewCopy.lastOverviewLine((ms: 180, windows: 1, snapshots: 1)) == "Last overview: 180 ms to open, 1 window, 1 snapshot")
+        #expect(OverviewCopy.lastOverviewLine((ms: 212, windows: 7, snapshots: 5)) == "Last overview: 212 ms to open, 7 windows, 5 snapshots")
+        #expect(OverviewCopy.lastOverviewLine((ms: 90, windows: 0, snapshots: 0)) == "Last overview: 90 ms to open, 0 windows, 0 snapshots")
+    }
 }

@@ -84,6 +84,20 @@ nonisolated public enum OverviewCopy {
     public static func couldNotSwitch(desktop index: Int) -> String { "Couldn't switch to \(desktopLabel(index))" }
     public static func couldNotSwitch(app: String) -> String { "Couldn't switch to \(app)" }
 
+    // MARK: Announcements (Accessibility)
+
+    public static func openedAnnouncement(windows: Int, displays: Int) -> String { "" }
+    public static func tileAnnouncement(app: String, title: String) -> String { "" }
+    public static func miniTileAnnouncement(app: String, title: String, desktop: Int) -> String { "" }
+    public static func thumbnailAnnouncement(desktop: Int, current: Bool, windows: Int) -> String { "" }
+    public static func thumbnailAnnouncement(fullScreenApp app: String) -> String { "" }
+    public static func displayPrefix(_ display: String, _ item: String) -> String { "" }
+    public static let closedAnnouncement = ""
+
+    // MARK: S6 Last overview
+
+    public static func lastOverviewLine(_ last: (ms: Int, windows: Int, snapshots: Int)?) -> String { "" }
+
     /// The main area of a current Space with no shown windows.
     public static let noWindows = "No windows on this desktop"
 }
