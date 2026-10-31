@@ -9,7 +9,9 @@ import Testing
 /// D-04 / D-16 live: picking another Space's thumbnail or mini tile in the overview's strip closes it, macOS switches to
 /// that Space within 1 s, and a mini tile's window gets focus. VM only: it posts Mission Control chords and switches
 /// Spaces. Every test starts and ends on the first desktop.
-@Suite(.serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"))
+@Suite(
+    .serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"),
+    .enabled(if: IntegrationEnv.inVM, "VM only: posts Mission Control chords and switches Spaces"))
 @MainActor struct OverviewSpaceSwitchIntegrationTests {
     /// Connects to the window server first (see ZoomSettleIntegrationTests).
     init() { _ = NSApplication.shared }

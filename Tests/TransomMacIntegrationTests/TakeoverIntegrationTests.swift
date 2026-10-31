@@ -8,7 +8,9 @@ import Testing
 /// OVER-02 / OVER-03 live: the takeover disables macOS's Mission Control shortcuts, their chords open and close the
 /// overview, and lifting gives macOS its shortcuts back. VM only: it changes symbolic-hotkey state and posts keys. Each
 /// test restores the hotkeys it recorded whatever happens (T-06-26), and keeps its defaults in a throwaway suite.
-@Suite(.serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"))
+@Suite(
+    .serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"),
+    .enabled(if: IntegrationEnv.inVM, "VM only: changes the symbolic hotkeys, which a crash cannot restore"))
 @MainActor struct TakeoverIntegrationTests {
     static let watched: [Int32] = [32, 108, 113]
 

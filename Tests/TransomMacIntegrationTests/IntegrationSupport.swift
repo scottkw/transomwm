@@ -9,6 +9,14 @@ import os
 enum IntegrationEnv {
     static let trusted = AXIsProcessTrusted() && ProcessInfo.processInfo.environment["TRANSOM_LIVE"] == "1"
 
+    /// Running inside a virtual machine (`kern.hv_vmm_present` is 1), as the spike's `requireVM()` checks. Suites that
+    /// change system state a crash cannot undo (symbolic hotkeys, the current Space) need it besides `trusted` (WR-11).
+    static let inVM: Bool = {
+        var vmm: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return sysctlbyname("kern.hv_vmm_present", &vmm, &size, nil, 0) == 0 && vmm == 1
+    }()
+
     /// Tests/TransomMacIntegrationTests/IntegrationSupport.swift -> repo root.
     static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
