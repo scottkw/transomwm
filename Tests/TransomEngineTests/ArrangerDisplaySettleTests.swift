@@ -1,5 +1,5 @@
 import Foundation
-import TransomEngine
+@testable import TransomEngine
 import TransomModel
 import TransomTestSupport
 import Testing
@@ -253,6 +253,29 @@ extension Harness {
         var (harness, _) = try await docked(onL: [1], onD: [])
         let change = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
         #expect(disconnected(change.settled).isEmpty)
+    }
+
+    /// CR-01: after a failed launch re-attach, layout.json keeps the saved layout, its arrangement and its sets through
+    /// any display settle: no empty World is stored as a set, no stored set is taken, nothing is relabelled.
+    @Test func aSettleAfterAFailedReattachKeepsTheSavedLayoutAndItsSets() async throws {
+        var (harness, _) = try await docked(onL: [1], onD: [2, 3])
+        _ = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        let saved = harness.arranger.snapshot
+        try #require(saved.arrangement == ArrangementID(["L"]) && saved.layoutSets.map(\.arrangement) == [ArrangementID(["D", "L"])])
+
+        harness.arranger = Arranger()
+        harness.arranger.reattachFault = .invariantViolated("test: the saved layout cannot be re-attached")
+        _ = harness.arranger.handle(
+            .restore(saved.world, homeFrames: saved.homeFrames, wantedFrames: saved.wantedFrames, arrangement: saved.arrangement, layoutSets: saved.layoutSets),
+            now: harness.now)
+        let launch = await harness.send(.inventory(await harness.fake.inventory()))
+        try #require(launch.contains { if case .fault(let line) = $0 { line.contains("could not re-attach") } else { false } })
+
+        _ = await harness.displayChange { await $0.plug("D") }
+        let after = harness.arranger.snapshot
+        #expect(after.world == saved.world, "the saved layout was replaced")
+        #expect(after.arrangement == saved.arrangement, "the saved layout was relabelled")
+        #expect(after.layoutSets == saved.layoutSets, "the stored layout sets changed")
     }
 
     /// Debug S4: desks whose display is away, and how many displays those are.

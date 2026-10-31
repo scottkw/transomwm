@@ -159,8 +159,12 @@ public struct Arranger: Sendable {
     private var refusalRetried: [WindowIdentity: Rect] = [:]
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect])?
-    /// A saved layout that could not be re-attached: still what is saved, so this session cannot overwrite it (WR-04).
-    private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect])?
+    /// A saved layout that could not be re-attached: still what is saved, with the arrangement it was saved under, so
+    /// this session cannot overwrite or relabel it (WR-04, CR-01).
+    private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID)?
+    /// Tests only: the next re-attach throws this. Real data cannot build a World whose re-attach throws (closing a
+    /// window always leaves a valid one), so this stands in for the failure CR-01 guards against.
+    var reattachFault: LayoutError?
     /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
     private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
@@ -271,7 +275,7 @@ public struct Arranger: Sendable {
             do throws(LayoutError) {
                 restored = try reattach(restore, tracked: inventory.windows, live: live)
             } catch {
-                unattached = restore
+                unattached = (restore.world, restore.homeFrames, restore.wantedFrames, arrangement)
                 restored = ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
             }
             var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects
@@ -395,7 +399,8 @@ public struct Arranger: Sendable {
     public var snapshot: (
         world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID, layoutSets: [LayoutSet]
     ) {
-        let saved = pendingRestore ?? unattached ?? (settling ? preChangeWorld ?? world : world, homeFrames, wantedFrames)
+        if let unattached { return (unattached.world, unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, layoutSets.all) }
+        let saved = pendingRestore ?? (settling ? preChangeWorld ?? world : world, homeFrames, wantedFrames)
         return (saved.world, saved.homeFrames, saved.wantedFrames, arrangement, layoutSets.all)
     }
 
@@ -430,13 +435,14 @@ public struct Arranger: Sendable {
         guard pendingRestore == nil else { return process(.inventory(inventory), now: now) }
         let uuids = inventory.displays.map(\.uuid)
         var effects: [ArrangerEffect] = []
-        var decision = ArrangementSwitch.decide(from: old, to: id, sets: layoutSets)
+        // CR-01: while the saved layout is unattached, layout.json still holds it and its sets: none is stored or taken.
+        var decision = ArrangementSwitch.decide(from: old, to: id, sets: unattached == nil ? layoutSets : LayoutSets())
         if Set(uuids).count != uuids.count {
             // Identical monitors may share a UUID (Pitfall 13): never apply a stored set to an ambiguous arrangement.
             effects.append(.info("duplicate display UUID in \(uuids.sorted()); treated as a new arrangement"))
             decision = .new
         }
-        if decision != .same, !old.isUnknown, old != id { layoutSets.store(before, for: old, at: .now) }
+        if decision != .same, unattached == nil, !old.isUnknown, old != id { layoutSets.store(before, for: old, at: .now) }
         adopt(inventory)
         // Where each window on a desk of a display that is not connected now was: its display, for the float and N12.
         let present = Set(displays.map(\.uuid))
@@ -603,6 +609,10 @@ public struct Arranger: Sendable {
     private mutating func reattach(
         _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?
     ) throws(LayoutError) -> (effects: [ArrangerEffect], unplaced: Int) {
+        if let fault = reattachFault {
+            reattachFault = nil
+            throw fault
+        }
         history = UndoHistory()
         let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live)
         var candidate = reattached.world
