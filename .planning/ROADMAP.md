@@ -295,7 +295,7 @@ Plans:
   4. Unplugging and re-plugging a display, or sleeping and waking the Mac, restores that display's layout, with "Displays have separate Spaces" both on and off
   5. Transom remembers a layout set per display arrangement and switches to the matching one automatically when a laptop is docked or undocked
 
-**Plans:** 11/12 plans executed
+**Plans:** 12/12 plans executed
 
 Plans:
 **Wave 1**
@@ -330,7 +330,7 @@ Plans:
 - [x] 06-11-PLAN.md — Takeover UI: Replace Mission Control toggle, explanation alert, N10/N11, Restore hook, Debug S5, swipe variant per spike
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 06-12-PLAN.md — Phase gate: full host suite, each VM suite, signed Debug build, 06-UAT.md hardware checklist
+- [x] 06-12-PLAN.md — Phase gate: full host suite, each VM suite, signed Debug build, 06-UAT.md hardware checklist
 **UI hint**: yes
 **Research**: Needs phase research. Verify SkyLight signatures, Space-UUID stability across reboots and macOS updates, and symbolic-hotkey state after deliberate crash tests
 **Scope notes**: Read-only SkyLight `SpacesProvider` with a single-Space fallback; skip dirty desks while their Space is hidden; orphan/dormant desks on unplug re-attached by display UUID; debounced display reconfiguration; Mission Control takeover is opt-in with a restore watchdog. The read-only SkyLight Spaces lookup (`SkyLightSpaces`, capability `Spaces`, single-Space fallback) landed in Phase 2 (02-14), so Phase 6 builds its `SpacesProvider` on it rather than re-adding it. When the Spaces lookup is unavailable, build a public-API fallback map of window→Space by co-visibility between `NSWorkspace.activeSpaceDidChangeNotification` events, so same-frame tab groups on different Spaces stay separate (closes phase 2 known limit: C5 single-Space merge; covers only Spaces visited since launch). Also closes deferred G-03-9: a window whose only CG entry has no Space (Safari keeps closed windows' entries for minutes) must count as closed, not alive (see .planning/debug/g-03-9-closed-safari-lingers.md).
@@ -401,7 +401,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Tiling MVP | 26/26 | Complete    | 2026-10-27 |
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
-| 6. Overview, Spaces & Displays | 11/12 | In Progress | - |
+| 6. Overview, Spaces & Displays | 12/12 | In Progress | - |
 | 7. Tab Groups | 0/TBD | Not started | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |

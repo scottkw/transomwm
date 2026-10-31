@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
-status: executing
-stopped_at: Completed 06-11-PLAN.md
-last_updated: "2026-10-31T21:29:40.781Z"
+status: verifying
+stopped_at: Completed 06-12-PLAN.md
+last_updated: "2026-10-31T21:42:42.344Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: 94342488003d041379bdfdbfd44e0cd0b7305e4e
+state_head: 97323d43af8956d4932022d5377032bd07d8555c
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 78
+  completed_plans: 79
   percent: 56
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
 Plan: 12 of 12
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-31 — Phase 6 execution started
 
 Progress: [██████░░░░] 56%
@@ -131,6 +131,7 @@ Progress: [██████░░░░] 56%
 | Phase 06 P09 | 14min | 3 tasks | 15 files |
 | Phase 06 P10 | 12min | 3 tasks | 9 files |
 | Phase 06 P11 | 11min | 3 tasks | 15 files |
+| Phase 06 P12 | 13min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -360,6 +361,7 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-11: swipe kept, no SwipeTakeoverTap; only the [swipe kept] alert text ships
 - [Phase 06]: 06-11: Restore macOS Window Settings lifts the takeover through ConflictController.takeover (canRestore true while on; N8 after)
 - [Phase 06]: 06-11: N10 posted in ArrangeController.start after N2/N3; launch-time N11 posted when ArrangeController.takeover is wired
+- [Phase 06]: 06-12: the intermittent VM Esc failure in OverviewIntegrationTests is recorded (deferred-items.md, WINDOWS.md), not patched, until a cause is found
 
 ### Quick Tasks Completed
 
@@ -400,8 +402,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T21:29:40.145Z
-Stopped at: Completed 06-11-PLAN.md
+Last session: 2026-10-31T21:42:41.707Z
+Stopped at: Completed 06-12-PLAN.md
 Resume file: None
 
 ## Deferred Verification
