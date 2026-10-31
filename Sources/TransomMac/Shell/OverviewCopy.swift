@@ -1,5 +1,10 @@
 /// Phase 6 copy from the UI-SPEC (Surface 7, Copywriting Contract). Pure strings, no AppKit types.
 nonisolated public enum OverviewCopy {
+    // MARK: Selection (Surface 3)
+
+    /// The selected window's title capsule and a selected mini tile's label: the AX title, else the app name.
+    public static func titleOrApp(title: String, app: String) -> String { title.isEmpty ? app : title }
+
     // MARK: S1 Spaces
 
     public enum SpacesLine: Equatable, Sendable {

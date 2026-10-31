@@ -33,12 +33,18 @@ import os
     private var panels: [String: StagePanel] = [:]
     /// Each open panel's tiles: start = the real frame, end = the overview rect (AppKit coordinates).
     private var shown: [String: [StageTile]] = [:]
-    /// The one selection across every display (D-04).
-    private(set) var selection = OverviewSelection()
+    /// The one selection across every display (D-04), drawn as it changes.
+    private(set) var selection = OverviewSelection() {
+        didSet { if selection != oldValue { markSelection() } }
+    }
+    /// Each open panel's strip as built, so a selected mini tile's label swap can be undone.
+    private var overlays: [String: OverviewOverlay] = [:]
+    /// The thumbnail whose label shows a selected mini tile's title.
+    private var swappedLabel: (display: String, space: UInt64)?
     /// Bumped on every open and close, so a capture or animation finishing late never acts on a newer state.
     private var generation = 0
     /// The open overview's geometry, for hit-testing clicks.
-    private var layout: OverviewLayout?
+    private(set) var layout: OverviewLayout?
     /// Per display: the capture waiting for its Space change to settle, and the Space whose visit was captured (D-03).
     private var visitTasks: [String: Task<Void, Never>] = [:]
     private var capturedVisit: [String: UInt64] = [:]
@@ -105,7 +111,6 @@ import os
             return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
         }
         self.layout = layout
-        selection = OverviewSelection.initial(layout: layout, focused: focused(), pointer: pointer())
         let zoom = zoom()
         var snapshots = 0, fallbacks = 0
         func image(_ window: TransomModel.WindowRef) -> CGImage? { zoom.cgWindow(window).flatMap { images[$0] ?? zoom.cachedSnapshot($0) } }
@@ -122,10 +127,14 @@ import os
             }
             if panel.isVisible { panel.freezeAtPresentation() }  // a close still fading: cancel its order-out
             panel.show(tiles: tiles)
-            panel.showOverview(overlay(display, input: input, image: image, appKit: appKit))
+            let strip = overlay(display, input: input, image: image, appKit: appKit)
+            overlays[display.uuid] = strip
+            panel.showOverview(strip)
             panel.animate {}
             shown[display.uuid] = tiles
         }
+        swappedLabel = nil
+        selection = OverviewSelection.initial(layout: layout, focused: focused(), pointer: pointer())  // drawn by didSet
         takeKeys()
         let ms = Int((ContinuousClock.now - started) / .milliseconds(1))
         logger.info(
@@ -185,6 +194,7 @@ import os
         let panel = StagePanel(screen: screen)
         panel.onOverviewClick = { [weak self] point, travel in self?.click(at: point, travel: travel) }
         panel.onKey = { [weak self] event in self?.key(event) }
+        panel.onOverviewHover = { [weak self] point in self?.hover(at: point) }
         panels[uuid] = panel
         return panel
     }
@@ -240,6 +250,78 @@ import os
     private func pickSelection() {
         guard isOpen, let item = selection.selected else { return }
         pick(item)
+    }
+
+    /// The pointer moved over a panel (AppKit global): an item under it becomes the selection; the backdrop, a gap or
+    /// the empty capsule leave the selection where it is, so a resting pointer never fights the keys. True over an item.
+    private func hover(at point: CGPoint) -> Bool? {
+        guard isOpen, let layout, let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else { return nil }
+        let location = Point(x: point.x, y: primaryHeight - point.y)
+        guard let item = layout.item(at: location), let display = layout.display(at: location) else { return false }
+        selection = OverviewSelection(selected: item, display: display.uuid)
+        return true
+    }
+
+    /// Draws the selection on its panel and clears the others; a selected mini tile's thumbnail label shows its title.
+    private func markSelection() {
+        guard isOpen, let layout, let primaryHeight = NSScreen.screens.first.map({ Double($0.frame.height) }) else {
+            for panel in panels.values { panel.showMark(nil) }
+            return
+        }
+        func appKit(_ rect: Rect) -> CGRect {
+            let r = Coordinates.appKit(fromTopLeft: rect, primaryHeight: primaryHeight)
+            return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+        }
+        var label: (display: String, space: UInt64, title: String)?
+        for display in layout.displays {
+            guard let panel = panels[display.uuid] else { continue }
+            guard display.uuid == selection.display, let item = selection.selected else {
+                panel.showMark(nil)
+                continue
+            }
+            switch item {
+            case .tile(let window):
+                guard let index = display.tiles.firstIndex(where: { $0.window == window }) else { panel.showMark(nil); continue }
+                let rect = display.tiles[index].rect
+                let content = shown[display.uuid].flatMap { index < $0.count ? $0[index].content : nil }  // tiles in layout order
+                guard case .snapshot? = content else {
+                    panel.showMark(OverviewMark(ring: appKit(rect), radius: min(TileLayer.cornerRadius, min(rect.width, rect.height) / 2)))
+                    continue  // a fallback tile already shows its title
+                }
+                let title = OverviewCopy.titleOrApp(title: window.titleHint, app: appName(window))
+                let text = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 13)]).size()
+                let capsule = OverviewLayout.titleCapsule(tile: rect, mainArea: display.mainArea, size: Size(width: ceil(text.width) + 16, height: 24))
+                panel.showMark(OverviewMark(ring: appKit(rect), radius: TileLayer.cornerRadius * display.scale, titleRect: capsule.map(appKit), title: title))
+            case .miniTile(let window, let space):
+                guard let thumb = display.thumbnails.first(where: { $0.spaceID == space }), let mini = thumb.miniTiles.first(where: { $0.window == window })
+                else { panel.showMark(nil); continue }
+                let radius = max(2, TileLayer.cornerRadius * thumb.rect.width / max(1, display.visibleFrame.width))
+                panel.showMark(OverviewMark(ring: appKit(mini.rect), radius: radius))
+                label = (display.uuid, space, OverviewCopy.titleOrApp(title: window.titleHint, app: appName(window)))
+            case .thumbnail(let space):
+                guard let thumb = display.thumbnails.first(where: { $0.spaceID == space }) else { panel.showMark(nil); continue }
+                panel.showMark(OverviewMark(ring: appKit(thumb.rect).insetBy(dx: -4, dy: -4), radius: 12))
+            }
+        }
+        swapLabel(label)
+    }
+
+    /// Restores the thumbnail label swapped last, then shows `label` under its thumbnail (Label Regular).
+    private func swapLabel(_ label: (display: String, space: UInt64, title: String)?) {
+        if let old = swappedLabel, old.display != label?.display || old.space != label?.space, let strip = overlays[old.display] {
+            panels[old.display]?.updateOverview(strip)
+        }
+        swappedLabel = label.map { ($0.display, $0.space) }
+        guard let label, var strip = overlays[label.display],
+            let index = layout?.displays.first(where: { $0.uuid == label.display })?.thumbnails.firstIndex(where: { $0.spaceID == label.space })
+        else { return }
+        strip.thumbnails[index].label = label.title
+        strip.thumbnails[index].labelIsTitle = true
+        panels[label.display]?.updateOverview(strip)
+    }
+
+    private func appName(_ window: TransomModel.WindowRef) -> String {
+        NSRunningApplication(processIdentifier: window.pid)?.localizedName ?? window.bundleID
     }
 
     /// The pointer in top-left global points.

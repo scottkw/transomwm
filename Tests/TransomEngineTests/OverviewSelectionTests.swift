@@ -211,6 +211,23 @@ private func selected(_ item: OverviewItem, on display: String = "D") -> Overvie
         #expect(s == selected(.tile(ref(2))))
     }
 
+    // MARK: Title capsule
+
+    @Test func theTitleCapsuleSitsInsideATallTileAndIsCappedToItsWidth() {
+        let area = Rect(x: 24, y: 169, width: 1392, height: 707)
+        let r = OverviewLayout.titleCapsule(tile: Rect(x: 100, y: 200, width: 300, height: 200), mainArea: area, size: Size(width: 400, height: 24))
+        #expect(r == Rect(x: 116, y: 368, width: 268, height: 24))  // 400 − 8 − 24; width 300 − 32
+    }
+
+    @Test func aShortTileGetsItsCapsuleBelowItKeptInTheMainArea() {
+        let area = Rect(x: 24, y: 169, width: 1392, height: 707)
+        let below = OverviewLayout.titleCapsule(tile: Rect(x: 100, y: 200, width: 300, height: 30), mainArea: area, size: Size(width: 100, height: 24))
+        #expect(below == Rect(x: 200, y: 238, width: 100, height: 24))
+        let clamped = OverviewLayout.titleCapsule(tile: Rect(x: 100, y: 840, width: 300, height: 30), mainArea: area, size: Size(width: 100, height: 24))
+        #expect(clamped?.y == 852)  // the main area ends at 876
+        #expect(OverviewLayout.titleCapsule(tile: Rect(x: 0, y: 200, width: 40, height: 200), mainArea: area, size: Size(width: 100, height: 24)) == nil)
+    }
+
     // MARK: A window closed while open
 
     @Test func closingTheSelectedWindowSelectsTheNearestRemainingTile() {

@@ -7,8 +7,8 @@ import Testing
 
 /// D-04 live: in the overview → moves the one selection to the window on the right and Return focuses it and closes
 /// the overview; other keys do nothing while it is open; Tab with one display stays put. The open overview's panel is
-/// key without activating Transom, and after every close path the frontmost app gets keys again. VM only: it posts
-/// keys and clicks. Fixture windows only.
+/// key without activating Transom, and after every close path the frontmost app gets keys again; the pointer moving
+/// onto a tile selects it. VM only: it posts keys, pointer moves and clicks. Fixture windows only.
 @Suite(.serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"))
 @MainActor struct OverviewKeyboardIntegrationTests {
     /// Connects to the window server first (see ZoomSettleIntegrationTests), as an agent app like Transom (LSUIElement).
@@ -20,9 +20,7 @@ import Testing
     /// Pumps AppKit's queue (the test helper runs no NSApplication: key events, fades) until `done` or the timeout.
     private func pump(timeout: Duration = .seconds(2), until done: () async -> Bool) async -> Bool {
         await waitUntil(timeout: timeout) {
-            while let event = NSApp.nextEvent(matching: .any, until: Date(timeIntervalSinceNow: 0.02), inMode: .default, dequeue: true) {
-                NSApp.sendEvent(event)
-            }
+            dispatchAppKitEvents()
             return await done()
         }
     }
@@ -99,6 +97,12 @@ import Testing
             _ = await press(48, timeout: .milliseconds(300)) { false }  // Tab
             #expect(overview.selection.selected == .tile(right), "Tab with one display moved the selection")
         }
+        // The pointer moving onto a tile selects it; the keys go on from there.
+        let leftTile = try #require(overview.layout?.displays.flatMap(\.tiles).first { $0.window == left }).rect
+        CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: leftTile.midX, y: leftTile.midY), mouseButton: .left)?
+            .post(tap: .cghidEventTap)
+        #expect(await pump { overview.selection.selected == .tile(left) }, "moving the pointer onto the left tile did not select it")
+        #expect(await press(124) { overview.selection.selected == .tile(right) }, "→ after hovering did not select the right window")
         // Any other key does nothing while open: the overview stays, and the app behind does not get it.
         _ = await press(7, timeout: .milliseconds(500)) { !overview.isOpen }  // x
         #expect(overview.isOpen, "x closed the overview")

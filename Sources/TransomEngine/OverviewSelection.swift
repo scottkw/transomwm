@@ -146,12 +146,22 @@ public struct OverviewSelection: Equatable, Sendable {
 
 extension OverviewLayout {
     /// The display the pointer is on: the one whose visibleFrame holds it, else the nearest (the menu bar, the Dock).
-    func display(at point: Point) -> OverviewDisplayLayout? {
+    public func display(at point: Point) -> OverviewDisplayLayout? {
         func distance(_ rect: Rect) -> Double {
             let dx = max(rect.minX - point.x, 0, point.x - rect.maxX), dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
             return dx * dx + dy * dy
         }
         return displays.min { distance($0.visibleFrame) < distance($1.visibleFrame) }
+    }
+
+    /// The selected snapshot tile's title capsule (06 UI-SPEC Surface 3): centred, 8 pt above the tile's bottom edge, at
+    /// most the tile's width − 32; 8 pt below the tile when the tile is shorter than the capsule + 16, kept inside the
+    /// main area. Nil when the tile is too narrow for any text (the capsule's 8 pt side padding).
+    public static func titleCapsule(tile: Rect, mainArea: Rect, size: Size) -> Rect? {
+        let width = min(size.width, tile.width - 32)
+        guard width > 16 else { return nil }
+        let y = tile.height < size.height + 16 ? min(tile.maxY + 8, mainArea.maxY - size.height) : tile.maxY - 8 - size.height
+        return Rect(x: tile.midX - width / 2, y: y, width: width, height: size.height)
     }
 
     /// Displays left to right by frame; ties by top edge, then UUID (OVER-01 ordering edge).

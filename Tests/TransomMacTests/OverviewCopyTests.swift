@@ -61,4 +61,9 @@ import Testing
         #expect(OverviewCopy.couldNotSwitch(desktop: 2) == "Couldn't switch to Desktop 2")
         #expect(OverviewCopy.couldNotSwitch(app: "Safari") == "Couldn't switch to Safari")
     }
+
+    @Test func aSelectedWindowShowsItsTitleElseItsAppName() {
+        #expect(OverviewCopy.titleOrApp(title: "Notes.txt", app: "TextEdit") == "Notes.txt")
+        #expect(OverviewCopy.titleOrApp(title: "", app: "TextEdit") == "TextEdit")
+    }
 }

@@ -9,8 +9,11 @@ import Testing
 /// never move, and Show Overview again or Esc closes it. Fixture windows only, VM only (it posts an Esc key event).
 @Suite(.serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"))
 @MainActor struct OverviewIntegrationTests {
-    /// Connects to the window server first (see ZoomSettleIntegrationTests).
-    init() { _ = NSApplication.shared }
+    /// Connects to the window server first (see ZoomSettleIntegrationTests), as an agent app like Transom (LSUIElement).
+    init() {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+    }
 
     @Test(.timeLimit(.minutes(1)))
     func overviewOpensPerDisplayAndCloses() async throws {
@@ -53,11 +56,9 @@ import Testing
         for down in [true, false] {
             CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: down)?.post(tap: .cghidEventTap)  // Esc
         }
-        // The Esc hotkey is a Carbon event: this process has no running NSApplication, so the test pumps AppKit's queue.
+        // Esc reaches the overview's key panel: this process has no running NSApplication, so the test pumps AppKit's queue.
         let escaped = await waitUntil(timeout: .seconds(2)) {
-            if let event = NSApp.nextEvent(matching: .any, until: Date(timeIntervalSinceNow: 0.02), inMode: .default, dequeue: true) {
-                NSApp.sendEvent(event)
-            }
+            dispatchAppKitEvents()
             return !overview.isOpen
         }
         #expect(escaped, "Esc did not close the overview")

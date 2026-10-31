@@ -37,10 +37,22 @@ struct OverviewOverlay {
         /// Empty: no label capsule.
         var label: String
         var isCurrent: Bool
+        /// The label shows a selected mini tile's window title: Label Regular, even on the current Space.
+        var labelIsTitle = false
         var minis: [Mini]
     }
     var thumbnails: [Thumbnail] = []
     var emptyMessage: (rect: CGRect, text: String)?
+}
+
+/// The overview's selection on one panel (06 UI-SPEC Surface 3): a 2 pt accent ring, and on a selected snapshot tile its
+/// title capsule. AppKit global rects.
+struct OverviewMark: Equatable {
+    /// The ring's outer edge: the tile or mini tile itself, or the thumbnail outset by 4 pt.
+    var ring: CGRect
+    var radius: CGFloat
+    var titleRect: CGRect?
+    var title = ""
 }
 
 /// Re-resolves the tiles' colours when the appearance changes, and takes every click on the stage.
@@ -50,8 +62,20 @@ private final class StageContentView: NSView {
     /// A press released: where it went down and where it came up (view coordinates). Left or right button, any
     /// modifier; the second click of a double-click is not reported, so it never acts twice.
     var onMouseUp: (CGPoint, CGPoint) -> Void = { _, _ in }
+    /// The pointer moved (view coordinates): true over an item (pointing hand), false elsewhere (arrow), nil when no
+    /// overview is open (the cursor is left alone).
+    var onMouseMoved: (CGPoint) -> Bool? = { _ in nil }
     private var pressedAt: CGPoint?
     override func viewDidChangeEffectiveAppearance() { onAppearanceChange() }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+    }
+    override func mouseMoved(with event: NSEvent) {
+        guard let overItem = onMouseMoved(convert(event.locationInWindow, from: nil)) else { return }
+        (overItem ? NSCursor.pointingHand : NSCursor.arrow).set()
+    }
     // The panel is not key before a click (and the camera stage never is), so the first click must reach the view.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
@@ -98,6 +122,11 @@ public final class StagePanel: NSPanel {
     var onTileClick: ((UInt32) -> Void)?
     /// The overview's press, on release: where it went down (AppKit global) and how far it travelled (pt).
     var onOverviewClick: ((CGPoint, CGFloat) -> Void)?
+    /// The pointer moved (AppKit global): true over an overview item, nil while no overview is open.
+    var onOverviewHover: ((CGPoint) -> Bool?)?
+    /// The selection ring and title capsule, above everything; the one fading out is dropped when its fade ends.
+    private var markLayer: CALayer?
+    private var markSpec: OverviewMark?
 
     public init(screen: NSScreen) {
         super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -142,6 +171,10 @@ public final class StagePanel: NSPanel {
             guard let self else { return }
             self.onOverviewClick?(down.applying(.init(translationX: self.frame.minX, y: self.frame.minY)), hypot(up.x - down.x, up.y - down.y))
         }
+        view.onMouseMoved = { [weak self] point in
+            guard let self else { return nil }
+            return self.onOverviewHover?(point.applying(.init(translationX: self.frame.minX, y: self.frame.minY)))
+        }
         colorObserver = NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) {
             [weak self] _ in
             MainActor.assumeIsolated { self?.resolveColors() }
@@ -152,6 +185,11 @@ public final class StagePanel: NSPanel {
         guard let appearance = contentView?.effectiveAppearance else { return }
         for layer in Array(layers.values) + leaving { layer.resolveColors(appearance) }
         if let overlaySpec { buildOverlay(overlaySpec) }
+        if let markSpec, let old = markLayer {
+            let layer = buildMark(markSpec, appearance: appearance)
+            contentView?.layer?.replaceSublayer(old, with: layer)
+            markLayer = layer
+        }
     }
 
     // MARK: Overview (06-06)
@@ -170,6 +208,53 @@ public final class StagePanel: NSPanel {
     func clearOverview(duration: Double = StagePanel.moveDuration) {
         overlaySpec = nil
         fade(overlay, to: 0, duration: duration)
+    }
+
+    /// Replaces the strip and capsule at once, no fade (a selected mini tile's label swap).
+    func updateOverview(_ spec: OverviewOverlay) {
+        overlaySpec = spec
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        buildOverlay(spec)
+        CATransaction.commit()
+    }
+
+    /// Moves the selection ring (and title capsule): the old one fades out over 120 ms, the new one in over 80 ms
+    /// (the Phase 4 hover-ring timing, opacity only, so the same under Reduce Motion). Nil clears it.
+    func showMark(_ mark: OverviewMark?) {
+        guard mark != markSpec else { return }
+        markSpec = mark
+        if let old = markLayer {
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { old.removeFromSuperlayer() }
+            fade(old, to: 0, duration: 0.12)
+            CATransaction.commit()
+        }
+        markLayer = nil
+        guard let mark, let appearance = contentView?.effectiveAppearance else { return }
+        let layer = buildMark(mark, appearance: appearance)
+        contentView?.layer?.addSublayer(layer)
+        fade(layer, from: 0, to: 1, duration: 0.08)
+        markLayer = layer
+    }
+
+    private func buildMark(_ mark: OverviewMark, appearance: NSAppearance) -> CALayer {
+        let container = CALayer()
+        container.frame = contentView?.bounds ?? .zero
+        container.zPosition = 2
+        appearance.performAsCurrentDrawingAppearance {
+            let ring = CALayer()
+            ring.frame = localRect(mark.ring)
+            ring.cornerRadius = mark.radius
+            ring.borderWidth = 2
+            let alpha: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.85
+            ring.borderColor = NSColor.controlAccentColor.withAlphaComponent(alpha).cgColor
+            container.addSublayer(ring)
+            if let rect = mark.titleRect {
+                container.addSublayer(capsule(mark.title, in: localRect(rect), font: .systemFont(ofSize: 13), color: .labelColor))
+            }
+        }
+        return container
     }
 
     private func buildOverlay(_ spec: OverviewOverlay) {
@@ -201,7 +286,7 @@ public final class StagePanel: NSPanel {
                 overlay.addSublayer(layer)
                 if !thumb.label.isEmpty {
                     overlay.addSublayer(capsule(
-                        thumb.label, in: localRect(thumb.labelRect), font: .systemFont(ofSize: 11, weight: thumb.isCurrent ? .semibold : .regular),
+                        thumb.label, in: localRect(thumb.labelRect), font: .systemFont(ofSize: 11, weight: thumb.isCurrent && !thumb.labelIsTitle ? .semibold : .regular),
                         color: .labelColor))
                 }
             }
