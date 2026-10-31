@@ -134,4 +134,82 @@ import Testing
             toggle: item("Turn On Zoom"))
         #expect(!off.map(\.title).contains("Replace Mission Control"), "rendered only with zoom on")
     }
+
+    @Test func aRefusedApplyRestoresTheOriginalsAndPostsN11() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let backend = FakeHotKeys()
+        backend.stuck = [32]  // the read-back keeps 32 on
+        let takeover = Self.takeover(defaults, backend)
+        var posted: [Notice] = []
+        var announced: [String] = []
+        takeover.post = { posted.append($0) }
+        takeover.announce = { announced.append($0) }
+        defaults.set(true, forKey: MissionControlTakeover.explainedKey)
+        takeover.choose { _ in Issue.record("explained before") }
+        #expect(takeover.state == .offApplyFailed)
+        #expect(backend.enabled == [32: true, 108: true], "originals restored")
+        #expect(takeover.storedOriginals == nil)
+        #expect(posted == [.takeoverApplyFailed])
+        #expect(announced.isEmpty, "N11 tells the user; no on announcement")
+        #expect(backend.registered.isEmpty, "no chord caught while macOS keeps it")
+        #expect(Self.s5(takeover) == "Mission Control takeover: off, couldn't apply")
+    }
+
+    @Test func aCrashLastLaunchPostsN10OnceAndO2TurnsItBackOnWithoutTheAlert() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let backend = FakeHotKeys()
+        let crashed = Self.takeover(defaults, backend)
+        crashed.setPreference(true)
+        #expect(crashed.isOn)  // dropped without a lift: the process "died"
+
+        let takeover = Self.takeover(defaults, backend)
+        takeover.launchRestore()
+        #expect(backend.enabled == [32: true, 108: true], "launch restored the originals first")
+        #expect(takeover.state == .offAfterCrash)
+        var posted: [Notice] = []
+        takeover.post = { posted.append($0) }
+        takeover.postCrashNotice()
+        takeover.postCrashNotice()
+        #expect(posted == [.takeoverCrashed])
+        #expect(Self.s5(takeover) == "Mission Control takeover: off after a crash last launch")
+
+        takeover.choose { _ in Issue.record("after a crash O2 turns it on at once") }
+        #expect(takeover.isOn)
+        takeover.lift(reason: .quit)
+        #expect(!MissionControlCanary(defaults: defaults).isTripped(), "canary cleared")
+    }
+
+    @Test func restoreMacOSWindowSettingsAlsoLiftsTheTakeover() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let backend = FakeHotKeys()
+        let takeover = Self.takeover(defaults, backend)
+        let conflicts = ConflictController(store: MemoryPreferences(), defaults: defaults, osMajor: 14, readBackDelay: .zero)
+        conflicts.takeover = takeover
+        var posted: [Notice] = []
+        conflicts.post = { posted.append($0) }
+        #expect(!conflicts.canRestore)
+        takeover.setPreference(true)
+        #expect(conflicts.canRestore, "enabled while the takeover is on, with no Phase 3 originals")
+        conflicts.restore()
+        #expect(!takeover.isOn && !takeover.preferenceOn)
+        #expect(backend.enabled == [32: true, 108: true])
+        #expect(posted == [.settingsRestored], "then N8, unchanged")
+        #expect(!conflicts.canRestore)
+    }
+
+    @Test func driftIsDisabledAgainAndTheOriginalsStay() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let backend = FakeHotKeys()
+        let takeover = Self.takeover(defaults, backend)
+        takeover.setPreference(true)
+        let originals = takeover.storedOriginals
+        backend.enabled[32] = true  // System Settings, behind Transom's back
+        takeover.checkDrift()
+        #expect(backend.enabled[32] == false)
+        #expect(takeover.storedOriginals == originals && originals == [32: true, 108: true])
+    }
 }

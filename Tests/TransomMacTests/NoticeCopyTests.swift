@@ -113,4 +113,20 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(NoticeCopy.text(for: .settingsRestored, appName: { _ in "" }) == "macOS window settings restored.")
         #expect(NoticeCopy.glyph(for: .settingsRestored) == "checkmark.circle")
     }
+
+    @Test func takeoverCrashedIsN10() {
+        #expect(NoticeCopy.text(for: .takeoverCrashed, appName: { _ in "" })
+            == "Transom quit unexpectedly, so Mission Control has its keys back. Choose Replace Mission Control in the Transom menu to use them for the overview again.")
+        #expect(NoticeCopy.glyph(for: .takeoverCrashed) == "lifepreserver")
+        #expect(!NoticeCopy.isWarning(.takeoverCrashed))
+        #expect(!Notice.takeoverCrashed.isCrashNotice, "queued behind N2/N3, never holding the toast like them")
+    }
+
+    @Test func takeoverApplyFailedIsN11() {
+        #expect(NoticeCopy.text(for: .takeoverApplyFailed, appName: { _ in "" })
+            == "Couldn't take over Mission Control's keys, so Mission Control works as before.")
+        #expect(NoticeCopy.glyph(for: .takeoverApplyFailed) == "exclamationmark.triangle.fill")
+        #expect(NoticeCopy.isWarning(.takeoverApplyFailed))
+        #expect(!Notice.takeoverApplyFailed.isCrashNotice)
+    }
 }
