@@ -23,6 +23,11 @@ public enum SymbolicHotKeys {
     public struct Value: Equatable, Sendable {
         public let keyCode: UInt16
         public let modifiers: UInt32
+
+        public init(keyCode: UInt16, modifiers: UInt32) {
+            self.keyCode = keyCode
+            self.modifiers = modifiers
+        }
     }
 
     private static let functions: (isEnabled: IsEnabled, setEnabled: SetEnabled, getValue: GetValue)? = {

@@ -112,4 +112,30 @@ import Testing
         #expect(OverviewCopy.lastOverviewLine((ms: 212, windows: 7, snapshots: 5)) == "Last overview: 212 ms to open, 7 windows, 5 snapshots")
         #expect(OverviewCopy.lastOverviewLine((ms: 90, windows: 0, snapshots: 0)) == "Last overview: 90 ms to open, 0 windows, 0 snapshots")
     }
+
+    @Test(arguments: [
+        (OverviewCopy.TakeoverLine.off, "Mission Control takeover: off"),
+        (.on(.standard), "Mission Control takeover: on, F3 and \u{2303}\u{2191}"),
+        (.on(.custom("\u{2325}\u{2318}\u{2191}")), "Mission Control takeover: on, F3 and \u{2325}\u{2318}\u{2191}"),
+        (.on(.off), "Mission Control takeover: on, F3"),
+        (.liftedForZoom, "Mission Control takeover: lifted while zoom is off"),
+        (.offAfterCrash, "Mission Control takeover: off after a crash last launch"),
+        (.offApplyFailed, "Mission Control takeover: off, couldn't apply"),
+        (.unavailable, "Mission Control takeover: unavailable (private API off)"),
+    ])
+    func theTakeoverLineMatchesS5(line: OverviewCopy.TakeoverLine, expected: String) {
+        #expect(OverviewCopy.takeoverLine(line) == expected)
+    }
+
+    /// Surface 5: the alert's {Keys} branches and the [swipe kept] informative text (06-SPIKE verdict).
+    @Test func theTakeoverAlertFollowsSurface5() {
+        #expect(OverviewCopy.takeoverAlertMessage == "Use the Mission Control keys for Transom's overview?")
+        #expect(OverviewCopy.takeoverAlertKeys(.standard) == "The Mission Control key (F3) and Control-Up Arrow")
+        #expect(OverviewCopy.takeoverAlertKeys(.custom("\u{2325}\u{2318}\u{2191}")) == "The Mission Control key (F3) and \u{2325}\u{2318}\u{2191}")
+        #expect(OverviewCopy.takeoverAlertKeys(.off) == "The Mission Control key (F3)")
+        #expect(
+            OverviewCopy.takeoverAlertInformative(.off)
+                == "The Mission Control key (F3) will show Transom's overview instead of Mission Control. Swiping up with four fingers still opens Mission Control. Transom gives Mission Control its keys back when you turn this off or quit, and the next time it opens if it quits unexpectedly.")
+        #expect(OverviewCopy.replaceMissionControlUnavailable == "Replace Mission Control (unavailable)")
+    }
 }

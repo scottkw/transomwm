@@ -31,6 +31,26 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
     func clearOriginals() { defaults.removeObject(forKey: Self.key) }
 }
 
+/// Every symbolic-hotkey and Carbon-hotkey call the takeover makes. Host tests inject a fake, so no test can change the
+/// user's real Mission Control shortcuts or register a hotkey.
+@MainActor protocol HotKeyBackend {
+    var isAvailable: Bool { get }
+    func isEnabled(_ id: Int32) -> Bool?
+    func setEnabled(_ id: Int32, _ enabled: Bool)
+    func value(_ id: Int32) -> SymbolicHotKeys.Value?
+    /// Registers `shortcut` as a Carbon hotkey right away; cancelling the stream's task unregisters it.
+    func events(for shortcut: KeyboardShortcuts.Shortcut) -> AsyncStream<KeyboardShortcuts.EventType>
+}
+
+/// SkyLight's symbolic hotkeys and KeyboardShortcuts' Carbon hotkeys (the app's only backend).
+struct LiveHotKeyBackend: HotKeyBackend {
+    var isAvailable: Bool { Capabilities.isAvailable(.symbolicHotKeys) }
+    func isEnabled(_ id: Int32) -> Bool? { SymbolicHotKeys.isEnabled(id) }
+    func setEnabled(_ id: Int32, _ enabled: Bool) { SymbolicHotKeys.setEnabled(id, enabled) }
+    func value(_ id: Int32) -> SymbolicHotKeys.Value? { SymbolicHotKeys.value(id) }
+    func events(for shortcut: KeyboardShortcuts.Shortcut) -> AsyncStream<KeyboardShortcuts.EventType> { KeyboardShortcuts.events(for: shortcut) }
+}
+
 /// The Mission Control takeover (OVER-02, D-05, D-07): disables macOS's Mission Control shortcuts and catches their
 /// chords as Carbon hotkeys, so they reach `onTrigger`. The only writer of symbolic-hotkey state. Every disable is
 /// preceded by stored originals and followed by a read-back (TakeoverPolicy).
@@ -43,35 +63,44 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
 
     /// Replace Mission Control (off by default, D-06). Only the menu toggle (06-11) and tests write it; no URL.
     static let enabledKey = "takeover.enabled"
+    /// The explanation alert was confirmed once (Surface 5); saved only on confirm.
+    static let explainedKey = "takeover.explained"
 
     private(set) var state: State = .off
     /// The canary tripped at launch and N10 has not shown for it yet (06-11 posts it, then calls `crashNoticeShown`).
     private(set) var pendingCrashNotice = false
     /// A taken chord was pressed (after the drift check).
     var onTrigger: () -> Void = {}
+    /// A VoiceOver announcement; set by ArrangeController.
+    var announce: (String) -> Void = { _ in }
 
     private let defaults: UserDefaults
+    private let backend: any HotKeyBackend
     private let store: UserDefaultsTakeoverStore
     private let canary: MissionControlCanary
     private var zoomOn: Bool
     private var keyTasks: [Task<Void, Never>] = []
     private let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
 
-    init(defaults: UserDefaults = .standard, zoomOn: Bool) {
+    init(defaults: UserDefaults = .standard, backend: any HotKeyBackend = LiveHotKeyBackend(), zoomOn: Bool) {
         self.defaults = defaults
+        self.backend = backend
         self.zoomOn = zoomOn
         store = UserDefaultsTakeoverStore(defaults: defaults)
         canary = MissionControlCanary(defaults: defaults)
     }
 
     var preferenceOn: Bool { defaults.bool(forKey: Self.enabledKey) }
+    var isOn: Bool { if case .on = state { true } else { false } }
+    /// The private symbols resolve (O2 reads "(unavailable)" otherwise).
+    var isAvailable: Bool { backend.isAvailable }
 
     /// OVER-03, before the Arranger starts: stored originals mean the last run did not lift, so they are restored
     /// first; then a tripped canary keeps the takeover off, otherwise the preference, capability and zoom decide.
     func launchRestore() {
         let actions = TakeoverPolicy.launch(
             store: store, canaryTripped: canary.isTripped(), crashNoticed: canary.noticed, preferenceOn: preferenceOn, zoomOn: zoomOn,
-            available: Capabilities.isAvailable(.symbolicHotKeys))
+            available: backend.isAvailable)
         for action in actions {
             switch action {
             case .restore(let originals):
@@ -96,6 +125,54 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
         if zoomOn { apply() } else { state = .liftedForZoom }
     }
 
+    /// O2 (Surface 5): on turns off at once; off turns on after the one-time explanation, unless it was confirmed
+    /// before or a crash turned the takeover off. `explain` shows the alert and answers whether the user confirmed.
+    func choose(explain: (_ answered: @escaping (Bool) -> Void) -> Void) {
+        if isOn {
+            setPreference(false)
+            return announce(OverviewCopy.takeoverOffAnnouncement)
+        }
+        guard defaults.bool(forKey: Self.explainedKey) || state == .offAfterCrash else {
+            return explain { [weak self] confirmed in
+                guard confirmed, let self else { return }
+                self.defaults.set(true, forKey: Self.explainedKey)
+                self.turnOn()
+            }
+        }
+        turnOn()
+    }
+
+    private func turnOn() {
+        setPreference(true)
+        if isOn { announce(OverviewCopy.takeoverOnAnnouncement) }
+    }
+
+    /// What macOS has for Mission Control (hotkey 32) right now: the alert's {Keys}.
+    var currentChord: OverviewCopy.Chord {
+        backend.isEnabled(SymbolicHotKeys.missionControl) == true ? chord() : .off
+    }
+
+    /// Debug S5.
+    var debugLine: OverviewCopy.TakeoverLine {
+        guard backend.isAvailable else { return .unavailable }  // the policy reports it only with the preference on
+        return switch state {
+        case .off: .off
+        case .on(let keys): .on(keys.contains(SymbolicHotKeys.missionControl) ? chord() : .off)
+        case .liftedForZoom: .liftedForZoom
+        case .offAfterCrash: .offAfterCrash
+        case .offApplyFailed: .offApplyFailed
+        case .unavailable: .unavailable
+        }
+    }
+
+    /// Hotkey 32's chord: the macOS default ⌃↑, or the user's in glyphs. No value reads as the default.
+    private func chord() -> OverviewCopy.Chord {
+        guard let value = backend.value(SymbolicHotKeys.missionControl) else { return .standard }
+        let carbon = TakeoverKeys.carbonModifiers(nx: value.modifiers)
+        if value.keyCode == 126, carbon == 0x1000 { return .standard }
+        return .custom(KeyboardShortcuts.Shortcut(carbonKeyCode: Int(value.keyCode), carbonModifiers: carbon).description)
+    }
+
     func crashNoticeShown() {
         pendingCrashNotice = false
         canary.markNoticed()
@@ -114,9 +191,9 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
     /// A taken hotkey found enabled again (System Settings, A11) is disabled again; the stored originals stay.
     func checkDrift() {
         guard case .on(let keys) = state else { return }
-        let drifted = TakeoverPolicy.drift(taken: keys, enabledNow: Dictionary(uniqueKeysWithValues: keys.map { ($0, SymbolicHotKeys.isEnabled($0) ?? false) }))
+        let drifted = TakeoverPolicy.drift(taken: keys, enabledNow: Dictionary(uniqueKeysWithValues: keys.map { ($0, backend.isEnabled($0) ?? false) }))
         guard !drifted.isEmpty else { return }
-        for id in drifted { SymbolicHotKeys.setEnabled(id, false) }
+        for id in drifted { backend.setEnabled(id, false) }
         log.info("takeover drift: disabled \(Self.describe(drifted), privacy: .public) again")
     }
 
@@ -127,21 +204,21 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
     /// hotkey on restores the originals and leaves the takeover off.
     @discardableResult func apply() -> Bool {
         if case .on = state { return true }
-        guard Capabilities.isAvailable(.symbolicHotKeys) else {
+        guard backend.isAvailable else {
             state = .unavailable
             log.error("takeover unavailable: SymbolicHotKeys missing")
             return false
         }
         let ids = TakeoverPolicy.takenIDs(
-            hotkey32Enabled: SymbolicHotKeys.isEnabled(SymbolicHotKeys.missionControl) == true,
-            extra: TakeoverPolicy.spikeExtra.filter { SymbolicHotKeys.isEnabled($0) == true })
-        let current = Dictionary(uniqueKeysWithValues: ids.map { ($0, SymbolicHotKeys.isEnabled($0) ?? true) })
+            hotkey32Enabled: backend.isEnabled(SymbolicHotKeys.missionControl) == true,
+            extra: TakeoverPolicy.spikeExtra.filter { backend.isEnabled($0) == true })
+        let current = Dictionary(uniqueKeysWithValues: ids.map { ($0, backend.isEnabled($0) ?? true) })
         // Read before the disable: each chord is registered as it was.
-        let shortcuts = Set(ids.compactMap(Self.shortcut))
+        let shortcuts = Set(ids.compactMap(shortcut))
         for step in TakeoverPolicy.apply(ids: ids, current: current, store: store) {
             switch step {
             case .storeOriginals(let originals): store.setOriginals(originals)
-            case .disable(let id): SymbolicHotKeys.setEnabled(id, false)
+            case .disable(let id): backend.setEnabled(id, false)
             }
         }
         switch TakeoverPolicy.afterReadBack(readBack(ids), store: store) {
@@ -149,7 +226,7 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
             state = .on(keys: ids)
             canary.arm()
             keyTasks = shortcuts.map { shortcut in
-                let events = KeyboardShortcuts.events(for: shortcut)  // registers here, not when the task first runs
+                let events = backend.events(for: shortcut)  // registers here, not when the task first runs
                 return Task { [weak self] in
                     for await event in events where event == .keyDown { self?.triggered() }
                 }
@@ -185,7 +262,7 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
 
     /// Restores `originals`, reads back and clears the store when all match; a mismatch keeps them for the next launch.
     @discardableResult private func restore(_ originals: [Int32: Bool]) -> Bool {
-        for (id, enabled) in originals { SymbolicHotKeys.setEnabled(id, enabled) }
+        for (id, enabled) in originals { backend.setEnabled(id, enabled) }
         let readBack = readBack(Array(originals.keys))
         guard TakeoverPolicy.afterRestore(readBack, store: store) else {
             log.error("takeover restore read-back \(String(describing: readBack), privacy: .public) differs from originals; kept for the next launch")
@@ -195,12 +272,12 @@ final class UserDefaultsTakeoverStore: TakeoverStore {
     }
 
     private func readBack(_ ids: [Int32]) -> [Int32: Bool?] {
-        Dictionary(uniqueKeysWithValues: ids.map { ($0, SymbolicHotKeys.isEnabled($0)) })
+        Dictionary(uniqueKeysWithValues: ids.map { ($0, backend.isEnabled($0)) })
     }
 
     /// The hotkey's live chord as a Carbon shortcut; the Mission Control key falls back to key code 160.
-    private static func shortcut(_ id: Int32) -> KeyboardShortcuts.Shortcut? {
-        if let value = SymbolicHotKeys.value(id) {
+    private func shortcut(_ id: Int32) -> KeyboardShortcuts.Shortcut? {
+        if let value = backend.value(id) {
             return KeyboardShortcuts.Shortcut(carbonKeyCode: Int(value.keyCode), carbonModifiers: TakeoverKeys.carbonModifiers(nx: value.modifiers))
         }
         return id == SymbolicHotKeys.missionControlKey ? KeyboardShortcuts.Shortcut(carbonKeyCode: TakeoverKeys.missionControlKeyCode) : nil

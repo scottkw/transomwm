@@ -116,6 +116,56 @@ nonisolated public enum OverviewCopy {
 
     public static let closedAnnouncement = "Overview closed"
 
+    // MARK: Replace Mission Control (Surface 5). Swipe verdict "kept" (06-SPIKE): only the [swipe kept] variant ships.
+
+    public static let replaceMissionControl = "Replace Mission Control"
+    public static let replaceMissionControlUnavailable = "Replace Mission Control (unavailable)"
+    public static let takeoverAlertMessage = "Use the Mission Control keys for Transom's overview?"
+    public static let takeoverNotNow = "Not Now"
+
+    /// What macOS has for Mission Control (hotkey 32): its default ⌃↑, the user's chord in glyphs, or turned off.
+    public enum Chord: Equatable, Sendable {
+        case standard, custom(String), off
+    }
+
+    /// The alert's {Keys}.
+    public static func takeoverAlertKeys(_ chord: Chord) -> String {
+        switch chord {
+        case .standard: "The Mission Control key (F3) and Control-Up Arrow"
+        case .custom(let glyphs): "The Mission Control key (F3) and \(glyphs)"
+        case .off: "The Mission Control key (F3)"
+        }
+    }
+
+    public static func takeoverAlertInformative(_ chord: Chord) -> String {
+        "\(takeoverAlertKeys(chord)) will show Transom's overview instead of Mission Control. Swiping up with four fingers still opens Mission Control. Transom gives Mission Control its keys back when you turn this off or quit, and the next time it opens if it quits unexpectedly."
+    }
+
+    public static let takeoverOnAnnouncement = "Mission Control keys show the overview"
+    public static let takeoverOffAnnouncement = "Mission Control keys restored"
+
+    // MARK: S5 Mission Control takeover
+
+    public enum TakeoverLine: Equatable, Sendable {
+        /// `on` carries hotkey 32's chord, `.off` when only F3 is taken.
+        case off, on(Chord), liftedForZoom, offAfterCrash, offApplyFailed, unavailable
+    }
+
+    public static func takeoverLine(_ line: TakeoverLine) -> String {
+        let value =
+            switch line {
+            case .off: "off"
+            case .on(.standard): "on, F3 and \u{2303}\u{2191}"
+            case .on(.custom(let glyphs)): "on, F3 and \(glyphs)"
+            case .on(.off): "on, F3"
+            case .liftedForZoom: "lifted while zoom is off"
+            case .offAfterCrash: "off after a crash last launch"
+            case .offApplyFailed: "off, couldn't apply"
+            case .unavailable: "unavailable (private API off)"
+            }
+        return "Mission Control takeover: \(value)"
+    }
+
     // MARK: S6 Last overview
 
     /// "Last overview: none yet" · "Last overview: {ms} ms to open, {n} windows, {s} snapshots" (1 window / 1 snapshot).
