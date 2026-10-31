@@ -18,28 +18,28 @@ Out of scope: creating/deleting Spaces, moving windows between Spaces, taking ov
 ## Implementation Decisions
 
 ### Overview look and interaction
-- D-01: The overview is a new command, **Show Overview**, on its own ⌃⌥⌘ hotkey (a free key, rebindable in the Shortcuts window). ⌃⌥⌘O keeps its Phase 4 meaning: per-display zoom out to all windows (pick mode).
-- D-02: Each display shows its own windows in place on its own StagePanel, with a strip of that display's Spaces along its top. No combined cross-display panel.
-- D-03: Windows on other Spaces show the last snapshot taken this session; otherwise the existing app-colour + icon + title tile (AppColor). Never try to capture non-composited windows.
-- D-04: Clicking a window switches to its Space if needed, focuses it and closes the overview. Arrow keys move the selection, Return opens it, Esc closes the overview. Clicking a Space in the strip switches to that Space.
+- **D-01:** The overview is a new command, **Show Overview**, on its own ⌃⌥⌘ hotkey (a free key, rebindable in the Shortcuts window). ⌃⌥⌘O keeps its Phase 4 meaning: per-display zoom out to all windows (pick mode).
+- **D-02:** Each display shows its own windows in place on its own StagePanel, with a strip of that display's Spaces along its top. No combined cross-display panel.
+- **D-03:** Windows on other Spaces show the last snapshot taken this session; otherwise the existing app-colour + icon + title tile (AppColor). Never try to capture non-composited windows.
+- **D-04:** Clicking a window switches to its Space if needed, focuses it and closes the overview. Arrow keys move the selection, Return opens it, Esc closes the overview. Clicking a Space in the strip switches to that Space.
 
 ### Mission Control takeover
-- D-05: v1 takeover triggers are the Mission Control keys (F3 / ⌃↑): disable the system symbolic hotkey and handle the keys ourselves. The 4-finger swipe up (CGEvent type 30, Dock control) is spike-gated: only take it if a VM spike plus a user host check prove it can be consumed safely; otherwise leave the swipe to macOS and say so.
-- D-06: Opt-in is a menu toggle (e.g. "Replace Mission Control") that shows a one-time explanation alert, matching the Phase 3 conflict-alert style, plus a Debug submenu status line. Off by default.
-- D-07: Crash safety: before disabling, store the original symbolic-hotkey state in UserDefaults; restore it on quit, on turning the toggle off and at the next launch. Also use the MultitouchCanary pattern: a crash while the takeover is on turns it off for that build/version until the user turns it back on.
-- D-08: ⌃←/→ Space switching stays with macOS; not taken over.
+- **D-05:** v1 takeover triggers are the Mission Control keys (F3 / ⌃↑): disable the system symbolic hotkey and handle the keys ourselves. The 4-finger swipe up (CGEvent type 30, Dock control) is spike-gated: only take it if a VM spike plus a user host check prove it can be consumed safely; otherwise leave the swipe to macOS and say so.
+- **D-06:** Opt-in is a menu toggle (e.g. "Replace Mission Control") that shows a one-time explanation alert, matching the Phase 3 conflict-alert style, plus a Debug submenu status line. Off by default.
+- **D-07:** Crash safety: before disabling, store the original symbolic-hotkey state in UserDefaults; restore it on quit, on turning the toggle off and at the next launch. Also use the MultitouchCanary pattern: a crash while the takeover is on turns it off for that build/version until the user turns it back on.
+- **D-08:** ⌃←/→ Space switching stays with macOS; not taken over.
 
 ### Display arrangements
-- D-09: A display arrangement is identified by the sorted set of display UUIDs, ignoring positions and resolution.
-- D-10: On unplug, the vanished display's desks become dormant (kept in the World, not planned). Its windows float on a remaining display and return to their tiles on re-plug, matched by display UUID.
-- D-11: Debounce display reconfiguration ~1.5 s after the last screen-parameters change, and never act while the session is asleep or locked (SessionGate).
-- D-12: "Displays have separate Spaces" off is detected (from SkyLight) and handled silently: one shared Space spanning displays, desks still keyed per display UUID. No prompt.
+- **D-09:** A display arrangement is identified by the sorted set of display UUIDs, ignoring positions and resolution.
+- **D-10:** On unplug, the vanished display's desks become dormant (kept in the World, not planned). Its windows float on a remaining display and return to their tiles on re-plug, matched by display UUID.
+- **D-11:** Debounce display reconfiguration ~1.5 s after the last screen-parameters change, and never act while the session is asleep or locked (SessionGate).
+- **D-12:** "Displays have separate Spaces" off is detected (from SkyLight) and handled silently: one shared Space spanning displays, desks still keyed per display UUID. No prompt.
 
 ### Spaces handling
-- D-13: Persist Space desks by the macOS Space UUID (from `SLSCopyManagedDisplaySpaces`); use the numeric ManagedSpaceID at runtime. Existing layout.json files with numeric IDs need a migration (research to confirm ID stability across reboots).
-- D-14: A desk that changes while its Space is hidden is marked dirty and planned when its Space is next shown; no AX writes to hidden-Space windows.
-- D-15: Without the Spaces lookup, build a window→Space co-visibility map from `activeSpaceDidChange` (Spaces visited since launch only) and hide the Spaces strip.
-- D-16: The Spaces strip is read-only in v1: click to switch only. No create, delete or drag-window-to-Space.
+- **D-13:** Persist Space desks by the macOS Space UUID (from `SLSCopyManagedDisplaySpaces`); use the numeric ManagedSpaceID at runtime. Existing layout.json files with numeric IDs need a migration (research to confirm ID stability across reboots).
+- **D-14:** A desk that changes while its Space is hidden is marked dirty and planned when its Space is next shown; no AX writes to hidden-Space windows.
+- **D-15:** Without the Spaces lookup, build a window→Space co-visibility map from `activeSpaceDidChange` (Spaces visited since launch only) and hide the Spaces strip.
+- **D-16:** The Spaces strip is read-only in v1: click to switch only. No create, delete or drag-window-to-Space.
 
 ### Claude's Discretion
 - Which free ⌃⌥⌘ key Show Overview uses; exact strip styling (follow 04-UI-SPEC tokens); selection highlight; how Space switching is performed (public API or SkyLight); arrangement-set schema shape and migration mechanics.
