@@ -56,4 +56,9 @@ import Testing
         #expect(OverviewCopy.noWindows == "No windows on this desktop")
         #expect(OverviewCopy.fullScreenRefusal == "The overview isn't available in full screen")
     }
+
+    @Test func aFailedSpaceSwitchNamesTheDesktopOrTheApp() {
+        #expect(OverviewCopy.couldNotSwitch(desktop: 2) == "Couldn't switch to Desktop 2")
+        #expect(OverviewCopy.couldNotSwitch(app: "Safari") == "Couldn't switch to Safari")
+    }
 }

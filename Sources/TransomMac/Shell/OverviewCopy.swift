@@ -65,6 +65,10 @@ nonisolated public enum OverviewCopy {
     /// Show Overview refused: every display is in full screen.
     public static let fullScreenRefusal = "The overview isn't available in full screen"
 
+    /// A pick's Space switch did not land within 1 s (Surface 2): the desktop's number, or a full-screen Space's app.
+    public static func couldNotSwitch(desktop index: Int) -> String { "Couldn't switch to \(desktopLabel(index))" }
+    public static func couldNotSwitch(app: String) -> String { "Couldn't switch to \(app)" }
+
     /// The main area of a current Space with no shown windows.
     public static let noWindows = "No windows on this desktop"
 }

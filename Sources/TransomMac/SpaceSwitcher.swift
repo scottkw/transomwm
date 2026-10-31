@@ -39,15 +39,19 @@ import os
         return false
     }
 
-    /// keyDown + keyUp with explicit flags, so held modifiers never change the chord (Pitfall 7).
+    /// keyDown with the chord's explicit flags, so held modifiers never change it (Pitfall 7), then keyUp with none: a
+    /// keyUp still carrying ⌃ leaves ⌃ marked down in the HID state after the post (seen in the VM, 06-07).
     static func post(_ chord: Chord) {
         let source = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: chord.keyCode, keyDown: down) else { return }
-            event.flags = CGEventFlags(rawValue: chord.flags)
+            event.flags = down ? CGEventFlags(rawValue: chord.flags) : []
             event.post(tap: .cghidEventTap)
         }
     }
+
+    /// ⌘ ⌘ ⇧ ⌥ ⌃ ⇧ ⌥ ⌃ (right and left) and fn.
+    static let modifierKeys: [CGKeyCode] = [54, 55, 56, 58, 59, 60, 61, 62, 63]
 
     /// The symbolic hotkey's chord and enabled state, read-only; nil when the getter is unavailable.
     private static func hotkey(_ id: Int32) -> SpaceSwitchPlan.HotKey? {
@@ -55,12 +59,11 @@ import os
         return (enabled, value.keyCode, value.modifiers)
     }
 
-    /// Posts only after the triggering click or chord is released (T-06-19), waiting at most 500 ms.
+    /// Posts only after the triggering click or chord's modifiers are released (T-06-19), waiting at most 500 ms.
     private static func waitForInputUp() async {
-        let held: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand]
         for _ in 0..<25 {
             let mouse = [CGMouseButton.left, .right, .center].contains { CGEventSource.buttonState(.hidSystemState, button: $0) }
-            if !mouse, CGEventSource.flagsState(.hidSystemState).isDisjoint(with: held) { return }
+            if !mouse, !Self.modifierKeys.contains(where: { CGEventSource.keyState(.hidSystemState, key: $0) }) { return }
             try? await Task.sleep(for: .milliseconds(20))
         }
     }

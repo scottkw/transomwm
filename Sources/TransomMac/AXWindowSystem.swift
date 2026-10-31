@@ -170,6 +170,9 @@ import os
         await sweep()
     }
 
+    /// One app's refresh now: a window on a Space just switched to is listed, and its element cached, before a focus.
+    public func refresh(app pid: Int32) async { await refresh(pid: pid) }
+
     public func inventory() async -> WindowInventory {
         WindowInventory(
             displays: displays, windows: tracker.sortedWindows(), degradedPIDs: responsiveness.degraded,

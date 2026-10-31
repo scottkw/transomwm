@@ -200,25 +200,51 @@ import os
         pick(item)
     }
 
-    /// Picks a strip item: another Space's thumbnail switches there; the current one's dismisses. Main-area tiles are
-    /// picked by 06-08/06-09.
+    /// Picks a strip item. Another Space's thumbnail switches there; a mini tile on another Space switches there, then
+    /// focuses its window. The current Space's thumbnail dismisses, and its mini tile focuses that window. Main-area tiles
+    /// are picked by 06-08/06-09.
     func pick(_ item: OverviewItem) {
         guard isOpen, let layout else { return }
-        guard case .thumbnail(let space) = item else { return }
+        let space: UInt64, window: TransomModel.WindowRef?
+        switch item {
+        case .tile: return
+        case .thumbnail(let id): (space, window) = (id, nil)
+        case .miniTile(let picked, let id): (space, window) = (id, picked)
+        }
         guard let display = layout.displays.first(where: { $0.thumbnails.contains { $0.spaceID == space } }) else { return }
-        if display.thumbnails.first(where: { $0.spaceID == space })?.isCurrent == true { return dismiss(reason: "current space") }
-        logger.info("pick space \(space, privacy: .public)")
-        switchAway(to: space, on: display.uuid)
+        if display.thumbnails.first(where: { $0.spaceID == space })?.isCurrent == true {
+            dismiss(reason: "current space")
+            if let window { Task { await focusWindow(window) } }
+            return
+        }
+        if let window {
+            logger.info("pick window \(window.windowID, privacy: .public) on space \(space, privacy: .public) (switch space)")
+        } else {
+            logger.info("pick space \(space, privacy: .public)")
+        }
+        switchAway(to: space, on: display.uuid, then: window)
     }
 
-    /// The stage fades out (120 ms), then the display switches to `space`. A switch that does not land is refused.
-    private func switchAway(to space: UInt64, on display: String) {
+    /// The stage fades out (120 ms), then the display switches to `space` and `window` gets focus. A switch that does not
+    /// land within 1 s beeps and announces (Surface 2); the overview is closed by then.
+    private func switchAway(to space: UInt64, on display: String, then window: TransomModel.WindowRef?) {
         interrupt(reason: "pick")
+        let refusal = refusal(for: space, on: display)
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(StagePanel.revealFade))
             guard let self else { return }
-            if !(await self.switcher.switchTo(space: space, on: display)) { self.onSwitchFailed("switch to space \(space) failed") }
+            guard await self.switcher.switchTo(space: space, on: display) else { return self.onSwitchFailed(refusal) }
+            if let window { await self.focusWindow(window) }
         }
+    }
+
+    /// "Couldn't switch to Desktop {n}", or the full-screen Space's app.
+    private func refusal(for space: UInt64, on display: String) -> String {
+        let info = spaces()?.displays.first { $0.displayUUID == display }?.spaces.first { $0.id == space }
+        guard info?.kind == .fullScreen else { return OverviewCopy.couldNotSwitch(desktop: info?.index ?? 0) }
+        let owner = arranger().windows.values.first { $0.spaces?.contains(space) == true }?.window
+        let name = owner.map { NSRunningApplication(processIdentifier: $0.pid)?.localizedName ?? $0.bundleID } ?? ""
+        return OverviewCopy.couldNotSwitch(app: MenuCopy.truncatedAppName(name))
     }
 
     /// The strip (thumbnails, mini tiles, labels) and the empty-message capsule of one display.
