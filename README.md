@@ -13,7 +13,7 @@ Transom was renamed from Pane on 2026-10-27.
 
 Transom is pre-release. There is no public download yet. A notarised 0.3.0 build (the version set in `scripts/release.sh`) has been made locally, but its public release is held.
 
-Phases 1-4 of the roadmap are complete, so tiling and zoom work today. Phase 5 (Gestures) is next.
+Phases 1-5 of the roadmap are complete, so tiling, zoom and trackpad gestures work today. Phase 6 (Overview, Spaces & Displays) is next.
 
 | Phase | Name | Status |
 |---|---|---|
@@ -21,7 +21,7 @@ Phases 1-4 of the roadmap are complete, so tiling and zoom work today. Phase 5 (
 | 2 | Window Control | Complete |
 | 3 | Tiling MVP | Complete |
 | 4 | Zoom Camera | Complete |
-| 5 | Gestures | Planned |
+| 5 | Gestures | Complete |
 | 6 | Overview, Spaces & Displays | Planned |
 | 7 | Tab Groups | Planned |
 | 8 | Saved Views, URLs & Persistence | Planned |
@@ -53,12 +53,13 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Zoom camera | Zoom out to see every window on a display, step in or out one level of the layout, go back and forward through up to 50 previous views per display, and pan to a neighbouring area. ⌘⇧-drag a rectangle to zoom to the windows it frames (Esc cancels). After zooming out, click a window to zoom in to it and focus it. Double-click a title bar to frame that window, or the bare wallpaper to frame the Desktop; do it again to toggle back. Only an overlay animates (about 250 ms, or a crossfade with Reduce Motion); real windows get one move each when the camera settles. Windows outside the view are moved off screen at their own size, never shrunk, and come back on quit, after a crash and with Restore All Windows. |
 | Window snapshots | With Screen Recording granted, the zoom overlay shows one-shot snapshots of each window. Without it, each window is drawn in its app's colour with its icon and title. Transom asks for Screen Recording the first time you zoom, never at setup. |
 | Collapsed blocks | With zoom on, a drop that doesn't fit the windows' minimum sizes is accepted: windows that lose room show as blocks in their app's colour until you zoom in. Double-click a block to zoom in to it. With zoom off, such a drop is refused as before. |
+| Trackpad gestures | Hold ⌥ and pinch on the trackpad over any app to zoom the desk one level in or out, or ⌥-two-finger pan to slide to a neighbouring area. Over the bare wallpaper, pinch and pan work without ⌥. The desk follows your fingers live, then snaps to the next level or neighbour, or springs back if the gesture was short. The app under your fingers never sees a gesture Transom takes. Other modifiers (⌃, ⌘) and mouse wheels pass through to macOS. Gestures keep working after sleep, and with Reduce Motion the finish is a fade. They work with Trackpad ▸ "Zoom in or out" on or off; with it off, Transom reads the pinch from the trackpad directly. Built-in trackpad tested; an external Magic Trackpad is untested. Pans follow your natural-scrolling setting, like scrolled content. |
 | Zoom off | Turn Off Zoom (menu) brings every window home and disables zoom entirely: no overlay, no Screen Recording use, and tiling behaves exactly as without zoom. |
 | Slow apps | Each app's Accessibility calls run off the main thread with a timeout, so a frozen app cannot stall Transom or the arranging of other apps' windows. |
 
 ### Menu
 
-The status menu has four sections. Arrange holds the layout commands and the Gaps submenu. Zoom holds the zoom commands, Turn Off or Turn On Zoom, Allow Window Previews… (Screen Recording) and Shortcuts…, a window where you can rebind every hotkey. Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, the state of the window-ID lookup, the Spaces lookup and the event tap, and the zoom and snapshot state.
+The status menu has four sections. Arrange holds the layout commands and the Gaps submenu. Zoom holds the zoom commands, Turn Off or Turn On Zoom, Allow Window Previews… (Screen Recording) and Shortcuts…, a window where you can rebind every hotkey. Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, the state of the window-ID lookup, the Spaces lookup and the event tap, the zoom and snapshot state, and the gesture state (gestures taken, the gesture tap, and multitouch). If multitouch was switched off after a crash, Turn Multitouch Back On re-enables it.
 
 ### URL commands
 
@@ -136,7 +137,6 @@ None of the following is in the code yet. Each line summarises the goal in `.pla
 
 | Phase | Feature | Status |
 |---|---|---|
-| 5 | Gestures: ⌥-pinch and ⌥-two-finger pan on the trackpad over any app, and pinch and pan on the bare desktop without ⌥. | Planned |
 | 6 | Overview, Spaces & Displays: an overview of every window on every display with a Spaces bar, an opt-in Mission Control takeover, and layouts kept per display and per Space across unplugging, sleep and docking. | Planned |
 | 7 | Tab Groups: drop a window on the middle of another to group them under one tab strip, with windows from any apps, docked or floating. | Planned |
 | 8 | Saved Views, URLs & Persistence: save views to slots 1-9, run more commands through `transom://` URLs and a bundled `transom` command-line tool, and restore layouts across app relaunches and reboots. | Planned |
@@ -218,10 +218,11 @@ The script builds the test bundles on the host without running them, copies them
 |---|---|---|---|
 | `_AXUIElementGetWindow` | `Sources/TransomPrivate/AXWindowID.swift` | The window ID behind an Accessibility window | Matching windows by frame against the public window list |
 | SkyLight Spaces (`SLSCopySpacesForWindows`, `SLSManagedDisplayGetCurrentSpace`) | `Sources/TransomPrivate/SkyLightSpaces.swift` | Which Space each window is on, and each display's current Space | Single-Space behaviour |
+| MultitouchSupport (`MTDeviceCreateList`, `MTRegisterContactFrameCallback`, `MTDeviceStart`/`Stop`) | `Sources/TransomPrivate/MultitouchSupport.swift` | Reading the pinch from the trackpad when Trackpad ▸ "Zoom in or out" is off | Gestures come from the event tap only; with "Zoom in or out" off, ⌥-pinch is unavailable. Switched off automatically if Transom crashed while it was running |
 
-Both are reached through `dlopen` and `dlsym`, never linked, so a removed symbol leaves only that feature degraded and Transom still launches. A capability whose function keeps failing is switched off for the rest of the session. To test a fallback, launch with `--disable-private=AXWindowID,Spaces` (one or both names). `Sources/TransomPrivate/Capabilities.swift` logs each capability as available or off under the `private` log category, and logs any unknown name.
+All three are reached through `dlopen` and `dlsym`, never linked, so a removed symbol leaves only that feature degraded and Transom still launches. A capability whose function keeps failing is switched off for the rest of the session. To test a fallback, launch with `--disable-private=AXWindowID,Spaces,Multitouch` (any of the names). `Sources/TransomPrivate/Capabilities.swift` logs each capability as available or off under the `private` log category, and logs any unknown name.
 
-MultitouchSupport (for trackpad gestures, Phase 5) and CoreDock (for the Mission Control takeover, Phase 6) are planned and not yet in the code.
+CoreDock (for the Mission Control takeover, Phase 6) is planned and not yet in the code.
 
 ## Data stored
 

@@ -38,7 +38,7 @@ public struct GestureRecognizer: Sendable {
 
     /// One event in the spike's tap-listen keys. `phase` and `momentum` keep the raw CG encodings: phase 1 began,
     /// 2 changed, 4 ended, 8 cancelled, 128 mayBegin; momentum 0 none, 1 begin, 2 continue, 3 end. Deltas are as macOS
-    /// delivers them (natural scrolling).
+    /// delivers them, so pans follow the user's natural-scrolling setting like scrolled content (IN-07, by design).
     public struct Sample: Codable, Equatable, Sendable {
         public var t: Double
         public var kind: Kind

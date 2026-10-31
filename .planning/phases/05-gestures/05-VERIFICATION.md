@@ -1,8 +1,9 @@
 ---
 phase: 05-gestures
 verified: 2026-10-30T18:53:47Z
-status: human_needed
-score: 12/17 must-haves verified
+status: passed
+score: 17/17 must-haves verified (1 accepted N/A)
+human_checks_passed: 2026-10-30
 covered_files:
   - .planning/phases/05-gestures/05-01-PLAN.md
   - .planning/phases/05-gestures/05-01-SUMMARY.md
@@ -53,9 +54,12 @@ covered_files:
   - Tests/TransomMacTests/ZoomOffTests.swift
   - scripts/vm-live-test.sh
   - scripts/vm-spike.sh
-covered_digest: "v4:sha256:83a8bfbbbbb366a6daa1cd9925b9f823fc6375bdc9fbb0c036334f58ab312712"
+covered_digest: "v4:sha256:8000f4ec6a4432205bc5f65402f751b3cb3ed307a29be0fd8de3d228f0beed2b"
 behavior_unverified: 1
-overrides_applied: 0
+overrides_applied: 1
+overrides:
+  - truth: "SC4: gestures keep working after the trackpad disconnects and reconnects"
+    decision: "Accepted as N/A by the user 2026-10-30: no Magic Trackpad on this Mac (C5); fake-backend tests only"
 decision_coverage:
   honored: 9
   total: 9
@@ -91,7 +95,7 @@ human_verification:
 **Phase Goal:** As a trackpad user, I want to pinch and pan the desk with my fingers, so that zooming and moving around feels direct.
 **Mode:** mvp (user-story goal validated by `user-story.validate`: valid)
 **Verified:** 2026-10-30T18:53:47Z
-**Status:** human_needed
+**Status:** passed (human checks 1-6 passed on the rebuilt app, 2026-10-30)
 **Re-verification:** No, initial verification
 
 ## User Flow Coverage
@@ -260,7 +264,7 @@ Disabled tests on requirements: 0. Circular patterns: 0. Insufficient assertions
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
 | (phase sources) | n/a | No TBD/FIXME/XXX/TODO/HACK/placeholder | n/a | n/a |
-| GestureController / GestureRecognizer | n/a | IN-07: pan direction assumes natural scrolling | ℹ️ Info | With natural scrolling off, pans go the opposite way; needs a product decision (open) |
+| GestureController / GestureRecognizer | n/a | IN-07: pan direction follows natural scrolling | ℹ️ Info | Decided 2026-10-30: by design, pans follow the scroll setting like other apps; documented in UI-SPEC and GestureRecognizer |
 | MultitouchDevices / GestureController | n/a | IN-03: rescan mid-pinch leaves stale trackers | ℹ️ Info | Rare (wake or hot-plug mid-pinch); open |
 | MultitouchSupport | n/a | IN-01, IN-04 (stop of never-started devices; unbounded `Worker.sync`) | ℹ️ Info | Open, documented in 05-REVIEW-FIX |
 | UAT risk | n/a | Reduce Motion takeover mid-crossfade can pop tiles to full opacity (item 20) | ℹ️ Info | Known, not looked at |
@@ -289,6 +293,10 @@ No blocking gaps. Every artifact exists, is substantive and is wired. Every key 
 Hence `human_needed`, with the six steps above.
 
 ---
+
+## Human Verification Result (2026-10-30)
+
+The user ran all six steps on the rebuilt `Transom Debug.app` (built-in trackpad): 1 smoke test, 2 resting fingers, 3 chords, 4 Reduce Motion, 5 sleep/wake with "Zoom in or out" on, 6 multitouch hand-off. All six passed. Trackpad reconnect (truth 10) was accepted as N/A. IN-07: pans follow the natural-scrolling setting, by design. Status: **passed**.
 
 _Verified: 2026-10-30T18:53:47Z_
 _Verifier: Claude (gsd-verifier)_

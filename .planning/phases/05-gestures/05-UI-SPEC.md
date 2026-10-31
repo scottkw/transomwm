@@ -124,7 +124,7 @@ Accent reserved for: the Phase 4 list only. Overscroll, snap, spring back and th
 | Pinch, fingers apart (`p > 0`) | in | One level in, toward the child under the **pinch point** (the pointer location at the latch). Called with no focused leaf, so the pinch point always decides. If the point is over a gap, it falls back to Phase 4's largest-child rule. This differs from the hotkey on purpose: a pinch is spatial |
 | Pinch, fingers together (`p < 0`) | out | The parent of the view's node, or home |
 | Pan, fingers moving left | shows the area to the **right** | `Navigator.pan(edge: .right)`: same depth, longest shared edge, most recently viewed |
-| Pan, fingers moving right / up / down | left / below / above | `.left` / `.bottom` / `.top`. Deltas are used as macOS delivers them, so the stage moves like scrolled content in every app (natural scrolling) |
+| Pan, fingers moving right / up / down | left / below / above | `.left` / `.bottom` / `.top`. Deltas are used as macOS delivers them, so the stage moves like scrolled content in every app. With natural scrolling off, pans reverse too, matching other apps (IN-07, user decision 2026-10-30) |
 
 If a pinch crosses `p = 0` (fingers apart, then together) or a pan reverses past its start, the target is recomputed for the new direction and the tile set is rebuilt from the tiles' **current** frames. At `p ≈ 0` the tiles are at their start rects, so nothing jumps. The pan axis stays locked for the whole gesture; motion on the other axis is ignored.
 
