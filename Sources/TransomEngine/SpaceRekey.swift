@@ -13,9 +13,24 @@ public enum SpaceRekey {
         public let quarantined: [DeskKey]
     }
 
-    /// The Space table for layout.json: each Space ID a desk of `world` uses that `uuids` knows, sorted by ID.
-    public static func table(for world: World, uuids: [UInt64: String]) -> [SavedSpace] {
-        Set(world.desks.keys.compactMap(\.spaceID)).sorted().compactMap { id in uuids[id].map { SavedSpace(id: id, uuid: $0) } }
+    /// The Space table for layout.json: each Space ID a desk of `world` or of a layout set uses that `uuids` knows,
+    /// sorted by ID. A set's Spaces are listed too, so its desks can be re-keyed after a reboot (CR-02).
+    public static func table(for world: World, layoutSets: [LayoutSet] = [], uuids: [UInt64: String]) -> [SavedSpace] {
+        let ids = Set(([world] + layoutSets.map(\.world)).flatMap { $0.desks.keys.compactMap(\.spaceID) })
+        return ids.sorted().compactMap { id in uuids[id].map { SavedSpace(id: id, uuid: $0) } }
+    }
+
+    /// A loaded file's World and every layout set's World re-keyed with one table, the file's Space table over the live
+    /// one (D-13, CR-02). A set whose World cannot be rebuilt (only an already invalid one) keeps its saved keys.
+    public static func rekey(_ file: LayoutFile, live: SpacesSnapshot) throws(LayoutError) -> (result: Result, layoutSets: [LayoutSet], setsQuarantined: [DeskKey]) {
+        let table = live.uuidByID.merging(file.spaceMap) { _, saved in saved }
+        var quarantined: [DeskKey] = []
+        let sets = file.layoutSets.map { set in
+            guard let result = try? rekey(set.world, saved: table, current: live.idByUUID) else { return set }
+            quarantined += result.quarantined
+            return LayoutSet(arrangement: set.arrangement, world: result.world, lastUsed: set.lastUsed)
+        }
+        return (try rekey(file.world, saved: table, current: live.idByUUID), sets, quarantined)
     }
 
     /// Moves each desk whose saved UUID (`saved`, by old ID) has a current ID (`current`, by UUID) to that ID. A desk

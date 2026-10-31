@@ -49,6 +49,29 @@ private func world(_ spaces: [UInt64]) throws -> World {
         #expect(table == [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4")])
     }
 
+    /// CR-02: a Space only a layout set uses still gets its UUID on disk.
+    @Test func theTableListsTheSpacesOfEveryLayoutSet() throws {
+        let set = LayoutSet(arrangement: ArrangementID([display, "B"]), world: try world([4, 6]), lastUsed: Date(timeIntervalSinceReferenceDate: 0))
+        let table = SpaceRekey.table(for: try world([3]), layoutSets: [set], uuids: [3: "U3", 4: "U4", 6: "U6", 8: "U8"])
+        #expect(table == [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4"), SavedSpace(id: 6, uuid: "U6")])
+    }
+
+    /// CR-02: after a reboot renumbers the Spaces, every layout set's desks move to their Space's new ID, like the World's.
+    @Test func everyLayoutSetIsRekeyedWithTheWorld() throws {
+        let raw: [[String: Any]] = [["Display Identifier": display, "Spaces": [["ManagedSpaceID": 7, "type": 0, "uuid": "U3"], ["ManagedSpaceID": 9, "type": 0, "uuid": "U4"]]]]
+        let live = SpacesSnapshot.parse(raw, mainDisplayUUID: display, separateSpaces: true)
+        let set = LayoutSet(arrangement: ArrangementID([display, "B"]), world: try world([4]), lastUsed: Date(timeIntervalSinceReferenceDate: 0))
+        let file = LayoutFile(
+            world: try world([3]), homeFrames: [:], session: SessionRecord(cleanExit: true, launchedAt: Date(timeIntervalSinceReferenceDate: 0)),
+            arrangement: ArrangementID([display]), layoutSets: [set], spaces: [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4")])
+        let loaded = try SpaceRekey.rekey(file, live: live)
+        #expect(loaded.result.world.desks.keys.sorted() == [key(7)])
+        #expect(loaded.layoutSets.map(\.arrangement) == [set.arrangement])
+        #expect(loaded.layoutSets.first?.world.desks.keys.sorted() == [key(9)], "the layout set kept its previous-boot Space ID")
+        #expect(loaded.layoutSets.first?.world[key(9)] == set.world[key(4)])
+        #expect(loaded.setsQuarantined.isEmpty)
+    }
+
     @Test func aDeskWhoseSpaceIsGoneKeepsItsKeyDormant() throws {
         let saved = try world([5])
         let result = try SpaceRekey.rekey(saved, saved: [5: "GONE"], current: ["U3": 3])
