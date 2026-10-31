@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Overview, Spaces & Displays
 status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-10-31T19:20:35.840Z"
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-10-31T19:44:21.084Z"
 last_activity: 2026-10-31
 last_activity_desc: Phase 6 execution started
-state_head: 251a8bc8c14eaf455f09560d4501f377c265680c
+state_head: 13ab0236e463dbfe63b843e0c8213077037e6daf
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 79
-  completed_plans: 73
+  completed_plans: 74
   percent: 56
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 6 (Overview, Spaces & Displays) — EXECUTING
-Plan: 7 of 12
+Plan: 8 of 12
 Status: Ready to execute
 Last activity: 2026-10-31 — Phase 6 execution started
 
@@ -126,6 +126,7 @@ Progress: [██████░░░░] 56%
 | Phase 06 P04 | 45min | 2 tasks | 9 files |
 | Phase 06 P05 | 20min | 2 tasks | 11 files |
 | Phase 6 P06 | 20 min | 3 tasks | 23 files |
+| Phase 6 P07 | 18min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -339,6 +340,9 @@ Recent decisions affecting current work:
 - [Phase 6]: 06-06: Show Overview availability lives in Arranger.availability: zoom on and ready, allowed while paused, no pointer display
 - [Phase 6]: 06-06: The overview has its own StagePanel per display and shares ZoomController's snapshot cache and tile contents
 - [Phase 6]: 06-06: Hidden-Space mini tiles come from Planner.plan over stored desks plus present floaters; full-screen Spaces from tracked windows' Space sets
+- [Phase 6]: 06-07: posted Space-switch chords keep the fn bit (getter flags verbatim, ⇧⌃⌥⌘+fn); keyUp posted with empty flags so no modifier stays down
+- [Phase 6]: 06-07: switch confirmation polls SkyLightSpaces.currentSpace for 1 s; ArrangeController stays the only system.events reader
+- [Phase 6]: 06-07: snapshot eviction on destroy stays in ZoomController.windowClosed (shared cache), not duplicated in OverviewController
 
 ### Quick Tasks Completed
 
@@ -379,8 +383,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T19:20:35.025Z
-Stopped at: Completed 06-06-PLAN.md
+Last session: 2026-10-31T19:44:20.742Z
+Stopped at: Completed 06-07-PLAN.md
 Resume file: None
 
 ## Deferred Verification
