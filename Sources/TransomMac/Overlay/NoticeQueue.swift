@@ -66,7 +66,7 @@ nonisolated extension Notice: QueueableNotice {
         case (.finderNoWindow, .finderNoWindow): .finderNoWindow
         // A newer Float All or Arrange All result replaces the older one: its count is the current one.
         case (.lostRoom, _), (.finderNoWindow, _), (.floatedAll, _), (.arrangeLeftovers, _), (.crashRecovered, _), (.crashLoop, _), (.restored, _),
-            (.turnOffFailed, _), (.settingsRestored, _): nil
+            (.turnOffFailed, _), (.settingsRestored, _), (.displaysDisconnected, _): nil
         }
     }
 }

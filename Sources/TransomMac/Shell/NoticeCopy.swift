@@ -28,6 +28,11 @@ nonisolated public enum NoticeCopy {
             "Couldn't turn off \(ConflictCopy.featureName(conflict)). Turn it off here in Desktop & Dock."
         case .settingsRestored:
             "macOS window settings restored."
+        case .displaysDisconnected(let names, let count):
+            // UI-SPEC Surface 6 N12; 06-05 adds the merge and its tests.
+            "\(names.count == 1 ? "\u{201C}\(names[0].count > 32 ? names[0].prefix(32) + "\u{2026}" : names[0])\u{201D} was" : "\(names.count) displays were") disconnected, so "
+                + (count == 1 ? "1 window from \(names.count == 1 ? "it" : "them") is" : "\(count) windows from \(names.count == 1 ? "it" : "them") are")
+                + " floating here until you reconnect \(names.count == 1 ? "it" : "them")."
         case .crashRecovered(let unplaced):
             "Transom quit unexpectedly. Your windows are back on screen and your layout is restored."
                 + (unplaced == 0 ? ""
@@ -44,6 +49,7 @@ nonisolated public enum NoticeCopy {
         case .crashRecovered, .crashLoop: "lifepreserver"
         case .restored, .settingsRestored: "checkmark.circle"
         case .turnOffFailed: "exclamationmark.triangle.fill"
+        case .displaysDisconnected: "display"
         }
     }
 

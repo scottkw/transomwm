@@ -38,7 +38,7 @@ private func near(_ a: Rect?, _ b: Rect?) -> Bool {
 /// L and D, each window opened on its display at `startFrame` and docked in order: `onL` on L, `onD` on D. Returns the
 /// harness and every docked window's tile.
 private func docked(
-    onL: [UInt32], onD: [UInt32], space: UInt64? = nil, extra: [DisplayInfo] = [], onExtra: [UInt32] = []
+    onL: [UInt32], onD: [UInt32], space: UInt64? = nil, extra: [DisplayInfo] = [], onExtra: [UInt32] = [], floating: [UInt32: Rect] = [:]
 ) async throws -> (harness: Harness, tiles: [WindowRef: Rect]) {
     var harness = Harness()
     await harness.fake.setDisplays([displayL(space: space), displayD(space: space)] + extra)
@@ -51,15 +51,21 @@ private func docked(
     for (ids, visible) in groups {
         for (index, id) in ids.enumerated() { await harness.fake.open(.standard(id: id, pid: pid, frame: startFrame(index, on: visible), space: space)) }
     }
+    for (id, frame) in floating.sorted(by: { $0.key < $1.key }) { await harness.fake.open(.standard(id: id, pid: pid, frame: frame, space: space)) }
     await harness.fake.refreshAll()
     _ = await harness.inbox.take()
     await harness.send(.inventory(await harness.fake.inventory()))
     for id in onL + onD + onExtra { await harness.send(.command(.dock, focused: ref(id))) }
-    try #require(harness.arranger.world[DeskKey(displayUUID: "L", spaceID: space)]?.tree.windows == onL.map(ref))
-    try #require(harness.arranger.world[DeskKey(displayUUID: "D", spaceID: space)]?.tree.windows == onD.map(ref))
+    try #require((harness.arranger.world[DeskKey(displayUUID: "L", spaceID: space)]?.tree.windows ?? []) == onL.map(ref))
+    try #require((harness.arranger.world[DeskKey(displayUUID: "D", spaceID: space)]?.tree.windows ?? []) == onD.map(ref))
     var tiles: [WindowRef: Rect] = [:]
     for id in onL + onD + onExtra { tiles[ref(id)] = try #require(await harness.frame(ref(id))) }
     return (harness, tiles)
+}
+
+/// The N12 notices in `effects`.
+private func disconnected(_ effects: [ArrangerEffect]) -> [Notice] {
+    effects.compactMap { if case .notice(let notice) = $0, case .displaysDisconnected = notice { notice } else { nil } }
 }
 
 private func floats(_ id: UInt32, on key: DeskKey, in arranger: Arranger) -> Bool {
@@ -120,5 +126,142 @@ extension Harness {
         #expect(harness.arranger.world[deskL]?.tree.windows == [ref(1)])
         for id: UInt32 in [1, 2, 3] { #expect(near(await harness.frame(ref(id)), tiles[ref(id)]), "window \(id) is not back in its tile") }
         #expect(!replug.settled.contains { if case .notice = $0 { true } else { false } }, "a re-plug showed a notice")
+    }
+
+    /// D-09: each arrangement brings back its own layout; a weight change is not a placement, so it stays with its set.
+    @Test func dockAndUndockCyclesBringEachArrangementsLayoutBack() async throws {
+        var (harness, tiles) = try await docked(onL: [1, 4], onD: [2, 3])
+        let unplug = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        #expect(disconnected(unplug.settled) == [.displaysDisconnected(names: ["DELL U2720Q"], windows: 2)])
+        #expect(floats(2, on: deskL, in: harness.arranger) && floats(3, on: deskL, in: harness.arranger))
+
+        await harness.send(.command(.growTile, focused: ref(1)))
+        let hand = try #require(await harness.frame(ref(1)))
+        try #require(!near(hand, tiles[ref(1)]), "growTile did not change L's layout")
+
+        let replug = await harness.displayChange { await $0.plug("D") }
+        #expect(disconnected(replug.settled).isEmpty)
+        #expect(harness.arranger.world[deskD]?.tree.windows == [ref(2), ref(3)])
+        for id: UInt32 in [1, 2, 3, 4] { #expect(near(await harness.frame(ref(id)), tiles[ref(id)]), "window \(id) is not in its {D, L} tile") }
+
+        let again = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        #expect(disconnected(again.settled).isEmpty, "a known arrangement floated windows")
+        #expect(near(await harness.frame(ref(1)), hand), "L's hand arrangement did not come back")
+        #expect(harness.arranger.layoutSets[ArrangementID(["D", "L"])] != nil && harness.arranger.layoutSets[ArrangementID(["L"])] == nil)
+    }
+
+    /// User action wins (OVER-06): a floated window the user docked on L stays there on re-plug; the other goes home.
+    @Test func aWindowTheUserDockedWhileAwayStaysWhereTheUserPutIt() async throws {
+        var (harness, _) = try await docked(onL: [1], onD: [2, 3])
+        _ = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        await harness.send(.command(.dock, focused: ref(2)))
+        try #require(harness.arranger.world[deskL]?.tree.windows.contains(ref(2)) == true)
+        let userTile = try #require(await harness.frame(ref(2)))
+
+        _ = await harness.displayChange { await $0.plug("D") }
+        #expect(harness.arranger.world[deskL]?.tree.windows.contains(ref(2)) == true, "the user's dock was undone")
+        #expect(harness.arranger.world[deskL]?.tree.windows.contains(ref(1)) == true)
+        #expect(harness.arranger.world[deskD]?.tree.windows == [ref(3)])
+        #expect(near(await harness.frame(ref(2)), userTile))
+        #expect(await harness.frame(ref(3)).map { inside($0, visibleD) } == true)
+    }
+
+    /// D-10: floated windows cascade from the Desktop tile's top-left, 24 pt apart, at their own sizes, on screen.
+    @Test func floatedWindowsCascadeFromTheDesktopTileOnScreen() async throws {
+        let sizes: [UInt32: Size] = [5: Size(width: 400, height: 300), 6: Size(width: 500, height: 350), 7: Size(width: 300, height: 200)]
+        let floating = Dictionary(uniqueKeysWithValues: sizes.map { id, size in
+            (id, Rect(x: visibleD.minX + 100 + 200 * Double(id - 5), y: 300, width: size.width, height: size.height))
+        })
+        var (harness, _) = try await docked(onL: [1], onD: [], floating: floating)
+        let unplug = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        #expect(disconnected(unplug.settled) == [.displaysDisconnected(names: ["DELL U2720Q"], windows: 3)])
+        let desk = try #require(harness.arranger.world[deskL])
+        let desktop = try #require(try Planner.plan(desk: desk, area: visibleL, gap: harness.arranger.gap, mins: [:]).desktopRect)
+        for (index, id) in [UInt32(5), 6, 7].enumerated() {
+            let offset = 24 * Double(index)
+            let expected = Rect(x: desktop.minX + offset, y: desktop.minY + offset, width: sizes[id]!.width, height: sizes[id]!.height)
+            #expect(near(desk.desktop.frame(of: ref(id)), expected), "window \(id) is not at its cascade frame")
+            #expect(near(await harness.frame(ref(id)), expected))
+            #expect(inside(expected, visibleL))
+        }
+    }
+
+    @Test func theCascadeIsClampedInsideTheReceivingDisplay() {
+        let frames = ArrangementSwitch.cascade(
+            frames: [Rect(x: 0, y: 0, width: 600, height: 400), Rect(x: 0, y: 0, width: 600, height: 400)], from: Point(x: 1000, y: 700), in: visibleL)
+        #expect(frames.allSatisfy { inside($0, visibleL) && $0.width == 600 && $0.height == 400 })
+    }
+
+    /// D-09: the same displays rearranged or re-scaled are one arrangement: no set is swapped, tiles re-plan.
+    @Test func aRescaledDisplayIsTheSameArrangementAndItsTilesReplan() async throws {
+        var (harness, tiles) = try await docked(onL: [1], onD: [2, 3])
+        let bigger = Rect(x: 1440, y: 25, width: 2560, height: 1415)
+        let rescaled = DisplayInfo(uuid: "D", frame: Rect(x: 1440, y: 0, width: 2560, height: 1440), visibleFrame: bigger, currentSpaceID: nil)
+        let change = await harness.displayChange { await $0.setDisplays([displayL(), rescaled]) }
+        #expect(harness.arranger.layoutSets.all.isEmpty)
+        #expect(harness.arranger.arrangement == ArrangementID(["D", "L"]))
+        #expect(harness.arranger.world[deskD]?.tree.windows == [ref(2), ref(3)])
+        let three = try #require(await harness.frame(ref(3)))
+        #expect(inside(three, bigger) && three.height > visibleD.height, "D's tiles did not re-plan to its new frame")
+        #expect(near(await harness.frame(ref(1)), tiles[ref(1)]))
+        #expect(disconnected(change.settled).isEmpty)
+    }
+
+    /// Pitfall 13: duplicate display UUIDs are logged and treated as a new arrangement; no stored set is applied.
+    @Test func duplicateDisplayUUIDsNeverApplyAStoredSet() async throws {
+        var (harness, _) = try await docked(onL: [1], onD: [2, 3])
+        _ = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        let twin = DisplayInfo(uuid: "D", frame: Rect(x: 3360, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 3360, y: 25, width: 1920, height: 1055), currentSpaceID: nil)
+        let change = await harness.displayChange { fake in
+            await fake.plug("D")
+            await fake.setDisplays([displayL(), displayD(), twin])
+        }
+        #expect(change.settled.contains { if case .info(let line) = $0 { line.contains("duplicate display UUID") } else { false } })
+        #expect(!change.settled.contains { if case .fault = $0 { true } else { false } })
+        #expect(harness.arranger.layoutSets[ArrangementID(["D", "L"])] != nil, "the stored set was applied")
+        #expect((harness.arranger.world[deskD]?.tree.windows ?? []).isEmpty)
+        #expect(floats(2, on: deskL, in: harness.arranger) && floats(3, on: deskL, in: harness.arranger))
+    }
+
+    /// D-12: with Spaces shared across displays, desks stay keyed per display UUID through an unplug and re-plug.
+    @Test func sharedSpacesKeepDesksKeyedPerDisplay() async throws {
+        var (harness, tiles) = try await docked(onL: [1], onD: [2, 3], space: 5)
+        let sharedL = DeskKey(displayUUID: "L", spaceID: 5), sharedD = DeskKey(displayUUID: "D", spaceID: 5)
+        _ = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        #expect(harness.arranger.world[sharedD] != nil)
+        #expect(floats(2, on: sharedL, in: harness.arranger) && floats(3, on: sharedL, in: harness.arranger))
+        _ = await harness.displayChange { await $0.plug("D") }
+        #expect(harness.arranger.world[sharedD]?.tree.windows == [ref(2), ref(3)])
+        #expect(harness.arranger.world[sharedL]?.tree.windows == [ref(1)])
+        for id: UInt32 in [2, 3] { #expect(near(await harness.frame(ref(id)), tiles[ref(id)])) }
+    }
+
+    /// Two displays unplugged in one change: one N12 naming both, with the total count.
+    @Test func twoDisplaysUnpluggedAtOnceGiveOneNotice() async throws {
+        let visibleE = Rect(x: 3360, y: 25, width: 1920, height: 1055)
+        let displayE = DisplayInfo(uuid: "E", frame: Rect(x: 3360, y: 0, width: 1920, height: 1080), visibleFrame: visibleE, currentSpaceID: nil)
+        var (harness, _) = try await docked(onL: [1], onD: [2], extra: [displayE], onExtra: [3])
+        let change = await harness.displayChange { fake in
+            await fake.unplug("D", movingSpacesTo: "L")
+            await fake.unplug("E", movingSpacesTo: "L")
+        }
+        #expect(disconnected(change.settled) == [.displaysDisconnected(names: ["DELL U2720Q", "LG UltraFine"], windows: 2)])
+        #expect(harness.arranger.dormantDeskCount == 2 && harness.arranger.awayDisplayCount == 2)
+    }
+
+    @Test func unpluggingADisplayWithNoWindowsShowsNoNotice() async throws {
+        var (harness, _) = try await docked(onL: [1], onD: [])
+        let change = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        #expect(disconnected(change.settled).isEmpty)
+    }
+
+    /// Debug S4: desks whose display is away, and how many displays those are.
+    @Test func dormantDesksAreCountedWhileTheirDisplayIsAway() async throws {
+        var (harness, _) = try await docked(onL: [1], onD: [2, 3])
+        #expect(harness.arranger.dormantDeskCount == 0 && harness.arranger.awayDisplayCount == 0)
+        _ = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
+        #expect(harness.arranger.dormantDeskCount == 1 && harness.arranger.awayDisplayCount == 1)
+        _ = await harness.displayChange { await $0.plug("D") }
+        #expect(harness.arranger.dormantDeskCount == 0 && harness.arranger.awayDisplayCount == 0)
     }
 }

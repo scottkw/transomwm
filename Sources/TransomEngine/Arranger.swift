@@ -214,7 +214,7 @@ public struct Arranger: Sendable {
 
     /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        let before = world
+        let before = world, beforeHistory = history
         let effects = process(input, now: now)
         // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
         if !homeFrames.isEmpty {
@@ -224,6 +224,8 @@ public struct Arranger: Sendable {
         }
         guard world != before else { return effects }
         dragPlans = [:]  // the plans a drag caches are of the World before
+        // An undo step means a user edit: every window it gave a new desk or tile was placed by the user (OVER-06).
+        if history != beforeHistory, Self.isUserEdit(input) { userPlacedSinceSwitch.formUnion(Self.placementChanges(from: before, to: world)) }
         return effects.contains(.save(.debounced)) ? effects : effects + [.save(.debounced)]
     }
 
@@ -434,6 +436,12 @@ public struct Arranger: Sendable {
         }
         if decision != .same, !old.isUnknown, old != id { layoutSets.store(before, for: old, at: .now) }
         adopt(inventory)
+        // Where each window on a desk of a display that is not connected now was: its display, for the float and N12.
+        let present = Set(displays.map(\.uuid))
+        var away: [WindowIdentity: String] = [:]
+        for (key, desk) in world.desks where !present.contains(key.displayUUID) {
+            for window in desk.tree.windows + desk.desktop.windows.map(\.window) { away[window.identity] = key.displayUUID }
+        }
         switch decision {
         case .same:
             effects.append(.info("arrangement \(id.shortHash): \(uuids.count) displays, same"))
@@ -445,7 +453,8 @@ public struct Arranger: Sendable {
             let shown = Set(displays.compactMap(\.currentSpaceID))
             let live = inventory.liveWindows?.filter { $0.spaces?.isDisjoint(with: shown) ?? true }
             do throws(LayoutError) {
-                effects += try reattach((set.world, homeFrames, wantedFrames), tracked: inventory.windows, live: live).effects
+                let merged = try Self.merged(set.world, current: world, keeping: userPlacedSinceSwitch)
+                effects += try reattach((merged, homeFrames, wantedFrames), tracked: inventory.windows, live: live).effects
             } catch {
                 layoutSets.store(set.world, for: id, at: set.lastUsed)
                 effects.append(.fault("could not apply the layout set for arrangement \(id.shortHash); keeping the current layout: \(error)"))
@@ -454,7 +463,102 @@ public struct Arranger: Sendable {
         var claimed = inventory
         claimed.windows = inventory.windows.map(claim)
         for info in claimed.windows { windows[info.window.identity] = info }
-        return effects + place(claimed) + [.save(.debounced)]
+        effects += place(claimed)
+        if decision == .new { effects += cascadeFloated(from: away, names: names) }
+        return effects + [.save(.debounced)]
+    }
+
+    /// D-10: the windows of a vanished display that now float on a connected one are cascaded from the top-left of
+    /// that desk's Desktop tile, at their own sizes, clamped on screen (a frame transform, no undo step), then N12 says
+    /// so, once, when at least one floated.
+    private mutating func cascadeFloated(from away: [WindowIdentity: String], names: [String: String]) -> [ArrangerEffect] {
+        var floated: [DeskKey: [WindowRef]] = [:]
+        for id in away.keys {
+            guard let info = windows[id], !info.isExcluded, let key = deskKey(of: info.window), world[key]?.desktop.contains(info.window) == true,
+                displays.contains(where: { $0.uuid == key.displayUUID })
+            else { continue }
+            floated[key, default: []].append(info.window)
+        }
+        guard !floated.isEmpty else { return [] }
+        var faults: [ArrangerEffect] = []
+        for (key, refs) in floated.sorted(by: { $0.key < $1.key }) {
+            guard let display = display(for: key) ?? displays.first(where: { $0.uuid == key.displayUUID }), let desk = world[key] else { continue }
+            let refs = refs.sorted { $0.identity < $1.identity }
+            let desktop = (try? Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums))?.desktopRect ?? display.visibleFrame
+            let frames = ArrangementSwitch.cascade(
+                frames: refs.map { desk.desktop.frame(of: $0) ?? display.visibleFrame }, from: Point(x: desktop.minX, y: desktop.minY), in: display.visibleFrame)
+            do throws(LayoutError) {
+                try world.reflow(key) { desk, _ throws(LayoutError) in
+                    for (window, frame) in zip(refs, frames) { try desk.desktop.setFrame(frame, for: window) }
+                }
+                for (window, frame) in zip(refs, frames) { wantedFrames[window.identity] = frame }
+            } catch {
+                faults.append(.fault("could not cascade the windows floated on \(key): \(error)"))
+            }
+        }
+        let gone = Set(floated.values.joined().compactMap { away[$0.identity] }).sorted()
+        let count = floated.values.map(\.count).reduce(0, +)
+        return faults + replan() + [
+            .info("displays \(gone) gone: \(dormantDeskCount) desks dormant, \(count) windows floated"),
+            .notice(.displaysDisconnected(names: gone.map { names[$0] ?? $0 }, windows: count)),
+        ]
+    }
+
+    /// Desks whose display is not connected (UI-SPEC Debug S4).
+    public var dormantDeskCount: Int { world.desks.keys.filter { key in !displays.contains { $0.uuid == key.displayUUID } }.count }
+    /// The distinct displays those dormant desks belong to.
+    public var awayDisplayCount: Int { Set(world.desks.keys.map(\.displayUUID)).subtracting(displays.map(\.uuid)).count }
+
+    /// User action wins (OVER-06): each desk of `current` holding a window in `placed` is kept, less its other windows
+    /// that `stored` puts on another desk; every other desk is `stored`'s, less the windows the kept desks hold. Windows
+    /// leave through the close path, so trees normalise. The ID source is the larger one, so no NodeID is minted twice.
+    static func merged(_ stored: World, current: World, keeping placed: Set<WindowIdentity>) throws(LayoutError) -> World {
+        func held(_ desk: Desk) -> [WindowRef] { desk.tree.windows + desk.desktop.windows.map(\.window) }
+        let kept = Set(current.desks.filter { held($0.value).contains { placed.contains($0.identity) } }.keys)
+        var stored = stored, current = current, throwaway = UndoHistory()
+        let nowhere = DeskKey(displayUUID: "", spaceID: nil)
+        for key in kept.sorted() {
+            for window in current[key].map(held) ?? [] where !placed.contains(window.identity) {
+                if let home = stored.desks.first(where: { $0.value.contains(window) })?.key, home != key {
+                    try current.apply(.closed, for: window, on: nowhere, history: &throwaway)
+                }
+            }
+            for window in current[key].map(held) ?? [] {
+                if let home = stored.desks.first(where: { $0.value.contains(window) })?.key, !kept.contains(home) {
+                    try stored.apply(.closed, for: window, on: nowhere, history: &throwaway)
+                }
+            }
+        }
+        var desks = stored.desks
+        for key in kept { desks[key] = current[key] }
+        return try World(ids: IDSource(next: max(stored.ids.next, current.ids.next)), desks: desks)
+    }
+
+    private static func isUserEdit(_ input: ArrangerInput) -> Bool {
+        switch input {
+        case .command, .pointer, .greenButton: true
+        default: false
+        }
+    }
+
+    /// Windows whose desk or tile differs between two Worlds: a dock, float, move, snap, swap or drop placed them.
+    private static func placementChanges(from old: World, to new: World) -> Set<WindowIdentity> {
+        func slots(_ world: World) -> [WindowIdentity: Slot] {
+            var slots: [WindowIdentity: Slot] = [:]
+            for (key, desk) in world.desks {
+                for window in desk.tree.windows { slots[window.identity] = Slot(desk: key, leaf: desk.tree.leaf(containing: window)) }
+                for floating in desk.desktop.windows { slots[floating.window.identity] = Slot(desk: key, leaf: nil) }
+            }
+            return slots
+        }
+        let before = slots(old)
+        return Set(slots(new).filter { before[$0.key] != $0.value }.keys)
+    }
+
+    private struct Slot: Equatable {
+        let desk: DeskKey
+        /// nil on the Desktop layer.
+        let leaf: NodeID?
     }
 
     /// The layout wins over where macOS left a window during a display change: a window a desk on a connected display

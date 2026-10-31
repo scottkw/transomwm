@@ -22,12 +22,15 @@ public enum Notice: Equatable, Sendable {
     case turnOffFailed(Conflict)
     /// N8: Restore macOS Window Settings wrote every recorded original back (D-21).
     case settingsRestored
+    /// N12: displays were disconnected (their names, captured before they left, in UUID order) and this many of their
+    /// windows now float on a remaining display (D-10).
+    case displaysDisconnected(names: [String], windows: Int)
 
     /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
         case .crashRecovered, .crashLoop: true
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored, .turnOffFailed, .settingsRestored: false
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored, .turnOffFailed, .settingsRestored, .displaysDisconnected: false
         }
     }
 }
