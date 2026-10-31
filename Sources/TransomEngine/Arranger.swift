@@ -165,6 +165,8 @@ public struct Arranger: Sendable {
     private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
     private var parkRequested: Set<WindowIdentity> = []
+    /// Whether a park was sent for `window` and it is still parked (the overview's camera-move pick, 06-09).
+    public func isParked(_ window: WindowRef) -> Bool { parkRequested.contains(window.identity) }
     /// The left-button press in progress, if any (TILE-01).
     public private(set) var drag: DragSession?
     /// A title-bar drag is under way (plan 16 defers alerts while it is).

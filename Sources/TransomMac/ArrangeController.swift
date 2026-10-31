@@ -675,6 +675,15 @@ import os
             await self.system.refresh(app: window.pid)
             await self.system.perform([.focus(window)])
         }
+        // Frame Focused Window for the picked window: its leaf (or the Desktop tile) framed, focus at settle. Paused, the
+        // camera stays put and the pick only focuses (Surface 1 Availability).
+        overview.frameWindow = { [weak self] window, uuid in
+            guard let self else { return }
+            guard self.arranger.pauseReasons.isEmpty, let leaf = self.arranger.leafNode(of: window),
+                let tree = self.arranger.deskKey(of: window).flatMap({ self.arranger.world[$0]?.tree })
+            else { return await self.system.perform([.focus(window)]) }
+            await self.zoom(to: Navigator.target(leaf, in: tree), displayUUID: uuid, focus: window)
+        }
         overviewController = overview
         return overview
     }

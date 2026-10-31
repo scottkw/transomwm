@@ -22,6 +22,8 @@ import os
     var onClosed: () -> Void = {}
     /// Focuses a window picked on another Space, once that Space shows (AX lists it only then).
     var focusWindow: (TransomModel.WindowRef) async -> Void = { _ in }
+    /// Brings a picked parked or collapsed window into view on its display (a camera move) and focuses it at settle.
+    var frameWindow: (TransomModel.WindowRef, _ displayUUID: String) async -> Void = { _, _ in }
     /// A pick's Space switch did not land within 1 s: beep and announce this text.
     var onSwitchFailed: (String) -> Void = { _ in }
     /// The frontmost app's focused tracked window: the initial selection when it is shown.
@@ -366,13 +368,26 @@ import os
     }
 
     /// A shown window: the reverse animation starts with its tile on top (the order once it is raised), and it gets focus.
+    /// A window the camera parked or collapsed (its display zoomed in): the overview closes the same way, then
+    /// `frameWindow` brings it into view with a camera move and focuses it at settle.
     private func pickOnCurrentSpace(_ window: TransomModel.WindowRef, in layout: OverviewLayout) {
         guard let display = layout.displays.first(where: { $0.tiles.contains { $0.window == window } }) else { return }
-        let space = arranger().displays.first { $0.uuid == display.uuid }?.currentSpaceID ?? 0
-        logger.info("pick window \(window.windowID, privacy: .public) on space \(space, privacy: .public) (same space)")
+        let arranger = arranger()
+        let space = arranger.displays.first { $0.uuid == display.uuid }?.currentSpaceID ?? 0
+        let hidden = arranger.homeView(on: display.uuid).map { $0.collapsed[window] != nil || arranger.isParked(window) } ?? false
+        logger.info("pick window \(window.windowID, privacy: .public) on space \(space, privacy: .public) (\(hidden ? "camera move" : "same space", privacy: .public))")
         panels[display.uuid]?.bringToFront(zoom().cgWindow(window) ?? window.windowID)
         dismiss(reason: "pick")
-        Task { await focusWindow(window) }
+        guard hidden else {
+            Task { await focusWindow(window) }
+            return
+        }
+        // The camera's stage comes up only once the overview's has gone (reverse animation, then its fade).
+        let closing = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? StagePanel.moveDuration : StagePanel.moveDuration + StagePanel.revealFade
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(closing))
+            await self?.frameWindow(window, display.uuid)
+        }
     }
 
     /// The stage fades out (120 ms), then the display switches to `space` and `window` gets focus. A switch that does not
