@@ -43,12 +43,13 @@ private struct ToastView: View {
 /// The one toast panel (UI-SPEC Surface 4): click-through, never activating Transom, on every Space, hidden from
 /// screen capture. `ArrangeController` decides what shows through `NoticeQueue`.
 @MainActor final class ToastPresenter {
-    private let panel = ToastPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
-    private let effect = NSVisualEffectView()
+    private(set) var panel = ToastPresenter.makePanel()
     /// Bumped by every show, so a fade-out that finishes after a newer show does not hide it.
     private var generation = 0
 
-    init() {
+    /// The panel, its content view the HUD material the toast's text goes in.
+    private static func makePanel() -> NSPanel {
+        let panel = ToastPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.ignoresMouseEvents = true
@@ -57,23 +58,29 @@ private struct ToastView: View {
         panel.sharingType = .none
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
+        let effect = NSVisualEffectView()
         effect.material = .hudWindow
         effect.state = .active
         effect.wantsLayer = true
         effect.layer?.cornerRadius = 12
         effect.layer?.masksToBounds = true
         panel.contentView = effect
+        return panel
     }
 
     /// Shows `text` centred 16 pt below the top of `displayUUID`'s visible frame (the menu-bar display when nil or
     /// gone), fading in over 160 ms, and announces it.
     func show(_ text: String, glyph: String, warning: Bool = false, on displayUUID: String?) {
         generation += 1
+        if panel.leftOnAnotherSpace("toast panel") {
+            panel.orderOut(nil)
+            panel = Self.makePanel()
+        }
         let hosting = NSHostingView(rootView: ToastView(text: text, glyph: glyph, warning: warning))
         let size = hosting.fittingSize
         hosting.frame = NSRect(origin: .zero, size: size)
-        effect.subviews.forEach { $0.removeFromSuperview() }
-        effect.addSubview(hosting)
+        panel.contentView?.subviews.forEach { $0.removeFromSuperview() }
+        panel.contentView?.addSubview(hosting)
 
         let displays = Displays.current()
         if let display = displays.first(where: { $0.uuid == displayUUID }) ?? displays.first,

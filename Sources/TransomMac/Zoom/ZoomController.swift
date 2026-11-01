@@ -65,7 +65,7 @@ import os
     var cacheStats: (windows: Int, bytes: Int) { (capture.cache.count, capture.cache.bytes) }
     var isIdle: Bool { active.isEmpty }
 
-    private var stages: [String: StagePanel] = [:]
+    private(set) var stages: [String: StagePanel] = [:]
     private var active: [String: Active] = [:]
     /// E-03: the move a gesture took over, by display, until the gesture commits (superseded) or springs back (it goes
     /// on from where it was, settling exactly once).
@@ -285,7 +285,10 @@ import os
     // MARK: Move steps
 
     private func stage(for uuid: String) -> StagePanel? {
-        if let stage = stages[uuid] { return stage }
+        if let stage = stages[uuid] {
+            guard stage.leftOnAnotherSpace("display \(uuid): zoom stage") else { return stage }
+            stage.orderOut(nil)
+        }
         guard let nsScreen = Displays.screen(uuid: uuid) else { return nil }
         let panel = StagePanel(screen: nsScreen)
         panel.onTileClick = { [weak self] id in self?.onTileClick?(uuid, id) }

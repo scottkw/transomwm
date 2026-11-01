@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import TransomEngine
+@testable import TransomEngine
 @testable import TransomMac
 import TransomModel
 import TransomPrivate
@@ -158,6 +158,7 @@ import Testing
 
     /// The window server's view: ordered in on the Space that shows now.
     private func isOnScreen(_ panel: NSPanel) -> Bool {
+        guard panel.windowNumber > 0 else { return false }  // never ordered in: no window server window yet
         let info = (CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(panel.windowNumber)) as? [[String: Any]])?.first
         return info?[kCGWindowIsOnscreen as String] as? Bool ?? false
     }
@@ -207,6 +208,85 @@ import Testing
         try #require(await waitUntil(timeout: .seconds(2)) { !overview.openPanels.isEmpty }, "the overview did not open again")
         #expect(overview.panels[display] === panel, "a panel on the shown Space was replaced")
         overview.interrupt(reason: .command)
+        try await Task.sleep(for: .milliseconds(400))
+        try await returnToFirst()
+    }
+
+    // MARK: The other panels the host lock stranded: the zoom stage and toast here; the drop preview, gap handle and
+    // collapsed panels share their guard (NSWindow.leftOnAnotherSpace) and have no test of their own.
+
+    /// Leaves `panel` ordered in on the first desktop without .canJoinAllSpaces, as the macOS 27 lock did, then shows the
+    /// second desktop.
+    private func strandThenSwitch(_ panel: NSPanel) async throws {
+        let (display, _, second) = try desktops()
+        panel.collectionBehavior = [.ignoresCycle]
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        _ = await SpaceSwitcher(spaces: { SpacesProvider.snapshot() }).switchTo(space: second, on: display)
+        try #require(await waitUntil(timeout: .seconds(3)) { SkyLightSpaces.currentSpace(displayUUID: display) == second })
+        try await Task.sleep(for: .milliseconds(300))
+        try #require(!panel.isOnActiveSpace, "the setup did not leave the panel on the first desktop")
+    }
+
+    /// A camera move with no tiles, held at its settle while the window server is asked whether the stage is on screen,
+    /// then settled with no writes and revealed. Also checks the stage made at the move's start is the one it shows.
+    private func runMove(_ zoom: ZoomController, id: UInt64, on display: String) async throws -> (stage: StagePanel, onScreen: Bool) {
+        var settling = false
+        zoom.run(CameraMove(id: id, displayUUID: display, from: .home, to: .home, tiles: [])) { _ in settling = true }
+        let started = zoom.stages[display]
+        try #require(await waitUntil(timeout: .seconds(2)) { settling }, "move \(id) never animated")
+        let stage = try #require(zoom.stages[display])
+        // run() and show() both ask for the stage: a new one, never ordered in yet, is not taken for a stranded one.
+        #expect(started === stage, "move \(id): the stage made at its start was replaced before it showed")
+        let onScreen = await waitUntil(timeout: .seconds(1)) { isOnScreen(stage) }
+        zoom.beginSettle(displayUUID: display, moveID: id, writes: [])
+        try #require(await waitUntil(timeout: .seconds(2)) { zoom.isIdle }, "move \(id) never revealed")
+        return (stage, onScreen)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aZoomStageStrandedOnAnotherSpaceDoesNotHideTheNextMove() async throws {
+        try await returnToFirst()
+        let display = try desktops().display
+        let zoom = ZoomController()
+        defer { zoom.purge() }
+        let first = try await runMove(zoom, id: 1, on: display)
+        try #require(first.onScreen, "the stage was not on screen on the first desktop")
+        try await strandThenSwitch(first.stage)
+
+        let next = try await runMove(zoom, id: 2, on: display)
+        #expect(next.onScreen, "the zoom stage is not on screen on the second desktop")
+        #expect(next.stage === first.stage || !first.stage.isVisible, "the old stage is still ordered in on the first desktop")
+        // A stage already on the shown Space is kept: no new window per move.
+        let again = try await runMove(zoom, id: 3, on: display)
+        #expect(again.stage === next.stage, "a stage on the shown Space was replaced")
+        try await returnToFirst()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aToastPanelStrandedOnAnotherSpaceDoesNotHideTheNextToast() async throws {
+        try await returnToFirst()
+        let display = try desktops().display
+        let toast = ToastPresenter()
+        let fresh = toast.panel
+        toast.show("Stranded panel test", glyph: "info.circle", on: display)
+        // A panel never ordered in also reports isOnActiveSpace false; it is not taken for a stranded one.
+        #expect(toast.panel === fresh, "the toast panel was replaced at its first show")
+        try #require(await waitUntil(timeout: .seconds(1)) { isOnScreen(fresh) }, "the toast was not on screen on the first desktop")
+        toast.hide()
+        try await Task.sleep(for: .milliseconds(400))  // past the fade-out
+        try await strandThenSwitch(fresh)
+
+        toast.show("Stranded panel test", glyph: "info.circle", on: display)
+        let panel = toast.panel
+        #expect(await waitUntil(timeout: .seconds(1)) { isOnScreen(panel) }, "the toast is not on screen on the second desktop")
+        #expect(panel === fresh || !fresh.isVisible, "the old toast panel is still ordered in on the first desktop")
+        toast.hide()
+        try await Task.sleep(for: .milliseconds(400))
+        // A panel already on the shown Space is kept.
+        toast.show("Stranded panel test", glyph: "info.circle", on: display)
+        #expect(toast.panel === panel, "a toast panel on the shown Space was replaced")
+        toast.hide()
         try await Task.sleep(for: .milliseconds(400))
         try await returnToFirst()
     }

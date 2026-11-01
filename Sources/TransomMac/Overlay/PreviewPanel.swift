@@ -118,7 +118,7 @@ private final class PreviewLabelView: NSView {
     /// Shows `state` on `displayUUID`'s panel, or withdraws the preview (nil). The panel is ordered front when a preview
     /// first shows and ordered out once it has faded.
     func show(_ state: PreviewState?, on displayUUID: String?) {
-        guard let state, let uuid = displayUUID, let overlay = overlays[uuid] else {
+        guard let state, let uuid = displayUUID, let overlay = overlay(uuid) else {
             hide(after: 0.08)
             return
         }
@@ -155,7 +155,7 @@ private final class PreviewLabelView: NSView {
 
     /// Keyboard parity: the blocked preview at `rect` for 600 ms (fade in 120 ms, hold, fade out 120 ms).
     func flashBlocked(_ rect: Rect, on displayUUID: String) {
-        guard shown == nil, let overlay = overlays[displayUUID] else { return }
+        guard shown == nil, let overlay = overlay(displayUUID) else { return }
         generation += 1
         let flash = generation
         draw(.blocked(rect), in: overlay)
@@ -210,6 +210,12 @@ private final class PreviewLabelView: NSView {
         }
     }
 
+    /// `uuid`'s overlay; every panel is made again first when macOS left this one on another Space (`leftOnAnotherSpace`).
+    private func overlay(_ uuid: String) -> Overlay? {
+        if overlays[uuid]?.panel.leftOnAnotherSpace("display \(uuid): drop preview panel") == true { rebuildPanels() }
+        return overlays[uuid]
+    }
+
     // MARK: Drawing
 
     private func redraw() {
@@ -258,7 +264,7 @@ private final class PreviewLabelView: NSView {
     /// The rubber band at `band`, following the pointer with no easing, and the target preview at `target`: it fades in
     /// over 80 ms, then morphs over 120 ms when the target changes (Reduce Motion: the new rect fades in over 120 ms).
     func showBand(_ band: Rect, target: Rect?, on displayUUID: String) {
-        guard let overlay = overlays[displayUUID], let marquee = marquees[displayUUID] else { return }
+        guard let overlay = overlay(displayUUID), let marquee = marquees[displayUUID] else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         apply(PreviewStyle.band(band, increaseContrast: increaseContrast), to: marquee.band, in: overlay)
@@ -304,7 +310,7 @@ private final class PreviewLabelView: NSView {
 
     /// Pick mode's hover ring inside the tile at `rect` (fade in 80 ms).
     func showPickRing(_ rect: Rect, radius: CGFloat, on displayUUID: String) {
-        guard let overlay = overlays[displayUUID], let marquee = marquees[displayUUID], marquee.ringRect != rect else { return }
+        guard let overlay = overlay(displayUUID), let marquee = marquees[displayUUID], marquee.ringRect != rect else { return }
         marquee.ringRect = rect
         CATransaction.begin()
         CATransaction.setDisableActions(true)

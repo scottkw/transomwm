@@ -149,7 +149,8 @@ final class CollapsedBlockView: NSView {
         var next: [BlockPanel] = []
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         for block in blocks {
-            let panel = old.firstIndex { Self.view($0)?.block.window == block.window }.map { old.remove(at: $0) } ?? pool.popLast() ?? makePanel(block)
+            let found = old.firstIndex { Self.view($0)?.block.window == block.window }.map { old.remove(at: $0) } ?? pool.popLast() ?? makePanel(block)
+            let panel = onShownSpace(found, displayUUID)
             if let view = Self.view(panel) {
                 view.block = block
                 view.onDoubleClick = { [weak self] window in self?.onDoubleClick?(window, displayUUID) }
@@ -180,6 +181,7 @@ final class CollapsedBlockView: NSView {
     /// That display's move revealed: its panels fade in over 120 ms (UI-SPEC Surface 1 step 7).
     func fadeIn(on displayUUID: String) {
         guard hidden.remove(displayUUID) != nil else { return }
+        shown[displayUUID] = shown[displayUUID]?.map { onShownSpace($0, displayUUID) }
         for panel in shown[displayUUID] ?? [] {
             panel.alphaValue = 0
             panel.orderFrontRegardless()
@@ -203,6 +205,16 @@ final class CollapsedBlockView: NSView {
         panel.hidesOnDeactivate = false
         panel.contentView = CollapsedBlockView(block)
         return panel
+    }
+
+    /// `panel`, or a new one with its block, handler and frame when macOS left it on another Space (`leftOnAnotherSpace`).
+    private func onShownSpace(_ panel: BlockPanel, _ displayUUID: String) -> BlockPanel {
+        guard let view = Self.view(panel), panel.leftOnAnotherSpace("display \(displayUUID): collapsed block panel") else { return panel }
+        panel.orderOut(nil)
+        let new = makePanel(view.block)
+        Self.view(new)?.onDoubleClick = view.onDoubleClick
+        new.setFrame(panel.frame, display: false)
+        return new
     }
 
     private static func view(_ panel: BlockPanel) -> CollapsedBlockView? { panel.contentView as? CollapsedBlockView }

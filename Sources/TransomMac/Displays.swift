@@ -58,3 +58,17 @@ public enum Displays {
         return CFUUIDCreateString(nil, uuid) as String?
     }
 }
+
+extension NSWindow {
+    private static let spacesLogger = Logger(subsystem: "com.eightabyte.transom", category: "spaces")
+
+    /// True, with a notice, when this panel was ordered in before but is no longer on the shown Space; the caller then
+    /// replaces it. macOS 27.2 can leave a .canJoinAllSpaces panel on the Space shown during a screen lock (host
+    /// 2026-11-01): ordered in again it stays there, off screen, until a new panel is made, as a relaunch did. A deferred
+    /// panel never ordered in has no window number yet and also reports isOnActiveSpace false; it is fine.
+    func leftOnAnotherSpace(_ name: String) -> Bool {
+        guard windowNumber > 0, !isOnActiveSpace else { return false }
+        Self.spacesLogger.notice("\(name, privacy: .public) was off the shown Space; made a new one")
+        return true
+    }
+}
