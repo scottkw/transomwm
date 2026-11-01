@@ -618,7 +618,6 @@ import os
         }
     }
 
-    /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.
     /// Re-reads the displays and reports each one whose current Space changed (D-25).
     private func spaceDidChange() {
         let old = Dictionary(displays.map { ($0.uuid, $0.currentSpaceID) }, uniquingKeysWith: { first, _ in first })
@@ -631,6 +630,9 @@ import os
         }
         refreshSpaces()
         visitSpaceSoon()
+        // AX lists a Space's windows only while it shows: read them now, not at the next sweep, so a Space not shown
+        // since launch is tracked before its visit capture 1 s from now (D-03).
+        scheduler?.scheduleAll(after: .milliseconds(75))
     }
 
     /// Lookup off: once a Space settles, the on-screen windows per display are one visit (D-15). Latest wins.
@@ -662,6 +664,7 @@ import os
         }
     }
 
+    /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.
     private func displaysDidChange() {
         // Read now, so the inventory the Arranger re-plans against already has the new visible frames (TILE-03).
         displays = Displays.current()

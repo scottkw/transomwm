@@ -118,6 +118,44 @@ import Testing
         try await returnToFirst()
     }
 
+    /// VM UAT B1 (2026-10-31): with windows already on the second desktop and Transom started on the first, the first
+    /// visit's capture 1 s after arrival found none of them, so the strip kept app icons for that Space. AX lists a
+    /// Space's windows only while it shows, so nothing was tracked there yet when the capture ran.
+    @Test(.timeLimit(.minutes(1)))
+    func theFirstVisitToASpaceNotYetReadCapturesItsWindows() async throws {
+        try #require(SnapshotCapture.isGranted(), "needs Screen Recording (the VM's SSH session has it)")
+        try await returnToFirst()
+        let (display, _, second) = try desktops()
+        _ = await SpaceSwitcher(spaces: { SpacesProvider.snapshot() }).switchTo(space: second, on: display)
+        try #require(await waitUntil(timeout: .seconds(3)) { SkyLightSpaces.currentSpace(displayUUID: display) == second })
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
+        defer { fixture.terminate() }
+        let ids = fixture.windows.map(\.id)
+        try #require(ids.count == 2)
+        try await returnToFirst()
+        let fixturePID = fixture.pid
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        await system.start()
+        let arrange = ArrangeController(system: system, zoomEnabled: true)
+        defer { withExtendedLifetime(arrange) {} }
+        await arrange.start()
+        let tracked = { arrange.arranger.windows.values.filter { ids.contains($0.window.windowID) }.count }
+        print("OverviewSpaceSwitchIntegrationTests: before the visit \(tracked()) of 2 windows tracked")
+
+        _ = await SpaceSwitcher(spaces: { SpacesProvider.snapshot() }).switchTo(space: second, on: display)
+        try #require(await waitUntil(timeout: .seconds(3)) { SkyLightSpaces.currentSpace(displayUUID: display) == second })
+        let arrived = ContinuousClock.now
+        var trackedAfter: Duration?
+        // The capture runs 1 s after the change, with up to 2 s for its snapshots.
+        let cached = await waitUntil(timeout: .seconds(3)) {
+            if trackedAfter == nil, tracked() == 2 { trackedAfter = ContinuousClock.now - arrived }
+            return ids.allSatisfy { arrange.zoomController?.cachedSnapshot($0) != nil }
+        }
+        print("OverviewSpaceSwitchIntegrationTests: tracked \(trackedAfter.map { "\($0 / .milliseconds(1)) ms" } ?? "never") after arrival, cached=\(cached)")
+        #expect(cached, "the first visit to Space \(second) did not capture windows \(ids)")
+        try await returnToFirst()
+    }
+
     /// The window server's view: ordered in on the Space that shows now.
     private func isOnScreen(_ panel: NSPanel) -> Bool {
         let info = (CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(panel.windowNumber)) as? [[String: Any]])?.first
