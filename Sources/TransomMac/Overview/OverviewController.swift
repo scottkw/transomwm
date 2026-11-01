@@ -32,7 +32,7 @@ import os
     static let dragThreshold: CGFloat = 4
 
     private(set) var isOpen = false
-    private var panels: [String: StagePanel] = [:]
+    private(set) var panels: [String: StagePanel] = [:]
     /// Each open panel's tiles: start = the real frame, end = the overview rect (AppKit coordinates).
     private var shown: [String: [StageTile]] = [:]
     /// The one selection across every display (D-04), drawn as it changes.
@@ -229,7 +229,13 @@ import os
     }
 
     private func panel(for uuid: String) -> StagePanel? {
-        if let panel = panels[uuid] { return panel }
+        if let panel = panels[uuid] {
+            if panel.isOnActiveSpace { return panel }
+            // macOS 27 can leave a panel on the Space shown during a screen lock despite .canJoinAllSpaces: ordered in
+            // again, it would stay there, off screen. A new panel joins every Space, as after a relaunch.
+            logger.notice("display \(uuid, privacy: .public): overview panel was off the shown Space; made a new one")
+            panel.orderOut(nil)
+        }
         guard let screen = Displays.screen(uuid: uuid) else { return nil }
         let panel = StagePanel(screen: screen)
         panel.onOverviewClick = { [weak self] point, travel in self?.click(at: point, travel: travel) }

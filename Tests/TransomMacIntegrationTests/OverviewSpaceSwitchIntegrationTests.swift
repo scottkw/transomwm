@@ -117,4 +117,59 @@ import Testing
         }
         try await returnToFirst()
     }
+
+    /// The window server's view: ordered in on the Space that shows now.
+    private func isOnScreen(_ panel: NSPanel) -> Bool {
+        let info = (CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(panel.windowNumber)) as? [[String: Any]])?.first
+        return info?[kCGWindowIsOnscreen as String] as? Bool ?? false
+    }
+
+    /// Host 2026-11-01 (macOS 27.2): after a screen lock, the overview's panel was left on the Space shown during the
+    /// lock although it asks for every Space, so from another Space the overview never showed until a relaunch. The
+    /// macOS 15 guest does not strand it on its own, so the test does: the panel left ordered in on the first desktop
+    /// without .canJoinAllSpaces. The next open on the second desktop must be on screen and leave nothing behind.
+    @Test(.timeLimit(.minutes(1)))
+    func aPanelStrandedOnAnotherSpaceDoesNotHideTheNextOpen() async throws {
+        try await returnToFirst()
+        let (display, _, second) = try desktops()
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let fixturePID = fixture.pid
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        await system.start()
+        let arrange = ArrangeController(system: system, zoomEnabled: true)
+        defer { withExtendedLifetime(arrange) {} }
+        await arrange.start()
+
+        await arrange.dispatch(.camera(.overview))
+        let overview = try #require(arrange.overviewController)
+        try #require(await waitUntil(timeout: .seconds(2)) { !overview.openPanels.isEmpty }, "the overview never opened")
+        overview.interrupt(reason: .command)
+        try await Task.sleep(for: .milliseconds(400))  // past the fade-out
+        let stranded = try #require(overview.panels[display])
+        stranded.collectionBehavior = [.ignoresCycle]
+        stranded.alphaValue = 0
+        stranded.orderFrontRegardless()
+        _ = await SpaceSwitcher(spaces: { SpacesProvider.snapshot() }).switchTo(space: second, on: display)
+        try #require(await waitUntil(timeout: .seconds(3)) { SkyLightSpaces.currentSpace(displayUUID: display) == second })
+        // The Arranger hears of the switch too, so its Space-change interrupt cannot close the open below.
+        try #require(await waitUntil(timeout: .seconds(3)) { arrange.arranger.displays.first { $0.uuid == display }?.currentSpaceID == second })
+        try await Task.sleep(for: .milliseconds(300))
+        try #require(!stranded.isOnActiveSpace, "the setup did not leave the panel on the first desktop")
+
+        await arrange.dispatch(.camera(.overview))
+        try #require(await waitUntil(timeout: .seconds(2)) { !overview.openPanels.isEmpty }, "the overview never opened on the second desktop")
+        let panel = try #require(overview.panels[display])
+        #expect(await waitUntil(timeout: .seconds(2)) { isOnScreen(panel) }, "the overview is not on screen on the second desktop")
+        #expect(stranded === panel || !stranded.isVisible, "the old panel is still ordered in on the first desktop")
+        overview.interrupt(reason: .command)
+        try await Task.sleep(for: .milliseconds(400))
+        // A panel already on the shown Space is kept: no new window per open.
+        await arrange.dispatch(.camera(.overview))
+        try #require(await waitUntil(timeout: .seconds(2)) { !overview.openPanels.isEmpty }, "the overview did not open again")
+        #expect(overview.panels[display] === panel, "a panel on the shown Space was replaced")
+        overview.interrupt(reason: .command)
+        try await Task.sleep(for: .milliseconds(400))
+        try await returnToFirst()
+    }
 }
