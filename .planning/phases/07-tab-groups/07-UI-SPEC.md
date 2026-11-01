@@ -1,7 +1,8 @@
 ---
 phase: "7"
 slug: "tab-groups"
-status: draft
+status: approved
+reviewed_at: "2026-11-01"
 shadcn_initialized: false
 preset: none
 created: "2026-11-01"
@@ -77,6 +78,7 @@ Exceptions (non-spacing metrics, listed so the checker and auditor can find them
 - **Minimum strip width for buttons: 116pt** = 4 + 3 × 20 + 2 × 4 + 8 + 32 + 4. Below it the group buttons hide (Surface 2).
 - **Corner radii.** Strip 8pt (the Phase 6 thumbnail token). Tabs, group buttons, the overflow button and the ghost are capsules (radius = height / 2 = 10pt, 12pt for the ghost). The Group preview keeps the Phase 3 12pt radius; its strip band uses 8pt.
 - **Stroke widths.** 1pt `separatorColor` for the strip border and the ghost border; 1pt `labelColor` for the selected tab under Increase Contrast only. The Group preview keeps the Phase 3 2pt border.
+- **Small offsets.** The clamp ghost's top edge sits 12pt above the pointer during a tear-off, so the window's title bar lands under the pointer. The Group preview's strip band is inset 2pt inside its border, matching the Phase 3 2pt border. On the zoom stage the strip radius scales with the camera but is never under 2pt, so it stays visibly rounded.
 - **System metrics.** Menu, context-menu, toast and `Recorder` metrics are system-drawn or Phase 3's. Never override them.
 
 ---
@@ -311,7 +313,7 @@ An `NSMenu` popped up at the pointer from the strip panel (`popUp(positioning:at
 | Item | Result |
 |---|---|
 | **"Close Tab"** | Closes that member's window with a normal AX close press. A hidden member is selected first (Surface 3), so a save prompt appears in view. If the window is still open 1 s later (a prompt is up), it stays selected and Transom does nothing more |
-| **"Move Out of Group"** | The member leaves the group and floats: at its pre-group size (saved wanted frame) or else the content rect's size, its top-left 24pt right of and 24pt below the group frame's top-left, then clamped inside the Desktop tile (Phase 3 clamp; a hidden Desktop tile is shown first). It is raised and focused. One undo step |
+| **"Move Out of Group"** | The member leaves the group and floats: at its pre-group size (saved wanted frame) or else the content rect's size, placed beside the group (D-11): 8pt (the gap token) to the right of the group frame, top edges aligned; if it doesn't fit there, 8pt to the left; if neither side has room, its top-left 24pt right of and 24pt below the group frame's top-left (cascade). Then clamped inside the Desktop tile (Phase 3 clamp; a hidden Desktop tile is shown first). It is raised and focused. One undo step |
 
 Both items are always enabled (a group always has two or more members). While paused or not ready, choosing either beeps and announces the Surface 2 refusal. The menu takes keyboard navigation from the system (it is a real menu).
 

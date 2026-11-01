@@ -18,7 +18,7 @@ Out of scope: a Settings window (Phase 9), saved views and the `transom` CLI (Ph
 ## Implementation Decisions
 
 ### Making a group
-- **D-01:** A centre drop (`DropZone.center`, the middle 50% of a tile) groups only after the pointer has rested there about 0.4 s. Then the drop preview changes to a tab-group outline with a strip. Releasing in the centre before the dwell is refused as today (beep, window returns).
+- **D-01:** A centre drop (`DropZone.center`, the middle 50% of a tile) groups only after the pointer has rested there about 0.4 s. Then the drop preview changes to a tab-group outline with a strip. Releasing in the centre before the dwell is refused as today: a drag that misses has no beep, and the window returns (clarified 2026-11-01: the drag-miss path has never beeped; only the keyboard Dock path beeps).
 - **D-02:** Works on docked tiles and on floating windows on the Desktop tile. A group made on a floating window floats at that window's frame. Dropping on an existing group's centre adds a tab to it.
 - **D-03:** The dropped window becomes the selected tab.
 
