@@ -131,6 +131,18 @@ extension Arranger {
         return tiles
     }
 
+    /// The home view of that display's shown desk while its camera is not at home (the overview's main area, 06-06):
+    /// docked windows' tile rects and collapsed windows' blocks. Nil at home, or when the desk cannot be planned.
+    public func homeView(on displayUUID: String) -> (frames: [WindowRef: Rect], collapsed: [WindowRef: Rect])? {
+        guard let display = displays.first(where: { $0.uuid == displayUUID }), resolvedView(for: Self.key(display)) != .home,
+            let desk = world[Self.key(display)],
+            let plan = try? ViewPlanner.plan(
+                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                collapsible: camera.collapsible)
+        else { return nil }
+        return (plan.frames, plan.collapsed)
+    }
+
     /// Every display's camera home with no move (Restore All, D-D); the caller's replan writes it. History is kept.
     mutating func goHome() {
         camera.views = [:]

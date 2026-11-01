@@ -43,6 +43,8 @@ public enum CameraCommand: Hashable, Sendable {
     case pan(Edge)
     /// Toggles: frame the focused docked window's leaf or the Desktop tile, or go back when already framed (ZOOM-10, 11).
     case frameWindow, frameDesktop
+    /// Show or dismiss the overview on every display (OVER-01, D-01). The shell handles it; it never reaches the Arranger.
+    case overview
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and

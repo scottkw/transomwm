@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import Foundation
 import TransomModel
@@ -7,6 +8,14 @@ import os
 /// windows, so they run only in the test VM (scripts/vm-live-test.sh), never by default on a developer's Mac.
 enum IntegrationEnv {
     static let trusted = AXIsProcessTrusted() && ProcessInfo.processInfo.environment["TRANSOM_LIVE"] == "1"
+
+    /// Running inside a virtual machine (`kern.hv_vmm_present` is 1), as the spike's `requireVM()` checks. Suites that
+    /// change system state a crash cannot undo (symbolic hotkeys, the current Space) need it besides `trusted` (WR-11).
+    static let inVM: Bool = {
+        var vmm: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return sysctlbyname("kern.hv_vmm_present", &vmm, &size, nil, 0) == 0 && vmm == 1
+    }()
 
     /// Tests/TransomMacIntegrationTests/IntegrationSupport.swift -> repo root.
     static let repoRoot = URL(fileURLWithPath: #filePath)
@@ -143,6 +152,19 @@ final class FixtureProcess: @unchecked Sendable {
         output.fileHandleForReading.readabilityHandler = nil
         terminate()
     }
+}
+
+/// Sends AppKit's queued events (this process runs no NSApplication) from inside a nested run of the main run loop.
+/// AppKit's tracking-area manager stops the current run to wake event waits (`-[NSEvent _postAtStart:]`); NSApp.run
+/// shrugs that off, but outside a nested run the stop lands on the test helper's own main loop, which then exits the
+/// process with status 0 and no test results.
+@MainActor func dispatchAppKitEvents() {
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue) {
+        MainActor.assumeIsolated {
+            while let event = NSApp.nextEvent(matching: .any, until: .distantPast, inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+        }
+    }
+    CFRunLoopRunInMode(.defaultMode, 0.02, false)
 }
 
 /// Polls `condition` every 50 ms until it is true or `timeout` passes.

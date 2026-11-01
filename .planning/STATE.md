@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 6
-current_phase_name: Overview, Spaces & Displays
+current_phase: 7
+current_phase_name: Tab Groups
 status: planning
-stopped_at: Phase 5 complete, ready to plan Phase 6
-last_updated: "2026-10-31T02:27:56.679Z"
-last_activity: 2026-10-30
-last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: e4df333349005e40c452206d00b105cc1ce8bbd4
+stopped_at: Phase 6 complete, ready to plan Phase 7
+last_updated: "2026-11-01T23:28:42.038Z"
+last_activity: 2026-11-01
+last_activity_desc: Phase 6 complete, transitioned to Phase 7
+state_head: a8b5a9be8aa4e2118ad33f1414960ed9ca778995
 progress:
   total_phases: 9
-  completed_phases: 5
-  total_plans: 67
-  completed_plans: 67
-  percent: 56
+  completed_phases: 6
+  total_plans: 79
+  completed_plans: 79
+  percent: 67
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 5
+**Current focus:** Phase 6 — Overview, Spaces & Displays
 
 ## Current Position
 
-Phase: 6 — Overview, Spaces & Displays
+Phase: 7 — Tab Groups
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-30 — Phase 5 complete, transitioned to Phase 6
+Last activity: 2026-11-01 — Phase 6 complete, transitioned to Phase 7
 
-Progress: [██████░░░░] 56%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 67
+- Total plans completed: 79
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -50,6 +50,7 @@ Progress: [██████░░░░] 56%
 | 2 | 19 | - | - |
 | 4 | 8 | - | - |
 | 5 | 8 | - | - |
+| 6 | 12 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -120,6 +121,18 @@ Progress: [██████░░░░] 56%
 | Phase 05 P06 | 15 min | 2 tasks | 3 files |
 | Phase 05 P07 | 56 min | 3 tasks | 15 files |
 | Phase 05 P08 | ~6h | 2 tasks | 7 files |
+| Phase 6 P01 | 2h21m | 3 tasks | 17 files |
+| Phase 6 P02 | 12min | 2 tasks | 14 files |
+| Phase 06 P03 | 30min | 2 tasks | 9 files |
+| Phase 06 P04 | 45min | 2 tasks | 9 files |
+| Phase 06 P05 | 20min | 2 tasks | 11 files |
+| Phase 6 P06 | 20 min | 3 tasks | 23 files |
+| Phase 6 P07 | 18min | 3 tasks | 11 files |
+| Phase 6 P08 | 30min | 3 tasks | 13 files |
+| Phase 06 P09 | 14min | 3 tasks | 15 files |
+| Phase 06 P10 | 12min | 3 tasks | 9 files |
+| Phase 06 P11 | 11min | 3 tasks | 15 files |
+| Phase 06 P12 | 13min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -314,6 +327,42 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-08: multitouch crash canary armed for the whole multitouch run, cleared only at a clean stop; any crash with zoom on disables multitouch for that OS build + app version until privateCanary.Multitouch is deleted
 - [Phase 05]: 05-08: multitouch frames cross to main via an os_unfair_lock buffer + DispatchSourceUserDataAdd (G-01 fix), never a closure behind generic lock state
 - [Phase 05]: 05-08: phase UAT closed with core items on hardware; items 7, 8, 10, 11, 14, 20, 21, 24 skipped by user decision (automated cover only); no GestureTuning change
+- [Phase 6]: 06-01: layout.json bumps to schema 2 (user: schema-2); 06-03 implements migration and downgrade refusal
+- [Phase 6]: 06-01: four-finger swipe kept with macOS (user: skip); 06-11 does not create SwipeTakeoverTap.swift
+- [Phase 6]: 06-01: Mission Control takeover disables symbolic hotkeys {32, 108, 113}; disabled state outlives a crash, so launch-time restore is required
+- [Phase 6]: 06-01: posted Space-switch chords must carry the fn flag 0x800000 (06-07)
+- [Phase 6]: 06-02: G-03-9 fixed with only the invalidElement and terminated known-empty-Space rows; the bounded valid-unlisted row did not ship (spike A7: ghost answers invalidElement)
+- [Phase 6]: 06-02: co-visibility (lookup off) is Debug-only; a joined visit replaces the cluster's window set; synthetic IDs never reach a DeskKey
+- [Phase 06]: 06-03: layout.json schema 2 implemented with in-memory v1 migration (LayoutFileV1); World.currentSchemaVersion stays 1
+- [Phase 06]: 06-03: re-key table at restore = live uuidByID overlaid by the file's spaces table (file wins); write keeps dormant desks' loaded UUIDs
+- [Phase 06]: 06-03: a stale Space ID equal to a live Space's (or a second desk aiming at a claimed key) is quarantined and dropped, logged
+- [Phase 06]: 06-04: user action wins at desk level; desks holding a user-placed window are kept over a stored layout set
+- [Phase 06]: 06-04: every display settle claims windows by their desk's display, so the layout wins over where macOS left a window
+- [Phase 06]: 06-04: a weight change is not a placement; undo history resets on a known arrangement switch
+- [Phase 06]: 06-05: Display settler resume restart runs after AXWindowSystem's post-resume full refresh, so a held change settles against a fresh unpaused inventory
+- [Phase 06]: 06-05: Launch settle waits for the saved layout's re-attach (not straight after .restore), so the saved World is stored under its own arrangement and a known live set applies
+- [Phase 06]: 06-05: Display names merged, never replaced, so a display that already left keeps its N12 name
+- [Phase 6]: 06-06: Shrink-to-fit stops at the factor that fits (16 Spaces on 1280x800 -> 38.75 pt); 32 pt is only the floor
+- [Phase 6]: 06-06: Show Overview availability lives in Arranger.availability: zoom on and ready, allowed while paused, no pointer display
+- [Phase 6]: 06-06: The overview has its own StagePanel per display and shares ZoomController's snapshot cache and tile contents
+- [Phase 6]: 06-06: Hidden-Space mini tiles come from Planner.plan over stored desks plus present floaters; full-screen Spaces from tracked windows' Space sets
+- [Phase 6]: 06-07: posted Space-switch chords keep the fn bit (getter flags verbatim, ⇧⌃⌥⌘+fn); keyUp posted with empty flags so no modifier stays down
+- [Phase 6]: 06-07: switch confirmation polls SkyLightSpaces.currentSpace for 1 s; ArrangeController stays the only system.events reader
+- [Phase 6]: 06-07: snapshot eviction on destroy stays in ZoomController.windowClosed (shared cache), not duplicated in OverviewController
+- [Phase 6]: 06-08: overview keys come from a non-activating key panel (Rule 4, user 2026-10-31); macOS 15 drops modifier-less Return/Tab/Space Carbon hotkeys; other keys are ignored while open
+- [Phase 6]: 06-08: integration tests pump AppKit events inside a nested run loop (dispatchAppKitEvents); AppKit tracking-area CFRunLoopStop otherwise exits the test helper with 0
+- [Phase 06]: 06-09: App-switch interruption comes from NSWorkspace app activation, not .windowFocused (⌘-Tab sends no focus change; a window opening while open fades its tile in)
+- [Phase 06]: 06-09: A parked/collapsed overview pick waits out the overview close, then zooms to Navigator.target(leafNode) with focus at settle; paused = focus only
+- [Phase 06]: 06-09: Overview live updates rebuild the layout and diff tiles; strip and empty capsule not rebuilt (shortcut)
+- [Phase 06]: 06-10: Takeover taken IDs are 32 (only while on), 108 and 113 (spike); 34 allowed but not taken; D-08 IDs rejected
+- [Phase 06]: 06-10: Stored takeover originals are cleared only after a matching restore read-back; otherwise kept for the next launch
+- [Phase 06]: 06-10: N10 shows once via a noticed flag in the Mission Control canary; lift clears the canary only when the takeover was on
+- [Phase 06]: 06-10: Carbon hotkeys (F3, ctrl-up, shift-F3) fire while the overview's non-activating key panel is up (VM)
+- [Phase 06]: 06-11: HotKeyBackend seam (LiveHotKeyBackend) - host tests inject FakeHotKeys; no test reaches SkyLight or registers a Carbon hotkey
+- [Phase 06]: 06-11: swipe kept, no SwipeTakeoverTap; only the [swipe kept] alert text ships
+- [Phase 06]: 06-11: Restore macOS Window Settings lifts the takeover through ConflictController.takeover (canRestore true while on; N8 after)
+- [Phase 06]: 06-11: N10 posted in ArrangeController.start after N2/N3; launch-time N11 posted when ArrangeController.takeover is wired
+- [Phase 06]: 06-12: the intermittent VM Esc failure in OverviewIntegrationTests is recorded (deferred-items.md, WINDOWS.md), not patched, until a cause is found
 
 ### Quick Tasks Completed
 
@@ -354,8 +403,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-30T18:06:18.434Z
-Stopped at: Phase 5 complete, ready to plan Phase 6
+Last session: 2026-10-31T21:42:41.707Z
+Stopped at: Phase 6 complete, ready to plan Phase 7
 Resume file: None
 
 ## Deferred Verification

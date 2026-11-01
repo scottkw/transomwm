@@ -7,7 +7,7 @@ import TransomPrivate
 /// What the gesture tap needs to decide, published whole from main (like `ZoomTapState`). Rects are global top-left points.
 public nonisolated struct GestureTapState: Equatable, Sendable {
     /// Why the tap is not armed, for the debug log only (UI-SPEC Logging).
-    public enum DisarmReason: Equatable, Sendable { case zoomPaused, notReady, rectZoomOrDrag }
+    public enum DisarmReason: Equatable, Sendable { case zoomPaused, notReady, rectZoomOrDrag, overviewOpen }
 
     /// Zoom on, Transom ready, not paused, no rubber band or drag in progress.
     public var armed: Bool

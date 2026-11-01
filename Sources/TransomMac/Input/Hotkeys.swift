@@ -50,6 +50,8 @@ extension KeyboardShortcuts.Name {
     static let panDown = Self("panDown", initial: .init(.pageDown, modifiers: [.control, .option, .command]))
     static let frameWindow = Self("frameWindow", initial: .init(.m, modifiers: [.control, .option, .command]))
     static let frameDesktop = Self("frameDesktop", initial: .init(.g, modifiers: [.control, .option, .command]))
+    // Overview (06 UI-SPEC Surface 4).
+    static let showOverview = Self("showOverview", initial: .init(.a, modifiers: [.control, .option, .command]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -99,6 +101,7 @@ enum Hotkeys {
         (.panDown, .camera(.pan(.bottom))),
         (.frameWindow, .camera(.frameWindow)),
         (.frameDesktop, .camera(.frameDesktop)),
+        (.showOverview, .camera(.overview)),
     ]
 
     /// The camera hotkeys: disabled while zoom is off, so their chords reach apps as in Phase 3 (D-D).

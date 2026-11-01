@@ -29,6 +29,10 @@ public enum TransomMacApp {
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        // Before anything else: stored originals mean the last run did not lift the Mission Control takeover (OVER-03).
+        let zoomEnabled = UserDefaults.standard.object(forKey: ZoomController.enabledKey) as? Bool ?? true
+        let takeover = MissionControlTakeover(zoomOn: zoomEnabled)
+        takeover.launchRestore()
         let system = AXWindowSystem()
         // Tracking starts only through the reducer's startTracking effect, once access is confirmed.
         let permissionController = PermissionController(system: system)
@@ -59,7 +63,8 @@ public enum TransomMacApp {
         let gaps = GapPreference()
         let arrangeController = ArrangeController(
             system: system, store: layoutStore, exclusions: exclusions, gap: gaps.value,
-            zoomEnabled: UserDefaults.standard.object(forKey: ZoomController.enabledKey) as? Bool ?? true)
+            zoomEnabled: zoomEnabled)
+        arrangeController.takeover = takeover
         gaps.onChange = { gap in Task { await arrangeController.setGap(gap) } }
         arrangeController.isReady = { permissionController.state.phase == .ready }
         // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).
@@ -68,6 +73,7 @@ public enum TransomMacApp {
         let conflictController = ConflictController(store: CFPreferencesStore(domain: ConflictPolicy.domain))
         conflictController.setStageManagerPaused = { on in Task { await arrangeController.setPaused(.stageManager, on) } }
         conflictController.post = { arrangeController.post($0) }
+        conflictController.takeover = takeover
         conflictController.isDragging = { arrangeController.arranger.isDragging }
         conflictController.presentAlert = { [unowned conflictController] in conflictController.showModelessAlert($0) }
         let controller = StatusItemController(
@@ -97,7 +103,10 @@ public enum TransomMacApp {
         setupController.decideAtLaunch()
         // A quit first returns parked and off-screen windows, then records cleanExit in layout.json (SAFE-01).
         let appDelegate = AppDelegate(
-            restore: { arrangeController.restoreForTermination() }, writeCleanExit: { arrangeController.writeCleanExit() },
+            restore: {
+                takeover.lift(reason: .quit)  // ⌘Q, logout and SIGTERM; kill -9 is launchRestore's case
+                arrangeController.restoreForTermination()
+            }, writeCleanExit: { arrangeController.writeCleanExit() },
             open: { command in Task { await arrangeController.dispatch(command, from: .url) } },
             urlScheme: AppDelegate.registeredScheme())
         appDelegate.handleSIGTERM()

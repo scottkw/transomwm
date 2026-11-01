@@ -82,8 +82,51 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(!NoticeCopy.isWarning(.settingsRestored))
     }
 
+    @Test func displaysDisconnectedIsN12WithOneDisplayAndOneOrSeveralWindows() {
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["DELL U2723QE"], windows: 1), appName: { _ in "" })
+            == "\u{201C}DELL U2723QE\u{201D} was disconnected, so 1 window from it is floating here until you reconnect it.")
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["DELL U2723QE"], windows: 3), appName: { _ in "" })
+            == "\u{201C}DELL U2723QE\u{201D} was disconnected, so 3 windows from it are floating here until you reconnect it.")
+    }
+
+    @Test func displaysDisconnectedIsN12WithSeveralDisplays() {
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["A", "B"], windows: 4), appName: { _ in "" })
+            == "2 displays were disconnected, so 4 windows from them are floating here until you reconnect them.")
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: ["A", "B"], windows: 1), appName: { _ in "" })
+            == "2 displays were disconnected, so 1 window from them is floating here until you reconnect them.")
+    }
+
+    @Test func aLongDisplayNameIsTruncatedTo32Characters() {
+        let name = String(repeating: "d", count: 40)
+        #expect(NoticeCopy.text(for: .displaysDisconnected(names: [name], windows: 1), appName: { _ in "" })
+            == "\u{201C}\(String(repeating: "d", count: 32))\u{2026}\u{201D} was disconnected, so 1 window from it is floating here until you reconnect it.")
+    }
+
+    @Test func displaysDisconnectedUsesTheDisplayGlyphAndIsNoWarning() {
+        let notice = Notice.displaysDisconnected(names: ["A"], windows: 1)
+        #expect(NoticeCopy.glyph(for: notice) == "display")
+        #expect(!NoticeCopy.isWarning(notice))
+        #expect(!notice.isCrashNotice)
+    }
+
     @Test func settingsRestoredIsN8() {
         #expect(NoticeCopy.text(for: .settingsRestored, appName: { _ in "" }) == "macOS window settings restored.")
         #expect(NoticeCopy.glyph(for: .settingsRestored) == "checkmark.circle")
+    }
+
+    @Test func takeoverCrashedIsN10() {
+        #expect(NoticeCopy.text(for: .takeoverCrashed, appName: { _ in "" })
+            == "Transom quit unexpectedly, so Mission Control has its keys back. Choose Replace Mission Control in the Transom menu to use them for the overview again.")
+        #expect(NoticeCopy.glyph(for: .takeoverCrashed) == "lifepreserver")
+        #expect(!NoticeCopy.isWarning(.takeoverCrashed))
+        #expect(!Notice.takeoverCrashed.isCrashNotice, "queued behind N2/N3, never holding the toast like them")
+    }
+
+    @Test func takeoverApplyFailedIsN11() {
+        #expect(NoticeCopy.text(for: .takeoverApplyFailed, appName: { _ in "" })
+            == "Couldn't take over Mission Control's keys, so Mission Control works as before.")
+        #expect(NoticeCopy.glyph(for: .takeoverApplyFailed) == "exclamationmark.triangle.fill")
+        #expect(NoticeCopy.isWarning(.takeoverApplyFailed))
+        #expect(!Notice.takeoverApplyFailed.isCrashNotice)
     }
 }

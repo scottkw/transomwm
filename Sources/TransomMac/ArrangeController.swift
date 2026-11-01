@@ -10,6 +10,9 @@ import os
 @MainActor public final class ArrangeController {
     private let system: AXWindowSystem
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "arrange")
+    private let displaysLog = Logger(subsystem: "com.eightabyte.transom", category: "displays")
+    /// The saved arrangement differs from the live displays: one settle runs once the saved layout is re-attached.
+    private var launchSettlePending = false
     /// One debug line per press and per release (WR-03); see them with `log stream --level debug`.
     private let dragLog = Logger(subsystem: "com.eightabyte.transom", category: "drag")
     /// What the press has seen so far: dragged tap events, and the first and last CG samples of the frame poll.
@@ -83,6 +86,20 @@ import os
     /// The stage side of camera moves, made on the first `.cameraMove`; never with zoom off.
     private(set) var zoomController: ZoomController?
     var hasZoomController: Bool { zoomController != nil }
+    /// The overview (06-06), made on the first Show Overview; never with zoom off.
+    private(set) var overviewController: OverviewController?
+    /// The Mission Control takeover (06-10), set by the app; nil in tests that don't own one.
+    var takeover: MissionControlTakeover? {
+        didSet {
+            guard let takeover else { return }
+            takeover.onTrigger = { [weak self] in Task { await self?.missionControlKey() } }
+            takeover.post = { [weak self] in self?.post($0) }
+            takeover.announce = { postAnnouncement($0) }
+            if takeover.state == .offApplyFailed { post(.takeoverApplyFailed) }  // the launch apply ran before this wiring
+        }
+    }
+    /// The last overview's open time, tiles and snapshots (Debug S6); kept across zoom off.
+    private(set) var lastOverview: (ms: Int, windows: Int, snapshots: Int)?
     /// Pointer input for the camera: ⌘⇧-drag, pick mode, double-clicks (04-06).
     private lazy var zoomInput = ZoomInput(controller: self, tap: tap)
     /// The gesture session tap (05-03): runs only while zoom is on and the mouse tap runs (D-07).
@@ -158,13 +175,31 @@ import os
                 }
             }
             if let saved = store.contents {
-                await run(arranger.handle(.restore(saved.world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap), now: .now))
+                let (world, layoutSets) = rekeyed(saved)
+                await run(arranger.handle(
+                    .restore(
+                        world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap, arrangement: saved.arrangement,
+                        layoutSets: layoutSets),
+                    now: .now))
+                launchSettlePending = !saved.arrangement.isUnknown && saved.arrangement != ArrangementID(inventory.displays.map(\.uuid))
             }
             // This launch's session record (cleanExit false) goes down at once, with the saved layout still in it.
             write()
         }
         fedCompleteInventory = inventory.initialRefreshComplete
         await run(arranger.handle(.inventory(inventory), now: .now))
+        await settleIfLaunchArrangementChanged()
+        takeover?.postCrashNotice()  // after the launch's N2/N3, so it queues behind them
+        system.onDisplaysSettling = { [weak self] in
+            guard let self else { return }
+            self.overviewController?.interrupt(reason: .displayChange)
+            // Synchronous, so no inventory from the change itself is fed before the Arranger is settling.
+            let effects = self.arranger.handle(.displaysSettling, now: .now)
+            Task { await self.run(effects) }
+        }
+        system.onDisplaysSettled = { [weak self] in
+            Task { await self?.displaysSettled() }
+        }
         if zoomEnabled { await run(arranger.handle(.zoomEnabled(true), now: .now)) }
         onInventory?(inventory)
         Task { [weak self, system] in
@@ -172,31 +207,44 @@ import os
                 guard let self else { return }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
-                if case .spaceChanged = event {
+                if case .spaceChanged(let uuid, let space) = event {
                     self.zoomInput.endPick(reason: "space changed")
+                    self.overviewController?.interrupt(reason: .spaceChange)
+                    if self.zoomEnabled { self.overview().spaceDidSettle(display: uuid, space: space) }  // D-03 visit capture
                     self.gestures.republish(reason: "space change")
                 }
                 // Back at the keyboard (⌘-Tab, a Dock click): pick mode's Esc hotkey must not keep Esc from that app (WR-02).
                 if case .windowFocused = event { self.zoomInput.endPick(reason: "focus changed") }
                 if case .displaysChanged = event {
                     self.zoomInput.endPick(reason: "displays changed")
+                    self.overviewController?.displaysChanged()
                     self.zoomController?.displaysChanged()
                     self.zoomInput.publish()  // a move whose display went away never reveals
                     self.gestures.republish(reason: "display change")
                 }
-                if case .windowDestroyed(let window) = event { self.zoomController?.windowClosed(window) }
+                if case .windowDestroyed(let window) = event {
+                    self.zoomController?.windowClosed(window)
+                    self.overviewController?.windowClosed(window)
+                }
+                if case .sessionPaused(true) = event { self.overviewController?.interrupt(reason: .sleep) }
+                // A tile fades in or out; the CG list catches a new window that was not on screen yet at its creation.
+                switch event {
+                case .windowCreated, .liveWindowsChanged: self.overviewController?.windowsChanged()
+                default: break
+                }
                 // inventory() serves the cache immediately, so re-reading it after each event is cheap.
                 let inventory = await system.inventory()
                 // New displays reach the Arranger as an inventory, which re-plans every shown desk (TILE-03). So does
                 // every complete inventory until a saved layout is re-attached, since it waits for an unlocked session
                 // and a usable CG list (SAFE-06, CR-03), and a changed CG list while a saved window is dormant, whose
                 // `liveWindows` prunes the ones that closed (G-03-8).
+                // New displays arrive through `.displaysSettled` (D-11); nothing is fed while they settle.
                 var feed = (self.arranger.awaitsRestore || !self.fedCompleteInventory) && inventory.initialRefreshComplete
-                if case .displaysChanged = event { feed = true }
                 if case .liveWindowsChanged = event, self.arranger.hasDormantWindows { feed = true }
-                if feed {
+                if feed, !self.arranger.settling {
                     self.fedCompleteInventory = self.fedCompleteInventory || inventory.initialRefreshComplete
                     await self.run(self.arranger.handle(.inventory(inventory), now: .now))
+                    await self.settleIfLaunchArrangementChanged()
                 }
                 self.onInventory?(inventory)
             }
@@ -258,6 +306,9 @@ import os
                 // ⌘-Tab sends no focused-window change, so pick mode must also end here (G-04-12).
                 if app?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
                     self?.zoomInput.endPick(reason: "app activated")
+                    // The frontmost app changed (⌘-Tab, the Dock). Not on a focus change inside the app: a window that
+                    // opens while the overview is open takes focus and fades its tile in instead (Surface 1 While open).
+                    self?.overviewController?.interrupt(reason: .appSwitch)
                 }
                 self?.watchdogTick()
             }
@@ -472,6 +523,7 @@ import os
             refuse()
             return
         }
+        if command != .camera(.overview) { overviewController?.interrupt(reason: .command) }
         if case .camera(let camera) = command {
             await dispatchCamera(camera, from: source)
             return
@@ -489,10 +541,18 @@ import os
     /// only logs; with zoom off a URL is ignored and logged (its hotkeys are disabled then, D-D).
     private func dispatchCamera(_ camera: CameraCommand, from source: CommandSource) async {
         guard zoomEnabled else {
+            if camera == .overview { logger.info("refused overview: zoom off") }
             if source == .url { zoomInputLog.info("url \(String(describing: camera), privacy: .public) ignored: zoom off") }
             return
         }
         let context = commandContext()
+        if case .overview = camera {  // the shell's: it needs no pointer display and is allowed while paused
+            guard context.ready else {
+                let text = OverviewCopy.refusedNotReady
+                return await run(source == .url ? [.info("refused overview: not ready")] : [.beep, .announce(text), .info("refused overview: not ready")])
+            }
+            return await toggleOverview(from: source)
+        }
         let pointer = pointerDisplay()
         var effects: [ArrangerEffect]
         if let uuid = pointer.uuid, context.ready {
@@ -617,6 +677,78 @@ import os
         return zoom
     }
 
+    private func overview() -> OverviewController {
+        if let overviewController { return overviewController }
+        let overview = OverviewController(
+            arranger: { [unowned self] in self.arranger }, spaces: { [unowned self] in self.system.spacesSnapshot }, zoom: { [unowned self] in self.zoom() },
+            switcher: SpaceSwitcher(spaces: { [unowned self] in self.system.spacesSnapshot }))
+        overview.onClosed = { [weak self] in
+            guard let self else { return }
+            for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
+            self.gestures.publish()  // armed again
+        }
+        overview.onOpened = { [weak self] stats in self?.lastOverview = stats }
+        overview.onSwitchFailed = { [weak self] text in Task { await self?.run([.beep, .announce(text)]) } }
+        overview.focused = { [weak self] in self?.commandContext().focused }
+        // AX lists a window only while its Space shows: read the app again before focusing (06-SPIKE, AX after switch).
+        overview.focusWindow = { [weak self] window in
+            guard let self else { return }
+            await self.system.refresh(app: window.pid)
+            await self.system.perform([.focus(window)])
+        }
+        // Frame Focused Window for the picked window: its leaf (or the Desktop tile) framed, focus at settle. Paused, the
+        // camera stays put and the pick only focuses (Surface 1 Availability).
+        overview.frameWindow = { [weak self] window, uuid in
+            guard let self else { return }
+            guard self.arranger.pauseReasons.isEmpty, let leaf = self.arranger.leafNode(of: window),
+                let tree = self.arranger.deskKey(of: window).flatMap({ self.arranger.world[$0]?.tree })
+            else { return await self.system.perform([.focus(window)]) }
+            await self.zoom(to: Navigator.target(leaf, in: tree), displayUUID: uuid, focus: window)
+        }
+        overviewController = overview
+        return overview
+    }
+
+    /// Opens or closes the overview with pick mode and any rubber band ended and the collapsed panels hidden (they would
+    /// sit above it); gestures are disarmed while it is open. Every display in full screen refuses: a beep and an
+    /// announcement, or from a URL only a log line.
+    private func toggleOverview(from source: CommandSource) async {
+        guard !toggleOverview(trigger: String(describing: source)) else { return }
+        let text = OverviewCopy.refusedFullScreen
+        await run(source == .url ? [.info("refused overview: full screen")] : [.beep, .announce(text), .info("refused overview: full screen")])
+    }
+
+    /// False, with nothing shown, when it could not open.
+    private func toggleOverview(trigger: String) -> Bool {
+        let overview = overview()
+        if !overview.isOpen {
+            zoomInput.reset(reason: "overview")
+            for display in arranger.displays { collapsedPanels.hide(on: display.uuid) }
+        }
+        guard !overview.toggle(trigger: trigger) else {
+            gestures.publish()
+            return true
+        }
+        for display in arranger.displays { collapsedPanels.fadeIn(on: display.uuid) }
+        return false
+    }
+
+    /// A taken Mission Control chord (Surface 5): dismisses or opens the overview; when it can't open, macOS Mission
+    /// Control through CoreDock; without CoreDock, beep and the overview refusal.
+    func missionControlKey() async {
+        let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
+        let ready = commandContext().ready
+        let coreDock = Capabilities.isAvailable(.coreDock)
+        var action = TakeoverPolicy.trigger(overviewOpen: overviewController?.isOpen == true, canOpen: zoomEnabled && ready, coreDockAvailable: coreDock)
+        if action == .dismiss || action == .open {
+            if toggleOverview(trigger: "missionControlKey") { return log.info("mission control key → overview") }
+            action = TakeoverPolicy.trigger(overviewOpen: false, canOpen: false, coreDockAvailable: coreDock)
+        }
+        if action == .missionControl, CoreDock.send(CoreDock.missionControl) { return log.info("mission control key → macOS Mission Control") }
+        log.info("mission control key → refused")
+        await run([.beep, .announce(ready ? OverviewCopy.refusedFullScreen : OverviewCopy.refusedNotReady)])
+    }
+
     /// Pick mode ends (a taken gesture, 05-05).
     func endPick(reason: String) { zoomInput.endPick(reason: reason) }
     /// Pick mode is on (tests).
@@ -663,6 +795,7 @@ import os
         guard on else {
             guard zoomEnabled, !turningOff else { return }
             turningOff = true
+            takeover?.zoomChanged(on: false)  // F3 goes back to macOS at once, not after the home moves
             gestures.publish()
             zoomInput.reset(reason: "zoom off")
             for display in arranger.displays {
@@ -684,6 +817,7 @@ import os
         updateGestureTap(reason: "")
         await run(arranger.handle(.zoomEnabled(true), now: .now))
         Hotkeys.setZoomHotkeys(enabled: true)
+        takeover?.zoomChanged(on: true)
         postAnnouncement(ZoomCopy.zoomOnAnnouncement)
         cameraLog.info("zoom on")
     }
@@ -699,6 +833,8 @@ import os
         let effects = arranger.handle(.zoomEnabled(false), now: .now)
         let floated = effects.reduce(0) { count, effect in if case .notice(.lostRoom(let windows)) = effect { count + windows.count } else { count } }
         await run(effects)
+        overviewController?.displaysChanged()  // closes it and drops its panels
+        overviewController = nil
         zoomController?.purge()
         zoomController = nil
         Hotkeys.setZoomHotkeys(enabled: false)
@@ -776,17 +912,105 @@ import os
         write(cleanExit: true)
     }
 
+    /// D-13: the saved World and every layout set (CR-02) with each desk moved to its Space's current ID, before
+    /// `.restore`. A Space the file's table lacks (every Space of a migrated schema-1 file) is taken as unchanged since
+    /// the save: the same-login assumption (RESEARCH Pattern 2). With the Spaces lookup off the desks keep their saved IDs.
+    private func rekeyed(_ saved: LayoutFile) -> (World, [LayoutSet]) {
+        guard let live = system.spacesSnapshot else {
+            logger.info("spaces lookup off: \(LayoutStore.fileName, privacy: .public) desks keep their saved Space IDs")
+            return (saved.world, saved.layoutSets)
+        }
+        do {
+            let (result, layoutSets, setsQuarantined) = try SpaceRekey.rekey(saved, live: live)
+            logger.info(
+                "\(LayoutStore.fileName, privacy: .public) migrated: \(result.rekeyed, privacy: .public) desks re-keyed by Space UUID, \(result.unmatched.count, privacy: .public) unmatched kept dormant")
+            let quarantined = result.quarantined + setsQuarantined
+            for key in quarantined {
+                let space = key.spaceID.map(String.init) ?? "none"
+                logger.error(
+                    "\(LayoutStore.fileName, privacy: .public) desk on display \(key.displayUUID, privacy: .public) space \(space, privacy: .public) quarantined: its Space is gone and the ID now names another")
+            }
+            // WR-04: the launch write drops quarantined desks, so the file is copied first; with no copy nothing is dropped.
+            if !quarantined.isEmpty, store?.backUp("pre-rekey") != true {
+                logger.error("no backup of \(LayoutStore.fileName, privacy: .public): keeping saved Space IDs rather than drop \(quarantined.count, privacy: .public) desks")
+                return (saved.world, saved.layoutSets)
+            }
+            return (result.world, layoutSets)
+        } catch {
+            // Unreachable for a decoded World (same windows and IDs); restoring it unchanged keeps the layout.
+            logger.error("could not re-key \(LayoutStore.fileName, privacy: .public) desks: \(String(describing: error), privacy: .public); keeping saved Space IDs")
+            return (saved.world, saved.layoutSets)
+        }
+    }
+
     private func write(cleanExit: Bool = false) {
         guard let store else { return }
         let snapshot = arranger.snapshot
         let session = SessionRecord(
             cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal, survivedMinute: survivedMinute)
-        let file = LayoutFile(world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session)
+        // Live Space UUIDs win; a dormant desk's Space (not live now) keeps the UUID it was loaded with (D-13).
+        let uuids = (store.contents?.spaceMap ?? [:]).merging(system.spacesSnapshot?.uuidByID ?? [:]) { _, live in live }
+        let file = LayoutFile(
+            world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session,
+            arrangement: snapshot.arrangement, layoutSets: snapshot.layoutSets,
+            spaces: SpaceRekey.table(for: snapshot.world, layoutSets: snapshot.layoutSets, uuids: uuids))
         do {
             try store.save(file)
         } catch {
             logger.error("could not save \(LayoutStore.fileName, privacy: .public): \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// Displays are quiet again (D-11): the Arranger gets the new arrangement, the names captured before any display
+    /// left, and a fresh inventory.
+    private func displaysSettled() async {
+        // WR-08: a change that began after this settle was queued gets its own settle; a mid-change inventory decides nothing.
+        guard system.settlerState == .idle else { return }
+        let inventory = await system.inventory()
+        guard system.settlerState == .idle else { return }
+        let id = ArrangementID(inventory.displays.map(\.uuid))
+        let stored = id == arranger.arrangement ? nil : arranger.layoutSets[id]
+        let known = stored != nil || id == arranger.arrangement
+        displaysLog.info(
+            "arrangement \(id.shortHash, privacy: .public): \(inventory.displays.count, privacy: .public) displays (\(id.displayUUIDs.joined(separator: ", "), privacy: .public)), \(known ? "known" : "new", privacy: .public)")
+        let before = Set(arranger.displays.map(\.uuid)), after = Set(id.displayUUIDs)
+        let leaving = Dictionary(uniqueKeysWithValues: before.subtracting(after).map { ($0, deskWindows(on: $0)) })
+        await run(arranger.handle(.displaysSettled(id, names: system.displayNames, inventory: inventory), now: .now))
+        // WR-09: a settle after the re-attach has handled the launch; while the restore still waits, the launch settle
+        // stays armed only if the live displays differ from the saved arrangement.
+        launchSettlePending = arranger.awaitsRestore && !arranger.arrangement.isUnknown && arranger.arrangement != id
+        for (uuid, windows) in leaving.sorted(by: { $0.key < $1.key }) {
+            let floated = windows.filter { arranger.windows[$0.identity] != nil && arranger.isFloating($0) }
+            let target = floated.first.flatMap { arranger.windows[$0.identity]?.displayUUID } ?? "none"
+            displaysLog.info(
+                "display \(uuid, privacy: .public) gone: \(self.deskCount(on: uuid), privacy: .public) desks dormant, \(floated.count, privacy: .public) windows floated on \(target, privacy: .public)")
+        }
+        for uuid in after.subtracting(before).sorted() {
+            let returned = deskWindows(on: uuid).filter { arranger.windows[$0.identity]?.displayUUID == uuid }.count
+            displaysLog.info(
+                "display \(uuid, privacy: .public) back: \(self.deskCount(on: uuid), privacy: .public) desks woken, \(returned, privacy: .public) windows returned")
+        }
+        if let stored {
+            let placed = Set(stored.world.desks.values.flatMap { $0.tree.windows }.map(\.identity)).filter { arranger.windows[$0] != nil }.count
+            displaysLog.info("applied layout set for arrangement \(id.shortHash, privacy: .public): \(placed, privacy: .public) windows placed")
+        }
+        onInventory?(inventory)
+    }
+
+    /// The windows the desks of display `uuid` hold, docked or floating.
+    private func deskWindows(on uuid: String) -> [TransomModel.WindowRef] {
+        arranger.world.desks.filter { $0.key.displayUUID == uuid }.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }
+    }
+
+    private func deskCount(on uuid: String) -> Int { arranger.world.desks.keys.filter { $0.displayUUID == uuid }.count }
+
+    /// Launched on other displays than the layout was saved on: once the saved layout is re-attached, a settle stores
+    /// it under its own arrangement and applies the live arrangement's set, if one is known (06-04 hand-off).
+    private func settleIfLaunchArrangementChanged() async {
+        guard launchSettlePending, !arranger.awaitsRestore else { return }
+        launchSettlePending = false
+        await run(arranger.handle(.displaysSettling, now: .now))
+        await displaysSettled()
     }
 
     /// Shows or hides the toast as the queue says, and schedules the visible notice's expiry.
@@ -809,11 +1033,14 @@ import os
         }
     }
 
-    /// The display the toast belongs on: the first named window's.
+    /// The display the toast belongs on: the first named window's, or N12's main display.
     private func displayUUID(of notice: Notice) -> String? {
         switch notice {
         case .lostRoom(let windows): windows.first.flatMap { arranger.windows[$0.identity]?.displayUUID }
-        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored: nil
+        // N12 belongs on the display that received the windows: the main display (UI-SPEC Surface 6).
+        case .displaysDisconnected: arranger.displays.first?.uuid
+        case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored, .takeoverCrashed,
+            .takeoverApplyFailed: nil
         }
     }
 

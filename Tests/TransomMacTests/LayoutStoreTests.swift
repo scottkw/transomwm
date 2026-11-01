@@ -52,7 +52,7 @@ private func sampleFile() throws -> LayoutFile {
         let file = try sampleFile()
         #expect(try LayoutStore(directory: dir.url).save(file))
         let text = try dir.text()
-        #expect(text.contains("\"schemaVersion\" : 1"))
+        #expect(text.contains("\"schemaVersion\" : 2"))
         let homeFrames = try #require(text.range(of: "\"homeFrames\"")), session = try #require(text.range(of: "\"session\""))
         let world = try #require(text.range(of: "\"world\""))
         #expect(homeFrames.lowerBound < session.lowerBound && session.lowerBound < world.lowerBound)
@@ -63,6 +63,22 @@ private func sampleFile() throws -> LayoutFile {
         fresh.load()
         #expect(fresh.loadError == nil)
         #expect(fresh.contents == file)
+    }
+
+    /// WR-04: a backup is a byte-for-byte, owner-only copy beside the file, and a later one never replaces it.
+    @Test func aBackupCopiesTheFileAndKeepsEarlierBackups() throws {
+        let dir = Directory()
+        let store = LayoutStore(directory: dir.url)
+        #expect(!store.backUp("pre-rekey"), "no file, no backup")
+        try store.save(try sampleFile())
+        let original = try Data(contentsOf: dir.file)
+        #expect(store.backUp("pre-rekey", at: Date(timeIntervalSince1970: 100)))
+        #expect(store.backUp("pre-rekey", at: Date(timeIntervalSince1970: 200)))
+        for seconds in [100, 200] {
+            let copy = dir.url.appending(path: "\(LayoutStore.fileName).pre-rekey-\(seconds)")
+            #expect(try Data(contentsOf: copy) == original)
+            #expect(try FileManager.default.attributesOfItem(atPath: copy.path)[.posixPermissions] as? Int == 0o600)
+        }
     }
 
     @Test func titlesAreNeverWritten() throws {
@@ -82,8 +98,25 @@ private func sampleFile() throws -> LayoutFile {
         #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
     }
 
+    /// `sampleFile()`'s JSON with top-level keys changed, for schema 2's keys, which `edited` cannot reach cleanly.
+    static func mutated(_ change: ([String: Any]) -> [String: Any]) throws -> String {
+        let dir = Directory()
+        try LayoutStore(directory: dir.url).save(try sampleFile())
+        let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: dir.file)) as? [String: Any])
+        return String(decoding: try JSONSerialization.data(withJSONObject: change(json), options: [.sortedKeys]), as: UTF8.self)
+    }
+
+    /// A layout set holding `json`'s own World.
+    static func layoutSet(_ displays: [String], _ json: [String: Any]) -> [String: Any] {
+        ["arrangement": ["displayUUIDs": displays], "world": json["world"]!, "lastUsed": 800_000_000]
+    }
+
+    static func setting(_ key: String, _ value: @escaping ([String: Any]) -> Any) -> () throws -> String {
+        { try mutated { json in json.merging([key: value(json)]) { $1 } } }
+    }
+
     nonisolated static let badFiles: [(String, @MainActor @Sendable () throws -> String)] = [
-        ("too large", { try edited("\"schemaVersion\" : 1", "\"schemaVersion\" : 1" + String(repeating: " ", count: World.maxEncodedBytes)) }),
+        ("too large", { try edited("\"schemaVersion\" : 2", "\"schemaVersion\" : 2" + String(repeating: " ", count: World.maxEncodedBytes)) }),
         ("malformed", { #"{"schemaVersion":1,"world":"# }),
         ("duplicate window", { try edited("\"windowID\" : 2", "\"windowID\" : 1") }),
         // JSON has no NaN; an overflowing literal is the nearest a file gets to a non-finite frame.
@@ -93,6 +126,19 @@ private func sampleFile() throws -> LayoutFile {
         ("session missing a field", { try edited("\"cleanExit\" : false,", "") }),
         ("non-finite wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1e400,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
         ("huge wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":2e6,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
+        ("unsorted arrangement", { try setting("arrangement") { _ in ["displayUUIDs": ["B", "A"]] }() }),
+        ("duplicate layout-set arrangement", { try setting("layoutSets") { [layoutSet(["A"], $0), layoutSet(["A"], $0)] }() }),
+        ("unsorted layout-set arrangement", { try setting("layoutSets") { [layoutSet(["B", "A"], $0)] }() }),
+        ("17 layout sets", { try setting("layoutSets") { json in (0..<17).map { layoutSet([String(format: "D%02d", $0)], json) } }() }),
+        ("invalid layout-set world", {
+            try setting("layoutSets") { json in
+                var world = json["world"] as! [String: Any]
+                world["ids"] = ["next": 0]
+                return [["arrangement": ["displayUUIDs": ["A"]], "world": world, "lastUsed": 0]]
+            }()
+        }),
+        ("duplicate space ID", { try setting("spaces") { _ in [["id": 3, "uuid": "U3"], ["id": 3, "uuid": "U4"]] }() }),
+        ("empty space uuid", { try setting("spaces") { _ in [["id": 3, "uuid": ""]] }() }),
         ("duplicate wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}},{\"frame\":{\"x\":5,\"y\":5,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
     ]
 
@@ -129,12 +175,12 @@ private func sampleFile() throws -> LayoutFile {
 
     @Test func aNewerFileIsKeptUntouchedAndNeverOverwritten() throws {
         let dir = Directory()
-        let newer = try Self.edited("\"schemaVersion\" : 1", "\"schemaVersion\" : 2")
+        let newer = try Self.edited("\"schemaVersion\" : 2", "\"schemaVersion\" : 3")
         try dir.write(newer)
         let store = LayoutStore(directory: dir.url)
         store.load()
         #expect(store.contents == nil)
-        #expect(store.loadError == .newerVersion(2))
+        #expect(store.loadError == .newerVersion(3))
         #expect(store.savingDisabled)
         #expect(try dir.text() == newer)
         #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
@@ -150,7 +196,9 @@ extension LayoutStoreTests {
         let sample = try sampleFile()
         try LayoutStore(directory: dir.url).save(sample)
         var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: dir.file)) as? [String: Any])
-        try #require(json.removeValue(forKey: "wantedFrames") != nil)
+        // A schema-1 file from before 03-26: no wantedFrames and none of schema 2's keys.
+        for key in ["wantedFrames", "arrangement", "layoutSets", "spaces"] { try #require(json.removeValue(forKey: key) != nil) }
+        json["schemaVersion"] = 1
         try JSONSerialization.data(withJSONObject: json).write(to: dir.file)
 
         let fresh = LayoutStore(directory: dir.url)
@@ -176,5 +224,65 @@ extension LayoutStoreTests {
         #expect(fresh.loadError == nil)
         #expect(fresh.contents == file)
         #expect(fresh.contents?.wantedFrames.map(\.window) == [ref(1).identity, ref(2).identity])
+    }
+}
+
+/// RESEARCH Pitfall 1, T-06-08: a schema-1 layout.json (every user's file at upgrade) loads and migrates, never set aside.
+extension LayoutStoreTests {
+    @Test func aSchema1FileLoadsMigratedAndIsNotSetAside() throws {
+        let dir = Directory()
+        try dir.write(LayoutFileV1Fixture.json)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(!store.savingDisabled)
+        #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
+        let contents = try #require(store.contents)
+        #expect(contents.schemaVersion == 2)
+        #expect(contents.arrangement.isUnknown)
+        #expect(contents.layoutSets.isEmpty)
+        #expect(contents.spaces.isEmpty)
+        let display = LayoutFileV1Fixture.display
+        #expect(contents.world.desks.keys.sorted() == [DeskKey(displayUUID: display, spaceID: 3), DeskKey(displayUUID: display, spaceID: 4)])
+        #expect(contents.homeFrames.map(\.window.windowID) == [2])
+        #expect(contents.wantedFrames.map(\.window.windowID) == [1])
+    }
+
+    @Test func aMigratedFileSavesAsSchema2WithItsSpaceTableAndRoundTrips() throws {
+        let dir = Directory()
+        try dir.write(LayoutFileV1Fixture.json)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        var contents = try #require(store.contents)
+        contents.spaces = [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4")]
+        #expect(try store.save(contents))
+        let text = try dir.text()
+        #expect(text.contains("\"schemaVersion\" : 2"))
+        #expect(text.contains("\"spaces\" : ["))
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == contents)
+        #expect(fresh.contents?.spaceMap == [3: "U3", 4: "U4"])
+    }
+}
+
+/// T-06-07: schema 2's caps. 16 layout sets is the limit, not over it.
+extension LayoutStoreTests {
+    @Test func sixteenLayoutSetsLoadAndSeventeenAreAnInvalidEntry() throws {
+        let dir = Directory()
+        try dir.write(try Self.setting("layoutSets") { json in (0..<16).map { Self.layoutSet([String(format: "D%02d", $0)], json) } }())
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(store.contents?.layoutSets.count == 16)
+
+        try dir.write(try Self.badFiles.first { $0.0 == "17 layout sets" }!.1())
+        store.load()
+        guard case .invalidEntry? = store.loadError else {
+            Issue.record("17 layout sets gave \(String(describing: store.loadError))")
+            return
+        }
     }
 }

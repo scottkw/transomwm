@@ -111,6 +111,10 @@ public actor FakeWindowSystem: WindowSystem {
     private var selectedTabs: [UInt32: UInt32] = [:]
     /// Space-switch notifications, consumed per app as `AXWindowSystem` does.
     private var spaceSwitches = SpaceSwitchMarks()
+    /// Closed windows whose CG entry lingers (G-03-9), with the Space set it reports.
+    private var lingering: [UInt32: Set<UInt64>] = [:]
+    /// Displays `unplug` removed: where each was in the list, the display it moved its windows to, and those windows.
+    private var unplugged: [String: (index: Int, display: DisplayInfo, target: String, windows: [UInt32])] = [:]
 
     public init(now: ContinuousClock.Instant = .now) {
         (events, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -260,6 +264,39 @@ public actor FakeWindowSystem: WindowSystem {
         self.displays = displays
     }
 
+    /// macOS unplugging display `uuid` (A6): it leaves the display list, every window on it moves onto `target` at the
+    /// same offset from the visible frame's top-left (clamped inside), and its Spaces move under `target` keeping their
+    /// numeric IDs (a window's `space` is unchanged). Each moved window's app is refreshed, so the tracker re-reports
+    /// it on `target`, then `.displaysChanged` is yielded.
+    public func unplug(_ uuid: String, movingSpacesTo target: String) {
+        guard let index = displays.firstIndex(where: { $0.uuid == uuid }), let to = displays.first(where: { $0.uuid == target }) else { return }
+        let gone = displays[index]
+        let moved = windows.values.filter { $0.inCGList && Coordinates.displayUUID(for: $0.frame, among: displays) == uuid }.map(\.id).sorted()
+        displays.remove(at: index)
+        for id in moved { update(id) { $0.frame = Self.carry($0.frame, from: gone.visibleFrame, to: to.visibleFrame) } }
+        unplugged[uuid] = (index, gone, target, moved)
+        refreshMoved(moved)
+    }
+
+    /// `unplug` reversed: the display comes back where it was in the list, and the windows macOS moved off it (still
+    /// open) move back from wherever they now are on the target, at the same offset.
+    public func plug(_ uuid: String) {
+        guard let off = unplugged.removeValue(forKey: uuid), let from = displays.first(where: { $0.uuid == off.target }) else { return }
+        displays.insert(off.display, at: min(off.index, displays.count))
+        let back = off.windows.filter { windows[$0]?.inCGList == true }
+        for id in back { update(id) { $0.frame = Self.carry($0.frame, from: from.visibleFrame, to: off.display.visibleFrame) } }
+        refreshMoved(back)
+    }
+
+    private func refreshMoved(_ ids: [UInt32]) {
+        for pid in Set(ids.compactMap { windows[$0]?.pid }).sorted() { refresh(pid: pid) }
+        continuation.yield(.displaysChanged)
+    }
+
+    private static func carry(_ frame: Rect, from: Rect, to: Rect) -> Rect {
+        Planner.clamp(Rect(x: to.minX + frame.minX - from.minX, y: to.minY + frame.minY - from.minY, width: frame.width, height: frame.height), into: to)
+    }
+
     /// Lock blanking (D-14): the CG list is empty and every AX read fails with -25204, or with `axInvalid` AXWindows
     /// is empty and every known window answers -25202, which only the gate keeps from closing. With `gate: false`
     /// the session stays active, as if no lock signal arrived.
@@ -271,10 +308,22 @@ public actor FakeWindowSystem: WindowSystem {
 
     /// The window closed: AX says invalid and it left the CG list.
     public func close(_ id: UInt32) {
+        lingering[id] = nil
         update(id) {
             $0.axValid = false
             $0.inCGList = false
         }
+    }
+
+    /// The window closed but WindowServer keeps its CG entry (G-03-9): AX says invalid (-25202), and while Spaces are
+    /// available the entry reports `spaces`, until `close` clears it.
+    public func lingerInCG(_ id: UInt32, spaces: Set<UInt64>) {
+        update(id) {
+            $0.axValid = false
+            $0.listedInAX = false
+            $0.onScreen = false
+        }
+        lingering[id] = spaces
     }
 
     /// The process quit, as NSWorkspace reports it. Its windows stay in the CG list until a test removes them
@@ -375,7 +424,8 @@ public actor FakeWindowSystem: WindowSystem {
             CGWindowEntry(windowID: $0.id, pid: $0.pid, bounds: $0.frame, layer: $0.cgLayer, onScreen: $0.onScreen, alpha: 1)
         }
         let windowSpaces: [UInt32: Set<UInt64>]? = spacesAvailable ? Dictionary(uniqueKeysWithValues: windows.values.filter { $0.inCGList && !locked }.compactMap { window in
-            window.space.map { (window.id, isHiddenTab(window) && !hiddenTabsReportSpace ? Set<UInt64>() : [$0]) }
+            if let spaces = lingering[window.id] { return (window.id, spaces) }
+            return window.space.map { (window.id, isHiddenTab(window) && !hiddenTabsReportSpace ? Set<UInt64>() : [$0]) }
         }) : nil
         return ObservationContext(cgWindows: cgWindows, displays: displays, sessionActive: !(locked && lockGate),
                                   initialSweep: !initialSweepDone, now: clock, windowSpaces: windowSpaces,

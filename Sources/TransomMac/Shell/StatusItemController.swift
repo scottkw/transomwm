@@ -35,6 +35,8 @@ import os
     /// Installed apps' display names by bundle ID, so a menu rebuild does not ask Launch Services per row (02-UI-REVIEW).
     private var displayNames: [String: String] = [:]
     private lazy var shortcutsWindow = ShortcutsWindowController()
+    /// The Replace Mission Control explanation while it is up or waiting to show.
+    private var takeoverAlert: TakeoverAlert?
 
     /// `showSetup` opens the "Set Up Transom" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
@@ -108,6 +110,8 @@ import os
     /// A chord pressed while the menu is open runs its menu item once, instead of being buffered and fired again by the
     /// hotkey when the menu closes (KeyboardShortcuts' `setShortcut` note, RESEARCH Pattern 9).
     func menuWillOpen(_ menu: NSMenu) {
+        arrange.overviewController?.interrupt(reason: .menu)  // Surface 1: the status menu opening interrupts the overview
+        arrange.takeover?.checkDrift()  // a Mission Control shortcut turned back on in System Settings is taken again
         KeyboardShortcuts.disable(Hotkeys.entries.map(\.name))
     }
 
@@ -148,8 +152,35 @@ import os
         let uuid = context.displayUUID
         let section = commands.zoomSection(
             enabled: on, framingWindow: uuid.map { arranger.isFramingFocused(displayUUID: $0, focused: context.focused) } ?? false,
-            framingDesktop: uuid.map(arranger.isFramingDesktop) ?? false, previews: previews, toggle: toggle)
+            framingDesktop: uuid.map(arranger.isFramingDesktop) ?? false, takeover: takeoverMenuItem(), previews: previews, toggle: toggle)
         for item in section { menu.addItem(item) }
+    }
+
+    /// O2: checked while the takeover is on; "(unavailable)" and disabled without the private symbols.
+    private func takeoverMenuItem() -> NSMenuItem? {
+        guard let takeover = arrange.takeover else { return nil }
+        guard takeover.isAvailable else { return Self.info(OverviewCopy.replaceMissionControlUnavailable) }
+        let item = NSMenuItem(title: OverviewCopy.replaceMissionControl, action: #selector(toggleTakeover), keyEquivalent: "")
+        item.target = self
+        item.state = takeover.isOn ? .on : .off
+        return item
+    }
+
+    @objc private func toggleTakeover() {
+        guard let takeover = arrange.takeover, takeoverAlert == nil else { return }
+        takeover.choose { [weak self] answered in
+            guard let self else { return }
+            let arrange = self.arrange
+            let alert = TakeoverAlert(
+                chord: { takeover.currentChord },
+                isBusy: { arrange.arranger.isDragging || NSEvent.pressedMouseButtons != 0 || arrange.overviewController?.isOpen == true }
+            ) { [weak self] confirmed in
+                self?.takeoverAlert = nil
+                answered(confirmed)
+            }
+            self.takeoverAlert = alert
+            alert.show()
+        }
     }
 
     @objc private func toggleZoom() {
@@ -332,6 +363,23 @@ import os
         submenu.addItem(Self.info(gestures.lastGesture.map(Self.lastGestureLine) ?? GestureCopy.lastGestureNone))
         let multitouch = arrange.multitouchStatus
         submenu.addItem(Self.info(GestureCopy.multitouchLine(multitouch)))
+        let spaces: OverviewCopy.SpacesLine =
+            if let snapshot = system.spacesSnapshot {
+                .counts(spaces: snapshot.spaceCount, displays: snapshot.displays.count, shared: !snapshot.separateSpaces)
+            } else { .visited(system.visitedSpaces) }
+        submenu.addItem(Self.info(OverviewCopy.spacesLine(spaces)))
+        let arranger = arrange.arranger
+        let displays: OverviewCopy.DisplaysLine =
+            switch system.settlerState {
+            case .idle: .settled(displays: arranger.displays.count, arrangement: arranger.arrangement.shortHash)
+            case .settling: .settling
+            case .waitingForWake: .waitingForWake
+            }
+        submenu.addItem(Self.info(OverviewCopy.displaysLine(displays)))
+        submenu.addItem(Self.info(OverviewCopy.savedArrangementsLine(arranger.layoutSets.all.count)))
+        submenu.addItem(Self.info(OverviewCopy.dormantDesksLine(desks: arranger.dormantDeskCount, awayDisplays: arranger.awayDisplayCount)))
+        if let takeover = arrange.takeover { submenu.addItem(Self.info(OverviewCopy.takeoverLine(takeover.debugLine))) }
+        submenu.addItem(Self.info(OverviewCopy.lastOverviewLine(arrange.lastOverview)))
         if multitouch == .offAfterCrash {
             let retry = NSMenuItem(title: GestureCopy.multitouchBackOnItem, action: #selector(turnMultitouchBackOn), keyEquivalent: "")
             retry.target = self

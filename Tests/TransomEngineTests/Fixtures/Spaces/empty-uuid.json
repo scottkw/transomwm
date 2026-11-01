@@ -1,0 +1,10 @@
+[
+  {
+    "Display Identifier": "5E0B7C1A-3F2D-4B6E-9A8C-1D2E3F4A5B6C",
+    "Current Space": {"ManagedSpaceID": 1, "id64": 1, "type": 0, "uuid": ""},
+    "Spaces": [
+      {"ManagedSpaceID": 1, "id64": 1, "type": 0, "uuid": ""},
+      {"ManagedSpaceID": 7, "id64": 7, "type": 0, "uuid": "C2A1D3E4-2222-4333-8444-A55566667777"}
+    ]
+  }
+]

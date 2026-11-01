@@ -338,6 +338,7 @@ func passText(_ reason: GestureTapRules.PassReason?) -> String {
     case .disarmed(.zoomPaused): "zoom paused"
     case .disarmed(.notReady): "not ready"
     case .disarmed(.rectZoomOrDrag): "rect zoom or drag in progress"
+    case .disarmed(.overviewOpen): "overview open"
     case .disarmed(nil): "not armed"
     case .fullScreen: "full screen"
     case .notDeskDisplay: "not a desk display"

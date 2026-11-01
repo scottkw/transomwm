@@ -87,12 +87,12 @@
 
 ### Overview, Spaces & Displays
 
-- [ ] **OVER-01**: Overview shows every window on every display, with Spaces along the top; clicking a window goes to it
-- [ ] **OVER-02**: User can opt in to having Mission Control's swipe and shortcut open Transom's overview instead
-- [ ] **OVER-03**: If Transom crashes while replacing Mission Control, the system shortcuts are restored on next launch
-- [ ] **OVER-04**: Each display (and each Space) keeps its own layout
-- [ ] **OVER-05**: Unplugging and re-plugging a display, or sleep/wake, restores that display's layout
-- [ ] **OVER-06**: Transom remembers layouts per display arrangement and applies the matching one automatically when the arrangement changes (e.g. docking and undocking a laptop)
+- [x] **OVER-01**: Overview shows every window on every display, with Spaces along the top; clicking a window goes to it
+- [x] **OVER-02**: User can opt in to having Mission Control's shortcut (F3, ⌃↑, ⇧F3) open Transom's overview instead; the four-finger swipe stays with macOS (user decision 2026-10-31, spike-gated D-05)
+- [x] **OVER-03**: If Transom crashes while replacing Mission Control, the system shortcuts are restored on next launch
+- [x] **OVER-04**: Each display (and each Space) keeps its own layout
+- [x] **OVER-05**: Unplugging and re-plugging a display, or sleep/wake, restores that display's layout
+- [x] **OVER-06**: Transom remembers layouts per display arrangement and applies the matching one automatically when the arrangement changes (e.g. docking and undocking a laptop)
 
 ### Tab Groups
 
@@ -215,12 +215,12 @@ Populated by the roadmapper on 2026-10-23.
 | GEST-02 | Phase 5 | Complete |
 | GEST-03 | Phase 5 | Complete |
 | GEST-04 | Phase 5 | Complete |
-| OVER-01 | Phase 6 | Pending |
-| OVER-02 | Phase 6 | Pending |
-| OVER-03 | Phase 6 | Pending |
-| OVER-04 | Phase 6 | Pending |
-| OVER-05 | Phase 6 | Pending |
-| OVER-06 | Phase 6 | Pending |
+| OVER-01 | Phase 6 | Complete |
+| OVER-02 | Phase 6 | Complete |
+| OVER-03 | Phase 6 | Complete |
+| OVER-04 | Phase 6 | Complete |
+| OVER-05 | Phase 6 | Complete |
+| OVER-06 | Phase 6 | Complete |
 | TABS-01 | Phase 7 | Pending |
 | TABS-02 | Phase 7 | Pending |
 | TABS-03 | Phase 7 | Pending |

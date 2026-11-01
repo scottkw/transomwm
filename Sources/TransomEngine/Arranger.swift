@@ -1,3 +1,4 @@
+import Foundation
 import TransomModel
 
 /// Everything the Arranger reacts to. `requeried` carries the real states of windows an undo revived (D-11).
@@ -9,7 +10,16 @@ public enum ArrangerInput: Sendable {
     /// The instant a `wake` asked for has come.
     case tick
     /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
-    case restore(World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:])
+    /// `arrangement` and `layoutSets` are the saved display arrangement and the other arrangements' layouts (D-09).
+    case restore(
+        World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:], arrangement: ArrangementID = ArrangementID([]),
+        layoutSets: [LayoutSet] = [])
+    /// Displays began reconfiguring (OVER-05): until `.displaysSettled` no window is re-homed by display and no frame is
+    /// written, so macOS moving windows off a vanishing display cannot destroy the tiles a re-plug needs (Pitfall 4).
+    case displaysSettling
+    /// Displays are quiet again: the new arrangement, each display's name captured before it left (for N12), and the
+    /// inventory read after the change (D-10, D-11, OVER-06).
+    case displaysSettled(ArrangementID, names: [String: String], inventory: WindowInventory)
     /// Sets or clears one pause reason; Stage Manager (plan 16) and the crash loop (plan 14) arrive this way.
     case setPaused(PauseReason, Bool)
     /// The gap between tiles (D-27), already validated by the shell's allow-list.
@@ -149,12 +159,18 @@ public struct Arranger: Sendable {
     private var refusalRetried: [WindowIdentity: Rect] = [:]
     /// The layout saved by the last session, waiting for the first complete inventory (SAFE-06).
     private var pendingRestore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect])?
-    /// A saved layout that could not be re-attached: still what is saved, so this session cannot overwrite it (WR-04).
-    private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect])?
+    /// A saved layout that could not be re-attached: still what is saved, with the arrangement it was saved under, so
+    /// this session cannot overwrite or relabel it (WR-04, CR-01).
+    private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID)?
+    /// Tests only: the next re-attach throws this. Real data cannot build a World whose re-attach throws (closing a
+    /// window always leaves a valid one), so this stands in for the failure CR-01 guards against.
+    var reattachFault: LayoutError?
     /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
     private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
     private var parkRequested: Set<WindowIdentity> = []
+    /// Whether a park was sent for `window` and it is still parked (the overview's camera-move pick, 06-09).
+    public func isParked(_ window: WindowRef) -> Bool { parkRequested.contains(window.identity) }
     /// The left-button press in progress, if any (TILE-01).
     public private(set) var drag: DragSession?
     /// A title-bar drag is under way (plan 16 defers alerts while it is).
@@ -167,6 +183,17 @@ public struct Arranger: Sendable {
     private var liveGap: (handle: GapHandle, delta: Double)?
     /// The zoom camera (Arranger+Camera.swift).
     var camera = CameraState()
+    /// Displays are reconfiguring (`.displaysSettling`): no display-based re-homing, no frames.
+    public private(set) var settling = false
+    /// The World when settling began: stored as the old arrangement's layout set at the settle.
+    private var preChangeWorld: World?
+    /// The current display arrangement (D-09); unknown until a restore or the first inventory says.
+    public private(set) var arrangement = ArrangementID([])
+    /// The other arrangements' layouts (OVER-06).
+    public private(set) var layoutSets = LayoutSets()
+    /// Windows an undoable user edit placed since the last arrangement switch: they keep their placement when a stored
+    /// set is applied (user action wins, RESEARCH Open Question 3).
+    private var userPlacedSinceSwitch: Set<WindowIdentity> = []
 
     private enum DragPlanKey: Hashable {
         case desk(DeskKey)
@@ -193,7 +220,7 @@ public struct Arranger: Sendable {
 
     /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        let before = world
+        let before = world, beforeHistory = history
         let effects = process(input, now: now)
         // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
         if !homeFrames.isEmpty {
@@ -203,24 +230,17 @@ public struct Arranger: Sendable {
         }
         guard world != before else { return effects }
         dragPlans = [:]  // the plans a drag caches are of the World before
-        return effects + [.save(.debounced)]
+        // An undo step means a user edit: every window it gave a new desk or tile was placed by the user (OVER-06).
+        if history != beforeHistory, Self.isUserEdit(input) { userPlacedSinceSwitch.formUnion(Self.placementChanges(from: before, to: world)) }
+        return effects.contains(.save(.debounced)) ? effects : effects + [.save(.debounced)]
     }
 
     private mutating func process(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch input {
         case .inventory(var inventory):
-            // A Space lookup that answers 0 or switches off mid-session keeps each display's last shown Space, so the
-            // desks keyed by it are not stranded and no Space-less phantom desk appears (WR-01).
-            let previous = displays
-            displays = inventory.displays.map { display in
-                var display = display
-                if display.currentSpaceID == nil { display.currentSpaceID = previous.first { $0.uuid == display.uuid }?.currentSpaceID }
-                return display
-            }
-            forgetMoves(onDisplaysOtherThan: Set(displays.map(\.uuid)))
-            sessionPaused = inventory.sessionPaused
             let dormant = Set(dormantWindows.map(\.identity))
-            windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
+            adopt(inventory)
+            if arrangement.isUnknown, !settling, !displays.isEmpty { arrangement = ArrangementID(displays.map(\.uuid)) }
             guard let restore = pendingRestore else {
                 // A dormant window this inventory tracks before its windowCreated is handled wakes here (WR-01).
                 var faults: [ArrangerEffect] = []
@@ -251,7 +271,13 @@ public struct Arranger: Sendable {
             // After a crash, stranded windows come on screen first, before any layout work (D-17).
             let rescued = launch == .normal ? [] : rescueStranded(desks: restore.world)
             inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
-            let restored = reattach(restore, tracked: inventory.windows, live: live)
+            let restored: (effects: [ArrangerEffect], unplaced: Int)
+            do throws(LayoutError) {
+                restored = try reattach(restore, tracked: inventory.windows, live: live)
+            } catch {
+                unattached = (restore.world, restore.homeFrames, restore.wantedFrames, arrangement)
+                restored = ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
+            }
             var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects
             if launch != .normal {
                 do throws(LayoutError) {
@@ -314,9 +340,18 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore(let world, let homeFrames, let wantedFrames):
+        case .restore(let world, let homeFrames, let wantedFrames, let arrangement, let sets):
             pendingRestore = (world, homeFrames, wantedFrames)
+            self.arrangement = arrangement
+            layoutSets = LayoutSets(sets)
             return []
+        case .displaysSettling:
+            guard !settling else { return [] }
+            preChangeWorld = world
+            settling = true
+            return hideHandles()
+        case .displaysSettled(let id, let names, let inventory):
+            return displaysSettled(id, names: names, inventory: inventory, now: now)
         case .setPaused(let reason, let on):
             let wasPaused = !pauseReasons.isEmpty
             if on { pauseReasons.insert(reason) } else { pauseReasons.remove(reason) }
@@ -360,8 +395,192 @@ public struct Arranger: Sendable {
 
     /// What layout.json should hold now: while a restore waits, or after it failed, the saved layout itself, so a write
     /// then loses nothing.
-    public var snapshot: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]) {
-        pendingRestore ?? unattached ?? (world, homeFrames, wantedFrames)
+    /// While displays settle, the World from before the change.
+    public var snapshot: (
+        world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID, layoutSets: [LayoutSet]
+    ) {
+        if let unattached { return (unattached.world, unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, layoutSets.all) }
+        let saved = pendingRestore ?? (settling ? preChangeWorld ?? world : world, homeFrames, wantedFrames)
+        return (saved.world, saved.homeFrames, saved.wantedFrames, arrangement, layoutSets.all)
+    }
+
+    /// Takes the displays, session state and windows of `inventory`. A Space lookup that answers 0 or switches off
+    /// mid-session keeps each display's last shown Space, so the desks keyed by it are not stranded and no Space-less
+    /// phantom desk appears (WR-01).
+    private mutating func adopt(_ inventory: WindowInventory) {
+        let previous = displays
+        displays = inventory.displays.map { display in
+            var display = display
+            if display.currentSpaceID == nil { display.currentSpaceID = previous.first { $0.uuid == display.uuid }?.currentSpaceID }
+            return display
+        }
+        forgetMoves(onDisplaysOtherThan: Set(displays.map(\.uuid)))
+        sessionPaused = inventory.sessionPaused
+        windows = Dictionary(inventory.windows.map { ($0.window.identity, $0) }, uniquingKeysWith: { $1 })
+    }
+
+    /// Ends settling (Pattern 7). The pre-change World is stored as the old arrangement's set unless nothing changed;
+    /// a known arrangement's set goes through the launch re-attach; a new one keeps the World, so a vanished display's
+    /// desks stay, dormant, and its windows float where macOS put them. No desk of an absent display is deleted.
+    private mutating func displaysSettled(
+        _ id: ArrangementID, names: [String: String], inventory: WindowInventory, now: ContinuousClock.Instant
+    ) -> [ArrangerEffect] {
+        let before = preChangeWorld ?? world
+        let old = arrangement
+        settling = false
+        preChangeWorld = nil
+        defer { userPlacedSinceSwitch = [] }
+        // WR-09: the launch re-attach has not run yet. It runs first, under the saved arrangement, against these displays;
+        // once it has, this settles from the saved arrangement to `id` (storing the saved layout, applying a known set).
+        guard pendingRestore == nil else {
+            let effects = process(.inventory(inventory), now: now)
+            return pendingRestore == nil ? effects + displaysSettled(id, names: names, inventory: inventory, now: now) : effects
+        }
+        arrangement = id
+        let uuids = inventory.displays.map(\.uuid)
+        var effects: [ArrangerEffect] = []
+        // CR-01: while the saved layout is unattached, layout.json still holds it and its sets: none is stored or taken.
+        var decision = ArrangementSwitch.decide(from: old, to: id, sets: unattached == nil ? layoutSets : LayoutSets())
+        if Set(uuids).count != uuids.count {
+            // Identical monitors may share a UUID (Pitfall 13): never apply a stored set to an ambiguous arrangement.
+            effects.append(.info("duplicate display UUID in \(uuids.sorted()); treated as a new arrangement"))
+            decision = .new
+        }
+        if decision != .same, unattached == nil, !old.isUnknown, old != id { layoutSets.store(before, for: old, at: .now) }
+        adopt(inventory)
+        // Where each window on a desk of a display that is not connected now was: its display, for the float and N12.
+        let present = Set(displays.map(\.uuid))
+        var away: [WindowIdentity: String] = [:]
+        for (key, desk) in world.desks where !present.contains(key.displayUUID) {
+            for window in desk.tree.windows + desk.desktop.windows.map(\.window) { away[window.identity] = key.displayUUID }
+        }
+        switch decision {
+        case .same:
+            effects.append(.info("arrangement \(id.shortHash): \(uuids.count) displays, same"))
+        case .new:
+            effects.append(.info("arrangement \(id.shortHash): \(uuids.count) displays, new"))
+        case .known(let set):
+            effects.append(.info("arrangement \(id.shortHash): \(uuids.count) displays, known"))
+            _ = layoutSets.take(id)
+            let shown = Set(displays.compactMap(\.currentSpaceID))
+            let live = inventory.liveWindows?.filter { $0.spaces?.isDisjoint(with: shown) ?? true }
+            do throws(LayoutError) {
+                let merged = try Self.merged(set.world, current: world, keeping: userPlacedSinceSwitch)
+                effects += try reattach((merged, homeFrames, wantedFrames), tracked: inventory.windows, live: live).effects
+            } catch {
+                layoutSets.store(set.world, for: id, at: set.lastUsed)
+                effects.append(.fault("could not apply the layout set for arrangement \(id.shortHash); keeping the current layout: \(error)"))
+            }
+        }
+        var claimed = inventory
+        claimed.windows = inventory.windows.map(claim)
+        for info in claimed.windows { windows[info.window.identity] = info }
+        effects += place(claimed)
+        if decision == .new { effects += cascadeFloated(from: away, names: names) }
+        return effects + [.save(.debounced)]
+    }
+
+    /// D-10: the windows of a vanished display that now float on a connected one are cascaded from the top-left of
+    /// that desk's Desktop tile, at their own sizes, clamped on screen (a frame transform, no undo step), then N12 says
+    /// so, once, when at least one floated.
+    private mutating func cascadeFloated(from away: [WindowIdentity: String], names: [String: String]) -> [ArrangerEffect] {
+        var floated: [DeskKey: [WindowRef]] = [:]
+        for id in away.keys {
+            guard let info = windows[id], !info.isExcluded, let key = deskKey(of: info.window), world[key]?.desktop.contains(info.window) == true,
+                displays.contains(where: { $0.uuid == key.displayUUID })
+            else { continue }
+            floated[key, default: []].append(info.window)
+        }
+        guard !floated.isEmpty else { return [] }
+        var faults: [ArrangerEffect] = []
+        for (key, refs) in floated.sorted(by: { $0.key < $1.key }) {
+            guard let display = display(for: key) ?? displays.first(where: { $0.uuid == key.displayUUID }), let desk = world[key] else { continue }
+            let refs = refs.sorted { $0.identity < $1.identity }
+            let desktop = (try? Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums))?.desktopRect ?? display.visibleFrame
+            let frames = ArrangementSwitch.cascade(
+                frames: refs.map { desk.desktop.frame(of: $0) ?? display.visibleFrame }, from: Point(x: desktop.minX, y: desktop.minY), in: display.visibleFrame)
+            do throws(LayoutError) {
+                try world.reflow(key) { desk, _ throws(LayoutError) in
+                    for (window, frame) in zip(refs, frames) { try desk.desktop.setFrame(frame, for: window) }
+                }
+                for (window, frame) in zip(refs, frames) { wantedFrames[window.identity] = frame }
+            } catch {
+                faults.append(.fault("could not cascade the windows floated on \(key): \(error)"))
+            }
+        }
+        let gone = Set(floated.values.joined().compactMap { away[$0.identity] }).sorted()
+        let count = floated.values.map(\.count).reduce(0, +)
+        return faults + replan() + [
+            .info("displays \(gone) gone: \(dormantDeskCount) desks dormant, \(count) windows floated"),
+            .notice(.displaysDisconnected(names: gone.map { names[$0] ?? $0 }, windows: count)),
+        ]
+    }
+
+    /// Desks whose display is not connected (UI-SPEC Debug S4).
+    public var dormantDeskCount: Int { world.desks.keys.filter { key in !displays.contains { $0.uuid == key.displayUUID } }.count }
+    /// The distinct displays those dormant desks belong to.
+    public var awayDisplayCount: Int { Set(world.desks.keys.map(\.displayUUID)).subtracting(displays.map(\.uuid)).count }
+
+    /// User action wins (OVER-06): each desk of `current` holding a window in `placed` is kept, less its other windows
+    /// that `stored` puts on another desk; every other desk is `stored`'s, less the windows the kept desks hold. Windows
+    /// leave through the close path, so trees normalise. The ID source is the larger one, so no NodeID is minted twice.
+    static func merged(_ stored: World, current: World, keeping placed: Set<WindowIdentity>) throws(LayoutError) -> World {
+        func held(_ desk: Desk) -> [WindowRef] { desk.tree.windows + desk.desktop.windows.map(\.window) }
+        let kept = Set(current.desks.filter { held($0.value).contains { placed.contains($0.identity) } }.keys)
+        var stored = stored, current = current, throwaway = UndoHistory()
+        let nowhere = DeskKey(displayUUID: "", spaceID: nil)
+        for key in kept.sorted() {
+            for window in current[key].map(held) ?? [] where !placed.contains(window.identity) {
+                if let home = stored.desks.first(where: { $0.value.contains(window) })?.key, home != key {
+                    try current.apply(.closed, for: window, on: nowhere, history: &throwaway)
+                }
+            }
+            for window in current[key].map(held) ?? [] {
+                if let home = stored.desks.first(where: { $0.value.contains(window) })?.key, !kept.contains(home) {
+                    try stored.apply(.closed, for: window, on: nowhere, history: &throwaway)
+                }
+            }
+        }
+        var desks = stored.desks
+        for key in kept { desks[key] = current[key] }
+        return try World(ids: IDSource(next: max(stored.ids.next, current.ids.next)), desks: desks)
+    }
+
+    private static func isUserEdit(_ input: ArrangerInput) -> Bool {
+        switch input {
+        case .command, .pointer, .greenButton: true
+        default: false
+        }
+    }
+
+    /// Windows whose desk or tile differs between two Worlds: a dock, float, move, snap, swap or drop placed them.
+    private static func placementChanges(from old: World, to new: World) -> Set<WindowIdentity> {
+        func slots(_ world: World) -> [WindowIdentity: Slot] {
+            var slots: [WindowIdentity: Slot] = [:]
+            for (key, desk) in world.desks {
+                for window in desk.tree.windows { slots[window.identity] = Slot(desk: key, leaf: desk.tree.leaf(containing: window)) }
+                for floating in desk.desktop.windows { slots[floating.window.identity] = Slot(desk: key, leaf: nil) }
+            }
+            return slots
+        }
+        let before = slots(old)
+        return Set(slots(new).filter { before[$0.key] != $0.value }.keys)
+    }
+
+    private struct Slot: Equatable {
+        let desk: DeskKey
+        /// nil on the Desktop layer.
+        let leaf: NodeID?
+    }
+
+    /// The layout wins over where macOS left a window during a display change: a window a desk on a connected display
+    /// holds is reported on that display, so `rehome` keeps it there and the plan writes its tile (D-10).
+    private func claim(_ info: WindowInfo) -> WindowInfo {
+        guard let key = deskKey(of: info.window), key.displayUUID != info.displayUUID, displays.contains(where: { $0.uuid == key.displayUUID })
+        else { return info }
+        var info = info
+        info.displayUUID = key.displayUUID
+        return info
     }
 
     /// A saved layout is waiting for a usable inventory: the shell feeds it every inventory until then.
@@ -389,50 +608,49 @@ public struct Arranger: Sendable {
     /// Replaces the World with the saved one re-attached by identity (SAFE-06), with each window's real state and, for
     /// a present floating window, its real frame. Each docked window's current frame counts as already requested, so
     /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). A window whose real state
-    /// or frame cannot be applied keeps its saved one. If the saved layout cannot be re-attached at all, the World starts
-    /// empty and the saved layout stays what is saved. `unplaced` counts the tracked windows the saved layout did not hold.
+    /// or frame cannot be applied keeps its saved one. Throws, changing nothing but the history, if the saved layout cannot
+    /// be re-attached at all. `unplaced` counts the tracked windows the saved layout did not hold.
     private mutating func reattach(
         _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?
-    ) -> (effects: [ArrangerEffect], unplaced: Int) {
-        history = UndoHistory()
-        do throws(LayoutError) {
-            let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live)
-            var candidate = reattached.world
-            var seeded: [WindowIdentity: Rect] = [:]
-            var faults: [ArrangerEffect] = []
-            // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
-            var wanted = restore.wantedFrames.filter { id, frame in
-                candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
-            }
-            for info in tracked where info.state != .closed {
-                guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
-                    continue
-                }
-                do throws(LayoutError) {
-                    if desk.state(of: info.window) != info.state { try candidate.apply(info.state, for: info.window, on: key, history: &history) }
-                    if !desk.desktop.contains(info.window) {
-                        seeded[info.window.identity] = info.frame
-                    } else if info.state == .present {
-                        if movedWhileOff(info, saved: desk) { wanted[info.window.identity] = info.frame }
-                        try candidate.recordFloatingFrame(info.frame, for: info.window)
-                    }
-                } catch {
-                    faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))  // WR-04
-                }
-            }
-            world = candidate
-            lastRequested = seeded
-            wantedFrames.merge(wanted) { $1 }
-            for desk in world.desks.values {
-                for floating in desk.desktop.windows where wantedFrames[floating.window.identity] == nil {
-                    wantedFrames[floating.window.identity] = floating.frame
-                }
-            }
-            return (faults, reattached.unplaced.count)
-        } catch {
-            unattached = restore
-            return ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
+    ) throws(LayoutError) -> (effects: [ArrangerEffect], unplaced: Int) {
+        if let fault = reattachFault {
+            reattachFault = nil
+            throw fault
         }
+        history = UndoHistory()
+        let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live)
+        var candidate = reattached.world
+        var seeded: [WindowIdentity: Rect] = [:]
+        var faults: [ArrangerEffect] = []
+        // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
+        var wanted = restore.wantedFrames.filter { id, frame in
+            candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
+        }
+        for info in tracked where info.state != .closed {
+            guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
+                continue
+            }
+            do throws(LayoutError) {
+                if desk.state(of: info.window) != info.state { try candidate.apply(info.state, for: info.window, on: key, history: &history) }
+                if !desk.desktop.contains(info.window) {
+                    seeded[info.window.identity] = info.frame
+                } else if info.state == .present {
+                    if movedWhileOff(info, saved: desk) { wanted[info.window.identity] = info.frame }
+                    try candidate.recordFloatingFrame(info.frame, for: info.window)
+                }
+            } catch {
+                faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))  // WR-04
+            }
+        }
+        world = candidate
+        lastRequested = seeded
+        wantedFrames.merge(wanted) { $1 }
+        for desk in world.desks.values {
+            for floating in desk.desktop.windows where wantedFrames[floating.window.identity] == nil {
+                wantedFrames[floating.window.identity] = floating.frame
+            }
+        }
+        return (faults, reattached.unplaced.count)
     }
 
     /// Moves every stranded window Transom may move (tracked, dockable, present, not excluded) back on screen: its home
@@ -490,6 +708,8 @@ public struct Arranger: Sendable {
         // Paused, only Resume acts; Stage Manager's pause ends through its conflict item, not Resume.
         if command == .togglePause { return pauseReasons != [.stageManager] }
         if command == .restoreAll { return true }  // the way back, so it works while paused (UI-SPEC Surface 1 row 21)
+        // The overview moves no window and needs no pointer display, so it works while paused (06 UI-SPEC Surface 1).
+        if command == .camera(.overview) { return camera.enabled }
         guard pauseReasons.isEmpty else { return false }
         let focused = context.focused
         let trackable = focused.flatMap { windows[$0.identity] }.map { $0.kind == .dockable && !$0.isExcluded } ?? false
@@ -744,7 +964,7 @@ public struct Arranger: Sendable {
             if frame.height < floor.height - t { floor.height = 0 }
             floaterFloors[window.identity] = floor
         }
-        guard pauseReasons.isEmpty else { return [] }  // paused: the fact is recorded, nothing is answered (D-23)
+        guard pauseReasons.isEmpty, !settling else { return [] }  // paused or settling: the fact is recorded, nothing is answered (D-23)
         guard windows[window.identity]?.isExcluded != true else { return [] }  // never clamped or corrected (D-29)
         if own { return [] }
         if floating {
@@ -861,6 +1081,8 @@ public struct Arranger: Sendable {
         let spaces = info.spaces ?? []
         let leftSpace = from.spaceID.map { !spaces.isEmpty && !spaces.contains($0) } ?? false
         guard to.displayUUID != from.displayUUID || leftSpace else { return }
+        // While displays settle, a display move is macOS's: the tile is kept for the re-plug (Pitfall 4).
+        if settling, to.displayUUID != from.displayUUID { return }
         var candidate = world
         try candidate.reflow(from) { desk, _ throws(LayoutError) in
             if desk.desktop.contains(info.window) { try desk.desktop.remove(info.window) } else { try desk.tree.remove(info.window) }
@@ -1543,7 +1765,7 @@ public struct Arranger: Sendable {
     /// Floats every docked window a shown desk has no room for, as `planShown` does, and returns its notice. A desk
     /// that cannot be planned is skipped here: the `planShown` that follows reports it.
     private mutating func floatLostRoom() -> [ArrangerEffect] {
-        guard !sessionPaused, pauseReasons.isEmpty else { return [] }
+        guard !sessionPaused, pauseReasons.isEmpty, !settling else { return [] }
         let mins = minimums
         var lost: [WindowRef] = []
         for display in displays where world[Self.key(display)] != nil {
@@ -1556,7 +1778,7 @@ public struct Arranger: Sendable {
     /// windows left without room float first, and are named in one notice (D-26). A hidden Desktop's floating windows
     /// are parked once each, first in the perform, and only after an immediate save holding their home frames (D-16).
     mutating func planShown() -> [ArrangerEffect] {
-        guard !sessionPaused, pauseReasons.isEmpty else { return [] }
+        guard !sessionPaused, pauseReasons.isEmpty, !settling else { return [] }
         var parks: [WindowCommand] = []
         var parkedNow: Set<WindowIdentity> = []
         var commands: [WindowCommand] = []

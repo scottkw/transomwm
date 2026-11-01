@@ -36,6 +36,14 @@ struct GestureControllerTests {
         #expect(GestureController.disarmReason(ready: false, paused: true, turningOff: true, busy: true) == .notReady)
     }
 
+    /// 06 Surface 1 While open: gestures are not armed while the overview is open, logged as "overview open".
+    @Test func anOpenOverviewDisarmsGestures() {
+        #expect(GestureController.disarmReason(ready: true, paused: false, turningOff: false, busy: false, overviewOpen: true) == .overviewOpen)
+        #expect(GestureController.disarmReason(ready: true, paused: false, turningOff: false, busy: true, overviewOpen: true) == .overviewOpen)
+        #expect(GestureController.disarmReason(ready: false, paused: false, turningOff: false, busy: false, overviewOpen: true) == .notReady)
+        #expect(GestureController.optionPassText(.disarmed(.overviewOpen)) == "overview open")
+    }
+
     /// WR-07: after `stop` nothing is handled; after a restart the stopped tap's buffered events are dropped.
     @Test func onlyTheRunningTapsEventsAreHandled() {
         for event in [sample(5), ended(5)] {

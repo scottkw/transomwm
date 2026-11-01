@@ -19,16 +19,30 @@ public enum SkyLightSpaces {
     /// (yabai's `SLSManagedDisplayGetCurrentSpace(int cid, CFStringRef uuid)`), cross-checked only by a probe on
     /// macOS 27.0.1 that returned the Space `SLSCopyManagedDisplaySpaces` called current (03-RESEARCH).
     typealias CurrentSpace = @convention(c) (Int32, CFString) -> UInt64
+    /// (connection) -> +1 CFArray of display dictionaries, each with "Display Identifier", "Current Space" and an
+    /// ordered "Spaces" array (06-RESEARCH F1, local probe on 27.2).
+    typealias CopyManagedDisplaySpaces = @convention(c) (Int32) -> Unmanaged<CFArray>?
+    /// (connection) -> 1 while "Displays have separate Spaces" is on (06-RESEARCH F4).
+    typealias GetSpaceManagementMode = @convention(c) (Int32) -> Int32
 
-    /// `currentSpace` is optional on its own, so a missing symbol never turns off the per-window lookup.
-    private static let functions: (connection: Int32, copySpaces: CopySpacesForWindows, currentSpace: CurrentSpace?)? = {
+    /// `currentSpace`, `copyManagedDisplaySpaces` and `managementMode` are optional on their own, so a missing symbol
+    /// never turns off the per-window lookup.
+    private static let functions: (
+        connection: Int32, copySpaces: CopySpacesForWindows, currentSpace: CurrentSpace?,
+        copyManagedDisplaySpaces: CopyManagedDisplaySpaces?, managementMode: GetSpaceManagementMode?
+    )? = {
         guard !Capabilities.isForcedOff(.spaces),
               let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY),
               let main = dlsym(handle, "SLSMainConnectionID"),
               let copy = dlsym(handle, "SLSCopySpacesForWindows")
         else { return nil }
         let current = dlsym(handle, "SLSManagedDisplayGetCurrentSpace").map { unsafeBitCast($0, to: CurrentSpace.self) }
-        return (unsafeBitCast(main, to: MainConnectionID.self)(), unsafeBitCast(copy, to: CopySpacesForWindows.self), current)
+        let managed = dlsym(handle, "SLSCopyManagedDisplaySpaces").map { unsafeBitCast($0, to: CopyManagedDisplaySpaces.self) }
+        let mode = dlsym(handle, "SLSGetSpaceManagementMode").map { unsafeBitCast($0, to: GetSpaceManagementMode.self) }
+        return (
+            unsafeBitCast(main, to: MainConnectionID.self)(), unsafeBitCast(copy, to: CopySpacesForWindows.self), current,
+            managed, mode
+        )
     }()
 
     /// True only when both symbols resolved and the capability was not forced off at launch.
@@ -60,6 +74,25 @@ public enum SkyLightSpaces {
         guard session.isAvailable(.spaces), let functions, let currentSpace = functions.currentSpace else { return nil }
         let space = currentSpace(functions.connection, displayUUID as CFString)
         return space == 0 ? nil : space
+    }
+
+    /// Every display's Spaces as SkyLight reports them (raw property-list values; `SpacesSnapshot.parse` reads them).
+    /// Nil when the capability is off in `session`, the symbol did not resolve, or the answer is not an array of
+    /// dictionaries.
+    public static func managedDisplaySpaces(session: CapabilitySession = Capabilities.session) -> [[String: Any]]? {
+        guard session.isAvailable(.spaces), let functions, let copy = functions.copyManagedDisplaySpaces else { return nil }
+        guard let array = copy(functions.connection)?.takeRetainedValue() as? [[String: Any]] else {
+            session.recordFailure(.spaces)
+            return nil
+        }
+        session.recordSuccess(.spaces)
+        return array
+    }
+
+    /// The raw Space management mode (1 = separate Spaces per display), nil when unavailable.
+    public static func managementMode(session: CapabilitySession = Capabilities.session) -> Int32? {
+        guard session.isAvailable(.spaces), let functions, let mode = functions.managementMode else { return nil }
+        return mode(functions.connection)
     }
 
     /// Only CFNumber elements count; 0 and anything past `maxSpacesPerWindow` are dropped (T-02-38).

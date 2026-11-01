@@ -108,6 +108,33 @@ extension Harness {
         #expect(setFrames(await harness.refresh()).isEmpty)
     }
 
+    /// G-03-9 end to end: a closed window whose CG entry lingers with no Space leaves the World and its neighbour reflows.
+    @Test func aGhostWithNoSpaceClosesAndItsNeighbourFillsTheSpace() async throws {
+        var harness = await Harness.onSpaceOne()
+        let tileA = try #require(await harness.frame(a))
+        await harness.fake.lingerInCG(2, spaces: [])
+        let effects = await harness.refresh()
+        #expect(harness.arranger.world[desk(1)]?.contains(b) == false)
+        let grown = try #require(setFrames(effects)[a], "the neighbour did not reflow")
+        #expect(grown.width * grown.height > tileA.width * tileA.height)
+    }
+
+    /// OVER-04 empty edge: with the lookup off every window joins the display's one desk, and no Space gets its own.
+    @Test func withTheLookupOffEveryWindowIsOnTheDisplaysOneDesk() async throws {
+        var harness = Harness()
+        await harness.fake.setDisplays([display(space: nil)])
+        await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await harness.fake.open(.standard(id: 1, pid: pid, frame: frameA, space: 1))
+        await harness.fake.open(.standard(id: 2, pid: pid, frame: frameB, space: 2))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        await harness.send(.command(.dock, focused: a))
+        await harness.send(.command(.dock, focused: b))
+        #expect(harness.arranger.deskKey(of: a) == desk(nil) && harness.arranger.deskKey(of: b) == desk(nil))
+        #expect(Set(harness.arranger.world.desks.keys) == [desk(nil)])
+    }
+
     @Test func theFakesSpaceSwitchMovesEveryDisplaysCurrentSpace() async {
         let harness = await Harness.onSpaceOne(dock: false)
         await harness.fake.showSpace(4, notifies: false)

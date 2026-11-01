@@ -119,6 +119,7 @@ import Testing
     private let base: NSEvent.ModifierFlags = [.control, .option, .command]
     private nonisolated static let cameraCommands: [CameraCommand] = [
         .zoomOutAll, .stepOut, .stepIn, .back, .forward, .pan(.left), .pan(.right), .pan(.top), .pan(.bottom), .frameWindow, .frameDesktop,
+        .overview,
     ]
 
     private func toggle() -> NSMenuItem { NSMenuItem(title: "", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "") }
@@ -149,7 +150,7 @@ import Testing
         let previews = NSMenuItem(title: "Allow Window Previews\u{2026}", action: nil, keyEquivalent: "")
         let section = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: false, previews: previews, toggle: toggle())
         #expect(section.map(\.title) == [
-            "Zoom", "Zoom Out to All Windows", "Zoom Out One Level", "Zoom In One Level", "Back", "Forward", "Move View",
+            "Zoom", "Show Overview", "Zoom Out to All Windows", "Zoom Out One Level", "Zoom In One Level", "Back", "Forward", "Move View",
             "Frame Focused Window", "Frame Desktop", "Allow Window Previews\u{2026}", "Turn Off Zoom",
         ])
         #expect(section[0].isSectionHeader)

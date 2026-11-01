@@ -27,9 +27,27 @@ import os
     private var pauseCount = 0
     private var displays: [DisplayInfo] = []
     private var screenObserver: (any NSObjectProtocol)?
+    /// D-11: display changes reach the Arranger as settling, then settled after 1.5 s of quiet, never while paused.
+    private lazy var settler = DisplaySettler(
+        isPaused: { [weak self] in self?.paused ?? false },
+        onSettling: { [weak self] in self?.displaysSettling() },
+        onSettled: { [weak self] in self?.onDisplaysSettled?() })
+    /// Set by ArrangeController: the Arranger's `.displaysSettling` and `.displaysSettled` inputs.
+    public var onDisplaysSettling: (() -> Void)?
+    public var onDisplaysSettled: (() -> Void)?
+    var settlerState: DisplaySettler.State { settler.state }
+    /// `NSScreen.localizedName` by display UUID, merged at each read so a display that left keeps its name (N12).
+    public private(set) var displayNames: [String: String] = [:]
     /// `NSWorkspace.activeSpaceDidChangeNotification`: marks every app's next full update `spaceChanged` (02-17).
     private var spaceObserver: (any NSObjectProtocol)?
     private var spaceSwitches = SpaceSwitchMarks()
+    private let spacesLogger = Logger(subsystem: "com.eightabyte.transom", category: "spaces")
+    /// The latest Spaces list, nil while the lookup is off: refreshed at start and on Space and display changes.
+    public private(set) var spacesSnapshot: SpacesSnapshot?
+    /// D-15, lookup off only: Spaces visited since launch, for the Debug line. Never reaches a desk.
+    private var coVisibility = CoVisibilitySpaces()
+    private var coVisibilityTask: Task<Void, Never>?
+    public var visitedSpaces: Int { coVisibility.visitedCount }
     private var registry: AppRegistry?
     private var scheduler: RefreshScheduler?
     /// False while the registry starts the apps already running, which are not "launched".
@@ -74,6 +92,7 @@ import os
         for thread in threads.values { thread.stop() }
         for probe in probes.values { probe.cancel() }
         resumeTask?.cancel()
+        coVisibilityTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
         hintContinuation.finish()
@@ -96,6 +115,10 @@ import os
         // Per-element timeouts do not reach equal or child elements (Pitfall 1), so set the global one.
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
         displays = Displays.current()
+        displayNames = Displays.localizedNames()
+        settler.observeReconfiguration()
+        refreshSpaces(force: true)
+        visitSpaceSoon()  // the Space shown at launch is visited too
         let scheduler = RefreshScheduler(
             refresh: { [weak self] pid in await self?.refresh(pid: pid) },
             refreshAll: { [weak self] in await self?.refreshAll() }
@@ -146,6 +169,9 @@ import os
         registry?.recheck()
         await sweep()
     }
+
+    /// One app's refresh now: a window on a Space just switched to is listed, and its element cached, before a focus.
+    public func refresh(app pid: Int32) async { await refresh(pid: pid) }
 
     public func inventory() async -> WindowInventory {
         WindowInventory(
@@ -427,7 +453,9 @@ import os
             cgWindows: withSyntheticPresence(cgWindows, shown: shown), displays: displays, sessionActive: !paused,
             initialSweep: initial, now: .now, windowSpaces: windowSpaces, spaceChanged: spaceChanged)
         emit(tracker.ingest(observation, context: context))
-        emit(tracker.recheckTerminated(context: context))
+        var terminatedContext = context
+        terminatedContext.windowSpaces = terminatedSpaces(cgWindows)
+        emit(tracker.recheckTerminated(context: terminatedContext))
         // A new window is withheld until it settles, a close AX reported waits for the CG list to agree, and a window
         // whose ID lookup failed for the first time waits for its own CG entry: refresh again soon.
         if tracker.hasPendingWindows(pid: observation.pid) || tracker.needsQuickRecheck(pid: observation.pid) || observation.identityPending {
@@ -463,7 +491,9 @@ import os
                     reportedMinimums[info.window.identity] = minimum
                     onLearnedMinimum?(info.window.bundleID, minimum)
                 }
-            case .windowDestroyed(let ref): reportedMinimums[ref.identity] = nil
+            case .windowDestroyed(let ref):
+                reportedMinimums[ref.identity] = nil
+                coVisibility.forget(windowID: ref.windowID)
             case .windowRekeyed(let from, let info):
                 // Every per-window record follows the new ID; the minimum it carries was reported or seeded already.
                 let pid = from.pid
@@ -487,10 +517,19 @@ import os
                 guard let self, !self.tracker.knownWindowIDs(pid: pid).isEmpty else { return }
                 guard let cgWindows = CGWindowList.snapshot() else { continue }
                 let context = ObservationContext(
-                    cgWindows: self.withSyntheticPresence(cgWindows), displays: self.displays, sessionActive: !self.paused, now: .now)
+                    cgWindows: self.withSyntheticPresence(cgWindows), displays: self.displays, sessionActive: !self.paused, now: .now,
+                    windowSpaces: self.terminatedSpaces(cgWindows))
                 self.emit(self.tracker.recheckTerminated(context: context))
             }
         }
+    }
+
+    /// The Spaces of terminated apps' windows still in the CG list, so a lingering entry with none closes (G-03-9).
+    /// Nil (unknown) when there are none, or the Spaces lookup is off.
+    private func terminatedSpaces(_ cgWindows: [CGWindowEntry]) -> [UInt32: Set<UInt64>]? {
+        let ids = Set(tracker.terminatedWindowIDs)
+        let present = cgWindows.filter { $0.layer == 0 && ids.contains($0.windowID) }.map(\.windowID)
+        return present.isEmpty ? nil : SkyLightSpaces.spaces(of: present)
     }
 
     /// A hint never decides anything: it only schedules its pid's refresh (D-09). A destroyed notification
@@ -574,24 +613,72 @@ import os
             self.logger.notice("session resumed after a full refresh")
             self.continuation.yield(.sessionPaused(false))
             self.scheduler?.startSweep()
+            // A display change held while paused settles a full quiet period from here, against a fresh inventory.
+            self.settler.sessionResumed()
         }
     }
 
-    /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.
     /// Re-reads the displays and reports each one whose current Space changed (D-25).
     private func spaceDidChange() {
         let old = Dictionary(displays.map { ($0.uuid, $0.currentSpaceID) }, uniquingKeysWith: { first, _ in first })
         displays = Displays.current()
         for display in displays where old[display.uuid] != .some(display.currentSpaceID) {
+            let from = old[display.uuid].flatMap { $0 }.map(String.init) ?? "unknown"
+            let to = display.currentSpaceID.map(String.init) ?? "unknown"
+            spacesLogger.info("space \(from, privacy: .public) → \(to, privacy: .public) on display \(display.uuid, privacy: .public)")
             continuation.yield(.spaceChanged(displayUUID: display.uuid, spaceID: display.currentSpaceID))
+        }
+        refreshSpaces()
+        visitSpaceSoon()
+        // AX lists a Space's windows only while it shows: read them now, not at the next sweep, so a Space not shown
+        // since launch is tracked before its visit capture 1 s from now (D-03).
+        scheduler?.scheduleAll(after: .milliseconds(75))
+    }
+
+    /// Lookup off: once a Space settles, the on-screen windows per display are one visit (D-15). Latest wins.
+    private func visitSpaceSoon() {
+        guard spacesSnapshot == nil else { return }
+        coVisibilityTask?.cancel()
+        coVisibilityTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, let self, let list = CGWindowList.onScreenFrontToBack() else { return }
+            let windows = list.filter { $0.layer == 0 }
+            for display in self.displays {
+                let ids = windows.filter { Coordinates.displayUUID(for: $0.bounds, among: self.displays) == display.uuid }.map(\.windowID)
+                self.coVisibility.visit(display: display.uuid, windowIDs: Set(ids))
+            }
         }
     }
 
+    /// Re-reads the Spaces list, logging the lookup state at start (`force`) and whenever it turns on or off.
+    private func refreshSpaces(force: Bool = false) {
+        let wasOff = spacesSnapshot == nil
+        spacesSnapshot = SpacesProvider.snapshot()
+        guard force || wasOff != (spacesSnapshot == nil) else { return }
+        if let snapshot = spacesSnapshot {
+            let separate = snapshot.separateSpaces ? "yes" : "no"
+            spacesLogger.info(
+                "spaces lookup: available, \(snapshot.spaceCount, privacy: .public) spaces, separate per display: \(separate, privacy: .public)")
+        } else {
+            spacesLogger.info("spaces lookup off: using co-visibility map")
+        }
+    }
+
+    /// Reports the change at once, then re-reads displays and refreshes every app after 500 ms of quiet.
     private func displaysDidChange() {
         // Read now, so the inventory the Arranger re-plans against already has the new visible frames (TILE-03).
         displays = Displays.current()
+        displayNames.merge(Displays.localizedNames()) { $1 }
+        refreshSpaces()
+        settler.touch()
         continuation.yield(.displaysChanged)
         scheduler?.scheduleAll(after: .milliseconds(500))
+    }
+
+    /// Names are read before the Arranger hears of the change, while a leaving display may still be listed.
+    private func displaysSettling() {
+        displayNames.merge(Displays.localizedNames()) { $1 }
+        onDisplaysSettling?()
     }
 
     /// The app's bundle ID, or `unbundled:<executable name>` for a bare executable; nil (logged) when neither exists.

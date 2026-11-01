@@ -58,6 +58,7 @@ public enum LayoutStoreError: Error, Equatable {
         guard !savingDisabled else { return false }
         var redacted = contents
         redacted.world = contents.world.withoutTitleHints()
+        for index in redacted.layoutSets.indices { redacted.layoutSets[index].world = redacted.layoutSets[index].world.withoutTitleHints() }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         do {
@@ -70,8 +71,25 @@ public enum LayoutStoreError: Error, Equatable {
         return true
     }
 
-    /// Size cap, then a version probe, then the full decode (World's own validation), then every home frame
-    /// and wanted frame (Persistence.swift's order). The session record has no field to check beyond its decode.
+    /// Copies layout.json to `layout.json.<label>-<unix seconds>` (owner-only, as the original), so desks the next save
+    /// drops can still be recovered by hand (WR-04). A timestamp per copy, so no earlier backup is replaced. False when
+    /// there is no file or the copy failed (logged).
+    @discardableResult
+    public func backUp(_ label: String, at date: Date = .now) -> Bool {
+        let copy = directory.appending(path: "\(Self.fileName).\(label)-\(Int(date.timeIntervalSince1970))")
+        do {
+            try FileManager.default.copyItem(at: file, to: copy)
+            Self.logger.notice("backed up \(Self.fileName, privacy: .public) to \(copy.lastPathComponent, privacy: .public)")
+            return true
+        } catch {
+            Self.logger.error("could not back up \(Self.fileName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// Size cap on the whole file, then a version probe, then the full decode (schema 1 through `LayoutFileV1`, each
+    /// World's own validation), then `LayoutFile.validate()`, then every home frame and wanted frame (Persistence.swift's
+    /// order). The session record has no field to check beyond its decode.
     private static func decode(_ url: URL) throws(LayoutStoreError) -> LayoutFile {
         let data: Data
         do {
@@ -94,12 +112,23 @@ public enum LayoutStoreError: Error, Equatable {
             throw .corrupt("no schemaVersion: \(error)")
         }
         guard version <= LayoutFile.schemaVersion else { throw .newerVersion(version) }
-        guard version == LayoutFile.schemaVersion else { throw .corrupt("unknown schemaVersion \(version)") }
         let contents: LayoutFile
         do {
-            contents = try decoder.decode(LayoutFile.self, from: data)
+            switch version {
+            // Every user's file at the upgrade: migrated in memory, saved as schema 2 (RESEARCH Pitfall 1).
+            case 1: contents = try decoder.decode(LayoutFileV1.self, from: data).migrated()
+            case LayoutFile.schemaVersion: contents = try decoder.decode(LayoutFile.self, from: data)
+            default: throw LayoutStoreError.corrupt("unknown schemaVersion \(version)")
+            }
+        } catch let error as LayoutStoreError {
+            throw error
         } catch {
             throw .corrupt(String(describing: error))
+        }
+        do {
+            try contents.validate()
+        } catch {
+            throw .invalidEntry(error.reason)
         }
         var seen: Set<WindowIdentity> = []
         for (index, home) in contents.homeFrames.enumerated() {

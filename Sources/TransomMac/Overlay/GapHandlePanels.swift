@@ -154,7 +154,11 @@ private final class HandleView: NSView {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         for handle in handles {
             let same = { (panel: HandlePanel) in Self.view(panel).map { Self.sameGap($0.handle, handle) } ?? false }
-            let panel = old.firstIndex(where: same).map { old.remove(at: $0) } ?? pool.popLast() ?? makePanel(handle)
+            var panel = old.firstIndex(where: same).map { old.remove(at: $0) } ?? pool.popLast() ?? makePanel(handle)
+            if panel.leftOnAnotherSpace("display \(displayUUID): gap handle panel") {
+                panel.orderOut(nil)
+                panel = makePanel(handle)
+            }
             Self.view(panel)?.handle = handle
             let rect = Coordinates.appKit(fromTopLeft: handle.rect, primaryHeight: primaryHeight)
             panel.setFrame(NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height), display: true)

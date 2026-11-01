@@ -27,7 +27,7 @@ import Testing
 
     @Test func spacesItemNamesTheSpacesLookupState() {
         #expect(MenuCopy.spacesItem(available: true) == "Spaces lookup: available")
-        #expect(MenuCopy.spacesItem(available: false) == "Spaces lookup: off, single Space")
+        #expect(MenuCopy.spacesItem(available: false) == "Spaces lookup: off, using Spaces visited since launch")
     }
 
     @Test func appNamesUpToTheLimitAreUnchanged() {

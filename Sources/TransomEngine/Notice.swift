@@ -22,12 +22,21 @@ public enum Notice: Equatable, Sendable {
     case turnOffFailed(Conflict)
     /// N8: Restore macOS Window Settings wrote every recorded original back (D-21).
     case settingsRestored
+    /// N12: displays were disconnected (their names, captured before they left, in UUID order) and this many of their
+    /// windows now float on a remaining display (D-10).
+    case displaysDisconnected(names: [String], windows: Int)
+    /// N10: the last run crashed with the Mission Control takeover on, so it stays off this launch (D-07). Queued
+    /// behind N2/N3, shown once.
+    case takeoverCrashed
+    /// N11: applying the takeover failed on read-back; the originals are back (D-07).
+    case takeoverApplyFailed
 
     /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
         case .crashRecovered, .crashLoop: true
-        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored, .turnOffFailed, .settingsRestored: false
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored, .turnOffFailed, .settingsRestored, .displaysDisconnected, .takeoverCrashed,
+            .takeoverApplyFailed: false
         }
     }
 }

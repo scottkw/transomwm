@@ -16,6 +16,7 @@ import AppKit
 //   fullscreen <i> | exit-fullscreen <i> (ok once the transition finished, 5 s limit)
 //   select-tab <i> | title <i> <text> | hide-app | unhide-app | list | quit
 //   frontmost: prints `frontmost index=<i>` while this app is active with window i key, else `frontmost none`
+//   typed: prints `typed <characters>`, every character typed into this app's windows so far
 // Menu: File ▸ New Window (⌘N) opens a `standard` window and prints its window line, for the AX menu-press test.
 // Closing stdin quits the fixture, so a crashed test never leaves it running.
 
@@ -46,6 +47,8 @@ final class Fixture: NSObject, NSApplicationDelegate {
     let launchSpecs: [String]
     /// AppKit animates sheets and tab groups in; report frames once they settle.
     let settle: Duration = .milliseconds(300)
+    /// Every character typed into this app, for the tests that check where keys go.
+    var typed = ""
 
     init(specs: [String]) {
         launchSpecs = specs
@@ -55,6 +58,10 @@ final class Fixture: NSObject, NSApplicationDelegate {
         var opened: [Int] = []
         for spec in launchSpecs {
             do throws(FixtureFailure) { opened += try open(spec) } catch { emit("error \(spec): \(error.message)") }
+        }
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.typed += event.characters ?? ""
+            return nil  // no window handles keys: swallowed, so no beep
         }
         NSApp.activate(ignoringOtherApps: true)
         Task {
@@ -229,6 +236,8 @@ final class Fixture: NSObject, NSApplicationDelegate {
             case "frontmost":
                 let key = NSApp.isActive ? entries.firstIndex { $0.open && $0.window === NSApp.keyWindow } : nil
                 emit(key.map { "frontmost index=\($0)" } ?? "frontmost none")
+            case "typed":
+                emit("typed \(typed)")
             case "quit":
                 emit("ok quit")
                 exit(0)

@@ -65,7 +65,7 @@ import os
     var cacheStats: (windows: Int, bytes: Int) { (capture.cache.count, capture.cache.bytes) }
     var isIdle: Bool { active.isEmpty }
 
-    private var stages: [String: StagePanel] = [:]
+    private(set) var stages: [String: StagePanel] = [:]
     private var active: [String: Active] = [:]
     /// E-03: the move a gesture took over, by display, until the gesture commits (superseded) or springs back (it goes
     /// on from where it was, settling exactly once).
@@ -285,7 +285,10 @@ import os
     // MARK: Move steps
 
     private func stage(for uuid: String) -> StagePanel? {
-        if let stage = stages[uuid] { return stage }
+        if let stage = stages[uuid] {
+            guard stage.leftOnAnotherSpace("display \(uuid): zoom stage") else { return stage }
+            stage.orderOut(nil)
+        }
         guard let nsScreen = Displays.screen(uuid: uuid) else { return nil }
         let panel = StagePanel(screen: nsScreen)
         panel.onTileClick = { [weak self] id in self?.onTileClick?(uuid, id) }
@@ -396,6 +399,19 @@ import os
         explainerRetry.cancel()
     }
 
+    // MARK: Overview (06-06)
+
+    /// The overview's one-shot captures, through the same permission check, budget and cache as a move's (06 UI-SPEC
+    /// Surface 1 Snapshots). Empty without Screen Recording.
+    func overviewImages(_ requests: [(CGWindowID, CGSize)], deadline: Duration = SnapshotCapture.moveBudget) async -> [UInt32: CGImage] {
+        guard checkPermission(), !requests.isEmpty else { return [:] }
+        let images = await capture.captureAll(requests, deadline: deadline)
+        updateFailing()
+        return images
+    }
+
+    func cachedSnapshot(_ id: CGWindowID) -> CGImage? { capture.cached(id) }
+
     // MARK: Screen Recording (UI-SPEC Surface 2)
 
     /// Read at every move start. The state is logged the first time and on every change; a revoke once per session,
@@ -443,6 +459,10 @@ import os
         }
     }
 
+    /// The overview closed and its stage has faded: the first overview without Screen Recording counts as the first move
+    /// (06 Surface 1 Snapshots), so the explainer may show now, never during the overview.
+    func offerExplainerAfterOverview() { offerExplainer() }
+
     /// The first move without Screen Recording asks once, after its reveal, never during a move, drag or rubber band.
     /// The flag is saved when the alert appears, so it never shows again (no re-prompt loop, T-04-15).
     private func offerExplainer() {
@@ -489,13 +509,13 @@ import os
     }
 
     /// A collapsed window's block: app colour and icon, no title.
-    private func collapsedBlock(_ window: TransomModel.WindowRef) -> TileLayer.Content {
+    func collapsedBlock(_ window: TransomModel.WindowRef) -> TileLayer.Content {
         let app = NSRunningApplication(processIdentifier: window.pid)
         return .collapsed(color: AppColor.color(forBundleID: window.bundleID, icon: app?.icon), icon: app?.icon)
     }
 
     /// App colour, app icon, and the AX title (the app name when it has none).
-    private func fallback(_ window: TransomModel.WindowRef) -> TileLayer.Content {
+    func fallback(_ window: TransomModel.WindowRef) -> TileLayer.Content {
         let app = NSRunningApplication(processIdentifier: window.pid)
         let name = app?.localizedName ?? window.bundleID
         return .fallback(
@@ -509,7 +529,7 @@ import os
     }
 
     /// The CG window a window shows (its visible tab); nil for a synthetic ID, which has none.
-    private func cgWindow(_ window: TransomModel.WindowRef) -> CGWindowID? {
+    func cgWindow(_ window: TransomModel.WindowRef) -> CGWindowID? {
         let id = windowInfo(window.identity)?.visibleMemberID ?? window.windowID
         return id < WindowIdentity.syntheticIDBase ? id : nil
     }

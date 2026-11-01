@@ -171,7 +171,7 @@ import os
         let arranger = controller.arranger
         let disarm = Self.disarmReason(
             ready: controller.isReady(), paused: !arranger.pauseReasons.isEmpty, turningOff: controller.isTurningOff,
-            busy: arranger.isDragging || controller.isRectZoomActive)
+            busy: arranger.isDragging || controller.isRectZoomActive, overviewOpen: controller.overviewController?.isOpen == true)
         let hasDesk = { (display: DisplayInfo) in arranger.world[ZoomInput.deskKey(display)] != nil }
         // The windows publishGreenButtons trusts, so the no-⌥ test skips the CG read over them (WR-01).
         let windows = arranger.windows.values.filter {
@@ -188,8 +188,8 @@ import os
     }
 
     /// Why the tap is not armed. Turn Off Zoom's move home counts as paused: a gesture must not take it over (WR-09).
-    nonisolated static func disarmReason(ready: Bool, paused: Bool, turningOff: Bool, busy: Bool) -> GestureTapState.DisarmReason? {
-        !ready ? .notReady : paused || turningOff ? .zoomPaused : busy ? .rectZoomOrDrag : nil
+    nonisolated static func disarmReason(ready: Bool, paused: Bool, turningOff: Bool, busy: Bool, overviewOpen: Bool = false) -> GestureTapState.DisarmReason? {
+        !ready ? .notReady : paused || turningOff ? .zoomPaused : overviewOpen ? .overviewOpen : busy ? .rectZoomOrDrag : nil
     }
 
     /// Re-reads what can change behind Transom's back and publishes even if nothing changed.
@@ -495,10 +495,11 @@ import os
 
     /// UI-SPEC Logging's ⌥ pass reasons. A sequence decided without ⌥ (window, overlay, mid-sequence) that later had ⌥
     /// down is "⌥ pressed mid-gesture".
-    private static func optionPassText(_ reason: GestureTapRules.PassReason?) -> String {
+    nonisolated static func optionPassText(_ reason: GestureTapRules.PassReason?) -> String {
         switch reason {
         case .disarmed(.notReady): "not ready"
         case .disarmed(.rectZoomOrDrag): "rect zoom or drag in progress"
+        case .disarmed(.overviewOpen): "overview open"
         case .disarmed: "zoom paused"
         case .fullScreen: "full screen"
         case .notDeskDisplay: "not a desk display"

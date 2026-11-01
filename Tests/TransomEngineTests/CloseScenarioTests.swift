@@ -172,6 +172,71 @@ private func blank(_ fake: FakeWindowSystem, gate: Bool, axInvalid: Bool = false
         let states = await drain(fake.events).compactMap { if case .windowStateChanged(_, let s) = $0 { s } else { nil } }
         #expect(states == [.absent, .present, .fullscreen])
     }
+
+    /// G-03-9: a lingering CG entry with no Space closes a terminated app's window instead of rechecking forever.
+    @Test func aTerminatedAppsGhostWithNoSpaceCloses() async {
+        let fake = await spacesFake()
+        await fake.terminate(pid: pid)
+        #expect(await fake.windowInfo(ref(1)) != nil, "a CG entry on a Space is WindowServer lag")
+        await fake.lingerInCG(1, spaces: [])
+        await fake.refreshAll()
+        #expect(destroyed(await drain(fake.events)).contains(ref(1)))
+    }
+
+    /// WR-10: a terminated app's tab group whose members all linger on no Space closes; the ghost tabs never keep it.
+    @Test func aTerminatedAppsGhostTabGroupCloses() async {
+        let fake = FakeWindowSystem()
+        await fake.setSpacesAvailable(true)
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await fake.tabGroup(ids: [1, 2], frame: Rect(x: 10, y: 25, width: 400, height: 300), pid: pid, visible: 1, space: 1)
+        await fake.refreshAll()
+        await fake.terminate(pid: pid)
+        await fake.lingerInCG(1, spaces: [])
+        await fake.lingerInCG(2, spaces: [])
+        await fake.refreshAll()
+        #expect(destroyed(await drain(fake.events)).contains(ref(1)))
+        #expect(await fake.windowInfo(ref(1)) == nil)
+    }
+
+    /// 02-14: a hidden native tab reports no Space; its group stays tracked whole.
+    @Test func aHiddenTabWithNoSpaceStaysTrackedOverFiveRefreshes() async throws {
+        let fake = FakeWindowSystem()
+        await fake.setSpacesAvailable(true)
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await fake.tabGroup(ids: [1, 2], frame: Rect(x: 10, y: 25, width: 400, height: 300), pid: pid, visible: 1, space: 1)
+        await fake.refreshAll()
+        for round in 0..<5 {
+            if round == 2 { await fake.selectTab(2) }
+            await fake.advance(by: .seconds(1))
+            await fake.refreshAll()
+        }
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+        #expect(try #require(await fake.windowInfo(ref(1))).tabCount == 2)
+    }
+
+    /// Without the Spaces lookup an empty set is unknown, never empty: the ghost keeps rechecking.
+    @Test func withTheLookupOffAGhostKeepsRechecking() async {
+        let fake = await fake()
+        await fake.lingerInCG(1, spaces: [])
+        for _ in 0..<5 {
+            await fake.advance(by: .seconds(1))
+            await fake.refreshAll()
+        }
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+        #expect(await fake.windowInfo(ref(1)) != nil)
+    }
+}
+
+/// One app with windows 1 and 2 on Space 1, Spaces data on, after the initial sweep.
+private func spacesFake() async -> FakeWindowSystem {
+    let fake = FakeWindowSystem()
+    await fake.setSpacesAvailable(true)
+    await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+    for id: UInt32 in [1, 2] {
+        await fake.open(.standard(id: id, pid: pid, frame: Rect(x: Double(id) * 10, y: 25, width: 400, height: 300), space: 1))
+    }
+    await fake.refreshAll()
+    return fake
 }
 
 @Suite struct QuickRecheckTests {

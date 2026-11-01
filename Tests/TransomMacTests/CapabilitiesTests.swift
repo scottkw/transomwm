@@ -12,6 +12,7 @@ import Testing
         (["TransomApp", "--disable-private=Spaces"], [.spaces], []),
         (["TransomApp", "--disable-private=AXWindowID,Spaces"], [.axWindowID, .spaces], []),
         (["TransomApp", "--disable-private=Multitouch"], [.multitouch], []),
+        (["TransomApp", "--disable-private=SymbolicHotKeys,CoreDock"], [.symbolicHotKeys, .coreDock], []),
     ] as [([String], Set<Capability>, [String])])
     func disablePrivateTakesOnlyKnownNames(arguments: [String], disabled: Set<Capability>, unknown: [String]) {
         let parsed = Capabilities.parseDisabled(arguments)
@@ -20,7 +21,7 @@ import Testing
     }
 
     @Test func everyCapabilityIsReported() {
-        #expect(Capability.allCases.map(\.rawValue) == ["AXWindowID", "Spaces", "Multitouch"])
+        #expect(Capability.allCases.map(\.rawValue) == ["AXWindowID", "Spaces", "Multitouch", "SymbolicHotKeys", "CoreDock"])
         #expect(Set(Capabilities.report().keys) == Set(Capability.allCases))
     }
 
@@ -28,6 +29,8 @@ import Testing
         #expect(Capability.axWindowID.fallback == "matching by frame")
         #expect(Capability.spaces.fallback == "single Space")
         #expect(Capability.multitouch.fallback == "trackpad gestures from system events")
+        #expect(Capability.symbolicHotKeys.fallback == "Mission Control keys unchanged")
+        #expect(Capability.coreDock.fallback == "beep instead of Mission Control")
     }
 }
 
@@ -85,6 +88,60 @@ import Testing
     @Test func theCurrentOSBuildIsRead() {
         #expect(MultitouchCanary.currentOSBuild != "?")
         #expect(!MultitouchCanary.currentOSBuild.isEmpty)
+    }
+}
+
+/// The Mission Control takeover canary (D-07), a copy of MultitouchCanary on its own key; private defaults suite only.
+@Suite struct MissionControlCanaryTests {
+    private func fresh() -> UserDefaults {
+        let name = "transom.mccanary.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
+    private func canary(_ defaults: UserDefaults, build: String = "26B123", version: String = "1.0 (1)") -> MissionControlCanary {
+        MissionControlCanary(defaults: defaults, osBuild: build, appVersion: version)
+    }
+
+    @Test func noCanaryIsNotTripped() {
+        #expect(!canary(fresh()).isTripped())
+    }
+
+    @Test func armedForTheSameBuildAndVersionTripsAndStays() {
+        let defaults = fresh()
+        canary(defaults).arm()
+        #expect(canary(defaults).isTripped())
+        #expect(canary(defaults).isTripped(), "stays off until the user turns it on again")
+        #expect(defaults.object(forKey: MultitouchCanary.key) == nil, "its own key, not multitouch's")
+    }
+
+    @Test(arguments: [("26C5", "1.0 (1)"), ("26B123", "1.1 (2)")])
+    func anotherBuildOrVersionClearsIt(build: String, version: String) {
+        let defaults = fresh()
+        canary(defaults).arm()
+        #expect(!canary(defaults, build: build, version: version).isTripped())
+        #expect(defaults.object(forKey: MissionControlCanary.key) == nil)
+    }
+
+    @Test func turningItBackOnClears() {
+        let defaults = fresh()
+        canary(defaults).arm()
+        canary(defaults).turnBackOn()
+        #expect(defaults.object(forKey: MissionControlCanary.key) == nil)
+        #expect(!canary(defaults).isTripped())
+    }
+
+    /// N10 shows once per crash: the mark survives relaunches; a new arm forgets it.
+    @Test func theCrashNoticeIsMarkedOnce() {
+        let defaults = fresh()
+        canary(defaults).arm()
+        #expect(!canary(defaults).noticed)
+        canary(defaults).markNoticed()
+        #expect(canary(defaults).noticed)
+        #expect(canary(defaults).isTripped())
+        canary(defaults).arm()
+        #expect(!canary(defaults).noticed)
     }
 }
 
