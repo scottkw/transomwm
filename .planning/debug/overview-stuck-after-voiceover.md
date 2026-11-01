@@ -2,7 +2,7 @@
 status: awaiting_human_verify
 trigger: "Phase 6 host check 4: after a VoiceOver session the overview never appears again (hotkey or menu) until Transom is relaunched"
 created: 2026-11-01
-updated: 2026-11-01
+updated: 2026-11-01 (follow-up: other reused panels)
 ---
 
 ## Symptoms
@@ -48,8 +48,8 @@ updated: 2026-11-01
 ## Current Focus
 
 bug_class: Bohrbug (deterministic once the panel is stranded), trigger = macOS 27 screen lock, not VoiceOver
-hypothesis: CONFIRMED (host log + guest probes): after the 15:28:36 screen lock, macOS 27.2 left Transom's .canJoinAllSpaces panels pinned to the Space current during the lock (Space 4); OverviewController.panel(for:) reuses its panel for the life of the process, so on Space 5 every open ordered the same stranded window in on Space 4.
-next_action: HOST RE-CHECK PENDING (user): lock the screen, unlock, switch to another desktop, open the overview (3 steps under Resolution.host_recheck). Fix committed 98f7d3d, Debug app rebuilt 2026-11-01 16:46.
+hypothesis: CONFIRMED for the overview (host re-check pass 2026-11-01) and, in the VM, for the zoom stage and toast panel (follow-up, commit db281d4).
+next_action: HOST RE-CHECK PENDING for the follow-up (user): steps under Resolution.followup_host_recheck. Debug app rebuilt with db281d4, not launched.
 
 reasoning_checkpoint:
   hypothesis: "The overview panel is invisible because it is no longer on every Space (isOnActiveSpace false after the macOS 27 lock transition) and panel(for:) keeps reusing it; orderFrontRegardless orders it in on the Space it was stranded on."
@@ -111,6 +111,27 @@ reasoning_checkpoint:
   found: overview on screen every time on macOS 15.7.7 (screen lock restored to off afterwards).
   implication: the unpinning is macOS 27 specific (its lock transition); macOS 15 cannot reproduce the OS half. The Transom half (reusing a panel that is not on the active Space) can be reproduced by pinning the panel to one Space and switching.
 
+- timestamp: 2026-11-01 (follow-up)
+  checked: every other reused .canJoinAllSpaces panel (code read): ZoomController.stage(for:) keeps one StagePanel per display for the process (rebuilt only on displaysChanged/purge); PreviewPresenter keeps one PreviewPanelWindow per display (rebuilt only on didChangeScreenParameters); GapHandlePanels and CollapsedPanels recycle panels through shown/pool; ToastPresenter has one `let` panel for life. All order in with orderFrontRegardless and never check the Space. The engine hides gap handles on a Space change, so the next show pops stranded pool panels; collapsed blocks are only re-sent when they change, so hide(on:)/fadeIn(on:) cycle the same stranded panels.
+  found: run() and show() in ZoomController both call stage(for:), so a new stage is looked up again before it is ever ordered in; the deferprobe showed a never-ordered-in panel also reports isOnActiveSpace false, so a plain `!isOnActiveSpace` guard would replace every new stage once (and the toast panel, made at launch, at its first show) and log a false notice.
+  implication: the guard must only replace a panel that was ordered in before: windowNumber > 0 (a deferred panel has no window device until first ordered in) and !isOnActiveSpace. Five sites need the same predicate + notice, so one helper (NSWindow.leftOnAnotherSpace) is justified; replacement stays per site.
+- timestamp: 2026-11-01 (follow-up)
+  checked: RED run, new VM tests aZoomStageStrandedOnAnotherSpaceDoesNotHideTheNextMove and aToastPanelStrandedOnAnotherSpaceDoesNotHideTheNextToast (strand the panel on desktop 1 as 98f7d3d's test does, show on desktop 2), code without the guard (.build/stranded-others-red.log)
+  found: "✘ ... recorded an issue at OverviewSpaceSwitchIntegrationTests.swift:256:9: Expectation failed: next.onScreen" and ":280:9: Expectation failed: ... isOnScreen(panel)"; "✘ Test run with 2 tests in 1 suite failed after 7.171 seconds with 2 issues." The new-stage-kept and toast-first-show-kept checks passed.
+  implication: both panels reproduce the overview's failure (reused while on another Space = off screen).
+- timestamp: 2026-11-01 (follow-up)
+  checked: GREEN run of the same two tests with the guard at every site (.build/stranded-others-green.log)
+  found: "✔ Test run with 2 tests in 1 suite passed after 5.411 seconds."
+  implication: a stranded zoom stage / toast panel is replaced and the new one is on screen on desktop 2; a panel on the shown Space is kept.
+- timestamp: 2026-11-01 (follow-up)
+  checked: mutant without the windowNumber gate (`guard !isOnActiveSpace`) (.build/stranded-others-mutant-nogate.log)
+  found: "Expectation failed: started === stage" (moves 1 and 2: the stage made by run() was replaced by show()) and "Expectation failed: toast.panel === fresh" (first toast replaced its never-shown panel); then the test helper trapped on CGWindowID(-1) for that replaced, never-ordered-in panel ("Negative value is not representable").
+  implication: confirms on the guest that a deferred panel never ordered in reports isOnActiveSpace false AND has a negative windowNumber, so the gate is needed and correct. isOnScreen now returns false for windowNumber <= 0 so such a regression fails instead of crashing.
+- timestamp: 2026-11-01 (follow-up)
+  checked: neighbour suites, one per vm-live-test run, with the final code
+  found: OverviewSpaceSwitchIntegrationTests "✔ Test run with 6 tests in 1 suite passed after 22.672 seconds."; ZoomSettleIntegrationTests "✔ Test run with 2 tests in 1 suite passed after 26.230 seconds."; ArrangeIntegrationTests "✔ Test run with 6 tests in 1 suite passed after 16.865 seconds." (fullscreen test skipped, opt-in); GestureFollowIntegrationTests "✔ Test run with 13 tests in 1 suite passed after 61.344 seconds."; OverviewIntegrationTests "✔ Test run with 3 tests in 1 suite passed after 10.730 seconds." Host: swift build OK, scripts/check-no-appkit.sh OK (53 files), scripts/build-debug.sh exit 0 (codesign valid, DR satisfied).
+  implication: no regression in camera moves, gestures (beginFollow uses stage(for:)), docking/gap handles, collapsed blocks or the overview.
+
 ## Eliminated
 
 - hypothesis: H-A Transom gets hidden (NSApp hidden) by VoiceOver / Hide Others
@@ -143,4 +164,28 @@ host_recheck:
     - "Quit the running Transom Debug (menu bar icon > Quit Transom), then open the rebuilt /Users/ken/dev/transomwm/xcode/.xcode-build/Build/Products/Debug/Transom Debug.app; zoom on; press ⌃⌥⌘A once to check the overview shows, then close it."
     - "Lock the screen (⌃⌘Q), wait about 10 s, unlock, then switch to a different desktop than the one you locked on (⌃→ or a swipe)."
     - "Press ⌃⌥⌘A (and try menu > Show Overview): expected the overview shows and Esc closes it. Then run: /usr/bin/log show --last 10m --predicate 'subsystem == \"com.eightabyte.transom\" AND category == \"overview\"' | grep 'off the shown Space'  - a line there means the lock stranded the panel and the fix replaced it; no line means this lock did not strand it (try again on another desktop)."
-  same_root_cause_not_fixed_here: "The zoom stage (ZoomController.stage(for:)), PreviewPanel (drag preview), GapHandlePanels, CollapsedPanels and Toast were also off the active Space on the host after the lock and are reused the same way. After a lock on another desktop, camera moves may show no stage, drag previews and gap handles may be missing, and notices may not show. Each needs the same isOnActiveSpace check in its own lifecycle (follow-up)."
+  status_note: "user re-check pass 2026-11-01 (orchestrator)"
+followup:
+  scope: "The zoom stage (ZoomController.stage(for:)), PreviewPanel (drag preview / marquee), gap HandlePanels, CollapsedPanels and the Toast panel, which the host also listed off the active Space after the lock and which are reused the same way."
+  fix: "NSWindow.leftOnAnotherSpace(_:) in Displays.swift: true, with the notice '<name> was off the shown Space; made a new one' (subsystem com.eightabyte.transom, category spaces), for a panel ordered in before (windowNumber > 0) that is not isOnActiveSpace. Sites: ZoomController.stage(for:) orders the old stage out and makes a new one (as 98f7d3d); ToastPresenter builds its panel in makePanel() and replaces it in show(); PreviewPresenter's show/flashBlocked/showBand/showPickRing look the overlay up through overlay(_:), which calls rebuildPanels() when stranded; GapHandlePanels.show replaces a reused (old or pooled) panel; CollapsedPanels.show and fadeIn replace one keeping block, double-click handler and frame. OverviewController.panel(for:) left as committed in 98f7d3d (host-verified; it always shows a panel it makes)."
+  why_windownumber_gate: "a deferred panel never ordered in also reports isOnActiveSpace false (deferprobe; mutant run), and ZoomController.run then show both call stage(for:) before the new stage is ever ordered in; the toast panel exists from launch and is first ordered in at the first notice."
+  commit: db281d4
+  files_changed:
+    - Sources/TransomMac/Displays.swift
+    - Sources/TransomMac/Zoom/ZoomController.swift
+    - Sources/TransomMac/Overlay/Toast.swift
+    - Sources/TransomMac/Overlay/PreviewPanel.swift
+    - Sources/TransomMac/Overlay/GapHandlePanels.swift
+    - Sources/TransomMac/Zoom/CollapsedPanels.swift
+    - Tests/TransomMacIntegrationTests/OverviewSpaceSwitchIntegrationTests.swift
+  oracle_type: "specified (kCGWindowIsOnscreen of the panel the move/toast used, on the shown desktop), plus boundary neighbours: the replaced panel is no longer ordered in; a panel on the shown Space is kept; a new panel never ordered in is kept (stage made by run() is the one show() uses; the toast's first show keeps its panel)"
+  verification:
+    target_tests: { result: pass, tests: ["aZoomStageStrandedOnAnotherSpaceDoesNotHideTheNextMove", "aToastPanelStrandedOnAnotherSpaceDoesNotHideTheNextToast"], red: ".build/stranded-others-red.log: ✘ Test run with 2 tests in 1 suite failed after 7.171 seconds with 2 issues (next.onScreen; isOnScreen(panel))", green: ".build/stranded-others-green.log: ✔ Test run with 2 tests in 1 suite passed after 5.411 seconds." }
+    mutation_check: { result: pass, mutant_killed: "no windowNumber gate: started === stage and toast.panel === fresh failed (.build/stranded-others-mutant-nogate.log); no guard at all = the RED run" }
+    adjacent_tests: { result: pass, suites_run: ["OverviewSpaceSwitchIntegrationTests (6 passed)", "ZoomSettleIntegrationTests (2 passed)", "ArrangeIntegrationTests (5 passed, 1 opt-in skipped)", "GestureFollowIntegrationTests (13 passed)", "OverviewIntegrationTests (3 passed)"] }
+    host: "swift build OK; scripts/check-no-appkit.sh OK (53 files); scripts/build-debug.sh exit 0, codesign valid, DR satisfied; built only, not launched"
+    not_covered: "no dedicated test for the PreviewPanel, gap handle or collapsed panel replacement (they share the tested predicate; their replacement code is exercised only on a stranded panel); the macOS 27 lock itself cannot be reproduced on the macOS 15 guest"
+  followup_host_recheck:
+    - "Quit the running Transom Debug, open the rebuilt xcode/.xcode-build/Build/Products/Debug/Transom Debug.app; zoom on; with two docked windows step in and out once (⌃⌥⌘. and ⌃⌥⌘,) and drag a window once, so the stage, preview and gap handles have been shown."
+    - "Lock the screen (⌃⌘Q), wait about 10 s, unlock, switch to a different desktop with docked windows."
+    - "Step in/out with ⌃⌥⌘. / ⌃⌥⌘, (the stage animation should show), drag a window (the drop preview should show), hover a gap (the handle should highlight). Then: /usr/bin/log show --last 10m --predicate 'subsystem == \"com.eightabyte.transom\"' | grep 'off the shown Space' lists which panels the lock stranded and were replaced."
