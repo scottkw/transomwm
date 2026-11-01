@@ -1,5 +1,5 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "Phase 6 host check 4: after a VoiceOver session the overview never appears again (hotkey or menu) until Transom is relaunched"
 created: 2026-11-01
 updated: 2026-11-01 (follow-up: other reused panels)

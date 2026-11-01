@@ -1,8 +1,8 @@
 ---
 phase: 06-overview-spaces-displays
 verified: 2026-10-31T23:05:00Z
-status: human_needed
-score: 5/5 roadmap success criteria verified (SC2 via accepted override) (10 hardware backstops left to the user in 06-UAT)
+status: passed
+score: 5/5 roadmap success criteria verified (SC2 via accepted override); host UAT passed 2026-11-01; hardware items 1-7, WR-06 and WR-08 deferred (no external display, as Phase 2 UAT 9)
 covered_files:
   - ".planning/phases/06-overview-spaces-displays/06-01-PLAN.md"
   - ".planning/phases/06-overview-spaces-displays/06-01-SUMMARY.md"
@@ -116,7 +116,11 @@ covered_files:
   - "Tests/TransomMacTests/OverviewCopyTests.swift"
   - "Tests/TransomMacTests/ShortcutsModelTests.swift"
   - "Tests/TransomMacTests/TakeoverMenuTests.swift"
-covered_digest: "v4:sha256:97386d8c17ea0b8226ad622add979e6d7c3182fad1217f08db2ef3d6d1ce3909"
+  - "Sources/TransomMac/Overlay/GapHandlePanels.swift"
+  - "Sources/TransomMac/Overlay/PreviewPanel.swift"
+  - "Sources/TransomMac/Overlay/Toast.swift"
+  - "Sources/TransomMac/Zoom/CollapsedPanels.swift"
+covered_digest: "v4:sha256:f4c6c53df8c78f77eda953530441dfc9b5661c45503328adcaf3d514f7889246"
 behavior_unverified: 1
 overrides_applied: 1
 overrides:
@@ -315,3 +319,17 @@ Known gaps, recorded and not blocking:
 
 _Verified: 2026-10-31T23:05:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Human Verification Result (2026-11-01)
+
+Host checks on macOS 27.2 (MacBook Air, one display), on the Debug build with the review fixes:
+- Takeover T1/T2: pass. Esc closes the alert without a click; F3 opens and closes the overview; turned off, F3 opens Mission Control.
+- ⌃ after an overview Space switch: pass (plain typing in TextEdit).
+- B2 timing: pass, Debug "Last overview" 326 ms (the VM's 423-451 ms was VM rendering).
+- B5 VoiceOver: VoiceOver owns ⌃⌥, so ⌃⌥⌘A doesn't reach Transom while it is on (README says use the menu or rebind). The session exposed a real bug: after a macOS 27 screen lock, reused panels stay pinned to the Space of the lock, so the overview opened off screen until relaunch. Fixed by 98f7d3d (overview; host lock re-check pass) and db281d4 (zoom stage, drag preview, gap handles, collapsed panels, toast; VM tests red→green, host re-check optional). Debug session: .planning/debug/overview-stuck-after-voiceover.md.
+- B1 first-visit capture (VM finding): fixed by d297b03, a Space change now refreshes every app after 75 ms (VM test red 4/4 → green 3/3). Debug session: .planning/debug/overview-first-visit-capture.md.
+
+Deferred by the user (no external display), as Phase 2 UAT 9: 06-UAT items 1-7, WR-06, WR-08 and Tab between displays. Status: **passed**.
+
+_Verified: 2026-11-01_
+

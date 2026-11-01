@@ -1,5 +1,5 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "Phase 6 UAT B1: first visit to another Space soon after a relaunch captures 0 windows, so the overview keeps app-icon tiles for that Space"
 created: 2026-11-01
 updated: 2026-11-01
