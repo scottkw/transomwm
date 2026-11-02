@@ -30,6 +30,8 @@ nonisolated enum PreviewStyle {
     static let blockedLabel = "Not enough room"
     /// The Collapsed state's glyph (UI-SPEC Surface 7), drawn by PreviewPanel's label like every preview glyph.
     static let collapsedGlyph = "arrow.down.right.and.arrow.up.left"
+    /// The Group preview's glyph (UI-SPEC Surface 1).
+    static let groupGlyph = "rectangle.topthird.inset.filled"
     static let dash: [Double] = [8, 4]
 
     /// The layers for `state`, back to front. Increase Contrast multiplies every fill alpha by 1.5 and makes every
@@ -62,8 +64,21 @@ nonisolated enum PreviewStyle {
                         rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85,
                         label: Label(text: text, glyph: collapsedGlyph, glyphRole: .label))
                 ]
-            case .group(let frame, _, _):
-                [LayerStyle(rect: frame, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85)]
+            case .group(let frame, let strip, let text):
+                // The frame, the strip band inset 2 pt inside its border, and the label centred in the content rect.
+                [
+                    LayerStyle(rect: frame, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85),
+                    LayerStyle(
+                        rect: Rect(x: strip.x + 2, y: strip.y + 2, width: max(0, strip.width - 4), height: max(0, strip.height - 2)),
+                        fill: .accent, fillAlpha: 0.50, border: .accent, borderAlpha: 0, borderWidth: 0, cornerRadius: 8),
+                ]
+                    + (text.map {
+                        [
+                            LayerStyle(
+                                rect: TabBand.content(of: frame), fill: .accent, fillAlpha: 0, border: .accent, borderAlpha: 0, borderWidth: 0,
+                                label: Label(text: $0, glyph: groupGlyph, glyphRole: .label))
+                        ]
+                    } ?? [])
             }
         return increaseContrast ? layers.map(contrasted) : layers
     }

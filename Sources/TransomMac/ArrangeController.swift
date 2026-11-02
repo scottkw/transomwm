@@ -635,7 +635,9 @@ import os
             case .collapsedBlocks(let blocks, let displayUUID):
                 collapsedPanels.show(blocks, on: displayUUID)
             case .tabAnnouncement(let announcement):
-                logger.info("\(String(describing: announcement), privacy: .public)")
+                let text = TabCopy.announcement(announcement) { MenuCopy.truncatedAppName(Self.appName($0)) }
+                logger.info("\(text, privacy: .public)")
+                postAnnouncement(text)
             case .cameraMove(let move):
                 guard zoomEnabled else {
                     // Never expected: zoom off never enables the engine's camera. Settle at once so windows stay right.
