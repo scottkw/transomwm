@@ -858,6 +858,7 @@ public struct Arranger: Sendable {
                 return retryRefusal(window, requested: requested, actual: actual, now: now)
             case .windowStateChanged(let window, let state):
                 if state == .closed || state == .absent { suppressFocus(ofGroupHolding: window, now: now) }
+                if state == .absent { try selectNeighbour(ofAbsent: window) } else { tabs.minimizing.remove(window.identity) }
                 if state == .closed { forget(window) } else { windows[window.identity]?.state = state }
                 subject = window.identity
             case .windowDestroyed(let window):
@@ -981,6 +982,7 @@ public struct Arranger: Sendable {
         camera.collapsible.remove(window.identity)
         camera.unparkedNew.remove(window.identity)
         focusOrder.removeAll { $0 == window.identity }
+        tabs.minimizing.remove(window.identity)
         // The model picks the group's selection when a member goes; nothing is left to wait for.
         if tabs.pendingReveal?.revealed == window || tabs.pendingReveal?.previous == window { tabs.pendingReveal = nil }
     }

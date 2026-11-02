@@ -142,6 +142,8 @@ struct TabGroupState: Sendable {
     var tearPress: TearPress?
     /// The torn-off tab, which moves alone (never its whole group), from the tear until its release commits.
     var tearing: WindowRef?
+    /// Members Minimize Group minimised: their absence keeps the group's selection (D-06), unlike ⌘M on one (WR-02).
+    var minimizing: Set<WindowIdentity> = []
 }
 
 /// A tab group holding some window, docked or floating, as select, reveal, D-08 and strips see it.
@@ -536,7 +538,18 @@ extension Arranger {
         guard pauseReasons.isEmpty, !sessionPaused, tabs.pendingReveal?.revealed != window, let ref = tabGroup(holding: window),
             ref.members[ref.selected] != window
         else { return [] }
-        if let until = tabs.suppressedUntil[ref.key], now < until { return [] }
+        if let until = tabs.suppressedUntil[ref.key], now < until {
+            // WR-02: with the group minimised, the parked member macOS focused would be an invisible key window. The last
+            // window focused that is on screen gets focus back; with none, the member is shown.
+            guard windows[ref.members[ref.selected].identity]?.state != .present else { return [] }
+            let shown = Set(displays.map(Self.key))
+            let back = focusOrder.compactMap { windows[$0] }.first { info in
+                info.window != window && info.state == .present && !parkRequested.contains(info.window.identity)
+                    && !isHiddenTab(info.window) && deskKey(of: info.window).map(shown.contains) == true
+            }
+            guard let back else { return select(window, via: .activation, ready: true, now: now) }
+            return [.perform([.focus(back.window)]), .info("group \(ref.key.node): minimized, focus of \(window) handed to \(back.window)")]
+        }
         return select(window, via: .activation, ready: true, now: now)
     }
 
@@ -562,6 +575,21 @@ extension Arranger {
     mutating func suppressFocus(ofGroupHolding window: WindowRef, now: ContinuousClock.Instant) {
         guard let ref = tabGroup(holding: window) else { return }
         tabs.suppressedUntil[ref.key] = now + Self.focusSuppression
+    }
+
+    /// WR-02: the selected member went absent (⌘M on it, its app hidden, native full screen), not by Minimize Group. The
+    /// nearest present member, right else left, takes the selection, so the group keeps its tile and strip, and the
+    /// absent one's return keeps it. No focus suppression: whichever member macOS focuses next is shown, never parked.
+    mutating func selectNeighbour(ofAbsent window: WindowRef) throws(LayoutError) {
+        guard let ref = tabGroup(holding: window), ref.members[ref.selected] == window, !tabs.minimizing.contains(window.identity)
+        else { return }
+        let i = ref.selected
+        let order = Array(ref.members[(i + 1)...]) + ref.members[..<i].reversed()
+        guard let next = order.first(where: { windows[$0.identity]?.state == .present }) else { return }
+        try selectInWorld(next, in: ref)
+        if ref.floating { wantedFrames[next.identity] = wantedFrames.removeValue(forKey: window.identity) }
+        if tabs.pendingReveal?.group == ref.key { tabs.pendingReveal = nil }
+        tabs.suppressedUntil[ref.key] = nil
     }
 
     /// One strip per docked group of `desk` whose selected member is planned on screen (not parked, collapsed,
@@ -635,6 +663,7 @@ extension Arranger {
         guard ready else { return refuse(.notReady, "minimize group \(group.node)", "Accessibility is not ready") }
         guard let ref = tabGroup(group) else { return refuse(.notInGroup, "minimize group \(group.node)", "no such group") }
         tabs.suppressedUntil[group] = now + Self.focusSuppression
+        tabs.minimizing.insert(ref.members[ref.selected].identity)
         return [.perform([.minimize(ref.members[ref.selected])]), .info("group \(group.node): minimized")]
     }
 

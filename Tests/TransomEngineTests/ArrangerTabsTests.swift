@@ -564,14 +564,29 @@ private func selected(_ arranger: Arranger, _ group: GroupKey) -> WindowRef? {
         #expect(selected(arranger, group) == f, "a focus 1.1 s after the selection did not switch tabs")
     }
 
-    @Test func aFocusWithin1sOfTheSelectedMemberGoingAbsentDoesNotSwitchTabs() throws {
+    /// WR-02: ⌘M on the selected member (not Minimize Group) keeps the group on screen with a present neighbour.
+    @Test func theSelectedMemberGoingAbsentSelectsAPresentNeighbourAndItsReturnKeepsIt() throws {
         let start = ContinuousClock.now
-        var (arranger, group, _, _) = try bareGroup(at: start)
-        _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start)
-        _ = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(500))
-        #expect(selected(arranger, group) == f, "a focus after a minimise switched tabs")
-        _ = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(1500))
-        #expect(selected(arranger, group) == b)
+        var (arranger, group, frame, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        let absent = arranger.handle(.event(.windowStateChanged(a, .absent)), now: start)
+        #expect(selected(arranger, group) == f, "the left neighbour of the last tab was not selected")
+        #expect(setFrames(absent)[f] == content, "the neighbour was not written into the content rect: \(absent)")
+        #expect(strips(absent).last?.first?.frame == TabBand.strip(of: frame), "the group lost its strip: \(absent)")
+        #expect(arranger.tabs.suppressedUntil[group] == nil, "a focus of a member would be ignored")
+        let focus = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(300))
+        #expect(selected(arranger, group) == b && commands(focus).contains(.setFrame(b, content)), "macOS's focus did not show b: \(focus)")
+        _ = arranger.handle(.event(.frameApplied(b, requested: content, actual: content)), now: start + .milliseconds(330))
+        let back = arranger.handle(.event(.windowStateChanged(a, .present)), now: start + .seconds(5))
+        #expect(selected(arranger, group) == b, "the returning member took the selection back")
+        #expect(parks(back).contains { if case .park(a, _, _) = $0 { true } else { false } }, "the returning member was not parked: \(back)")
+    }
+
+    @Test func theSelectedMemberGoingAbsentPicksTheRightNeighbourFirst() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a]
+        try arranger.world.reflow(mainKey) { desk, _ throws(LayoutError) in try desk.tree.selectTab(b) }
+        _ = arranger.handle(.event(.windowStateChanged(b, .absent)), now: start)
+        #expect(selected(arranger, group) == f)
     }
 
     @Test func aFocusWithin1sOfAMemberClosingDoesNotSwitchTabs() throws {
@@ -1109,11 +1124,25 @@ private func runCloseGroup(_ arranger: inout Arranger, _ group: GroupKey, conten
     @Test func macOSFocusingTheHiddenMemberAfterTheMinimiseDoesNotBringTheGroupBack() throws {
         let start = ContinuousClock.now
         var (arranger, group, _, _) = try bareGroup(at: start)
+        _ = arranger.handle(.event(.windowFocused(a)), now: start)  // a, docked beside the group, is on screen
+        _ = arranger.handle(.event(.windowFocused(f)), now: start)
+        _ = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
+        _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start + .milliseconds(200))
+        #expect(selected(arranger, group) == f, "Minimize Group's absence moved the selection")
+        let focus = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(700))
+        #expect(selected(arranger, group) == f, "the same-app focus switched tabs")
+        // WR-02: the parked b must not stay the key window; the last window on screen gets focus back.
+        #expect(commands(focus) == [.focus(a)], "focus was not handed back: \(commands(focus))")
+    }
+
+    @Test func withNoWindowOnScreenToFocusTheFocusedHiddenMemberIsShown() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
         _ = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
         _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start + .milliseconds(200))
         let focus = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(700))
-        #expect(selected(arranger, group) == f, "the same-app focus switched tabs")
-        #expect(commands(focus).isEmpty, "the focus moved a window: \(commands(focus))")
+        #expect(selected(arranger, group) == b, "an invisible key window was left")
+        #expect(commands(focus).contains(.setFrame(b, content)), "b was not shown: \(focus)")
     }
 
     @Test func restoringTheSelectedMemberBringsTheGroupBackWithTheSameTab() throws {
@@ -1995,7 +2024,8 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
     /// leaf has no planned rect. The quit restore must still bring the hidden one on screen: the stranded rule does.
     @Test func whileTheSelectedIsMinimisedTheQuitPlanStillBringsTheHiddenMemberOnScreen() throws {
         let start = ContinuousClock.now
-        var (arranger, _, _, content) = try bareGroup(at: start)  // [b, f], f selected
+        var (arranger, group, _, content) = try bareGroup(at: start)  // [b, f], f selected
+        _ = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
         _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start)
         try #require(!arranger.isParked(b), "the 07-05 premise changed")
         #expect(arranger.groupContentRects()[b.identity] == nil, "the absent selected member's leaf is planned")
