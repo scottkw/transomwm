@@ -72,6 +72,60 @@ private func groupFrame(_ arranger: Arranger, _ window: WindowRef, on target: Wi
     return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: mins).resolution.nodeRects[leaf])
 }
 
+/// Moves the pointer of a drag that grabbed `frame`'s title bar on to `point`, the frame following.
+private func move(_ harness: inout Harness, _ window: WindowRef, from frame: Rect, to point: Point, _ modifiers: Modifiers = []) async -> [ArrangerEffect] {
+    let grab = Point(x: frame.midX, y: frame.minY + 10)
+    var effects = await harness.send(pointer(.dragged, point.x, point.y, modifiers))
+    effects += await harness.send(.dragFrame(window.identity, shifted(frame, point.x - grab.x, point.y - grab.y)))
+    return effects
+}
+
+/// The same drag on an Arranger with no window system behind it.
+private func drag(
+    _ arranger: inout Arranger, _ window: WindowRef, from frame: Rect, to point: Point, _ modifiers: Modifiers = [],
+    at now: ContinuousClock.Instant
+) -> [ArrangerEffect] {
+    let grab = Point(x: frame.midX, y: frame.minY + 10)
+    var effects = arranger.handle(pointer(.down, grab.x, grab.y, modifiers, press: window), now: now)
+    effects += arranger.handle(pointer(.dragged, grab.x + 10, grab.y, modifiers), now: now)
+    effects += arranger.handle(.dragFrame(window.identity, shifted(frame, 10)), now: now)
+    effects += arranger.handle(pointer(.dragged, point.x, point.y, modifiers), now: now)
+    effects += arranger.handle(.dragFrame(window.identity, shifted(frame, point.x - grab.x, point.y - grab.y)), now: now)
+    return effects
+}
+
+private func info(_ id: UInt32, frame: Rect, minimum: Size? = nil) -> WindowInfo {
+    WindowInfo(window: window(id), frame: frame, state: .present, displayUUID: "main", kind: .dockable, isExcluded: false, learnedMinimum: minimum)
+}
+
+/// a and b docked side by side by the keyboard on an Arranger with no window system (zoom on or off), `aMinimum` a's
+/// learned minimum; returns it with b's tile.
+private func bareDocked(aMinimum: Size? = nil, bMinimum: Size? = nil, zoom: Bool = false) throws -> (Arranger, Rect) {
+    var arranger = Arranger()
+    let infos = [info(1, frame: frameA, minimum: aMinimum), info(3, frame: frameB, minimum: bMinimum)]
+    _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: .now)
+    if zoom { _ = arranger.handle(.zoomEnabled(true), now: .now) }
+    _ = arranger.handle(.command(.dock, focused: a), now: .now)
+    _ = arranger.handle(.command(.dock, focused: b), now: .now)
+    let desk = try #require(arranger.world[mainKey])
+    try #require(desk.tree.state(of: a) == .present && desk.tree.state(of: b) == .present, "a and b did not dock")
+    let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: arranger.minimums)
+    let leaf = try #require(desk.tree.leaf(containing: b))
+    return (arranger, try #require(plan.resolution.nodeRects[leaf]))
+}
+
+/// f dragged onto b's centre, held 400 ms and released: the group [b, f].
+private func groupFWithB(_ harness: inout Harness, _ rb: Rect) async {
+    _ = await drag(&harness, f, from: smallF, to: centre(rb))
+    harness.now += .milliseconds(400)
+    await harness.send(.tick)
+    await harness.send(pointer(.up, rb.midX, rb.midY))
+}
+
+private func groupPreviews(_ effects: [ArrangerEffect]) -> [PreviewState] {
+    previews(effects).filter { if case .group = $0 { true } else { false } }
+}
+
 /// TABS-01, D-01 to D-04, D-07: a centre held for 400 ms groups on release, through the pure Arranger and the fake.
 @Suite struct ArrangerTabsTests {
     @Test func aReleaseInACentreBeforeTheGroupDwellIsTheMissWithNoBeep() async throws {
@@ -143,5 +197,187 @@ private func groupFrame(_ arranger: Arranger, _ window: WindowRef, on target: Wi
         harness.now += .milliseconds(150)
         let tick = await harness.send(.tick)
         #expect(tick.contains(.wake(at: harness.now + .milliseconds(250))), "no wake at the group deadline: \(tick)")
+    }
+}
+
+/// The UI-SPEC Surface 1 dwell contract: 400 ms within 16 pt, modifiers, exclusions, room and undo.
+extension ArrangerTabsTests {
+    @Test func aMoveOfMoreThan16ptInsideTheCentreRestartsTheGroupDwell() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        _ = await drag(&harness, a, from: ra, to: centre(rb))
+        harness.now += .milliseconds(300)
+        _ = await move(&harness, a, from: ra, to: Point(x: rb.midX + 17, y: rb.midY))
+        harness.now += .milliseconds(100)
+        #expect(groupPreviews(await harness.send(.tick)).isEmpty, "the dwell did not restart after a 17 pt move")
+        harness.now += .milliseconds(300)
+        #expect(groupPreviews(await harness.send(.tick)).count == 1, "no group 400 ms after the restart")
+    }
+
+    @Test func aMoveWithin16ptKeepsTheGroupDwell() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        _ = await drag(&harness, a, from: ra, to: centre(rb))
+        harness.now += .milliseconds(300)
+        _ = await move(&harness, a, from: ra, to: Point(x: rb.midX + 15, y: rb.midY))
+        harness.now += .milliseconds(100)
+        #expect(groupPreviews(await harness.send(.tick)).count == 1, "a 15 pt move restarted the dwell")
+    }
+
+    @Test func leavingTheCentreCancelsTheDwellAndAReturnNeedsANewOne() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        _ = await drag(&harness, a, from: ra, to: centre(rb))
+        harness.now += .milliseconds(200)
+        _ = await move(&harness, a, from: ra, to: Point(x: rb.maxX - 5, y: rb.midY))  // b's right edge band
+        harness.now += .milliseconds(100)
+        _ = await move(&harness, a, from: ra, to: centre(rb))
+        harness.now += .milliseconds(100)
+        #expect(groupPreviews(await harness.send(.tick)).isEmpty, "the dwell survived leaving the centre")
+        harness.now += .milliseconds(300)
+        #expect(groupPreviews(await harness.send(.tick)).count == 1)
+    }
+
+    @Test func onceShownTheGroupPreviewFollowsThePointerAnywhereInTheCentre() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        _ = await drag(&harness, a, from: ra, to: centre(rb))
+        harness.now += .milliseconds(400)
+        #expect(groupPreviews(await harness.send(.tick)).count == 1)
+        let far = Point(x: rb.minX + rb.width * 0.3, y: rb.minY + rb.height * 0.3)
+        let moved = await move(&harness, a, from: ra, to: far)
+        #expect(!moved.contains { if case .preview(nil, _) = $0 { true } else { false } }, "the preview was withdrawn: \(moved)")
+        await harness.send(pointer(.up, far.x, far.y))
+        let leaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: b))
+        #expect(harness.arranger.world[mainKey]?.tree.node(leaf) == .tabs(windows: [b, a], selected: 1))
+    }
+
+    @Test func shiftBypassesGrouping() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        _ = await drag(&harness, a, from: ra, to: centre(rb), [.shift])
+        harness.now += .milliseconds(400)
+        #expect(groupPreviews(await harness.send(.tick)).isEmpty)
+        await harness.send(pointer(.up, rb.midX, rb.midY, [.shift]))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.desktop.contains(a), "⇧ did not undock")
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: b))) == .panel(b))
+    }
+
+    @Test func commandOverAPlainDockedPanelSwapsInsteadOfGrouping() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        _ = await drag(&harness, a, from: ra, to: centre(rb), [.command])
+        harness.now += .milliseconds(400)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.swap(target: rb, origin: ra)], "tick gave \(tick)")
+        let up = await harness.send(pointer(.up, rb.midX, rb.midY, [.command]))
+        #expect(up.contains(.announce("Swapped")))
+    }
+
+    @Test func commandOverAGroupIsIgnoredAndTheDwellRuns() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b])
+        await groupFWithB(&harness, rb)
+        let leaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: b))
+        let now = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
+        let group = try #require(now.resolution.nodeRects[leaf]), from = try #require(now.frames[a])
+        _ = await drag(&harness, a, from: from, to: centre(TabBand.content(of: group)), [.command])
+        harness.now += .milliseconds(400)
+        let tick = await harness.send(.tick)
+        #expect(groupPreviews(tick).count == 1, "⌘ over a group stopped the dwell: \(tick)")
+    }
+
+    /// An excluded or never-dock window leaves the tree when it is reported so (D-29), so its tile is gone before any
+    /// drag can see it; `groupable` still refuses one as a defence.
+    @Test(arguments: ["own tile", "Desktop tile", "collapsed target"])
+    func excludedCentresNeverGroup(over place: String) async throws {
+        let start = ContinuousClock.now
+        var (arranger, rb) = try bareDocked(bMinimum: place == "collapsed target" ? Size(width: 1500, height: 100) : nil, zoom: place == "collapsed target")
+        let desk = try #require(arranger.world[mainKey])
+        let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: arranger.minimums)
+        let leafA = try #require(desk.tree.leaf(containing: a))
+        let ra = try #require(plan.resolution.nodeRects[leafA])
+        if place == "collapsed target" { try #require(arranger.camera.collapsible.contains(b.identity), "b did not collapse") }
+        let point = switch place {
+        case "own tile": centre(ra)
+        case "Desktop tile": centre(plan.desktopRect ?? area)
+        default: centre(rb)
+        }
+        _ = drag(&arranger, a, from: frameA, to: point, at: start)
+        try #require(arranger.drag?.kind == .move, "the drag never started")
+        let tick = arranger.handle(.tick, now: start + .milliseconds(400))
+        #expect(groupPreviews(tick).isEmpty, "over the \(place) a group preview showed: \(tick)")
+        #expect(arranger.drag?.groupDwellEnds == nil, "over the \(place) a group dwell ran")
+    }
+
+    @Test func aDropOnAGroupAddsTheWindowAsTheLastSelectedTab() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        await groupFWithB(&harness, rb)
+        let leaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: b))
+        let now = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
+        let group = try #require(now.resolution.nodeRects[leaf])
+        let point = centre(TabBand.content(of: group))
+        _ = await drag(&harness, a, from: ra, to: point)
+        let frame = try groupFrame(harness.arranger, a, on: b)
+        harness.now += .milliseconds(400)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.group(frame: frame, strip: TabBand.strip(of: frame), label: "Add as a tab")], "tick gave \(tick)")
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        let up = await harness.send(pointer(.up, point.x, point.y))
+        #expect(harness.arranger.world[mainKey]?.tree.node(leaf) == .tabs(windows: [b, f, a], selected: 2))
+        #expect(up.contains(.tabAnnouncement(.added(tabs: 3))))
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1, "adding a tab is not one undo step")
+        #expect(harness.arranger.isParked(b) && harness.arranger.isParked(f))
+    }
+
+    @Test func aGroupWithoutRoomShowsBlockedWithZoomOffAndIsRefused() throws {
+        let start = ContinuousClock.now
+        let tall = Size(width: 100, height: 840)  // fits a tile, not a content rect (859 − 32)
+        var (arranger, rb) = try bareDocked(aMinimum: tall)
+        _ = drag(&arranger, a, from: frameA, to: centre(rb), at: start)
+        let loose = try groupFrame(arranger, a, on: b)
+        let tick = arranger.handle(.tick, now: start + .milliseconds(400))
+        #expect(previews(tick).last == .blocked(loose), "tick gave \(tick)")
+        let depth = arranger.history.depth(for: mainKey)
+
+        let up = arranger.handle(pointer(.up, rb.midX, rb.midY), now: start + .milliseconds(450))
+        #expect(up.contains(.announce("Not enough room to dock here")))
+        #expect(!up.contains { if case .tabAnnouncement = $0 { true } else { false } })
+        #expect(arranger.history.depth(for: mainKey) == depth)
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: b))) == .panel(b))
+    }
+
+    @Test func aGroupWithoutRoomCollapsesWithZoomOnAndIsAccepted() throws {
+        let start = ContinuousClock.now
+        let tall = Size(width: 100, height: 840)
+        var (arranger, rb) = try bareDocked(aMinimum: tall, zoom: true)
+        _ = drag(&arranger, a, from: frameA, to: centre(rb), at: start)
+        let loose = try groupFrame(arranger, a, on: b)
+        let tick = arranger.handle(.tick, now: start + .milliseconds(400))
+        #expect(previews(tick).last == .collapsed(loose, label: CollapseCopy.draggedLabel), "tick gave \(tick)")
+        let depth = arranger.history.depth(for: mainKey)
+
+        let up = arranger.handle(pointer(.up, rb.midX, rb.midY), now: start + .milliseconds(450))
+        #expect(up.contains(.announce("Docked. Zoom in to see it.")))
+        #expect(!up.contains { if case .tabAnnouncement = $0 { true } else { false } }, "two announcements for one drop")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: b))) == .tabs(windows: [b, a], selected: 1))
+    }
+
+    @Test func selectingATabLaterIsNoUndoStep() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b])
+        await groupFWithB(&harness, rb)
+        let depth = harness.arranger.history.depth(for: mainKey)
+        try harness.arranger.world.reflow(mainKey) { desk, _ throws(LayoutError) in try desk.tree.selectTab(b) }
+        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+        #expect(try harness.arranger.world.undo(mainKey, history: &harness.arranger.history) != nil)
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: b))) == .panel(b), "one undo did not take the group apart")
     }
 }

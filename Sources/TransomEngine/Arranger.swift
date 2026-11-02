@@ -1379,7 +1379,10 @@ public struct Arranger: Sendable {
         let hidden = hideHandles()  // no gap handles while a window is dragged
         guard windows[session.window.identity]?.isExcluded == false, deskKey(of: session.window) != nil else { return endDrag() }
         let hover = hover(for: session)
-        guard session.update(hover: hover, at: now) else { return hidden + settleDrag(now: now) }
+        guard session.update(hover: hover, at: now) else {
+            drag = session  // a group dwell restarted by a move is kept; the earlier wake's tick re-arms for it
+            return hidden + settleDrag(now: now)
+        }
         var effects = hidden
         if session.shown != nil {
             effects.append(.preview(nil, displayUUID: session.shownOn))

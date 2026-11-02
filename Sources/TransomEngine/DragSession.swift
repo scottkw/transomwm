@@ -190,6 +190,13 @@ public struct DragSession: Equatable, Sendable {
     /// Feeds the current hover; true when it changed, which restarts the dwell and drops the decision. The group dwell
     /// restarts only when the centre or the modifiers change; moving inside the same centre never restarts the Phase 3 one.
     mutating func update(hover: Hover, at now: ContinuousClock.Instant) -> Bool {
+        // Wandering more than `groupRest` before the Group preview shows restarts the group dwell from here (D-01).
+        if groupDecision == nil, let anchor = groupAnchor, hover.groupTarget == self.hover?.groupTarget,
+            ((pointer.x - anchor.x) * (pointer.x - anchor.x) + (pointer.y - anchor.y) * (pointer.y - anchor.y)).squareRoot() > Self.groupRest
+        {
+            groupAnchor = pointer
+            groupSince = now
+        }
         guard hover != self.hover else { return false }
         if hover.groupTarget != self.hover?.groupTarget || hover.modifiers != self.hover?.modifiers {
             groupAnchor = hover.groupTarget == nil ? nil : pointer

@@ -10,11 +10,17 @@ public enum TabAnnouncement: Equatable, Sendable {
 
 /// Making tab groups by a centre drop (D-01 to D-03). Each drop is one `World.edit`, dry-run first like a dock (Pattern 4).
 extension Arranger {
-    /// Whether a drop on leaf `id` of `key`'s desk may group: a docked panel or an existing group.
+    /// Whether a drop on leaf `id` of `key`'s desk may group (UI-SPEC Surface 1): a docked panel or an existing group,
+    /// none of whose windows is collapsed, excluded or never-dock.
     func groupable(_ id: NodeID, on key: DeskKey) -> Bool {
+        let members: [WindowRef]
         switch world[key]?.tree.node(id) {
-        case .panel?, .tabs?: true
-        case .split?, .desktop?, nil: false
+        case .panel(let window)?: members = [window]
+        case .tabs(let windows, _)?: members = windows
+        case .split?, .desktop?, nil: return false
+        }
+        return members.allSatisfy { window in
+            !camera.collapsible.contains(window.identity) && windows[window.identity].map { !$0.isExcluded && $0.kind == .dockable } ?? false
         }
     }
 
