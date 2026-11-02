@@ -1838,3 +1838,60 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(arranger.world == before)
     }
 }
+
+/// TABS-06: Close Tab closes one member through the close queue, shown first when hidden, and stops at a prompt.
+@Suite struct ArrangerTabsCloseTabTests {
+    @Test func closeTabOnTheSelectedMemberClosesItAtOnceAndTheNeighbourIsSelected() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        let effects = arranger.handle(.tab(.closeTab(a), ready: true), now: start)
+        #expect(closes(effects) == [a])
+        let closed = arranger.handle(.event(.windowDestroyed(a)), now: start + .milliseconds(100))
+        #expect(selected(arranger, group) == f)
+        #expect(commands(closed).contains(.setFrame(f, content)), "f was not written into the content rect: \(commands(closed))")
+        #expect(closes(closed).isEmpty && arranger.tabs.closeQueue == nil, "Close Tab closed more than one window")
+    }
+
+    @Test func closeTabOnAHiddenMemberShowsItFirstThenCloses() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, withA: true)
+        let effects = arranger.handle(.tab(.closeTab(b), ready: true), now: start)
+        #expect(closes(effects).isEmpty, "a hidden member was closed before it was shown")
+        #expect(commands(effects).contains(.setFrame(b, content)) && arranger.tabs.pendingReveal?.revealed == b)
+        #expect(selected(arranger, group) == b)
+        let shown = arranger.handle(.event(.frameApplied(b, requested: content, actual: content)), now: start + .milliseconds(100))
+        #expect(closes(shown) == [b])
+    }
+
+    @Test func aMemberStillOpenAfterTheConfirmationStaysSelectedAndNothingMoreHappens() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.tab(.closeTab(a), ready: true), now: start)
+        let stop = arranger.handle(.tick, now: start + Arranger.closeConfirmation)
+        #expect(announcements(stop) == [.didNotClose(a)])
+        #expect(closes(stop).isEmpty && selected(arranger, group) == a)
+        #expect(arranger.tabs.closeQueue == nil, "a resumable list was kept")
+        let later = arranger.handle(.tick, now: start + .seconds(3))
+        #expect(announcements(later).isEmpty && closes(later).isEmpty)
+    }
+
+    @Test func closingOneOfTwoTabsAnnouncesTheDissolve() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [b, f], f selected
+        _ = arranger.handle(.tab(.closeTab(f), ready: true), now: start)
+        let closed = arranger.handle(.event(.windowDestroyed(f)), now: start + .milliseconds(100))
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .panel(b))
+        #expect(closed.contains(.tabAnnouncement(.ended)), "Close Tab did not announce the dissolve: \(closed)")
+    }
+
+    @Test(arguments: [true, false])
+    func aRefusedCloseTabBeepsAndSendsNothing(paused: Bool) throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)
+        if paused { _ = arranger.handle(.setPaused(.user, true), now: start) }
+        let before = arranger.world
+        let effects = arranger.handle(.tab(.closeTab(f), ready: paused), now: start)
+        #expect(effects.contains(.beep) && effects.contains(.tabAnnouncement(.refused(paused ? .paused : .notReady))))
+        #expect(commands(effects).isEmpty && arranger.world == before && arranger.tabs.closeQueue == nil)
+    }
+}

@@ -239,6 +239,18 @@ final class TabStripView: NSView, NSViewToolTipOwner {
             tab.setAccessibilityHelp(TabCopy.tabHelp(index: i + 1, count: count))
             tab.setAccessibilityParent(self)
             tab.setAccessibilityFrameInParentSpace(layout.tabRects[i].map(Self.ns) ?? overflowFrame)
+            // The context menu's two items, reachable without a pointer (overflowed tabs included).
+            let member = strip.members[i]
+            tab.setAccessibilityCustomActions([
+                NSAccessibilityCustomAction(name: TabCopy.closeTab) { [weak self] in
+                    self?.onAction?(.closeTab(member))
+                    return true
+                },
+                NSAccessibilityCustomAction(name: TabCopy.moveOut) { [weak self] in
+                    self?.onAction?(.moveOut(member, via: .voiceOver))
+                    return true
+                },
+            ])
             return tab
         }
         if let overflow = layout.overflow {
