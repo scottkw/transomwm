@@ -1991,6 +1991,24 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(arranger.selectedGroupMembers() == [f])
     }
 
+    /// 07-05: while the selected member is minimised the engine stops recording the hidden one as parked, and the
+    /// leaf has no planned rect. The quit restore must still bring the hidden one on screen: the stranded rule does.
+    @Test func whileTheSelectedIsMinimisedTheQuitPlanStillBringsTheHiddenMemberOnScreen() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, content) = try bareGroup(at: start)  // [b, f], f selected
+        _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start)
+        try #require(!arranger.isParked(b), "the 07-05 premise changed")
+        #expect(arranger.groupContentRects()[b.identity] == nil, "the absent selected member's leaf is planned")
+        #expect(arranger.selectedGroupMembers().isEmpty, "a minimised selected member is raised at quit")
+        let parked = info(3, frame: Rect(x: area.maxX - 1, y: area.maxY - 1, width: content.width, height: content.height))
+        let groups = arranger.groupContentRects()
+        let plan = Recovery.terminationPlan(
+            windows: [parked], homeFrames: arranger.homeFrames, displays: [mainDisplay], docked: Set(groups.keys).union([b.identity]),
+            homeTiles: arranger.homeTiles().merging(groups) { $1 })
+        let back = try #require(plan[b], "the parked hidden member is left off screen")
+        #expect(!Recovery.isStranded(back, displays: [mainDisplay]))
+    }
+
     @Test func groupContentRectsUsesTheHomeViewWhileZoomedIn() throws {
         let start = ContinuousClock.now
         var (arranger, group, _, content) = try bareGroup(at: start, zoom: true)
@@ -2063,5 +2081,77 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         _ = arranger.handle(.command(.undo, focused: a), now: start + .seconds(2))
         #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f, a], selected: 2), "Undo did not re-form the group")
         #expect(arranger.isParked(b) && arranger.isParked(f), "the hidden members did not re-park")
+    }
+
+    /// A fresh Arranger on a `mode` launch restoring `saved`, whose first complete inventory tracks only `kept` (the CG
+    /// list holds only them, so every other saved window is gone).
+    private func relaunch(_ saved: World, keeping kept: [WindowInfo], mode: LaunchMode = .normal) -> (Arranger, [ArrangerEffect]) {
+        var arranger = Arranger()
+        _ = arranger.handle(.launch(mode), now: .now)
+        _ = arranger.handle(.restore(saved, homeFrames: [:]), now: .now)
+        let live = kept.map { CGWindowEntry(windowID: $0.window.windowID, pid: $0.window.pid, bounds: $0.frame, layer: 0, onScreen: true, alpha: 1) }
+        let inventory = WindowInventory(displays: [mainDisplay], windows: kept, initialRefreshComplete: true, liveWindows: live)
+        let effects = arranger.handle(.inventory(inventory), now: .now)
+        return (arranger, effects)
+    }
+
+    @Test func aCrashRelaunchRescuesTheParkedMemberThenReformsTheGroupAndParksItAgain() async throws {
+        var (harness, plan) = try await docked()
+        await groupFWithB(&harness, try #require(plan.frames[b]))  // [b, f], f selected, b parked
+        let leaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: b))
+        let parked = try #require(await harness.frame(b))
+        try #require(harness.arranger.isParked(b) && Recovery.isStranded(parked, displays: [mainDisplay]), "b is not parked off screen")
+        let snapshot = harness.arranger.snapshot
+        let content = try #require(harness.arranger.groupContentRects()[b.identity])
+
+        var restored = Arranger()
+        _ = restored.handle(.launch(.recovery), now: .now)
+        _ = restored.handle(.restore(snapshot.world, homeFrames: snapshot.homeFrames), now: .now)
+        let effects = restored.handle(.inventory(await harness.fake.inventory()), now: .now)
+        let rescue = try #require(effects.first { if case .perform = $0 { true } else { false } }, "nothing was sent: \(effects)")
+        guard case .perform(let first) = rescue, case .setFrame(b, let back)? = first.first(where: { $0.window == b }) else {
+            Issue.record("the first perform does not move b: \(rescue)")
+            return
+        }
+        #expect(!Recovery.isStranded(back, displays: [mainDisplay]), "b was not brought on screen: \(back)")
+        #expect(effects.contains(.notice(.crashRecovered(unplaced: 0))), "N2: \(effects)")
+        #expect(restored.world[mainKey]?.tree.node(leaf) == .tabs(windows: [b, f], selected: 1), "the group did not re-form with f selected")
+        #expect(parks(effects).contains(.park(b, displayUUID: "main", size: content.size)), "b was not parked again at the content size: \(parks(effects))")
+        #expect(restored.isParked(b))
+    }
+
+    @Test func aRelaunchWithAHiddenMemberGoneReformsWithTheRestAndLogs() throws {
+        let (source, group, _, _) = try bareGroup(at: .now, withA: true)  // [b, f, a], a selected
+        let (arranger, effects) = relaunch(source.world, keeping: [info(1, frame: frameA), info(2, frame: smallF)])  // b gone
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [f, a], selected: 1), "the group did not keep a selected")
+        #expect(effects.contains(.info("relaunch: group \(group.node) re-formed with 2 of 3 members")), "\(effects)")
+        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "a relaunch with a member gone is not silent")
+    }
+
+    @Test func aRelaunchWithTheSelectedMemberGoneSelectsItsRightNeighbour() throws {
+        let (source, group, _, _) = try bareGroup(at: .now, withA: true)  // [b, f, a]
+        var saved = source.world
+        try saved.reflow(mainKey) { desk, _ throws(LayoutError) in try desk.tree.selectTab(f) }
+        let (arranger, effects) = relaunch(saved, keeping: [info(1, frame: frameA), info(3, frame: frameB)])  // f gone
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, a], selected: 1), "a, f's right neighbour, is not selected")
+        #expect(effects.contains(.info("relaunch: group \(group.node) re-formed with 2 of 3 members")))
+    }
+
+    @Test func aTwoMemberGroupWithOneGoneDissolvesDockedAndFloating() throws {
+        let (dockedSource, group, _, _) = try bareGroup(at: .now)  // [b, f], f selected
+        let (docked, _) = relaunch(dockedSource.world, keeping: [info(1, frame: frameA), info(3, frame: frameB)])  // f gone
+        #expect(docked.world[mainKey]?.tree.node(group.node) == .panel(b), "the docked group did not dissolve into a plain panel")
+        let (floatingSource, _, _) = try bareFloatingGroup(at: .now)  // [t, f]
+        let (floating, _) = relaunch(floatingSource.world, keeping: [info(5, frame: tFrame)])  // f gone
+        let desktop = try #require(floating.world[mainKey]?.desktop)
+        #expect(desktop.groups.isEmpty && desktop.contains(t), "the floating group did not dissolve into a floater")
+    }
+
+    @Test func aGroupWithNoMemberLeftIsRemovedLikeAnyAbsentWindow() throws {
+        let (source, group, _, _) = try bareGroup(at: .now)  // [b, f]
+        let (arranger, effects) = relaunch(source.world, keeping: [info(1, frame: frameA)])
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == nil)
+        #expect(arranger.world[mainKey]?.tree.windows == [a])
+        #expect(!effects.contains { if case .fault = $0 { true } else { false } }, "\(effects)")
     }
 }

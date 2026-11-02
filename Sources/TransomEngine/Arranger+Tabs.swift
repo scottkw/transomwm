@@ -346,7 +346,8 @@ extension Arranger {
 
     /// The quit restore's group targets (D-07, Pitfall 3): every member of every group on every desk, at home or not, at
     /// its group's home-view content rect (a docked group's leaf rect, a floating group's planned or stored frame, minus
-    /// the band). A collapsed group or a desk that cannot be planned gives none, so its members keep the stranded rule.
+    /// the band). A docked group with no planned rect (collapsed, or its selected member absent, 07-05) or a desk that
+    /// cannot be planned gives none, so its members keep the stranded rule: a parked one comes back centred on screen.
     public func groupContentRects() -> [WindowIdentity: Rect] {
         var rects: [WindowIdentity: Rect] = [:]
         for (key, desk) in world.desks {
@@ -897,46 +898,33 @@ extension Arranger {
     /// Dissolves every group on every desk, one undo step per desk holding groups (in key order), a hidden Desktop
     /// shown first. The selected member keeps the group's place: its tile (a plain panel under the same NodeID), or the
     /// whole floating frame (the band returns). The others float at the content size, top-lefts 24 pt apart from the
-    /// group frame's top-left, clamped inside the Desktop tile. Returns the groups dissolved and the members floated.
-    mutating func dissolveAllGroups() throws(LayoutError) -> (groups: Int, windows: [WindowRef]) {
-        var groups = 0, floated: [WindowRef] = []
+    /// group frame's top-left, clamped inside the Desktop tile. Returns the groups dissolved, the members floated, and a
+    /// fault per desk that could not be dissolved (it keeps its groups, so the rest of Restore All still runs).
+    mutating func dissolveAllGroups() -> (groups: Int, windows: [WindowRef], faults: [ArrangerEffect]) {
+        var groups = 0, floated: [WindowRef] = [], faults: [ArrangerEffect] = []
         for (key, desk) in world.desks.sorted(by: { $0.key < $1.key }) {
-            let docked = desk.tree.nodes.compactMap { id, node -> (NodeID, [WindowRef], Int)? in
-                if case .tabs(let members, let selected) = node { (id, members, selected) } else { nil }
-            }.sorted { $0.0 < $1.0 }
-            guard !docked.isEmpty || !desk.desktop.groups.isEmpty else { continue }
+            guard !desk.desktop.groups.isEmpty || desk.tree.nodes.values.contains(where: { if case .tabs = $0 { true } else { false } }) else { continue }
             // shortcut: a desk whose display is gone keeps its groups; its members are rescued as stranded windows.
             guard let area = displays.first(where: { $0.uuid == key.displayUUID })?.visibleFrame else { continue }
             let mins = minimums, gap = gap, show = showingDesktop()
-            let tiles = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution.nodeRects
+            guard let tiles = try? Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution.nodeRects else {
+                faults.append(.fault("restore all: could not plan \(key) to dissolve its groups"))
+                continue
+            }
+            // A docked group with no planned tile (its selected member absent, 07-05) stays; its hidden members are not
+            // parked then, and the rescue brings a stranded one back.
+            let docked = desk.tree.nodes.compactMap { id, node -> (NodeID, [WindowRef], Int, Rect)? in
+                if case .tabs(let members, let selected) = node, let tile = tiles[id] { (id, members, selected, tile) } else { nil }
+            }.sorted { $0.0 < $1.0 }
+            guard !docked.isEmpty || !desk.desktop.groups.isEmpty else { continue }
             var moved: [WindowRef: Rect] = [:]
-            try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-                if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
-                var cascade: [(WindowRef, WindowState?, frame: Rect, n: Int)] = []
-                for (id, members, selected) in docked {
-                    guard let frame = tiles[id] else { continue }
-                    for (n, member) in members.enumerated().filter({ $0.offset != selected }).map(\.element).enumerated() {
-                        cascade.append((member, desk.tree.state(of: member), frame, n + 1))
-                        try desk.tree.remove(member)
-                    }
+            do throws(LayoutError) {
+                try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+                    try Self.dissolve(docked, on: &desk, ids: &ids, area: area, gap: gap, mins: mins, show: show, moved: &moved)
                 }
-                for group in desk.desktop.groups {
-                    let (removed, states) = try desk.desktop.removeGroup(group.id)
-                    let selected = removed.members[removed.selected]
-                    try desk.desktop.add(selected, frame: removed.frame)
-                    if let state = states[selected.identity], state != .present { try desk.desktop.setState(state, for: selected) }
-                    for (n, member) in removed.members.filter({ $0 != selected }).enumerated() {
-                        cascade.append((member, states[member.identity], removed.frame, n + 1))
-                    }
-                }
-                let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
-                for (member, state, frame, n) in cascade {
-                    let content = TabBand.content(of: frame), step = Self.moveOutCascade * Double(n)
-                    let rect = Planner.clamp(Rect(x: frame.minX + step, y: frame.minY + step, width: content.width, height: content.height), into: desktop)
-                    try desk.desktop.add(member, frame: rect)
-                    if let state, state != .present { try desk.desktop.setState(state, for: member) }
-                    moved[member] = rect
-                }
+            } catch {
+                faults.append(.fault("restore all: could not dissolve the groups of \(key): \(error)"))
+                continue
             }
             groups += docked.count + desk.desktop.groups.count
             for (member, rect) in moved.sorted(by: { $0.key.identity < $1.key.identity }) {
@@ -945,6 +933,56 @@ extension Arranger {
                 floated.append(member)
             }
         }
-        return (groups, floated)
+        return (groups, floated, faults)
+    }
+
+    /// One desk's dissolve (`dissolveAllGroups`): `docked` groups with their tiles, then every floating group.
+    private static func dissolve(
+        _ docked: [(NodeID, [WindowRef], Int, Rect)], on desk: inout Desk, ids: inout IDSource, area: Rect, gap: Double,
+        mins: [WindowRef: Size], show: (inout Desk, inout IDSource) throws(LayoutError) -> Void, moved: inout [WindowRef: Rect]
+    ) throws(LayoutError) {
+        if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
+        var cascade: [(WindowRef, WindowState?, frame: Rect, n: Int)] = []
+        for (_, members, selected, frame) in docked {
+            for (n, member) in members.enumerated().filter({ $0.offset != selected }).map(\.element).enumerated() {
+                cascade.append((member, desk.tree.state(of: member), frame, n + 1))
+                try desk.tree.remove(member)
+            }
+        }
+        for group in desk.desktop.groups {
+            let (removed, states) = try desk.desktop.removeGroup(group.id)
+            let selected = removed.members[removed.selected]
+            try desk.desktop.add(selected, frame: removed.frame)
+            if let state = states[selected.identity], state != .present { try desk.desktop.setState(state, for: selected) }
+            for (n, member) in removed.members.filter({ $0 != selected }).enumerated() {
+                cascade.append((member, states[member.identity], removed.frame, n + 1))
+            }
+        }
+        let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
+        for (member, state, frame, n) in cascade {
+            let content = TabBand.content(of: frame), step = Self.moveOutCascade * Double(n)
+            let rect = Planner.clamp(Rect(x: frame.minX + step, y: frame.minY + step, width: content.width, height: content.height), into: desktop)
+            try desk.desktop.add(member, frame: rect)
+            if let state, state != .present { try desk.desktop.setState(state, for: member) }
+            moved[member] = rect
+        }
+    }
+}
+
+/// Relaunch with tab groups (D-13, UI-SPEC "Relaunch with a member missing").
+extension Arranger {
+    /// One line per saved group that lost members to windows gone since the last session; silent otherwise. The close
+    /// path already re-formed it without them (or dissolved it, or removed it). NodeIDs and counts only.
+    func regroupedLog(saved: World) -> [ArrangerEffect] {
+        let held = Set(world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) })
+        return saved.desks.sorted { $0.key < $1.key }.flatMap { _, desk in
+            let docked = desk.tree.nodes.compactMap { id, node -> (NodeID, [WindowRef])? in
+                if case .tabs(let members, _) = node { (id, members) } else { nil }
+            }
+            return (docked + desk.desktop.groups.map { ($0.id, $0.members) }).sorted { $0.0 < $1.0 }.compactMap { id, members -> ArrangerEffect? in
+                let left = members.filter(held.contains).count
+                return left < members.count ? .info("relaunch: group \(id) re-formed with \(left) of \(members.count) members") : nil
+            }
+        }
     }
 }

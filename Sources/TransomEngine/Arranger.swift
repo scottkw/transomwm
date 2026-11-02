@@ -302,7 +302,7 @@ public struct Arranger: Sendable {
                 unattached = (restore.world, restore.homeFrames, restore.wantedFrames, arrangement)
                 restored = ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
             }
-            var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects
+            var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects + regroupedLog(saved: restore.world)
             if launch != .normal {
                 do throws(LayoutError) {
                     try showParkedDesktops(keeping: rescued, undoable: false)

@@ -32,14 +32,14 @@ extension Arranger {
     mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
         goHome()
         camera.collapsible = []  // else the replan parks them again in the same perform
-        let dissolved = try dissolveAllGroups()
+        let dissolved = dissolveAllGroups()
         let log: [ArrangerEffect] = dissolved.groups == 0
             ? [] : [.info("restore all: dissolved \(dissolved.groups) groups, \(dissolved.windows.count) windows brought back")]
         // The dissolved members float at their cascade frames; the rescue would move them elsewhere.
         let moves = rescueStranded(desks: world, sparing: Set(dissolved.windows.map(\.identity)))
         try showParkedDesktops(keeping: moves, undoable: true)
         let count = moves.count + dissolved.windows.count
-        return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + log + [.notice(.restored(count: count))]
+        return dissolved.faults + (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + log + [.notice(.restored(count: count))]
     }
 
     /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step. A floating
