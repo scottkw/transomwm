@@ -349,7 +349,45 @@ Plans:
   5. Tab groups work for windows from different apps, both docked and floating on the Desktop tile
   6. Right-clicking a tab offers close and move-out
 
-**Plans**: TBD
+**Plans:** 12 plans
+
+Plans:
+**Wave 1**
+- [ ] 07-01-PLAN.md — Tracer: centre drop after 400 ms groups two docked windows; 32 pt band in `resolve`, sized parks, Group preview, VM park test
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 07-02-PLAN.md — Tab strip panels and click-to-switch (reveal, read back, then park); D-08 activation with focus guard; VM switch test
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 07-03-PLAN.md — Strip complete: follows drags, geometry/overflow/narrow, styling, VoiceOver, Space handling; VM Space test
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 07-04-PLAN.md — Floating groups: DesktopLayer sidecar (backward-compatible layout.json), floating centre drops, moves, selection
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 07-05-PLAN.md — Close Group and Minimize Group (AX close press, minimise), member closes and dissolve; VM AX and same-app tests
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 07-06-PLAN.md — Whole-group moves: Float/Dock Group, Dock/Float Window, green button, title-bar drag, Arrange/Float All, rehome
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 07-07-PLAN.md — Tear-off: tab drag out through the pointer pipeline, ghost, dock/group/float/cancel, Esc
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 07-08-PLAN.md — Tab context menu: Close Tab and Move Out of Group, VoiceOver custom actions
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 07-09-PLAN.md — Tabs commands: Next/Previous Tab, Move Out of Group hotkeys, URLs, Tabs submenu, Shortcuts rows, Debug line
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 07-10-PLAN.md — Safety: quit places members at the content rect, Restore All dissolves groups, crash and missing-member relaunch; VM quit test
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 07-11-PLAN.md — Groups on the zoom stage and in the overview: strip layer, collapsed group label, counts, background capture
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 07-12-PLAN.md — Phase gate: full suite, VM suites one at a time, Debug build, 07-UAT.md (host checklist, VM checks, backstops)
+
 **UI hint**: yes
 **Research**: Standard patterns; builds on `Node.tabs` (Phase 1), native-tab detection (Phase 2) and window parking (Phase 4)
 **Scope notes**: Tab strip panel tracks the group leader via CG bounds polling; inactive tabs are hidden by parking, never minimised.

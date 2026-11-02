@@ -40,7 +40,40 @@ created: "2026-11-01"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| {N}-01-01 | 01 | 1 | REQ-{XX} | T-{N}-01 / — | {expected secure behavior or "N/A"} | unit | `{command}` | ✅ / ❌ W0 | ⬜ pending |
+| 07-01-01 | 01 | 1 | TABS-01, TABS-05 | T-07-01, T-07-02 | Hidden members never get a window rect; one frame per group | unit + VM | `swift test --filter 'TabGroupModelTests\|ArrangerTabsTests\|ResolveTests\|PlannerTests\|ViewPlannerTests\|ArrangerDragTests\|FakeWindowSystemTests'` + `scripts/vm-live-test.sh TabGroupIntegrationTests` | ❌ W0 | ⬜ pending |
+| 07-01-02 | 01 | 1 | TABS-01 | — | N/A | unit | `swift test --filter 'ArrangerTabsTests\|ArrangerDragTests\|DragSessionTests\|ArrangerCollapseTests'` | ❌ W0 | ⬜ pending |
+| 07-01-03 | 01 | 1 | TABS-01 | — | N/A | unit | `swift test` (TabCopyTests, PreviewStyleTests) + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-02-01 | 02 | 2 | TABS-02, TABS-01 | T-07-03, T-07-05, T-07-08 | Strip never activates Transom; reveal before park; strip presses never start drags | unit + VM | `swift test --filter ArrangerTabsTests` + `scripts/vm-live-test.sh TabGroupIntegrationTests` | ❌ W0 | ⬜ pending |
+| 07-02-02 | 02 | 2 | TABS-02 | T-07-06 | Focus echoes and post-close focus never flip a group | unit | `swift test --filter 'ArrangerTabsTests\|ArrangerFocusTests\|ArrangerCameraTests'` | ❌ W0 | ⬜ pending |
+| 07-02-03 | 02 | 2 | TABS-02 | T-07-04 | Titles never logged | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-03-01 | 03 | 3 | TABS-01 | T-07-09 | Backstop poll reads CG bounds only | unit | `swift test --filter ArrangerTabsTests` + `swift build` | ❌ W0 | ⬜ pending |
+| 07-03-02 | 03 | 3 | TABS-02 | — | N/A | unit | `swift test --filter 'TabStripLayoutTests\|TabCopyTests'` | ❌ W0 | ⬜ pending |
+| 07-03-03 | 03 | 3 | TABS-02 | T-07-07 | Strips only on their Space; stranded panels replaced | unit + VM | `swift test` + `scripts/vm-live-test.sh TabStripSpaceIntegrationTests` | ❌ W0 | ⬜ pending |
+| 07-04-01 | 04 | 4 | TABS-05, TABS-01 | T-07-10, T-07-11 | Hostile layout.json groups rejected; old files decode | unit | `swift test --filter 'TabGroupModelTests\|DesktopLayerTests\|PersistenceTests\|InvariantTests\|ArrangerTabsTests\|PlannerTests\|LayoutStoreTests'` | ❌ W0 | ⬜ pending |
+| 07-04-02 | 04 | 4 | TABS-05, TABS-02 | T-07-12 | Hidden member echoes never move a group | unit | `swift test --filter 'ArrangerTabsTests\|ArrangerDesktopTests\|ArrangerFocusTests'` | ❌ W0 | ⬜ pending |
+| 07-04-03 | 04 | 4 | TABS-05 | — | N/A | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-05-01 | 05 | 5 | TABS-03 | T-07-13, T-07-14 | Normal close press only; excluded apps never receive close/minimise | unit + VM | `swift test --filter 'ArrangerTabsTests\|FakeWindowSystemTests\|ExclusionScenarioTests'` + `scripts/vm-live-test.sh TabGroupIntegrationTests` | ❌ W0 | ⬜ pending |
+| 07-05-02 | 05 | 5 | TABS-03, TABS-02 | T-07-15 | Minimize Group survives same-app focus shift | unit + VM | `swift test --filter ArrangerTabsTests` + `scripts/vm-live-test.sh TabGroupIntegrationTests` | ❌ W0 | ⬜ pending |
+| 07-05-03 | 05 | 5 | TABS-03 | — | N/A | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-06-01 | 06 | 6 | TABS-03 | T-07-16 | Whole-leaf moves validated, all-or-nothing | unit | `swift test --filter 'TabGroupModelTests\|LayoutEditTests\|InvariantTests\|ArrangerTabsTests\|TabCopyTests\|TabStripLayoutTests'` | ❌ W0 | ⬜ pending |
+| 07-06-02 | 06 | 6 | TABS-03, TABS-05 | T-07-16 | No path tears out a member | unit | `swift test --filter 'TabGroupModelTests\|ArrangerTabsTests\|ArrangerCommandTests\|ArrangerGreenButtonTests\|ArrangerDesktopTests\|ArrangerSpacesTests'` | ❌ W0 | ⬜ pending |
+| 07-06-03 | 06 | 6 | TABS-03 | T-07-16 | Whole-group drag keeps the Core Value | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-07-01 | 07 | 7 | TABS-04 | T-07-18 | Strip presses reach the engine as tab presses only | unit | `swift test --filter 'ArrangerTabsTests\|ArrangerDragTests\|DragSessionTests'` + `swift build` | ❌ W0 | ⬜ pending |
+| 07-07-02 | 07 | 7 | TABS-04 | — | N/A | unit | `swift test --filter 'ArrangerTabsTests\|TabCopyTests'` | ❌ W0 | ⬜ pending |
+| 07-07-03 | 07 | 7 | TABS-04 | T-07-17 | Esc hotkeys only during a tear-off; never ⌥⌘Esc | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-08-01 | 08 | 8 | TABS-06, TABS-04 | — | N/A | unit | `swift test --filter 'ArrangerTabsTests\|TabCopyTests'` + `swift build` | ❌ W0 | ⬜ pending |
+| 07-08-02 | 08 | 8 | TABS-06 | T-07-19 | Close Tab reveals first, stops at a prompt | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-09-01 | 09 | 9 | TABS-02, TABS-04 | T-07-21 | Hotkey names pinned | unit | `swift test --filter 'ArrangerTabsTests\|HotkeyTableTests\|CommandTests\|ArrangerCommandTests'` | ❌ W0 | ⬜ pending |
+| 07-09-02 | 09 | 9 | TABS-02, TABS-06 | T-07-20 | URL whitelist, rate limit, no beep | unit | `swift test --filter 'TransomURLTests\|ShortcutsModelTests\|CommandMenuTests\|MenuCopyTests'` | ✅ | ⬜ pending |
+| 07-09-03 | 09 | 9 | TABS-02 | — | N/A | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-10-01 | 10 | 10 | TABS-02, TABS-05 | T-07-22 | Quit leaves no member off screen | unit + VM | `swift test --filter 'ArrangerTabsTests\|RecoveryTests'` + `scripts/vm-live-test.sh TabGroupIntegrationTests` | ❌ W0 | ⬜ pending |
+| 07-10-02 | 10 | 10 | TABS-02 | T-07-22, T-07-23 | Restore All dissolves before rescue; logged | unit | `swift test --filter 'ArrangerTabsTests\|ArrangerRestoreTests\|ArrangerCommandTests'` | ❌ W0 | ⬜ pending |
+| 07-10-03 | 10 | 10 | TABS-01, TABS-05 | — | N/A | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-11-01 | 11 | 11 | TABS-01, TABS-05 | T-07-24 | Hidden members never drawn or captured | unit | `swift test --filter 'ArrangerTabsTests\|ArrangerCameraTests\|TileLayerTests\|StageFollowTests'` + `swift build` | ❌ W0 | ⬜ pending |
+| 07-11-02 | 11 | 11 | TABS-01 | — | N/A | unit | `swift test --filter 'ArrangerTabsTests\|TabCopyTests\|OverviewCopyTests\|OverviewLayoutTests'` | ❌ W0 | ⬜ pending |
+| 07-11-03 | 11 | 11 | TABS-01 | T-07-24 | Captures stay in memory | unit | `swift test` + `scripts/check-no-appkit.sh` | ❌ W0 | ⬜ pending |
+| 07-12-01 | 12 | 12 | TABS-01..06 | T-07-25 | Live suites only in the VM | full + VM | `swift test` + each VM suite via `scripts/vm-live-test.sh` + `scripts/build-debug.sh` | ✅ | ⬜ pending |
+| 07-12-02 | 12 | 12 | TABS-01..06 | — | N/A | doc check | 07-UAT.md phrase check loop | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -48,11 +81,16 @@ created: "2026-11-01"
 
 ## Wave 0 Requirements
 
-- [ ] `{tests/test_file.py}` — stubs for REQ-{XX}
-- [ ] `{tests/conftest.py}` — shared fixtures
-- [ ] `{framework install}` — if no framework detected
+- [ ] `Tests/TransomModelTests/TabGroupModelTests.swift` — band in `resolve`, floating group edits/validation/decode, leaf moves (07-01, 07-04, 07-06)
+- [ ] `Tests/TransomEngineTests/ArrangerTabsTests.swift` — dwell, drops, reveal/park, D-08, close/minimise, whole-group moves, tear-off, move out, commands, safety (07-01 onward)
+- [ ] `Tests/TransomMacTests/TabCopyTests.swift` — copy, plurals, Debug line (07-01 onward)
+- [ ] `Tests/TransomMacTests/TabStripLayoutTests.swift` — strip geometry and overflow (07-03)
+- [ ] `Tests/TransomMacIntegrationTests/TabGroupIntegrationTests.swift` — five VM tests (07-01, 07-02, 07-05 ×2, 07-10)
+- [ ] `Tests/TransomMacIntegrationTests/TabStripSpaceIntegrationTests.swift` — strip Space behaviour, VM only (07-03)
+- [ ] `FakeWindowSystem` support for `.park(size:)`, `.close`, `.minimize` (07-01, 07-05)
+- [ ] Existing `ResolveTests` expectations updated for tab leaves (07-01)
 
-*If none: "Existing infrastructure covers all phase requirements."*
+Each suite is created by the first task that names it in its `<files>`; every `swift test --filter` gate requires a non-zero "Test run with N tests … passed" line, so a filter matching nothing fails.
 
 ---
 
@@ -60,9 +98,12 @@ created: "2026-11-01"
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| {behavior} | REQ-{XX} | {reason} | {steps} |
-
-*If none: "All phase behaviors have automated verification."*
+| Strip follows a quick drag with no visible lag | TABS-01 | Visual timing on real hardware | 07-UAT.md hardware backstop |
+| No wallpaper flash on tab switch | TABS-02 | Visual, frame-level | 07-UAT.md hardware backstop |
+| Close Group with an unsaved TextEdit document | TABS-03 | Real app save sheet | 07-UAT.md host checklist item 5 |
+| Native Safari tab group as one member | TABS-05 | Real Safari | 07-UAT.md host checklist item 4 |
+| VoiceOver reads the strip as a tab group | TABS-02, TABS-06 | Screen reader output | 07-UAT.md hardware backstop |
+| Tear-off dock/float/Esc, ⌘Tab to hidden member, strip ordering, inactive click, context menu tracking, kill -9 relaunch, Restore All + Undo, lock/unlock | TABS-02, TABS-04, TABS-06 | Needs pointer gestures or session events the suites do not post | 07-UAT.md VM checks (Tart VM only) |
 
 ---
 
