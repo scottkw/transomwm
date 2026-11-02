@@ -499,13 +499,25 @@ import os
             let r = Coordinates.appKit(fromTopLeft: rect, primaryHeight: primaryHeight)
             return CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
         }
-        return move.tiles.map { tile in
+        let windows = move.tiles.map { tile in
             let cg = cgWindow(tile.window)
             let image = cg.flatMap { images[$0] ?? capture.cached($0) }
             return StageTile(
                 id: cg ?? tile.window.windowID, start: appKit(tile.start), end: appKit(tile.end),
                 content: tile.kind == .collapsed ? collapsedBlock(tile.window) : image.map { .snapshot($0) } ?? fallback(tile.window))
         }
+        // After the windows, so each strip draws above its group's tile (07 UI-SPEC Surface 6).
+        return windows + move.strips.map { strip in
+            let shown = strip.members[strip.selected]
+            return StageTile(
+                id: StageTile.stripID(cgWindow(shown) ?? shown.windowID), start: appKit(strip.start), end: appKit(strip.end),
+                content: stripContent(strip.members, selected: strip.selected))
+        }
+    }
+
+    /// A group's icon-only strip: each member's app icon.
+    func stripContent(_ members: [TransomModel.WindowRef], selected: Int) -> TileLayer.Content {
+        .strip(icons: members.map { NSRunningApplication(processIdentifier: $0.pid)?.icon }, selected: selected)
     }
 
     /// A collapsed window's block: app colour and icon, no title.

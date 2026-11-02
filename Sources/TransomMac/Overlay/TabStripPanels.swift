@@ -428,6 +428,8 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     private var drift: [GroupKey: Rect] = [:]
     /// Per display, the Space its shown strips belong to.
     private var spaces: [String: UInt64] = [:]
+    /// Displays whose stage is up (a camera move or the overview, 07 UI-SPEC Surface 6): their strips are placed but stay out.
+    private var hidden: Set<String> = []
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "tabs")
 
     /// The window numbers of the strips on screen: a press on one is never a window drag (Pitfall 4).
@@ -469,12 +471,25 @@ final class TabStripView: NSView, NSViewToolTipOwner {
                 view.onAction = { [weak self] in self?.onAction?($0) }
             }
             place(panel, strip.frame, primaryHeight: primaryHeight)
-            if kept == nil || !panel.isVisible { fadeIn(panel) }
+            if (kept == nil || !panel.isVisible) && !hidden.contains(displayUUID) { fadeIn(panel) }
             next.append(panel)
         }
         for panel in old { fadeOut(panel) }
         shown[displayUUID] = next.isEmpty ? nil : next
+        if strips.isEmpty { hidden.remove(displayUUID) }  // nothing waits for a reveal that may never come
         updateBackstop()
+    }
+
+    /// The stage ordered in on that display: it draws the strips itself, so the panels go out at once.
+    func hide(on displayUUID: String) {
+        hidden.insert(displayUUID)
+        for panel in shown[displayUUID] ?? [] { panel.orderOut(nil) }
+    }
+
+    /// That display's stage revealed: the last strips sent for it fade back in over 120 ms.
+    func fadeIn(on displayUUID: String) {
+        guard hidden.remove(displayUUID) != nil else { return }
+        for panel in shown[displayUUID] ?? [] { fadeIn(panel) }
     }
 
     /// The group whose selected member is `window`, when its strip is on screen.
@@ -543,7 +558,7 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         guard let space else { return }  // Spaces unknown: macOS keeps each strip on its own Space
         let panels = shown[displayUUID] ?? []
         if space == spaces[displayUUID] {
-            for panel in panels where !panel.isVisible { fadeIn(panel) }
+            for panel in panels where !panel.isVisible && !hidden.contains(displayUUID) { fadeIn(panel) }
         } else {
             for panel in panels { panel.orderOut(nil) }
         }

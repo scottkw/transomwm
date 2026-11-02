@@ -2155,3 +2155,29 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(!effects.contains { if case .fault = $0 { true } else { false } }, "\(effects)")
     }
 }
+
+// MARK: Groups on the zoom stage (07-11)
+
+private func cameraMoves(_ effects: [ArrangerEffect]) -> [CameraMove] {
+    effects.compactMap { if case .cameraMove(let move) = $0 { move } else { nil } }
+}
+
+/// UI-SPEC Surface 6: the stage draws a group as its selected member's tile plus one strip; hidden members never.
+@Suite struct ArrangerTabStageTests {
+    @Test func aCameraMoveHasOneTileForTheSelectedMemberAndOneStripPerGroup() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, frame, _) = try bareGroup(at: start, zoom: true)  // [b, f], f selected, b parked
+        let move = try #require(cameraMoves(arranger.handle(.zoomTo(.node(group.node), displayUUID: "main"), now: start)).first)
+
+        #expect(!move.tiles.contains { $0.window == b }, "the hidden member got a tile: \(move.tiles)")
+        let tile = try #require(move.tiles.first { $0.window == f })
+        #expect(tile.kind == .stay)
+        let strip = try #require(move.strips.first, "no strip: \(move)")
+        #expect(move.strips.count == 1)
+        #expect(strip.group == group)
+        #expect(strip.members == [b, f] && strip.selected == 1)
+        #expect(strip.kind == .stay)
+        #expect(strip.start == TabBand.strip(of: frame), "the strip did not start at the group frame's top")
+        #expect(strip.end == TabBand.strip(of: TabBand.frame(ofContent: tile.end)), "the strip did not end above the tile")
+    }
+}

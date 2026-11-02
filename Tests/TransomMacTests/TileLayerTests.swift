@@ -33,3 +33,27 @@ import Testing
         #expect(try brightest(try #require(image), drawing: light) > 0.8, "labelColor in dark mode is light text")
     }
 }
+
+/// 07 UI-SPEC Surface 6: the stage strip's layout at each scale.
+@Suite struct StripLayerStyleTests {
+    @Test func atFullScaleThreeChipsShareTheWidthWithIcons() {
+        let style = StripLayerStyle.layout(frame: CGRect(x: 0, y: 0, width: 400, height: 28), scale: 1, count: 3)
+        #expect(style.radius == 8)
+        #expect(style.chips.count == 3)
+        #expect(Set(style.chips.map(\.width)).count == 1, "the chips are not equal: \(style.chips)")
+        #expect(style.chips.first?.minX == 4 && style.chips.last?.maxX == 396, "the chips do not sit inside 4 pt padding")
+        #expect(style.showsIcons && !style.fillOnly)
+    }
+
+    @Test func atAQuarterTheRadiusFloorsAt2AndIconsHide() {
+        let style = StripLayerStyle.layout(frame: CGRect(x: 0, y: 0, width: 100, height: 7), scale: 0.25, count: 3)
+        #expect(style.radius == 2)
+        #expect(!style.showsIcons, "a 4 pt icon showed")
+        #expect(!style.fillOnly, "a 7 pt strip drew only its fill")
+    }
+
+    @Test func belowFourPointsTallOnlyTheFillIsDrawn() {
+        let style = StripLayerStyle.layout(frame: CGRect(x: 0, y: 0, width: 40, height: 2.8), scale: 0.1, count: 3)
+        #expect(style.fillOnly)
+    }
+}

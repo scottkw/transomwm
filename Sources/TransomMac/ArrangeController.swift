@@ -707,13 +707,25 @@ import os
                     await settle(displayUUID: move.displayUUID, moveID: move.id)
                     continue
                 }
-                collapsedPanels.hide(on: move.displayUUID)  // the stage draws the blocks until the reveal
+                hidePanels(on: move.displayUUID)  // the stage draws the blocks and strips until the reveal
                 zoom().run(move) { [weak self] id in
                     Task { await self?.settle(displayUUID: move.displayUUID, moveID: id) }
                 }
                 zoomInput.publish()  // no zoom presses taken until it reveals
             }
         }
+    }
+
+    /// A stage orders in on that display: the collapsed-block and tab strip panels go out, since the stage draws both.
+    private func hidePanels(on displayUUID: String) {
+        collapsedPanels.hide(on: displayUUID)
+        tabStripPanels.hide(on: displayUUID)
+    }
+
+    /// That display's stage is gone: both kinds of panel fade back in over 120 ms.
+    private func showPanels(on displayUUID: String) {
+        collapsedPanels.fadeIn(on: displayUUID)
+        tabStripPanels.fadeIn(on: displayUUID)
     }
 
     private func zoom() -> ZoomController {
@@ -724,7 +736,7 @@ import os
         zoom.appName = { Self.appName($0) }
         zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
         zoom.onRevealed = { [weak self] uuid, move in
-            self?.collapsedPanels.fadeIn(on: uuid)
+            self?.showPanels(on: uuid)
             self?.revealed(uuid, moveID: move.id)
             self?.zoomInput.revealed(displayUUID: uuid, move: move)
         }
@@ -732,7 +744,7 @@ import os
             Task { await self?.zoomInput.stageClick(cgID: id, displayUUID: uuid) }
         }
         zoom.onFollowEnded = { [weak self] uuid in
-            self?.collapsedPanels.fadeIn(on: uuid)
+            self?.showPanels(on: uuid)
             self?.zoomInput.publish()
         }
         zoom.bringNoticesFront = { [weak self] in
@@ -750,7 +762,7 @@ import os
             switcher: SpaceSwitcher(spaces: { [unowned self] in self.system.spacesSnapshot }))
         overview.onClosed = { [weak self] in
             guard let self else { return }
-            for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
+            for display in self.arranger.displays { self.showPanels(on: display.uuid) }
             self.gestures.publish()  // armed again
         }
         overview.onOpened = { [weak self] stats in self?.lastOverview = stats }
@@ -789,13 +801,13 @@ import os
         let overview = overview()
         if !overview.isOpen {
             zoomInput.reset(reason: "overview")
-            for display in arranger.displays { collapsedPanels.hide(on: display.uuid) }
+            for display in arranger.displays { hidePanels(on: display.uuid) }
         }
         guard !overview.toggle(trigger: trigger) else {
             gestures.publish()
             return true
         }
-        for display in arranger.displays { collapsedPanels.fadeIn(on: display.uuid) }
+        for display in arranger.displays { showPanels(on: display.uuid) }
         return false
     }
 
@@ -825,9 +837,9 @@ import os
 
     /// A gesture's stage orders in: as for `.cameraMove`, collapsed panels hide and zoom presses wait for the end.
     @discardableResult func beginFollow(_ move: CameraMove, gesture: String) -> Bool {
-        collapsedPanels.hide(on: move.displayUUID)
+        hidePanels(on: move.displayUUID)
         guard zoom().beginFollow(move, gesture: gesture) else {
-            collapsedPanels.fadeIn(on: move.displayUUID)
+            showPanels(on: move.displayUUID)
             return false
         }
         zoomInput.publish()
@@ -903,6 +915,7 @@ import os
         overviewController = nil
         zoomController?.purge()
         zoomController = nil
+        for display in arranger.displays { showPanels(on: display.uuid) }  // a stage purged before its reveal leaves none out
         Hotkeys.setZoomHotkeys(enabled: false)
         postAnnouncement(ZoomCopy.zoomOffAnnouncement)
         cameraLog.info("zoom off (\(floated, privacy: .public) collapsed windows floated)")
