@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-10-PLAN.md
-last_updated: "2026-11-02T03:15:05.441Z"
+stopped_at: Completed 07-11-PLAN.md
+last_updated: "2026-11-02T03:29:35.797Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: c8b76beea35ab500c04a9a61876fb53f4e6c2745
+state_head: 5fc7eb981b1a60ca908a723b640f057dc59476f4
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 89
+  completed_plans: 90
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
@@ -143,6 +143,7 @@ Progress: [███████░░░] 67%
 | Phase 07 P08 | 5min | 2 tasks | 6 files |
 | Phase 07 P09 | 6min | 3 tasks | 17 files |
 | Phase 07 P10 | 25min | 3 tasks | 9 files |
+| Phase 07 P11 | 15min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -402,6 +403,9 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-09: Next/Previous Tab step from the group's selected index, wrapping; hotkeys nextTab ⌃⌥⌘T, previousTab ⇧⌃⌥⌘T, moveOutOfGroup ⌃⌥⌘L are not zoom names
 - [Phase 07]: 07-10: quit plan treats every tab group member as docked with groupContentRects (every desk, at home or not) merged over homeTiles; a minimised-selected docked group falls to the stranded rule
 - [Phase 07]: 07-10: Restore All dissolves groups first (one undo step per desk, cascade 24 pt), spares them from the rescue, counts them in N6; per-desk failures log a fault and never block the rescue
+- [Phase 07]: 07-11: StripMove carries strip rects (group frame's top band x view scale), not group frames
+- [Phase 07]: 07-11: group strips are stage tiles (ID = selected tile ID with top bit flipped), so every stage path animates them
+- [Phase 07]: 07-11: strip panels hide with the collapsed-block panels whenever a stage is up and fade back at reveal, overview close or zoom off
 
 ### Quick Tasks Completed
 
@@ -442,8 +446,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T03:15:04.591Z
-Stopped at: Completed 07-10-PLAN.md
+Last session: 2026-11-02T03:29:34.947Z
+Stopped at: Completed 07-11-PLAN.md
 Resume file: None
 
 ## Deferred Verification
