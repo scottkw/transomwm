@@ -48,7 +48,8 @@ final class CollapsedBlockView: NSView {
 
     override func accessibilityLabel() -> String? {
         let name = NSRunningApplication(processIdentifier: block.window.pid)?.localizedName ?? block.window.bundleID
-        return Self.label(appName: name, title: block.window.titleHint)
+        guard block.groupSize > 1 else { return Self.label(appName: name, title: block.window.titleHint) }
+        return TabCopy.collapsedGroupLabel(count: block.groupSize, app: name, title: block.window.titleHint)
     }
 
     override func accessibilityPerformPress() -> Bool {

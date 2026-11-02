@@ -68,3 +68,15 @@ import Testing
         #expect(TabCopy.tabsMenu == "Tabs" && TabCopy.nextTab == "Next Tab" && TabCopy.previousTab == "Previous Tab")
     }
 }
+
+/// UI-SPEC Surface 6: the collapsed group block and the overview's group tile.
+@Suite struct TabStageCopyTests {
+    @Test func aCollapsedGroupsLabelNamesTheGroupAndItsSelectedTab() {
+        #expect(TabCopy.collapsedGroupLabel(count: 3, app: "Notes", title: "List") == "Tab group, 3 windows, collapsed: \u{201C}Notes\u{201D}, List")
+        #expect(TabCopy.collapsedGroupLabel(count: 2, app: "Notes", title: "") == "Tab group, 2 windows, collapsed: \u{201C}Notes\u{201D}")
+    }
+
+    @Test func theOverviewSuffixGivesTheTabPosition() {
+        #expect(TabCopy.overviewTabSuffix(index: 2, count: 3) == ", tab 2 of 3")
+    }
+}

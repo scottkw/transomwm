@@ -1984,7 +1984,9 @@ public struct Arranger: Sendable {
                         desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
                         collapsible: camera.collapsible)
                     (plan.frames, plan.parks, plan.parkSizes, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.parkSizes, viewPlan.resolution)
-                    blocks[display.uuid] = viewPlan.collapsed.map { CollapsedBlock(window: $0.key, rect: $0.value) }
+                    blocks[display.uuid] = viewPlan.collapsed.map {
+                        CollapsedBlock(window: $0.key, rect: $0.value, groupSize: tabGroup(holding: $0.key)?.members.count ?? 1)
+                    }
                         .sorted { $0.window.identity < $1.window.identity }
                     let home = view == .home ? viewPlan : try ViewPlanner.plan(
                         desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,

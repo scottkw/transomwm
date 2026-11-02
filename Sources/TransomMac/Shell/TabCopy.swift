@@ -32,6 +32,14 @@ nonisolated public enum TabCopy {
 
     public static func tabHelp(index: Int, count: Int) -> String { "Tab \(index) of \(count)" }
 
+    /// A collapsed group's block (UI-SPEC Surface 6): "Tab group, {n} windows, collapsed: “{App}”, {title}".
+    public static func collapsedGroupLabel(count: Int, app: String, title: String) -> String {
+        "\(stripLabel(count: count)), collapsed: \(tabLabel(app: app, title: title))"
+    }
+
+    /// Added to an overview group tile's selection announcement (UI-SPEC Surface 6).
+    public static func overviewTabSuffix(index: Int, count: Int) -> String { ", tab \(index) of \(count)" }
+
     /// The group buttons' tooltips and labels (UI-SPEC Surface 4).
     public static let closeGroup = "Close Group"
     public static let minimizeGroup = "Minimize Group"

@@ -2181,3 +2181,17 @@ private func cameraMoves(_ effects: [ArrangerEffect]) -> [CameraMove] {
         #expect(strip.end == TabBand.strip(of: TabBand.frame(ofContent: tile.end)), "the strip did not end above the tile")
     }
 }
+
+/// UI-SPEC Surface 6, collapsed group: one block, for the selected member, carrying the group's size.
+@Suite struct ArrangerTabCollapsedBlockTests {
+    @Test func aCollapsedGroupIsOneBlockForItsSelectedMemberWithItsSize() throws {
+        let start = ContinuousClock.now
+        var (arranger, rb) = try bareDocked(aMinimum: Size(width: 100, height: 840), zoom: true)  // fits a tile, not a content rect
+        _ = drag(&arranger, a, from: frameA, to: centre(rb), at: start)
+        _ = arranger.handle(.tick, now: start + .milliseconds(400))
+        let up = arranger.handle(pointer(.up, rb.midX, rb.midY), now: start + .milliseconds(450))
+        let blocks = up.compactMap { if case .collapsedBlocks(let blocks, "main") = $0 { blocks } else { nil } }.last
+        #expect(blocks?.map(\.window) == [a], "not one block for the selected member: \(up)")
+        #expect(blocks?.first?.groupSize == 2)
+    }
+}

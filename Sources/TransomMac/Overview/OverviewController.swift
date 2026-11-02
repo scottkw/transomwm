@@ -71,8 +71,10 @@ import os
 
     /// The displays with an open overview panel (tests).
     var openPanels: [String] { isOpen ? Array(shown.keys) : [] }
-    /// The tiles on that display's open panel (tests).
-    func tileCount(display uuid: String) -> Int { isOpen ? shown[uuid]?.count ?? 0 : 0 }
+    /// The window tiles on that display's open panel, group strips not counted (tests).
+    func tileCount(display uuid: String) -> Int {
+        isOpen ? shown[uuid]?.filter { if case .strip = $0.content { false } else { true } }.count ?? 0 : 0
+    }
 
     /// Show Overview while open dismisses it. False when it could not open (every display is in full screen).
     @discardableResult func toggle(trigger: String) -> Bool {
@@ -139,8 +141,12 @@ import os
                     collapsed[tile.window] != nil ? zoom.collapsedBlock(tile.window) : picture.map { .snapshot($0) } ?? zoom.fallback(tile.window)
                 return StageTile(id: zoom.cgWindow(tile.window) ?? tile.window.windowID, start: appKit(real), end: appKit(tile.rect), content: content)
             }
+            // After the tiles, so each strip draws above its group's tile; a collapsed group is one block, no strip.
+            let strips = display.tiles.compactMap { tile in
+                collapsed[tile.window] == nil ? strip(tile, scale: display.scale, arranger: arranger, appKit: appKit) : nil
+            }
             if panel.isVisible { panel.freezeAtPresentation() }  // a close still fading: cancel its order-out
-            panel.show(tiles: tiles)
+            panel.show(tiles: tiles + strips)
             let strip = overlay(display, input: input, image: image, appKit: appKit)
             overlays[display.uuid] = strip
             panel.showOverview(strip)
@@ -151,7 +157,7 @@ import os
                 guard first, let self, self.generation == opened else { return }
                 self.opened(trigger: trigger, started: started, displays: layout.displays.count, snapshots: snapshots, fallbacks: fallbacks)
             }
-            shown[display.uuid] = tiles
+            shown[display.uuid] = tiles + strips
         }
         swappedLabel = nil
         selection = OverviewSelection.initial(layout: layout, focused: focused(), pointer: pointer())  // drawn by didSet, not announced
@@ -323,16 +329,17 @@ import os
                 continue
             }
             let id = { (window: TransomModel.WindowRef) in zoom.cgWindow(window) ?? window.windowID }
-            let removed = display.tiles.filter { tile in !kept.contains { $0.window == tile.window } }.map { id($0.window) }
+            let gone = display.tiles.filter { tile in !kept.contains { $0.window == tile.window } }.map { id($0.window) }
+            let removed = gone + gone.map(StageTile.stripID)  // a gone tile's strip goes with it
             let addedTiles = added.map { tile in
                 let content = zoom.cgWindow(tile.window).flatMap { zoom.cachedSnapshot($0) }.map { TileLayer.Content.snapshot($0) } ?? zoom.fallback(tile.window)
                 let real = arranger.windows[tile.window.identity]?.frame ?? tile.rect
                 return StageTile(id: id(tile.window), start: appKit(real), end: appKit(tile.rect), content: content)
-            }
+            } + added.compactMap { strip($0, scale: fresh.scale, arranger: arranger, appKit: appKit) }
             panel.fadeTiles(adding: addedTiles, removing: removed)
             shown[display.uuid] = (shown[display.uuid] ?? []).filter { !removed.contains($0.id) } + addedTiles
             var updated = display
-            updated.tiles = kept + added  // the same order as `shown`, which markSelection indexes
+            updated.tiles = kept + added
             displays.append(updated)
         }
         layout = OverviewLayout(laidOut: displays)
@@ -376,7 +383,8 @@ import os
             case .tile(let window):
                 guard let index = display.tiles.firstIndex(where: { $0.window == window }) else { panel.showMark(nil); continue }
                 let rect = display.tiles[index].rect
-                let content = shown[display.uuid].flatMap { index < $0.count ? $0[index].content : nil }  // tiles in layout order
+                let id = zoom().cgWindow(window) ?? window.windowID
+                let content = shown[display.uuid]?.first { $0.id == id }?.content
                 guard case .snapshot? = content else {
                     panel.showMark(OverviewMark(ring: appKit(rect), radius: min(TileLayer.cornerRadius, min(rect.width, rect.height) / 2)))
                     continue  // a fallback tile already shows its title
@@ -436,7 +444,8 @@ import os
         let text: String
         switch item {
         case .tile(let window):
-            text = OverviewCopy.tileAnnouncement(app: appName(window), title: window.titleHint)
+            let tab = arranger().tabGroupMembers(holding: window).map { TabCopy.overviewTabSuffix(index: $0.selected + 1, count: $0.members.count) }
+            text = OverviewCopy.tileAnnouncement(app: appName(window), title: window.titleHint) + (tab ?? "")
         case .miniTile(let window, let space):
             text = OverviewCopy.miniTileAnnouncement(app: appName(window), title: window.titleHint, desktop: spaceInfo(space)?.index ?? 0)
         case .thumbnail(let space):
@@ -540,6 +549,18 @@ import os
         let owner = arranger().windows.values.first { $0.spaces?.contains(space) == true }?.window
         let name = owner.map { NSRunningApplication(processIdentifier: $0.pid)?.localizedName ?? $0.bundleID } ?? ""
         return OverviewCopy.couldNotSwitch(app: MenuCopy.truncatedAppName(name))
+    }
+
+    /// A group tile's icon-only strip (07 UI-SPEC Surface 6): from above its window's real frame to above its main-area
+    /// rect, 28 pt × the display's scale. Nil for a window in no group. Mini tiles never get one.
+    private func strip(_ tile: OverviewTile, scale: Double, arranger: Arranger, appKit: (Rect) -> CGRect) -> StageTile? {
+        guard let group = arranger.tabGroupMembers(holding: tile.window) else { return nil }
+        let zoom = zoom()
+        let real = arranger.windows[tile.window.identity]?.frame ?? tile.rect
+        let end = Rect(x: tile.rect.x, y: tile.rect.y - TabBand.height * scale, width: tile.rect.width, height: TabBand.stripHeight * scale)
+        return StageTile(
+            id: StageTile.stripID(zoom.cgWindow(tile.window) ?? tile.window.windowID), start: appKit(TabBand.strip(of: TabBand.frame(ofContent: real))),
+            end: appKit(end), content: zoom.stripContent(group.members, selected: group.selected))
     }
 
     /// The strip (thumbnails, mini tiles, labels) and the empty-message capsule of one display.

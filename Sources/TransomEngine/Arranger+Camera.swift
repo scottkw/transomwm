@@ -68,10 +68,13 @@ public struct TileMove: Equatable, Sendable {
 public struct CollapsedBlock: Equatable, Sendable {
     public var window: WindowRef
     public var rect: Rect
+    /// A collapsed group's member count (its selected member is `window`); 1 for a plain window.
+    public var groupSize: Int
 
-    public init(window: WindowRef, rect: Rect) {
+    public init(window: WindowRef, rect: Rect, groupSize: Int = 1) {
         self.window = window
         self.rect = rect
+        self.groupSize = groupSize
     }
 }
 

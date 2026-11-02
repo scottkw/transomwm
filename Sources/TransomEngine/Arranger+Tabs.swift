@@ -377,6 +377,11 @@ extension Arranger {
         .filter { windows[$0.identity]?.state == .present }
     }
 
+    /// The members of the group holding `window` and its selected index, docked or floating (the overview's group tiles).
+    public func tabGroupMembers(holding window: WindowRef) -> (members: [WindowRef], selected: Int)? {
+        tabGroup(holding: window).map { ($0.members, $0.selected) }
+    }
+
     /// Whether `window` is a non-selected member of a docked or floating group: it never shows in focus moves or the overview.
     public func isHiddenTab(_ window: WindowRef) -> Bool {
         tabGroup(holding: window).map { $0.members[$0.selected] != window } ?? false
