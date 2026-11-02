@@ -8,38 +8,98 @@ private final class StripPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// One group's strip (UI-SPEC Surface 2): `windowBackgroundColor`, 8 pt radius, 1 pt `separatorColor` border inside,
-/// 4 pt padding, and one equal-width capsule tab per member (16 pt app icon, title in Body; the selected tab in
-/// Heading on a `labelColor` 16% fill). A tab acts on mouse-up with under 4 pt of travel.
-final class TabStripView: NSView {
+/// An accessibility child of the strip (a tab or the overflow button) whose press runs `press`. Accessibility calls
+/// arrive on the main thread.
+nonisolated private final class PressElement: NSAccessibilityElement {
+    private let press: @MainActor @Sendable () -> Void
+
+    init(_ press: @escaping @MainActor @Sendable () -> Void) {
+        self.press = press
+        super.init()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        let press = press
+        MainActor.assumeIsolated { press() }
+        return true
+    }
+}
+
+/// One group's strip (UI-SPEC Surface 2), drawn from `TabStripLayout`: `windowBackgroundColor`, 8 pt radius, 1 pt
+/// `separatorColor` border inside, then capsule tabs (titled, icon-only, or icon-only with the overflow button); the
+/// selected tab in Heading on a `labelColor` 16% fill. A tab acts on mouse-up with under 4 pt of travel. Flipped, so
+/// the layout's top-left rects apply as they are.
+final class TabStripView: NSView, NSViewToolTipOwner {
     var strip: TabStrip {
-        didSet { needsDisplay = true }
+        didSet { changed() }
     }
     var onAction: ((TabAction) -> Void)?
-    private var hovered: Int?
-    private var press: (tab: Int?, at: NSPoint)?
+
+    /// What the pointer is over.
+    private enum Target: Equatable { case tab(Int), overflow }
+    private var hovered: Target?
+    private var press: (target: Target?, at: NSPoint)?
+    /// The hover / pressed fill, faded in over 80 ms and out over 120 ms.
+    private let hover = CALayer()
+    private var elements: [NSAccessibilityElement]?
 
     init(_ strip: TabStrip) {
         self.strip = strip
         super.init(frame: .zero)
+        wantsLayer = true
+        hover.opacity = 0
+        hover.cornerRadius = 10
+        layer?.addSublayer(hover)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError("not used") }
 
-    private static let padding: CGFloat = 4
-    private static let tabHeight: CGFloat = 20
+    override var isFlipped: Bool { true }
+
     /// Under this a press is still a click (UI-SPEC Spacing xs).
     private static let clickTravel: CGFloat = 4
 
-    /// Tab `i`'s rect: the region inside the padding shared equally, 4 pt apart.
-    func tabRect(_ i: Int) -> NSRect {
-        let n = CGFloat(max(strip.members.count, 1))
-        let region = bounds.width - 2 * Self.padding
-        let width = max(0, (region - Self.padding * (n - 1)) / n)
-        return NSRect(x: Self.padding + CGFloat(i) * (width + Self.padding), y: (bounds.height - Self.tabHeight) / 2, width: width, height: Self.tabHeight)
+    // shortcut: no group buttons yet; 07-05 passes Close and Minimize, 07-06 Float / Dock.
+    private var layout: TabStripLayout {
+        TabStripLayout(width: bounds.width, tabCount: strip.members.count, selected: strip.selected, buttons: [])
     }
 
-    private func tab(at point: NSPoint) -> Int? { strip.members.indices.first { tabRect($0).contains(point) } }
+    private static func ns(_ rect: Rect) -> NSRect { NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height) }
+
+    private func target(at point: NSPoint) -> Target? {
+        let layout = layout
+        if let button = layout.overflow?.button, Self.ns(button).contains(point) { return .overflow }
+        return layout.tabRects.first { Self.ns($0.value).contains(point) }.map { .tab($0.key) }
+    }
+
+    /// Tab `i`'s tooltip and overflow item: its title, else its app name.
+    private func title(_ i: Int) -> String {
+        TabCopy.titleOrApp(title: strip.titles.indices.contains(i) ? strip.titles[i] : "", app: Self.appName(strip.members[i]))
+    }
+
+    /// The strip or the size changed: redraw, and rebuild the tooltip rects and accessibility children.
+    private func changed() {
+        needsDisplay = true
+        elements = nil
+        removeAllToolTips()
+        let layout = layout
+        for rect in layout.tabRects.values { addToolTip(Self.ns(rect), owner: self, userData: nil) }
+        if let button = layout.overflow?.button { addToolTip(Self.ns(button), owner: self, userData: nil) }
+        updateHover()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        changed()
+    }
+
+    func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?) -> String {
+        switch target(at: point) {
+        case .tab(let i)?: title(i)
+        case .overflow?: TabCopy.moreTabs
+        case nil: ""
+        }
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         let contrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
@@ -49,38 +109,113 @@ final class TabStripView: NSView {
         NSColor.separatorColor.setStroke()
         outline.lineWidth = 1
         outline.stroke()
-        for (i, member) in strip.members.enumerated() {
-            let rect = tabRect(i), isSelected = i == strip.selected
-            let capsule = NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2)
-            let fill: CGFloat? = isSelected ? 0.16 : i == hovered ? 0.08 : nil
-            if let fill {
-                NSColor.labelColor.withAlphaComponent(contrast ? fill * 1.5 : fill).setFill()
-                capsule.fill()
+        let layout = layout
+        for (i, rect) in layout.tabRects { drawTab(i, Self.ns(rect), titled: layout.mode == .titled, contrast: contrast) }
+        if let button = layout.overflow?.button {
+            let rect = Self.ns(button), color: NSColor = hovered == .overflow ? .labelColor : .secondaryLabelColor
+            let config = NSImage.SymbolConfiguration(textStyle: .body, scale: .small).applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+            if let glyph = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?.withSymbolConfiguration(config) {
+                let size = glyph.size
+                glyph.draw(
+                    in: NSRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height),
+                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
-            if isSelected, contrast {
+        }
+        updateHover()  // the fill colour re-resolves with the appearance and Increase Contrast
+    }
+
+    private func drawTab(_ i: Int, _ rect: NSRect, titled: Bool, contrast: Bool) {
+        let isSelected = i == strip.selected
+        let capsule = NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2)
+        if isSelected {
+            NSColor.labelColor.withAlphaComponent(contrast ? 0.24 : 0.16).setFill()
+            capsule.fill()
+            if contrast {
                 NSColor.labelColor.setStroke()
                 capsule.lineWidth = 1
                 capsule.stroke()
             }
-            var x = rect.minX + 8
-            if let icon = Self.icon(member.pid) {
-                icon.draw(in: NSRect(x: x, y: rect.midY - 8, width: 16, height: 16))
-                x += 16 + 4
-            }
-            let width = rect.maxX - 8 - x
-            guard width > 8 else { continue }
-            let title = strip.titles.indices.contains(i) && !strip.titles[i].isEmpty ? strip.titles[i] : Self.appName(member)
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.lineBreakMode = .byTruncatingMiddle
-            let text = NSAttributedString(string: title, attributes: [
-                .font: NSFont.preferredFont(forTextStyle: isSelected ? .headline : .body),
-                .foregroundColor: isSelected ? NSColor.labelColor : NSColor.secondaryLabelColor,
-                .paragraphStyle: paragraph,
-            ])
-            let height = text.size().height
-            text.draw(with: NSRect(x: x, y: rect.midY - height / 2, width: width, height: height), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
+        let iconX = titled ? rect.minX + 8 : rect.midX - 8
+        Self.icon(strip.members[i].pid)?.draw(
+            in: NSRect(x: iconX, y: rect.midY - 8, width: 16, height: 16), from: .zero, operation: .sourceOver, fraction: 1,
+            respectFlipped: true, hints: nil)
+        guard titled else { return }
+        let x = iconX + 16 + 4, width = rect.maxX - 8 - x
+        guard width > 8 else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        let text = NSAttributedString(string: title(i), attributes: [
+            .font: NSFont.preferredFont(forTextStyle: isSelected ? .headline : .body),
+            .foregroundColor: isSelected ? NSColor.labelColor : NSColor.secondaryLabelColor,
+            .paragraphStyle: paragraph,
+        ])
+        let height = text.size().height
+        text.draw(with: NSRect(x: x, y: rect.midY - height / 2, width: width, height: height), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
+
+    /// Places the hover fill (`labelColor` 8%, pressed 16%, × 1.5 with Increase Contrast) on the hovered or pressed
+    /// unselected tab or the overflow button, fading it in over 80 ms and out over 120 ms.
+    private func updateHover() {
+        let target = press?.target ?? hovered, layout = layout
+        let rect: Rect? = switch target {
+        case .tab(let i)? where i != strip.selected: layout.tabRects[i]
+        case .overflow?: layout.overflow?.button
+        default: nil
+        }
+        let alpha = (press == nil ? 0.08 : 0.16) * (NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1.5 : 1)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if let rect { hover.frame = Self.ns(rect) }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            hover.backgroundColor = NSColor.labelColor.withAlphaComponent(alpha).cgColor
+        }
+        CATransaction.commit()
+        let opacity: Float = rect == nil ? 0 : 1
+        guard hover.opacity != opacity else { return }
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = hover.presentation()?.opacity ?? hover.opacity
+        animation.toValue = opacity
+        animation.duration = opacity == 1 ? 0.08 : 0.12
+        hover.opacity = opacity
+        hover.add(animation, forKey: "fade")
+    }
+
+    // MARK: Accessibility (UI-SPEC Accessibility): a tab group of radio-button tabs; overflowed tabs are still children.
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .tabGroup }
+    override func accessibilityLabel() -> String? { TabCopy.stripLabel(count: strip.members.count) }
+
+    override func accessibilityChildren() -> [Any]? {
+        if let elements { return elements }
+        let layout = layout, count = strip.members.count
+        let overflowFrame = layout.overflow.map { Self.ns($0.button) } ?? .zero
+        var made: [NSAccessibilityElement] = strip.members.indices.map { i in
+            let tab = PressElement { [weak self] in self?.select(i, via: .click) }
+            tab.setAccessibilityRole(.radioButton)
+            tab.setAccessibilitySubrole(.tabButtonSubrole)  // `.tabButton` does not compile (Pitfall 11)
+            tab.setAccessibilityLabel(TabCopy.tabLabel(app: Self.appName(strip.members[i]), title: strip.titles.indices.contains(i) ? strip.titles[i] : ""))
+            tab.setAccessibilityValue(i == strip.selected ? 1 : 0)
+            tab.setAccessibilityHelp(TabCopy.tabHelp(index: i + 1, count: count))
+            tab.setAccessibilityParent(self)
+            tab.setAccessibilityFrameInParentSpace(layout.tabRects[i].map(Self.ns) ?? overflowFrame)
+            return tab
+        }
+        if let overflow = layout.overflow {
+            let button = PressElement { [weak self] in self?.openOverflow() }
+            button.setAccessibilityRole(.button)
+            button.setAccessibilityLabel(TabCopy.moreTabs)
+            button.setAccessibilityHelp(TabCopy.moreTabsHelp(overflow.hidden.count))
+            button.setAccessibilityParent(self)
+            button.setAccessibilityFrameInParentSpace(overflowFrame)
+            made.append(button)
+        }
+        elements = made
+        return made
+    }
+
+    // MARK: Pointer
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -90,30 +225,61 @@ final class TabStripView: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect], owner: self))
     }
 
-    override func mouseMoved(with event: NSEvent) { setHovered(tab(at: convert(event.locationInWindow, from: nil))) }
+    override func mouseMoved(with event: NSEvent) { setHovered(target(at: convert(event.locationInWindow, from: nil))) }
     override func mouseExited(with event: NSEvent) { setHovered(nil) }
 
-    private func setHovered(_ tab: Int?) {
-        guard tab != hovered else { return }
-        hovered = tab
-        needsDisplay = true
+    private func setHovered(_ target: Target?) {
+        guard target != hovered else { return }
+        hovered = target
+        needsDisplay = true  // the overflow glyph's colour
+        updateHover()
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        press = (tab(at: point), point)
+        press = (target(at: point), point)
+        updateHover()
     }
 
-    /// A click on a tab selects it; on the background it focuses the selected member. A double-click is one click.
+    /// A click on a tab selects it, on the overflow button opens its menu, on the background focuses the selected
+    /// member. A double-click is one click.
     override func mouseUp(with event: NSEvent) {
         guard let press else { return }
         self.press = nil
+        updateHover()
         let point = convert(event.locationInWindow, from: nil)
-        guard hypot(point.x - press.at.x, point.y - press.at.y) < Self.clickTravel, tab(at: point) == press.tab, event.clickCount <= 1 else { return }
-        let index = press.tab ?? strip.selected
-        guard strip.members.indices.contains(index) else { return }
-        onAction?(.select(strip.members[index], via: .click))
+        guard hypot(point.x - press.at.x, point.y - press.at.y) < Self.clickTravel, target(at: point) == press.target, event.clickCount <= 1 else { return }
+        switch press.target {
+        case .overflow?: openOverflow()
+        case .tab(let i)?: select(i, via: .click)
+        case nil: select(strip.selected, via: .click)
+        }
     }
+
+    private func select(_ i: Int, via source: TabSelectSource) {
+        guard strip.members.indices.contains(i) else { return }
+        onAction?(.select(strip.members[i], via: source))
+    }
+
+    /// The members not in the strip, in group order (16 pt icon + title, the app name when untitled), below the button.
+    private func openOverflow() {
+        guard let overflow = layout.overflow else { return }
+        let menu = NSMenu()
+        for i in overflow.hidden {
+            let item = NSMenuItem(title: title(i), action: #selector(chooseOverflow(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = i
+            if let icon = Self.icon(strip.members[i].pid)?.copy() as? NSImage {
+                icon.size = NSSize(width: 16, height: 16)
+                item.image = icon
+            }
+            menu.addItem(item)
+        }
+        let button = Self.ns(overflow.button)
+        menu.popUp(positioning: nil, at: NSPoint(x: button.minX, y: button.maxY), in: self)
+    }
+
+    @objc private func chooseOverflow(_ item: NSMenuItem) { select(item.tag, via: .overflow) }
 
     private static var icons: [Int32: NSImage] = [:]
 
@@ -124,8 +290,9 @@ final class TabStripView: NSView {
         return icon
     }
 
+    /// The untruncated app name; `TabCopy` truncates it.
     private static func appName(_ window: TransomModel.WindowRef) -> String {
-        MenuCopy.truncatedAppName(NSRunningApplication(processIdentifier: window.pid)?.localizedName ?? window.bundleID)
+        NSRunningApplication(processIdentifier: window.pid)?.localizedName ?? window.bundleID
     }
 }
 

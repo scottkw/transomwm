@@ -17,5 +17,24 @@ nonisolated public enum TabCopy {
         }
     }
 
+    /// The strip's accessibility label (UI-SPEC Accessibility); `count` is always 2 or more.
+    public static func stripLabel(count: Int) -> String { "Tab group, \(count) windows" }
+
+    /// A tab's accessibility label: "“{App}”, {title}", the app name only when untitled.
+    public static func tabLabel(app: String, title: String) -> String {
+        let name = "\u{201C}\(MenuCopy.truncatedAppName(app))\u{201D}"
+        return title.isEmpty ? name : "\(name), \(title)"
+    }
+
+    public static func tabHelp(index: Int, count: Int) -> String { "Tab \(index) of \(count)" }
+
+    /// The overflow button's tooltip and label.
+    public static let moreTabs = "More Tabs"
+
+    public static func moreTabsHelp(_ hidden: Int) -> String { hidden == 1 ? "1 more tab" : "\(hidden) more tabs" }
+
+    /// A tab's tooltip and overflow item: its title, else its app name.
+    public static func titleOrApp(title: String, app: String) -> String { title.isEmpty ? MenuCopy.truncatedAppName(app) : title }
+
     private static func count(_ tabs: Int) -> String { tabs == 1 ? "1 tab" : "\(tabs) tabs" }
 }
