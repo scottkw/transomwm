@@ -384,16 +384,22 @@ extension ArrangerTabsTests {
 
 /// a and b docked by the keyboard, then f grouped into b's leaf ([b, f], f selected) on an Arranger with no window
 /// system, and planned: f in the content rect, b parked. Returns it with the group's key, frame and content rect.
-private func bareGroup(at now: ContinuousClock.Instant) throws -> (Arranger, GroupKey, frame: Rect, content: Rect) {
+/// `withA` groups a too ([b, f, a], a selected); `zoom` turns zoom on first.
+private func bareGroup(at now: ContinuousClock.Instant, withA: Bool = false, zoom: Bool = false) throws -> (Arranger, GroupKey, frame: Rect, content: Rect) {
     var arranger = Arranger()
     let infos = [info(1, frame: frameA), info(2, frame: smallF), info(3, frame: frameB)]
     _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: now)
+    if zoom { _ = arranger.handle(.zoomEnabled(true), now: now) }
     _ = arranger.handle(.command(.dock, focused: a), now: now)
     _ = arranger.handle(.command(.dock, focused: b), now: now)
     let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: b))
     try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in
         try desk.desktop.remove(f)
         try desk.tree.group(f, into: leaf)
+        if withA {
+            try desk.tree.remove(a)
+            try desk.tree.group(a, into: leaf)
+        }
     }
     _ = arranger.handle(.gap(8), now: now)  // re-plans
     #expect(arranger.isParked(b), "b was not parked")
@@ -517,5 +523,78 @@ private func selected(_ arranger: Arranger, _ group: GroupKey) -> WindowRef? {
         #expect(effects.contains(.tabAnnouncement(.refused(paused ? .paused : .notReady))))
         #expect(commands(effects).isEmpty)
         #expect(selected(arranger, group) == f)
+    }
+}
+
+/// D-08 with RESEARCH Open Question 2: a hidden member focused another way becomes the selected tab, with a 1 s
+/// per-group suppression against focus fights (Pitfall 6).
+@Suite struct ArrangerTabActivationTests {
+    @Test func aFocusedHiddenMemberIsSelectedWithoutAnAnnouncement() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
+        let effects = arranger.handle(.event(.windowFocused(b)), now: start)
+        #expect(selected(arranger, group) == b)
+        #expect(commands(effects).contains(.setFrame(b, content)) && commands(effects).contains(.focus(b)), "no reveal: \(effects)")
+        #expect(parks(effects).isEmpty, "the previous member parked before the read-back")
+        #expect(!effects.contains { if case .tabAnnouncement = $0 { true } else { false } }, "an activation was announced")
+        let back = arranger.handle(.event(.frameApplied(b, requested: content, actual: content)), now: start + .milliseconds(30))
+        #expect(parks(back).contains { if case .park(f, _, _) = $0 { true } else { false } })
+    }
+
+    @Test func aFocusOfTheRevealedWindowIsAnEchoAndSelectsNothing() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        let echo = arranger.handle(.event(.windowFocused(b)), now: start + .seconds(2))
+        #expect(commands(echo).isEmpty && !echo.contains(.raiseStrip(group)), "the echo selected again: \(echo)")
+        #expect(arranger.tabs.pendingReveal?.revealed == b, "the echo ended the reveal")
+    }
+
+    @Test func aFocusWithin1sOfASelectionChangeDoesNotSwitchTabs() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        _ = arranger.handle(.event(.frameApplied(b, requested: content, actual: content)), now: start + .milliseconds(30))
+        _ = arranger.handle(.event(.windowFocused(f)), now: start + .milliseconds(500))
+        #expect(selected(arranger, group) == b, "a focus 0.5 s after the selection switched tabs")
+        _ = arranger.handle(.event(.windowFocused(f)), now: start + .milliseconds(1100))
+        #expect(selected(arranger, group) == f, "a focus 1.1 s after the selection did not switch tabs")
+    }
+
+    @Test func aFocusWithin1sOfTheSelectedMemberGoingAbsentDoesNotSwitchTabs() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start)
+        _ = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(500))
+        #expect(selected(arranger, group) == f, "a focus after a minimise switched tabs")
+        _ = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(1500))
+        #expect(selected(arranger, group) == b)
+    }
+
+    @Test func aFocusWithin1sOfAMemberClosingDoesNotSwitchTabs() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
+        try #require(selected(arranger, group) == a)
+        _ = arranger.handle(.event(.windowDestroyed(a)), now: start)
+        let after = try #require(selected(arranger, group))
+        let other = after == b ? f : b
+        _ = arranger.handle(.event(.windowFocused(other)), now: start + .milliseconds(500))
+        #expect(selected(arranger, group) == after, "a focus after a close switched tabs")
+        _ = arranger.handle(.event(.windowFocused(other)), now: start + .milliseconds(1500))
+        #expect(selected(arranger, group) == other)
+    }
+
+    @Test func theCameraWidenRunsAfterTheSelectionOnTheGroupsLeaf() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, zoom: true)
+        let leafA = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        let move = arranger.handle(.zoomTo(.node(leafA), displayUUID: "main"), now: start)
+        let id = try #require(move.compactMap { if case .cameraMove(let m) = $0 { m.id } else { nil } }.first, "no zoom move: \(move)")
+        _ = arranger.handle(.cameraSettle(displayUUID: "main", moveID: id), now: start)
+        let effects = arranger.handle(.event(.windowFocused(b)), now: start)
+        #expect(selected(arranger, group) == b, "the focused hidden member was not selected")
+        let widen = effects.compactMap { if case .cameraMove(let m) = $0 { m } else { nil } }
+        #expect(widen.count == 1, "no widen: \(effects)")
+        #expect(widen.first?.to != .node(leafA), "the widen stayed on a's leaf")
     }
 }
