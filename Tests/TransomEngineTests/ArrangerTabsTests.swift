@@ -1340,3 +1340,148 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
         #expect(arranger.world == before)
     }
 }
+
+/// [a | [b, f] | Desktop] on the fake, f selected; returns the group leaf, a's tile and the group's content rect.
+private func dockedGroup() async throws -> (Harness, leaf: NodeID, ra: Rect, content: Rect) {
+    var (harness, plan) = try await docked()
+    let ra = try #require(plan.frames[a])
+    await groupFWithB(&harness, try #require(plan.frames[b]))
+    let desk = try #require(harness.arranger.world[mainKey])
+    let leaf = try #require(desk.tree.leaf(containing: f))
+    try #require(desk.tree.node(leaf) == .tabs(windows: [b, f], selected: 1), "f did not group with b")
+    let content = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[f])
+    try #require(await harness.frame(f) == content)
+    return (harness, leaf, ra, content)
+}
+
+/// The group frame the group leaf `leaf` of the main desk gets docked on `edge` of `target`.
+private func groupDocked(_ arranger: Arranger, _ leaf: NodeID, at edge: Edge, of target: NodeID) throws -> Rect {
+    var desk = try #require(arranger.world[mainKey])
+    var ids = arranger.world.ids
+    let taken = try desk.tree.removeLeaf(leaf)
+    try desk.tree.insertLeaf(taken.node, states: taken.states, at: edge, of: target, ids: &ids)
+    let moved = try #require(desk.tree.leaf(containing: f))
+    return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).resolution.nodeRects[moved])
+}
+
+/// UI-SPEC Surface 5: a title-bar drag of the selected member moves the whole group.
+@Suite struct ArrangerWholeGroupDragTests {
+    @Test func anEdgeBandPreviewsTheGroupFrameAndTheReleaseMovesTheWholeLeaf() async throws {
+        var (harness, leaf, ra, content) = try await dockedGroup()
+        let aLeaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: a))
+        let expected = try groupDocked(harness.arranger, leaf, at: .left, of: aLeaf)
+        let point = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
+        _ = await drag(&harness, f, from: content, to: point)
+        harness.now += DragSession.dwell
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.dock(expected)], "tick gave \(tick)")
+        let depth = harness.arranger.history.depth(for: mainKey)
+        await harness.send(pointer(.up, point.x, point.y))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.windows == [b, f, a], "the group did not move left of a: \(desk.tree.windows)")
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: f))) == .tabs(windows: [b, f], selected: 1))
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1, "the move is not one undo step")
+    }
+
+    @Test func aShiftDragFloatsTheWholeGroupAtTheReleasePosition() async throws {
+        var (harness, _, _, content) = try await dockedGroup()
+        let grab = Point(x: content.midX, y: content.minY + 10)
+        let point = Point(x: grab.x + 300, y: grab.y)
+        _ = await drag(&harness, f, from: content, to: point, [.shift])
+        harness.now += DragSession.dwell
+        await harness.send(.tick)
+        let depth = harness.arranger.history.depth(for: mainKey)
+        await harness.send(pointer(.up, point.x, point.y, [.shift]))
+        let group = try #require(harness.arranger.world[mainKey]?.desktop.groups.first, "the group did not float")
+        #expect(group.members == [b, f] && group.selected == 1)
+        #expect(group.frame == TabBand.frame(ofContent: shifted(content, 300)), "group frame \(group.frame)")
+        #expect(harness.arranger.world[mainKey]?.tree.windows == [a])
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test func aCommandDragSwapsTheGroupWithAPlainPanel() async throws {
+        var (harness, leaf, ra, content) = try await dockedGroup()
+        let desk = try #require(harness.arranger.world[mainKey])
+        let frame = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).resolution.nodeRects[leaf])
+        _ = await drag(&harness, f, from: content, to: centre(ra), [.command])
+        harness.now += DragSession.dwell
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.swap(target: ra, origin: frame)], "tick gave \(tick)")
+        let up = await harness.send(pointer(.up, ra.midX, ra.midY, [.command]))
+        #expect(harness.arranger.world[mainKey]?.tree.windows == [b, f, a], "the group and a did not swap")
+        #expect(up.contains(.announce(Arranger.swapped)))
+    }
+
+    @Test func aCommandDragOverAnotherGroupNeverSwaps() throws {
+        let start = ContinuousClock.now
+        var arranger = Arranger()
+        let infos = [info(1, frame: frameA), info(2, frame: smallF), info(3, frame: frameB), info(4, frame: gFrame)]
+        _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: start)
+        _ = arranger.handle(.command(.dock, focused: a), now: start)
+        _ = arranger.handle(.command(.dock, focused: b), now: start)
+        let aLeaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        let bLeaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: b))
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in
+            try desk.desktop.remove(f)
+            try desk.tree.group(f, into: bLeaf)
+            try desk.desktop.remove(g)
+            try desk.tree.group(g, into: aLeaf)
+        }
+        _ = arranger.handle(.gap(8), now: start)
+        let grouped = try #require(arranger.world[mainKey])
+        let plan = try Planner.plan(desk: grouped, area: area, gap: 8, mins: [:])
+        let content = try #require(plan.frames[f]), aContent = try #require(plan.frames[g])
+        _ = arranger.handle(.event(.windowMoved(f, content)), now: start)
+        let before = arranger.world[mainKey]?.tree
+        var effects = drag(&arranger, f, from: content, to: centre(aContent), [.command], at: start)
+        effects += arranger.handle(.tick, now: start + .milliseconds(450))
+        #expect(!previews(effects).contains { if case .swap = $0 { true } else { false } }, "a swap was offered: \(previews(effects))")
+        _ = arranger.handle(pointer(.up, aContent.midX, aContent.midY, [.command]), now: start + .milliseconds(500))
+        #expect(arranger.world[mainKey]?.tree == before, "the groups changed")
+    }
+
+    @Test func aReleaseWithNoTargetSnapsTheDockedGroupBack() async throws {
+        var (harness, leaf, _, content) = try await dockedGroup()
+        let point = Point(x: content.midX + 40, y: content.minY + 10)
+        _ = await drag(&harness, f, from: content, to: point)
+        harness.now += DragSession.dwell
+        await harness.send(.tick)
+        let up = await harness.send(pointer(.up, point.x, point.y))
+        #expect(setFrames(up)[f] == content, "f did not snap back: \(up)")
+        #expect(harness.arranger.world[mainKey]?.tree.node(leaf) == .tabs(windows: [b, f], selected: 1))
+    }
+
+    @Test func aFloatingGroupMovesWithItsWindowOnAMissAndDocksWholeOnAnEdge() async throws {
+        var harness = await floaters()
+        _ = await groupFOntoT(&harness)
+        let content = TabBand.content(of: tFrame)
+        let point = Point(x: content.midX - 100, y: content.minY + 10 + 50)  // on the Desktop, no floater's centre
+        _ = await drag(&harness, f, from: content, to: point)
+        harness.now += DragSession.dwell
+        await harness.send(.tick)
+        await harness.send(pointer(.up, point.x, point.y))
+        let moved = shifted(content, -100, 50)
+        #expect(harness.arranger.world[mainKey]?.desktop.groups.first?.frame == TabBand.frame(ofContent: moved), "the group did not follow")
+        // Onto the display's left edge: the whole group docks.
+        let edge = Point(x: 10, y: 450)
+        _ = await drag(&harness, f, from: moved, to: edge)
+        harness.now += DragSession.dwell
+        await harness.send(.tick)
+        await harness.send(pointer(.up, edge.x, edge.y))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.desktop.groups.isEmpty)
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: f))) == .tabs(windows: [t, f], selected: 1), "the group did not dock whole")
+    }
+
+    @Test func aCentreNeverGroupsDuringAWholeGroupDrag() async throws {
+        var (harness, leaf, ra, content) = try await dockedGroup()
+        _ = await drag(&harness, f, from: content, to: centre(ra))
+        harness.now += .milliseconds(450)
+        let tick = await harness.send(.tick)
+        #expect(groupPreviews(tick).isEmpty, "a group preview showed: \(tick)")
+        await harness.send(pointer(.up, ra.midX, ra.midY))
+        let tree = try #require(harness.arranger.world[mainKey]?.tree)
+        #expect(tree.node(leaf) == .tabs(windows: [b, f], selected: 1))
+        #expect(tree.node(try #require(tree.leaf(containing: a))) == .panel(a))
+    }
+}
