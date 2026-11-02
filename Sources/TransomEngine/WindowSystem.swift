@@ -153,7 +153,8 @@ public enum WindowEvent: Equatable, Sendable {
 /// Something the engine asks the window system to do.
 public enum WindowCommand: Equatable, Sendable {
     case setFrame(WindowRef, Rect)
-    case park(WindowRef, displayUUID: String)
+    /// Moves the window to its display's `parkedFrame`, at `size` when given (a hidden tab's content size), else its own.
+    case park(WindowRef, displayUUID: String, size: Size? = nil)
     case focus(WindowRef)
     case raise(WindowRef)
     case setHidden(WindowRef, Bool)

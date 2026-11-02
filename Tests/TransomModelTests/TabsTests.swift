@@ -72,16 +72,17 @@ private func pair() throws -> (LayoutTree, IDSource) {
         #expect(tree == before)
     }
 
-    @Test func aTabGroupResolvesToOneRectSizedForItsLargestMinimum() throws {
+    @Test func aTabGroupResolvesOneContentRectSizedForItsLargestMinimumPlusTheBand() throws {
         var (tree, _) = try pair()
         try tree.group(b, into: n(1))
         let mins = [a: Size(width: 300, height: 100), b: Size(width: 500, height: 200)]
         let r = try resolve(tree, in: Rect(x: 0, y: 0, width: 1000, height: 600), mins: mins, gap: 10)
         let group = try #require(r.nodeRects[n(1)])
         #expect(group.width >= 500)
-        #expect(group.height >= 200)
-        #expect(r.windowRects[a] == group)
-        #expect(r.windowRects[b] == group)
+        #expect(group.height >= 200 + TabBand.height)
+        #expect(r.windowRects[b] == TabBand.content(of: group), "the selected tab is not in the content rect")
+        #expect(r.windowRects[a] == nil)
+        #expect(r.hiddenTabs == [a: TabBand.content(of: group)])
         #expect(r.windowRects[c].map { !$0.overlaps(group) } == true)
         #expect(r.unfit.isEmpty)
     }

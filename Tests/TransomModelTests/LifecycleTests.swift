@@ -101,18 +101,23 @@ private func layout(_ tree: LayoutTree) throws -> Resolution {
         #expect(try layout(tree) == before)
     }
 
-    @Test func anAbsentTabLeavesItsGroupPlacedForTheOthers() throws {
+    @Test func anAbsentHiddenTabLeavesItsGroupPlacedAndAnAbsentSelectedOneReservesTheSlot() throws {
         var (tree, ids) = try triple()
         try tree.remove(c)
         try tree.remove(b)
         try tree.group(b, into: n(1))
         try tree.insert(c, at: .right, of: n(1), ids: &ids)
-        try tree.selectTab(a)
         try tree.setState(.absent, for: a)
         let r = try layout(tree)
         let group = try #require(r.nodeRects[n(1)])
-        #expect(r.windowRects[b] == group)
+        #expect(r.windowRects[b] == TabBand.content(of: group))
         #expect(r.windowRects[a] == nil)
+        #expect(r.hiddenTabs.isEmpty)
+
+        try tree.selectTab(a)
+        let reserved = try layout(tree)
+        #expect(reserved.nodeRects[n(1)] == nil, "a group whose selected tab is absent took part")
+        #expect(reserved.windowRects[b] == nil && reserved.hiddenTabs.isEmpty)
         #expect(tree.node(n(1)) == .tabs(windows: [a, b], selected: 0))
     }
 

@@ -9,11 +9,17 @@ public struct Resolution: Equatable, Sendable {
     public var windowRects: [WindowRef: Rect]
     /// Windows that cannot fit without overlapping; they get no rect.
     public var unfit: Set<WindowRef>
+    /// The present, unselected members of each placed tab group, with the group's content rect: they get no window rect
+    /// (only one member is ever written into a tile) and are parked at this size.
+    public var hiddenTabs: [WindowRef: Rect]
 
-    public init(nodeRects: [NodeID: Rect] = [:], windowRects: [WindowRef: Rect] = [:], unfit: Set<WindowRef> = []) {
+    public init(
+        nodeRects: [NodeID: Rect] = [:], windowRects: [WindowRef: Rect] = [:], unfit: Set<WindowRef> = [], hiddenTabs: [WindowRef: Rect] = [:]
+    ) {
         self.nodeRects = nodeRects
         self.windowRects = windowRects
         self.unfit = unfit
+        self.hiddenTabs = hiddenTabs
     }
 
     /// The Desktop tile's rect; nil when the tree has none or it is hidden.
@@ -23,8 +29,12 @@ public struct Resolution: Equatable, Sendable {
 /// Lays the tree out in `area` with one `gap` between tiles and around the outer edge (D-12).
 ///
 /// - Only `.present` windows take part (D-17). Absent and fullscreen windows keep their node but get
-///   no rect and are not unfit; a leaf takes part while one of its windows does, a split while one
-///   child does, and the taking-part children of a split share its length by their stored weights.
+///   no rect and are not unfit; a panel takes part while its window does, a tab group while its selected
+///   member does, a split while one child does, and the taking-part children of a split share its length
+///   by their stored weights.
+/// - A tab group's selected member gets the content rect (`TabBand.content`), its other present members
+///   go to `hiddenTabs` with the same rect, and its minimum is the largest present member's plus the band.
+///   Only the selected member can become unfit; the group goes with it.
 /// - Every present window gets at least its minimum (rounded up, at least 1×1) by water-filling
 ///   (D-10). While the minimums cannot fit, the window with the largest minimum on the violated axis
 ///   (area when both are) becomes unfit; ties go to the larger leaf NodeID, then the larger
@@ -61,17 +71,17 @@ public func resolve(
         desktopMinimum: Size(width: max(1, desktopMinimum.width.rounded(.up)), height: max(1, desktopMinimum.height.rounded(.up))))
     var candidates: [(leaf: NodeID, window: WindowRef, min: Size)] = []
     for (id, node) in tree.nodes {
-        let windows: [WindowRef]
+        let windows: [WindowRef], selected: WindowRef
         switch node {
-        case let .panel(window): windows = [window]
-        case let .tabs(tabs, _): windows = tabs
+        case let .panel(window): (windows, selected) = ([window], window)
+        case let .tabs(tabs, index): (windows, selected) = (tabs, tabs[index])
         case .split, .desktop: continue
         }
         for window in windows where tree.state(of: window) == .present {
             let min = mins[window] ?? Size(width: 1, height: 1)
             let effective = Size(width: max(1, min.width.rounded(.up)), height: max(1, min.height.rounded(.up)))
             solver.minimum[window] = effective
-            candidates.append((id, window, effective))
+            if window == selected { candidates.append((id, window, effective)) }
         }
     }
     solver.active = Set(candidates.map(\.window))
@@ -124,11 +134,11 @@ private struct Solver {
         switch try node(id) {
         case let .panel(window):
             return active.contains(window) ? minimum[window] : nil
-        case let .tabs(windows, _):
-            // Tabs share one rect, so it must fit the largest of them on each axis.
-            let sizes = windows.filter(active.contains).compactMap { minimum[$0] }
-            guard !sizes.isEmpty else { return nil }
-            return Size(width: sizes.map(\.width).max()!, height: sizes.map(\.height).max()!)
+        case let .tabs(windows, selected):
+            // Tabs share one content rect, so it must fit the largest present member on each axis, plus the band.
+            guard active.contains(windows[selected]) else { return nil }
+            let sizes = windows.compactMap { minimum[$0] }
+            return Size(width: sizes.map(\.width).max()!, height: sizes.map(\.height).max()! + TabBand.height)
         case let .desktop(hidden):
             return hidden ? nil : desktopMinimum
         case let .split(axis, children, _):
@@ -148,8 +158,12 @@ private struct Solver {
         switch try node(id) {
         case let .panel(window):
             result.windowRects[window] = rect
-        case let .tabs(windows, _):
-            for window in windows where active.contains(window) { result.windowRects[window] = rect }
+        case let .tabs(windows, selected):
+            let content = TabBand.content(of: rect)
+            result.windowRects[windows[selected]] = content
+            for window in windows where window != windows[selected] && tree.state(of: window) == .present {
+                result.hiddenTabs[window] = content
+            }
         case .desktop:
             break  // its rect is the nodeRects entry recorded above
         case let .split(axis, children, weights):

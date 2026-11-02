@@ -102,6 +102,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case cameraMove(CameraMove)
     /// The collapsed blocks to show on that display; empty hides them (UI-SPEC Surface 3, ZOOM-13).
     case collapsedBlocks([CollapsedBlock], displayUUID: String)
+    /// Speak this tab-group change (the shell formats it with `TabCopy`).
+    case tabAnnouncement(TabAnnouncement)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -169,6 +171,8 @@ public struct Arranger: Sendable {
     private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
     private var parkRequested: Set<WindowIdentity> = []
+    /// The size each sized park (a hidden tab) was sent at: a content size that changes parks the window again (Pitfall 1).
+    private var parkedSize: [WindowIdentity: Size] = [:]
     /// Whether a park was sent for `window` and it is still parked (the overview's camera-move pick, 06-09).
     public func isParked(_ window: WindowRef) -> Bool { parkRequested.contains(window.identity) }
     /// The left-button press in progress, if any (TILE-01).
@@ -1031,7 +1035,9 @@ public struct Arranger: Sendable {
     /// The earliest instant a waiting correction, the Finder deadline or a drag's dwell is due: the shell keeps one wake.
     private var nextWake: ContinuousClock.Instant? {
         let dwell = drag?.kind == .move ? drag?.dwellEnds : nil
-        return (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } } + [finderExpectation?.deadline, dwell].compactMap { $0 }).min()
+        let groupDwell = drag?.kind == .move ? drag?.groupDwellEnds : nil
+        return (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } }
+            + [finderExpectation?.deadline, dwell, groupDwell].compactMap { $0 }).min()
     }
 
     /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
@@ -1107,7 +1113,7 @@ public struct Arranger: Sendable {
         guard let frame = current.frames[window] ?? desk.desktop.frame(of: window),
             let target = Planner.dockTarget(at: Point(x: frame.midX, y: frame.midY), desk: desk, area: area, resolution: current.resolution)
         else { return [.beep] }
-        if case .tile(_, .center) = target { return [.beep] }  // tab groups from a centre drop are Phase 7
+        if case .tile(_, .center) = target { return [.beep] }  // dockTarget never gives a centre: keyboard commands never group
         var candidate = world, candidateHistory = history
         try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
             try desk.desktop.remove(window)
@@ -1384,14 +1390,16 @@ public struct Arranger: Sendable {
         return effects + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
-    /// Runs the dry run once the hover has held for the dwell, and shows (or moves) the preview it gives.
+    /// Runs the dry run once the hover has held for the dwell (and the group dry run once a centre has held for the group
+    /// dwell), and shows (or moves) the preview it gives.
     private mutating func settleDrag(now: ContinuousClock.Instant) -> [ArrangerEffect] {
         guard var session = drag, session.kind == .move else { return [] }
         let window = session.window
         _ = session.settle(at: now) { decide($0, window: window) }
+        _ = session.settleGroup(at: now) { decideGroup($0, window: window) }
         let frame = windows[window.identity]?.frame ?? session.startFrame
-        let preview = session.decision.flatMap { decision in decision.clampInto.map { .clamp(Planner.clamp(frame, into: $0)) } ?? decision.preview }
-        guard let decision = session.decision, preview != session.shown else {
+        let preview = session.current.flatMap { decision in decision.clampInto.map { .clamp(Planner.clamp(frame, into: $0)) } ?? decision.preview }
+        guard let decision = session.current, preview != session.shown else {
             drag = session
             return []
         }
@@ -1402,7 +1410,7 @@ public struct Arranger: Sendable {
     }
 
     /// What the pointer is over, reduced to what decides the drop (UI-SPEC Surface 2): the dwell restarts only when this
-    /// changes. A docked window over its own tile, and any tile centre, are a miss.
+    /// changes. A docked window over its own tile is a miss; another docked leaf's centre is a miss until the group dwell.
     private mutating func hover(for session: DragSession) -> Hover {
         let window = session.window
         guard let ownKey = deskKey(of: window), let ownDesk = world[ownKey], let ownPlan = dragPlan(.desk(ownKey)) else { return Hover() }
@@ -1425,23 +1433,27 @@ public struct Arranger: Sendable {
             return Hover(displayUUID: ownKey.displayUUID, swapWith: other, modifiers: [.command])
         }
         var target: DropTarget?
+        var groupTarget: GroupTarget?
         if let display, let plan = dragPlan(.desk(Self.key(display))) {
             let key = Self.key(display)
             target = DropZones.target(at: point, in: display.visibleFrame, tree: (world[key] ?? Desk()).tree, resolution: plan.resolution)
             switch target {
-            case .tile(_, .center)?: target = nil  // tab groups from a centre drop are Phase 7 (D-02)
             case .tile(let id, _)? where docked && key == ownKey && id == ownDesk.tree.leaf(containing: window): target = nil
+            case .tile(let id, .center)?:
+                // A docked leaf's centre groups after the group dwell (D-01); until then it is a miss.
+                target = nil
+                groupTarget = groupable(id, on: key) ? .tile(key, id) : nil
             default: break
             }
         }
         return Hover(
             displayUUID: display?.uuid, target: target,
-            crossesTiles: !docked && target == nil && Self.crosses(frame, ownPlan, except: window))
+            crossesTiles: !docked && target == nil && Self.crosses(frame, ownPlan, except: window), groupTarget: groupTarget)
     }
 
     /// The dry run for one held hover (UI-SPEC Surface 2 state matrix): a copy of the World with the drop applied, then
     /// planned. A drop that leaves any window without room is blocked, showing the frame it would get ignoring minimums.
-    private mutating func decide(_ hover: Hover, window: WindowRef) -> Decision {
+    mutating func decide(_ hover: Hover, window: WindowRef) -> Decision {
         guard let ownKey = deskKey(of: window), let ownDesk = world[ownKey], let ownPlan = dragPlan(.desk(ownKey)) else {
             return Decision(action: .miss)
         }
@@ -1494,7 +1506,7 @@ public struct Arranger: Sendable {
     }
 
     /// The World and history with `window` taken off its desk and dropped on `key`'s at `target`: one undo step there.
-    private func dropping(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> (world: World, history: UndoHistory) {
+    func dropping(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> (world: World, history: UndoHistory) {
         var candidate = world, candidateHistory = history
         if let from = deskKey(of: window), from != key {
             // Leaving another display's desk is a fact of where it was dropped, not a second undo step.
@@ -1531,7 +1543,7 @@ public struct Arranger: Sendable {
                 return effects + [.fault("could not answer the frame change of \(window): \(error)")] + replan()
             }
         }
-        let action = kind == .move ? session.decision?.action ?? .miss : .miss
+        let action = kind == .move ? session.current?.action ?? .miss : .miss
         do throws(LayoutError) {
             if kind == .resize, let key = deskKey(of: window), world[key]?.tree.state(of: window) != nil,
                 let change = try boundaryChange(key, edgeMoves(session))
@@ -1542,6 +1554,7 @@ public struct Arranger: Sendable {
             }
             switch action {
             case .dock(let key, let target): effects += try commitDock(window, on: key, at: target)
+            case .group(let key, let target): effects += try commitGroup(window, on: key, into: target)
             case .swap(let other): effects += try commitSwap(window, with: other)
             case .undock: effects += try commitUndock(window)
             case .refuse(let text): effects += [.announce(text)] + (try missed(window))
@@ -1553,7 +1566,7 @@ public struct Arranger: Sendable {
         return effects
     }
 
-    private mutating func commitDock(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> [ArrangerEffect] {
+    mutating func commitDock(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> [ArrangerEffect] {
         let candidate = try dropping(window, on: key, at: target)
         guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key] else {
             return [.announce(Self.noRoom)] + (try missed(window))
@@ -1599,7 +1612,7 @@ public struct Arranger: Sendable {
 
     /// The miss rules (D-01, D-06): a docked window snaps back to its tile; a floating one stays where it was released,
     /// clamped into the Desktop rect if it crosses a docked tile, and moves to the desk of the display it is now on.
-    private mutating func missed(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+    mutating func missed(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let info = windows[window.identity] else { return replan() }
         if desk.tree.state(of: window) != nil {
             if let tile = lastRequested[window.identity], Self.near(info.frame, tile, within: 2) { return replan() }
@@ -1804,7 +1817,7 @@ public struct Arranger: Sendable {
                     let viewPlan = try ViewPlanner.plan(
                         desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
                         collapsible: camera.collapsible)
-                    (plan.frames, plan.parks, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.resolution)
+                    (plan.frames, plan.parks, plan.parkSizes, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.parkSizes, viewPlan.resolution)
                     blocks[display.uuid] = viewPlan.collapsed.map { CollapsedBlock(window: $0.key, rect: $0.value) }
                         .sorted { $0.window.identity < $1.window.identity }
                     let home = view == .home ? viewPlan : try ViewPlanner.plan(
@@ -1828,11 +1841,16 @@ public struct Arranger: Sendable {
             // A just-created window outside the view stays where it opened until its widen move settles (Pitfall 3).
             for window in plan.parks where windows[window.identity]?.isExcluded == false && !camera.unparkedNew.contains(window.identity) {
                 parkedNow.insert(window.identity)
-                guard parkRequested.insert(window.identity).inserted else { continue }
+                let size = plan.parkSizes[window]
+                let resized = size.map { new in
+                    parkedSize[window.identity].map { abs($0.width - new.width) > 0.5 || abs($0.height - new.height) > 0.5 } ?? true
+                } ?? false
+                guard parkRequested.insert(window.identity).inserted || resized else { continue }
                 if homeFrames[window.identity] == nil, windows[window.identity]?.isExcluded != true {
                     homeFrames[window.identity] = desk.desktop.frame(of: window)
                 }
-                parks.append(.park(window, displayUUID: display.uuid))
+                parkedSize[window.identity] = size
+                parks.append(.park(window, displayUUID: display.uuid, size: size))
             }
             // A floating window not where the model has it (after Float, Undo or Show Desktop) is moved there.
             for floating in desk.desktop.windows
@@ -1863,6 +1881,7 @@ public struct Arranger: Sendable {
             windows[id].map { info in world.desks.values.contains { $0.tree.state(of: info.window) != nil } } ?? false
         }
         parkRequested = parkRequested.filter { parkedNow.contains($0) || hidden.contains($0) }
+        parkedSize = parkedSize.filter { parkRequested.contains($0.key) }
         // Collapsible only while collapsed: one that fits its home tile again, or left every tree, gets CONTEXT E's
         // refusals and lost-room float again (WR-01). A desk not shown keeps its windows' membership.
         camera.collapsible = camera.collapsible.filter { id in

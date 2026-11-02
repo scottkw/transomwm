@@ -3,10 +3,13 @@ import TransomModel
 /// Where every window of one desk should be. `frames` holds docked windows' tile rects and the floating windows that
 /// must move: each to its wanted frame, clamped into the Desktop only when that frame overlaps a docked tile. A
 /// floating window already there and clear of every tile is left where it is (D-24).
-/// While the Desktop tile is hidden, its present floating windows are in `parks` instead, with no frame.
+/// While the Desktop tile is hidden, its present floating windows are in `parks` instead, with no frame. A tab group's
+/// hidden members are always in `parks`, never in `frames`, with their content size in `parkSizes` (D-07).
 public struct FramePlan: Equatable, Sendable {
     public var frames: [WindowRef: Rect]
     public var parks: [WindowRef]
+    /// The size each park is written at; a park with none keeps the window's own size.
+    public var parkSizes: [WindowRef: Size] = [:]
     public var unfit: Set<WindowRef>
     public var desktopRect: Rect?
     public var resolution: Resolution
@@ -59,7 +62,12 @@ public enum Planner {
             }
         }
         var frames = resolution.windowRects
-        let parks = desk.tree.isDesktopHidden == true ? floating.map(\.window) : []
+        var parks = desk.tree.isDesktopHidden == true ? floating.map(\.window) : []
+        var parkSizes: [WindowRef: Size] = [:]
+        for (window, content) in resolution.hiddenTabs.sorted(by: { $0.key.identity < $1.key.identity }) {
+            parks.append(window)
+            parkSizes[window] = Size(width: content.width, height: content.height)
+        }
         if let desktop = resolution.desktopRect {
             let tiles = Array(resolution.windowRects.values)
             for window in floating {
@@ -68,7 +76,8 @@ public enum Planner {
                 if tiles.contains(where: window.frame.overlaps) || !near(target, window.frame, within: 0.5) { frames[window.window] = target }
             }
         }
-        return FramePlan(frames: frames, parks: parks, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
+        return FramePlan(
+            frames: frames, parks: parks, parkSizes: parkSizes, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
     }
 
     static func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {

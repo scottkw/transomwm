@@ -203,7 +203,7 @@ import os
     /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
     /// `Geometry.maxCoordinate`, and windows Transom does not track, are dropped and logged (T-02-32). `.park` is a
-    /// frame write through the same slot, to its display's `parkedFrame` at the window's tracked size (Pattern 15).
+    /// frame write through the same slot, to its display's `parkedFrame` at the given size (a hidden tab's content size), else the window's tracked size (Pattern 15).
     /// `.focus` and `.raise` run as jobs on the app's thread and never hold up the caller (`focus(_:of:on:)`).
     /// `setHidden` is logged and dropped: no phase needs it yet, and it stays in the protocol for later ones.
     /// Commands for an excluded app are dropped before anything else, logged once per bundle ID (D-12).
@@ -226,12 +226,12 @@ import os
                     continue
                 }
                 thread.enqueueFrame(windowID: windowID, rect: rect, ref: info.window)
-            case .park(_, let uuid):
+            case .park(_, let uuid, let size):
                 guard let display = displays.first(where: { $0.uuid == uuid }) else {
                     logger.error("dropping park for \(ref.description, privacy: .public): display \(uuid, privacy: .public) unknown")
                     continue
                 }
-                thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: info.frame.size, among: displays), ref: info.window)
+                thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: size ?? info.frame.size, among: displays), ref: info.window)
             case .focus:
                 Task { await focus(windowID, of: info.window, on: thread) }
             case .raise:

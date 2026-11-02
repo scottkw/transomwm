@@ -62,6 +62,8 @@ nonisolated enum PreviewStyle {
                         rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85,
                         label: Label(text: text, glyph: collapsedGlyph, glyphRole: .label))
                 ]
+            case .group(let frame, _, _):
+                [LayerStyle(rect: frame, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85)]
             }
         return increaseContrast ? layers.map(contrasted) : layers
     }

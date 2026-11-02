@@ -536,7 +536,7 @@ import os
 
     private static func written(_ command: WindowCommand) -> WindowIdentity? {
         switch command {
-        case .setFrame(let window, _), .park(let window, _): window.identity
+        case .setFrame(let window, _), .park(let window, _, _): window.identity
         case .focus, .raise, .setHidden: nil
         }
     }

@@ -112,16 +112,18 @@ private let third = 1.0 / 3
         #expect(resolution.unfit.isEmpty)
     }
 
-    @Test func tabGroupStaysPlacedWhileOneTabIsPresent() throws {
-        let nodes: [UInt64: Node] = [1: h(2, 3, weights: [0.5, 0.5]), 2: .tabs(windows: [a, b], selected: 0), 3: .panel(c)]
+    @Test func tabGroupStaysPlacedWhileItsSelectedTabIsPresent() throws {
+        let nodes: [UInt64: Node] = [1: h(2, 3, weights: [0.5, 0.5]), 2: .tabs(windows: [a, b], selected: 1), 3: .panel(c)]
         let one = try resolve(try tree(root: 1, nodes, states: [a: .absent]), in: wide, mins: [:], gap: 10)
         #expect(one.nodeRects[n(2)] == Rect(x: 10, y: 10, width: 485, height: 480))
-        #expect(one.windowRects[b] == Rect(x: 10, y: 10, width: 485, height: 480))
+        #expect(one.windowRects[b] == Rect(x: 10, y: 42, width: 485, height: 448), "the selected tab gets the content rect")
         #expect(one.windowRects[a] == nil)
+        #expect(one.hiddenTabs.isEmpty, "an absent member is not parked")
 
-        let none = try resolve(try tree(root: 1, nodes, states: [a: .absent, b: .absent]), in: wide, mins: [:], gap: 10)
-        #expect(none.nodeRects[n(2)] == nil)
+        let none = try resolve(try tree(root: 1, nodes, states: [b: .absent]), in: wide, mins: [:], gap: 10)
+        #expect(none.nodeRects[n(2)] == nil, "a group whose selected tab is absent took part")
         #expect(none.windowRects == [c: Rect(x: 10, y: 10, width: 980, height: 480)])
+        #expect(none.hiddenTabs.isEmpty)
         #expect(none.unfit.isEmpty)
     }
 
