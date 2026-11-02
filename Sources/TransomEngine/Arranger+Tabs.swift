@@ -66,6 +66,8 @@ public enum TabAction: Equatable, Sendable {
     case select(WindowRef, via: TabSelectSource)
     case closeGroup(GroupKey)
     case minimizeGroup(GroupKey)
+    /// The strip's Float Group (docked group) or Dock Group (floating group) button.
+    case toggleGroupFloat(GroupKey)
 }
 
 /// Close Group in progress (D-06): one member at a time, each hidden one shown first. `current` was sent its close
@@ -317,6 +319,7 @@ extension Arranger {
         case .select(let window, let source): select(window, via: source, ready: ready, now: now)
         case .closeGroup(let group): closeGroup(group, ready: ready, now: now)
         case .minimizeGroup(let group): minimizeGroup(group, ready: ready, now: now)
+        case .toggleGroupFloat(let group): toggleGroupFloat(group, ready: ready)
         }
     }
 
@@ -355,7 +358,7 @@ extension Arranger {
         return spoken + logged + replan() + [.raiseStrip(group)] + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
-    private func refuse(_ refusal: TabRefusal, _ what: String, _ why: String) -> [ArrangerEffect] {
+    func refuse(_ refusal: TabRefusal, _ what: String, _ why: String) -> [ArrangerEffect] {
         [.beep, .tabAnnouncement(.refused(refusal)), .info("group: \(what) refused, \(why)")]
     }
 
@@ -521,5 +524,59 @@ extension Arranger {
         queue.deadline = now + Self.closeConfirmation
         tabs.closeQueue = queue
         return [.perform([.close(next)])]
+    }
+}
+
+/// Whole-group moves (D-06, UI-SPEC Surface 5, RESEARCH Pattern 9): every path that moves a group's window moves the
+/// whole group, as one leaf or one floating group, in one `World.edit`.
+extension Arranger {
+    /// The strip's Float Group / Dock Group button.
+    mutating func toggleGroupFloat(_ group: GroupKey, ready: Bool) -> [ArrangerEffect] {
+        guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, "float or dock group \(group.node)", "arranging is paused") }
+        guard ready else { return refuse(.notReady, "float or dock group \(group.node)", "Accessibility is not ready") }
+        guard let ref = tabGroup(group) else { return refuse(.notInGroup, "float or dock group \(group.node)", "no such group") }
+        do throws(LayoutError) {
+            return try ref.floating ? dockGroup(ref) : floatGroup(ref)
+        } catch {
+            return [.beep, .fault("group \(group.node): float or dock failed: \(error)")]
+        }
+    }
+
+    /// The minimum a group needs: its largest member's per axis, plus the band. Nil when no member has one.
+    func groupMinimum(_ members: [WindowRef]) -> Size? {
+        let known = members.compactMap { minimums[$0] }
+        guard !known.isEmpty else { return nil }
+        return Size(width: known.map(\.width).max()!, height: known.map(\.height).max()! + TabBand.height)
+    }
+
+    /// Float Group: the docked group floats at `Planner.floatFrame` of its group frame (its selected member's pre-dock
+    /// frame plus the band, else 90% of the tile, centred), showing a hidden Desktop first (D-31). Its tile closes and the
+    /// neighbours reflow; members, order and selection stay. One undo step. Hidden members re-park at the new size.
+    mutating func floatGroup(_ ref: TabGroupRef) throws(LayoutError) -> [ArrangerEffect] {
+        let key = ref.key.desk, selected = ref.members[ref.selected]
+        guard let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let mins = minimums, gap = gap, show = showingDesktop(), minimum = groupMinimum(ref.members)
+        guard let tile = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution.nodeRects[ref.key.node]
+            ?? windows[selected.identity].map({ TabBand.frame(ofContent: $0.frame) })
+        else { return [.beep] }
+        let wanted = wantedFrames[selected.identity]
+        var frame = tile, desktop = area
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
+            let removed = try desk.tree.removeLeaf(ref.key.node)
+            desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
+            frame = Planner.floatFrame(wanted: wanted.map(TabBand.frame(ofContent:)), tile: tile, desktop: desktop, minimum: minimum)
+            let group = FloatingTabGroup(id: try ids.make(), members: ref.members, selected: ref.selected, frame: frame)
+            try desk.desktop.addGroup(group, states: removed.states)
+        }
+        // As Float Window: a pre-dock frame only clamped stays wanted, re-planned as the Desktop changes (WR-01).
+        let content = TabBand.content(of: frame)
+        wantedFrames[selected.identity] = wanted.map { Planner.clamp(TabBand.frame(ofContent: $0), into: desktop) } == frame ? wanted : content
+        return replan() + [.info("group \(ref.key.node): floated")]
+    }
+
+    /// Dock Group (07-06 Task 2).
+    mutating func dockGroup(_ ref: TabGroupRef) throws(LayoutError) -> [ArrangerEffect] {
+        [.beep]
     }
 }

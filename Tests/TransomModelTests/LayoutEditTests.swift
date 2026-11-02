@@ -72,12 +72,14 @@ private func worldABDesktop() throws -> World {
     }
 
     @Test func swapRejectsSelfTabsAndUnknownWindows() throws {
-        let original = try tree(root: 1, [1: h(2, 3, weights: [0.5, 0.5]), 2: .panel(a), 3: .tabs(windows: [b, c], selected: 0)])
+        // A panel and one tab group swap whole leaves (07-06); two tab groups never do.
+        let original = try tree(root: 1, [1: h(2, 3, weights: [0.5, 0.5]), 2: .tabs(windows: [a, d], selected: 0), 3: .tabs(windows: [b, c], selected: 0)])
         var t = original
         let selfSwap = #expect(throws: LayoutError.self) { try t.swap(a, a) }
         #expect({ if case .invariantViolated? = selfSwap { true } else { false } }())
         #expect(throws: LayoutError.notALeaf(n(3))) { try t.swap(a, b) }
-        #expect(throws: LayoutError.windowNotFound(d)) { try t.swap(a, d) }
+        let unknown = makeWindow(9)
+        #expect(throws: LayoutError.windowNotFound(unknown)) { try t.swap(a, unknown) }
         #expect(t == original)
     }
 

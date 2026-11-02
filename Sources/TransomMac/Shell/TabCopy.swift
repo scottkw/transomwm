@@ -33,6 +33,8 @@ nonisolated public enum TabCopy {
     /// The group buttons' tooltips and labels (UI-SPEC Surface 4).
     public static let closeGroup = "Close Group"
     public static let minimizeGroup = "Minimize Group"
+    public static let floatGroup = "Float Group"
+    public static let dockGroup = "Dock Group"
 
     /// Close Group's accessibility help.
     public static func closeGroupHelp(_ count: Int) -> String { "Closes all \(count) windows in this tab group" }

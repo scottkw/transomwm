@@ -136,6 +136,30 @@ public struct DesktopLayer: Codable, Equatable, Sendable {
         groups[g].selected = groups[g].members.firstIndex(of: window)!
     }
 
+    /// Takes group `id` and its members off the layer as one unit (Pattern 9), returning it and the members' states.
+    public mutating func removeGroup(_ id: NodeID) throws(LayoutError) -> (group: FloatingTabGroup, states: [WindowIdentity: WindowState]) {
+        guard let g = groups.firstIndex(where: { $0.id == id }) else { throw .notATabGroup(id) }
+        let group = groups.remove(at: g)
+        var states: [WindowIdentity: WindowState] = [:]
+        for floating in windows where group.members.contains(floating.window) { states[floating.window.identity] = floating.state }
+        windows.removeAll { group.members.contains($0.window) }
+        return (group, states)
+    }
+
+    /// Adds `group` in front of the others, each member at its content rect with its state from `states` (else present).
+    public mutating func addGroup(_ group: FloatingTabGroup, states: [WindowIdentity: WindowState]) throws(LayoutError) {
+        guard !groups.contains(where: { $0.id == group.id }) else { throw .invariantViolated("floating group \(group.id) already exists") }
+        guard group.members.count >= 2, group.members.indices.contains(group.selected) else { throw .notATabGroup(group.id) }
+        guard group.frame.isValidGeometry else { throw .invalidGeometry("floating group \(group.id) frame is not finite or out of range") }
+        var next = self
+        for member in group.members {
+            try next.add(member, frame: TabBand.content(of: group.frame))
+            if let state = states[member.identity], state != .present { try next.setState(state, for: member) }
+        }
+        next.groups.append(group)
+        self = next
+    }
+
     /// The group holding `window`, if any.
     public func group(containing window: WindowRef) -> FloatingTabGroup? {
         groupIndex(of: window).map { groups[$0] }

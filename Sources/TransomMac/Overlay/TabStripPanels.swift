@@ -60,15 +60,15 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     /// Under this a press is still a click (UI-SPEC Spacing xs).
     private static let clickTravel: CGFloat = 4
 
-    // shortcut: Close and Minimize only; 07-06 adds Float / Dock.
-    private static let buttons: [TabStripButton] = [.closeGroup, .minimizeGroup]
+    /// Close, Minimize, then Float Group on a docked group or Dock Group on a floating one (UI-SPEC Surface 2).
+    private var buttons: [TabStripButton] { [.closeGroup, .minimizeGroup, strip.floating ? .dockGroup : .floatGroup] }
 
     private var layout: TabStripLayout {
-        TabStripLayout(width: bounds.width, tabCount: strip.members.count, selected: strip.selected, buttons: Self.buttons)
+        TabStripLayout(width: bounds.width, tabCount: strip.members.count, selected: strip.selected, buttons: buttons)
     }
 
     /// The group buttons laid out (none under 116 pt), with their rects.
-    private var buttonRects: [(TabStripButton, Rect)] { Array(zip(Self.buttons, layout.buttonRects)) }
+    private var buttonRects: [(TabStripButton, Rect)] { Array(zip(buttons, layout.buttonRects)) }
 
     private static func ns(_ rect: Rect) -> NSRect { NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height) }
 
@@ -114,7 +114,8 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         switch button {
         case .closeGroup: TabCopy.closeGroup
         case .minimizeGroup: TabCopy.minimizeGroup
-        case .floatGroup, .dockGroup: ""  // 07-06
+        case .floatGroup: TabCopy.floatGroup
+        case .dockGroup: TabCopy.dockGroup
         }
     }
 
@@ -314,7 +315,7 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         switch button {
         case .closeGroup: onAction?(.closeGroup(strip.group))
         case .minimizeGroup: onAction?(.minimizeGroup(strip.group))
-        case .floatGroup, .dockGroup: break  // 07-06
+        case .floatGroup, .dockGroup: onAction?(.toggleGroupFloat(strip.group))
         }
     }
 

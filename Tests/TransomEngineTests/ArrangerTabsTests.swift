@@ -1180,3 +1180,40 @@ private func runCloseGroup(_ arranger: inout Arranger, _ group: GroupKey, conten
         #expect(!all.contains(.tabAnnouncement(.ended)), "Close Group announced the dissolve")
     }
 }
+
+private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger.world[mainKey]?.desktop.groups.first }
+
+/// TABS-03, D-06, UI-SPEC Surface 5: Float Group / Dock Group and every path that moves a group's window move the whole group.
+@Suite struct ArrangerWholeGroupTests {
+    @Test func floatGroupFloatsTheWholeDockedGroupInOneUndoStep() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, tileContent) = try bareGroup(at: start)  // [b, f], f selected, b parked
+        _ = arranger.handle(.event(.windowMoved(f, tileContent)), now: start)  // f's echo
+        let depth = arranger.history.depth(for: mainKey)
+        let effects = arranger.handle(.tab(.toggleGroupFloat(group), ready: true), now: start)
+        let floated = try #require(floatingGroup(arranger), "no floating group: \(effects)")
+        #expect(floated.members == [b, f] && floated.selected == 1)
+        #expect(arranger.world[mainKey]?.tree.windows == [a], "the group's tile did not close")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1, "Float Group is not one undo step")
+        let content = TabBand.content(of: floated.frame)
+        #expect(setFrames(effects).filter { $0.key != a } == [f: content], "group writes: \(setFrames(effects))")
+        #expect(parks(effects) == [.park(b, displayUUID: "main", size: Size(width: content.width, height: content.height))])
+        let strip = try #require(strips(effects).last?.first, "no strip: \(effects)")
+        #expect(strip.floating && strip.frame == TabBand.strip(of: floated.frame) && strip.members == [b, f] && strip.selected == 1)
+        #expect(effects.contains(.info("group \(group.node): floated")))
+        _ = arranger.handle(.command(.undo, focused: f), now: start + .seconds(1))
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f], selected: 1), "Undo did not restore the docked leaf")
+        #expect(floatingGroup(arranger) == nil)
+    }
+
+    @Test(arguments: [true, false])
+    func aRefusedFloatGroupBeepsAndChangesNothing(paused: Bool) throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        if paused { _ = arranger.handle(.setPaused(.user, true), now: start) }
+        let before = arranger.world
+        let effects = arranger.handle(.tab(.toggleGroupFloat(group), ready: paused), now: start)
+        #expect(effects.contains(.beep) && effects.contains(.tabAnnouncement(.refused(paused ? .paused : .notReady))))
+        #expect(arranger.world == before)
+    }
+}

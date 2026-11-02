@@ -344,3 +344,77 @@ private func decodeLayer(_ json: String) throws -> DesktopLayer {
         #expect(layer.frame(of: c) == floatC)
     }
 }
+
+/// Pattern 9: a group moves as one leaf (Float / Dock Group, whole-group drags).
+@Suite struct WholeGroupEditTests {
+    @Test func removingAndReinsertingATabsLeafKeepsMembersOrderAndSelection() throws {
+        var tree = try groupBesideC(selected: 0, states: [a: .absent])
+        var ids = IDSource(next: 4)
+        let removed = try tree.removeLeaf(n(2))
+        #expect(removed.node == .tabs(windows: [a, b], selected: 0))
+        #expect(removed.states == [a.identity: .absent, b.identity: .present])
+        #expect(tree.root == n(3) && tree.windows == [c], "the split did not collapse onto c")
+        try tree.insertLeaf(removed.node, states: removed.states, at: .bottom, of: n(3), ids: &ids)
+        let leaf = try #require(tree.leaf(containing: a))
+        #expect(tree.node(leaf) == .tabs(windows: [a, b], selected: 0))
+        #expect(tree.state(of: a) == .absent && tree.state(of: b) == .present)
+        guard case .split(_, _, let weights)? = tree.node(try #require(tree.root)) else { Issue.record("no split root"); return }
+        #expect(abs(weights.reduce(0, +) - 1) < 1e-12)
+        try tree.validate()
+    }
+
+    @Test func aDuplicateMemberIdentityThrowsAndChangesNothing() throws {
+        var tree = try groupBesideC()
+        var ids = IDSource(next: 4)
+        let before = tree, beforeIDs = ids
+        #expect(throws: LayoutError.duplicateWindow(c)) {
+            try tree.insertLeaf(.tabs(windows: [d, c], selected: 0), states: [d.identity: .present, c.identity: .present], at: .left, of: n(3), ids: &ids)
+        }
+        #expect(tree == before && ids == beforeIDs)
+        #expect(throws: LayoutError.self, "states not matching the members inserted") {
+            try tree.insertLeaf(.tabs(windows: [d, makeWindow(9)], selected: 0), states: [d.identity: .present], at: .left, of: n(3), ids: &ids)
+        }
+        #expect(tree == before && ids == beforeIDs)
+    }
+
+    @Test func theLastDockedLeafLeavingShowsAHiddenDesktop() throws {
+        var tree = LayoutTree.withDesktop()
+        var ids = IDSource()
+        try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try tree.group(b, into: try #require(tree.leaf(containing: a)))
+        try tree.setDesktopHidden(true)
+        _ = try tree.removeLeaf(try #require(tree.leaf(containing: a)))
+        #expect(tree.windows.isEmpty && tree.isDesktopHidden == false)
+    }
+
+    @Test func removeGroupAndAddGroupRoundTrip() throws {
+        var layer = DesktopLayer()
+        try layer.add(a, frame: floatA)
+        try layer.add(c, frame: floatC)
+        try layer.group(id: n(5), target: a, adding: b)
+        try layer.setState(.absent, for: a)
+        let before = layer
+        let (group, states) = try layer.removeGroup(n(5))
+        #expect(group == FloatingTabGroup(id: n(5), members: [a, b], selected: 1, frame: floatA))
+        #expect(states == [a.identity: .absent, b.identity: .present])
+        #expect(layer.groups.isEmpty && layer.windows.map(\.window) == [c])
+        try layer.addGroup(group, states: states)
+        #expect(layer.groups == before.groups)
+        #expect(layer.frame(of: a) == TabBand.content(of: floatA) && layer.frame(of: b) == TabBand.content(of: floatA))
+        #expect(layer.windows.first { $0.window == a }?.state == .absent)
+        try layer.validate()
+        #expect(throws: LayoutError.self) { try layer.addGroup(group, states: states) }
+        #expect(throws: LayoutError.notATabGroup(n(9))) { _ = try layer.removeGroup(n(9)) }
+    }
+
+    @Test func aTabsLeafSwapsWithAPanelButTwoGroupsDoNot() throws {
+        var tree = try groupBesideC()
+        try tree.swap(b, c)
+        #expect(tree.node(n(2)) == .panel(c) && tree.node(n(3)) == .tabs(windows: [a, b], selected: 1))
+        var two = try groupBesideC()
+        try two.group(d, into: n(3))
+        let before = two
+        #expect(throws: LayoutError.self) { try two.swap(a, d) }
+        #expect(two == before)
+    }
+}
