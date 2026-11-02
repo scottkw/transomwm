@@ -1,3 +1,4 @@
+import ApplicationServices
 import Foundation
 import TransomEngine
 @testable import TransomMac
@@ -15,7 +16,9 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
 /// A saved group [0, 1] with window 1 selected, re-formed by a fresh controller over two fixture windows. The store
 /// is a temporary directory, never the user's real layout.json.
 @MainActor struct SavedGroup {
-    let fixture: FixtureProcess
+    /// One fixture with both windows, or one per window (`separateApps`), window 0's first.
+    let fixtures: [FixtureProcess]
+    var fixture: FixtureProcess { fixtures[0] }
     let directory: URL
     let arrange: ArrangeController
     let key: DeskKey
@@ -24,20 +27,22 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
     let selected: TransomModel.WindowRef
     let visible: Rect
 
-    static func start() async throws -> SavedGroup {
+    static func start(separateApps: Bool = false) async throws -> SavedGroup {
         let directory = FileManager.default.temporaryDirectory.appending(path: "transom-tabs-\(UUID().uuidString)", directoryHint: .isDirectory)
-        let fixture = try await FixtureProcess.launch(["standard", "standard"])
+        let fixtures = separateApps
+            ? [try await FixtureProcess.launch(["standard"]), try await FixtureProcess.launch(["standard"])]
+            : [try await FixtureProcess.launch(["standard", "standard"])]
         var started = false
         defer {
             if !started {  // a failed start leaves no fixture or store behind
-                fixture.terminate()
+                for fixture in fixtures { fixture.terminate() }
                 try? FileManager.default.removeItem(at: directory)
             }
         }
-        let fixturePID = fixture.pid
-        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        let pids = Set(fixtures.map(\.pid))
+        let system = AXWindowSystem(appFilter: { pid, _ in pids.contains(pid) })
         await system.start()
-        let ids = fixture.windows.sorted { $0.index < $1.index }.map(\.id)
+        let ids = fixtures.flatMap { $0.windows.sorted { $0.index < $1.index }.map(\.id) }
         try #require(ids.count == 2)
         var found: [WindowInfo] = []
         _ = await waitUntil(timeout: .seconds(3)) {
@@ -69,11 +74,11 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         let visible = try #require(Displays.current().first { $0.uuid == key.displayUUID }).visibleFrame
         started = true
         return SavedGroup(
-            fixture: fixture, directory: directory, arrange: arrange, key: key, leaf: leaf, hidden: hidden, selected: selected, visible: visible)
+            fixtures: fixtures, directory: directory, arrange: arrange, key: key, leaf: leaf, hidden: hidden, selected: selected, visible: visible)
     }
 
     func close() {
-        fixture.terminate()
+        for fixture in fixtures { fixture.terminate() }
         try? FileManager.default.removeItem(at: directory)
     }
 
@@ -85,10 +90,14 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         return TabBand.content(of: tile)
     }
 
-    /// The fixture's own report of its two window frames, window 0 first.
+    /// The fixtures' own report of the two window frames, window 0 first.
     func frames() async -> [Rect] {
-        _ = try? await fixture.send("list")
-        return fixture.windows.sorted { $0.index < $1.index }.map(\.frame)
+        var frames: [Rect] = []
+        for fixture in fixtures {
+            _ = try? await fixture.send("list")
+            frames += fixture.windows.sorted { $0.index < $1.index }.map(\.frame)
+        }
+        return frames
     }
 
     /// `shown` fills `content` and `parked` is a sliver at the content size.
@@ -217,6 +226,49 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         #expect(abs(frames[0].width - rect.width) <= 1 && abs(frames[0].height - rect.height) <= 1, "the hidden window was resized to \(frames[0])")
         #expect(group.arrange.arranger.world[group.key]?.tree.node(group.leaf) == .tabs(windows: [group.hidden, group.selected], selected: 1),
             "the group changed its selected tab")
+    }
+
+    /// 07 UAT Bug 1 (D-08): activating the app of a hidden member that is already that app's focused window (⌘Tab, the
+    /// Dock, `open -a`) sends no focused-window change, only the activation; the member still becomes the selected tab
+    /// and fills the content rect, the other member parking. Each window is its own fixture app.
+    @Test(.timeLimit(.minutes(1)))
+    func activatingTheAppOfAHiddenMemberSelectsIt() async throws {
+        let group = try await SavedGroup.start(separateApps: true)
+        defer { group.close() }
+        defer { withExtendedLifetime(group.arrange) {} }
+        let (formed, last, content) = await group.formed()
+        try #require(formed, "the group never formed: windows at \(last)")
+        let rect = try #require(content)
+
+        /// Sets AXFrontmost, as the focus fallback does: the app activates and keeps its focused window, like ⌘Tab.
+        func activate(_ index: Int) async throws -> String {
+            let app = AXUIElementCreateApplication(group.fixtures[index].pid)
+            #expect(AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue) == .success)
+            var reply = ""
+            _ = await waitUntil(timeout: .seconds(2)) {
+                reply = (try? await group.fixtures[index].send("frontmost"))?.first ?? ""
+                return reply != "frontmost none"
+            }
+            return reply
+        }
+        // The selected member's app first, as after a click on its tab; then past the focus suppression.
+        #expect(try await activate(1) == "frontmost index=0", "fixture 1 did not become frontmost with its window key")
+        try await Task.sleep(for: Arranger.focusSuppression + .milliseconds(300))
+        let before = try await group.fixture.send("frontmost").first
+        try #require(before == "frontmost none", "fixture 0 is still active: \(before ?? "")")
+        try #require(group.arrange.arranger.world[group.key]?.tree.node(group.leaf) == .tabs(windows: [group.hidden, group.selected], selected: 1),
+            "activating the selected member's app changed the group")
+
+        // Its only window is the parked member, so it is that app's key window, invisible until the group selects it.
+        #expect(try await activate(0) == "frontmost index=0", "fixture 0 did not become frontmost with its parked window key")
+        var frames: [Rect] = []
+        let shown = await waitUntil(timeout: .seconds(3)) {
+            frames = await group.frames()
+            return frames.count == 2 && group.isShown(frames[0], parked: frames[1], content: rect)
+        }
+        #expect(shown, "window 0 was not shown in the content rect with window 1 parked: windows at \(frames), content \(rect)")
+        #expect(group.arrange.arranger.world[group.key]?.tree.node(group.leaf) == .tabs(windows: [group.hidden, group.selected], selected: 0),
+            "the activated member did not become the selected tab")
     }
 
     /// D-07: the quit restore puts both members of a re-formed group (the hidden one parked) at the content rect, the

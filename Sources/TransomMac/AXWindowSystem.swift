@@ -40,6 +40,8 @@ import os
     public private(set) var displayNames: [String: String] = [:]
     /// `NSWorkspace.activeSpaceDidChangeNotification`: marks every app's next full update `spaceChanged` (02-17).
     private var spaceObserver: (any NSObjectProtocol)?
+    /// `NSWorkspace.didActivateApplicationNotification`: the activated app's AXMain window is reported focused (D-08).
+    private var activationObserver: (any NSObjectProtocol)?
     private var spaceSwitches = SpaceSwitchMarks()
     private let spacesLogger = Logger(subsystem: "com.eightabyte.transom", category: "spaces")
     /// The latest Spaces list, nil while the lookup is off: refreshed at start and on Space and display changes.
@@ -95,6 +97,7 @@ import os
         coVisibilityTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
+        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
         hintContinuation.finish()
     }
 
@@ -144,6 +147,12 @@ import os
                 self.spaceSwitches.spaceDidChange(pids: self.threads.keys)
                 self.spaceDidChange()
             }
+        }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let pid = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier else { return }
+            MainActor.assumeIsolated { self?.appActivated(pid) }
         }
         let gate = SessionGate(
             workspaceCenter: NSWorkspace.shared.notificationCenter, distributedCenter: DistributedNotificationCenter.default(),
@@ -407,7 +416,7 @@ import os
         // A hint for a window still settling stays until a later refresh tracks it (G-03-5). A no-ID hint resolves
         // through AXMain from this observation only if its AXWindows read succeeded (T-03-54).
         let mainID = observation.listFailure == nil ? mainWindowIDs[pid] : nil
-        if let ref = pendingFocus.resolve(pid: pid, mainID: mainID, windows: tracker.sortedWindows()) {
+        if let ref = pendingFocus.resolve(pid: pid, mainID: mainID, windows: tracker.sortedWindows(), now: .now) {
             emit([.windowFocused(ref)])
         }
         if followUp.remove(pid) != nil { scheduler?.schedule(pid: pid, after: .zero) }
@@ -572,6 +581,15 @@ import os
         // A nil ID (an element the thread has not cached yet, such as a new window) resolves through AXMain.
         if focus { pendingFocus.hint(pid: hint.pid, windowID: hint.windowID) }
         scheduler?.schedule(pid: hint.pid)
+    }
+
+    /// ⌘Tab, the Dock or `open -a` made `pid` frontmost. macOS sends no focus change when its focused window stays the
+    /// same (a hidden tab, 07 UAT Bug 1), so its refresh reads AXMain on the app's thread and reports it focused, once
+    /// even when an AX focus hint for the same change comes too (`PendingFocus.activated`).
+    private func appActivated(_ pid: Int32) {
+        guard threads[pid] != nil else { return }
+        pendingFocus.activated(pid: pid)
+        scheduler?.schedule(pid: pid)
     }
 
     private func appStarted(_ app: NSRunningApplication) {
