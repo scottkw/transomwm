@@ -651,7 +651,7 @@ import os
             case .raiseStrip(let group):
                 tabStripPanels.raise(group)
             case .tabAnnouncement(let announcement):
-                let text = TabCopy.announcement(announcement) { MenuCopy.truncatedAppName(Self.appName($0)) }
+                let text = TabCopy.announcement(announcement, appName: Self.appName)
                 logger.info("\(text, privacy: .public)")
                 postAnnouncement(text)
             case .cameraMove(let move):
