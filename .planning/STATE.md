@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-08-PLAN.md
-last_updated: "2026-11-02T02:44:11.081Z"
+stopped_at: Completed 07-09-PLAN.md
+last_updated: "2026-11-02T02:53:35.773Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: d90d7295a58d3baa12ce9daa897342a16eccca35
+state_head: e6f7e2f58d48bd23214855273ab1f1ff06b82d2b
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 87
+  completed_plans: 88
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 9 of 12
+Plan: 10 of 12
 Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
@@ -141,6 +141,7 @@ Progress: [███████░░░] 67%
 | Phase 07 P06 | 16min | 3 tasks | 12 files |
 | Phase 7 P07 | 17 min | 3 tasks | 11 files |
 | Phase 07 P08 | 5min | 2 tasks | 6 files |
+| Phase 07 P09 | 6min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -396,6 +397,8 @@ Recent decisions affecting current work:
 - [Phase 7]: 07-07: Planner clamps a floating group's whole frame (strip band included) when it crosses a tile
 - [Phase 07]: 07-08: Move Out of Group reuses the tear-off float commit with a computed landing frame (8 pt right, else left, else 24/24 cascade, then clamp)
 - [Phase 07]: 07-08: Close Tab is a one-member CloseQueue flagged oneTab so its dissolve is announced; a ctrl-click on a strip never starts a tear press
+- [Phase 07]: 07-09: tab commands reach the engine as TabAction.command with the shell's ready flag and source, so not-ready refusals announce; URL refusals drop beep and announcement
+- [Phase 07]: 07-09: Next/Previous Tab step from the group's selected index, wrapping; hotkeys nextTab ⌃⌥⌘T, previousTab ⇧⌃⌥⌘T, moveOutOfGroup ⌃⌥⌘L are not zoom names
 
 ### Quick Tasks Completed
 
@@ -436,8 +439,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T02:44:10.273Z
-Stopped at: Completed 07-08-PLAN.md
+Last session: 2026-11-02T02:53:34.949Z
+Stopped at: Completed 07-09-PLAN.md
 Resume file: None
 
 ## Deferred Verification
