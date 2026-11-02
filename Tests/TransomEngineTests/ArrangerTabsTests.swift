@@ -1998,4 +1998,70 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         _ = arranger.handle(.zoomTo(.node(leafA), displayUUID: "main"), now: start)
         #expect(arranger.groupContentRects()[b.identity] == content, "group \(group.node) was not planned at home")
     }
+
+    /// The cascade Restore All gives the `n`th non-selected member: content size, top-left `n` × 24 pt from the group's.
+    private func cascade(_ n: Int, from frame: Rect, content: Rect, into desktop: Rect) -> Rect {
+        Planner.clamp(Rect(x: frame.minX + 24 * Double(n), y: frame.minY + 24 * Double(n), width: content.width, height: content.height), into: desktop)
+    }
+
+    private func desktopRect(_ arranger: Arranger) throws -> Rect {
+        let desk = try #require(arranger.world[mainKey])
+        return try #require(try Planner.plan(desk: desk, area: area, gap: arranger.gap, mins: [:]).desktopRect)
+    }
+
+    @Test func restoreAllDissolvesADockedGroupTheSelectedKeepsTheTileTheOthersCascade() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, frame, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        let depth = arranger.history.depth(for: mainKey)
+        let effects = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.node(group.node) == .panel(a), "a does not keep the group's tile")
+        let desktop = try desktopRect(arranger)
+        #expect(desk.desktop.frame(of: b) == cascade(1, from: frame, content: content, into: desktop))
+        #expect(desk.desktop.frame(of: f) == cascade(2, from: frame, content: content, into: desktop))
+        #expect(![a, b, f].contains { arranger.isParked($0) }, "a member is still parked")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1, "Restore All is not one undo step on the desk")
+        #expect(effects.contains(.info("restore all: dissolved 1 groups, 2 windows brought back")))
+    }
+
+    @Test func restoreAllDissolvesAFloatingGroupTheSelectedTakesTheWholeFrame() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, content) = try bareFloatingGroup(at: start)  // [t, f] at tFrame, f selected
+        _ = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.desktop.groups.isEmpty)
+        #expect(desk.desktop.frame(of: f) == tFrame, "the band did not return to the selected member")
+        #expect(desk.desktop.frame(of: t) == cascade(1, from: tFrame, content: content, into: try desktopRect(arranger)))
+        #expect(!arranger.isParked(t))
+    }
+
+    @Test func restoreAllShowsAHiddenDesktopBeforeFloatingTheMembers() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
+        try #require(arranger.world[mainKey]?.tree.isDesktopHidden == true)
+        _ = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.isDesktopHidden == false)
+        #expect(desk.desktop.contains(b) && desk.desktop.contains(f))
+    }
+
+    @Test func restoreAllCountsTheMembersBroughtBackOnceEvenWhenStranded() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, frame, content) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.event(.windowMoved(b, Rect(x: 5000, y: 5000, width: content.width, height: content.height))), now: start)
+        let effects = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
+        #expect(effects.contains(.notice(.restored(count: 2))), "N6 count: \(effects)")
+        #expect(arranger.world[mainKey]?.desktop.frame(of: b) == cascade(1, from: frame, content: content, into: try desktopRect(arranger)),
+            "the rescue moved the stranded member away from its cascade")
+    }
+
+    @Test func undoAfterRestoreAllReformsTheGroupWithTheSameSelection() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
+        _ = arranger.handle(.command(.undo, focused: a), now: start + .seconds(2))
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f, a], selected: 2), "Undo did not re-form the group")
+        #expect(arranger.isParked(b) && arranger.isParked(f), "the hidden members did not re-park")
+    }
 }

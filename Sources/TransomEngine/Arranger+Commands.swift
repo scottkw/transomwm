@@ -28,12 +28,18 @@ extension Arranger {
     /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every
     /// hidden Desktop tile holding windows shown, one undo step per desk shown. Runs while paused; N6 counts the windows
     /// moved, camera-parked ones included. Collapsed windows come back too and float with N1, as with zoom off (CR-01).
+    /// Tab groups dissolve first (D-07), their hidden members floating beside the group and counted in N6.
     mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
         goHome()
         camera.collapsible = []  // else the replan parks them again in the same perform
-        let moves = rescueStranded(desks: world)
+        let dissolved = try dissolveAllGroups()
+        let log: [ArrangerEffect] = dissolved.groups == 0
+            ? [] : [.info("restore all: dissolved \(dissolved.groups) groups, \(dissolved.windows.count) windows brought back")]
+        // The dissolved members float at their cascade frames; the rescue would move them elsewhere.
+        let moves = rescueStranded(desks: world, sparing: Set(dissolved.windows.map(\.identity)))
         try showParkedDesktops(keeping: moves, undoable: true)
-        return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + [.notice(.restored(count: moves.count))]
+        let count = moves.count + dissolved.windows.count
+        return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + log + [.notice(.restored(count: count))]
     }
 
     /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step. A floating

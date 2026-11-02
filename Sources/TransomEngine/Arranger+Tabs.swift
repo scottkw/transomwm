@@ -890,3 +890,61 @@ extension Arranger {
         }
     }
 }
+
+/// Restore All Windows and tab groups (D-07, RESEARCH Pitfall 3): groups dissolve before the rescue, or the replan
+/// would park their hidden members again.
+extension Arranger {
+    /// Dissolves every group on every desk, one undo step per desk holding groups (in key order), a hidden Desktop
+    /// shown first. The selected member keeps the group's place: its tile (a plain panel under the same NodeID), or the
+    /// whole floating frame (the band returns). The others float at the content size, top-lefts 24 pt apart from the
+    /// group frame's top-left, clamped inside the Desktop tile. Returns the groups dissolved and the members floated.
+    mutating func dissolveAllGroups() throws(LayoutError) -> (groups: Int, windows: [WindowRef]) {
+        var groups = 0, floated: [WindowRef] = []
+        for (key, desk) in world.desks.sorted(by: { $0.key < $1.key }) {
+            let docked = desk.tree.nodes.compactMap { id, node -> (NodeID, [WindowRef], Int)? in
+                if case .tabs(let members, let selected) = node { (id, members, selected) } else { nil }
+            }.sorted { $0.0 < $1.0 }
+            guard !docked.isEmpty || !desk.desktop.groups.isEmpty else { continue }
+            // shortcut: a desk whose display is gone keeps its groups; its members are rescued as stranded windows.
+            guard let area = displays.first(where: { $0.uuid == key.displayUUID })?.visibleFrame else { continue }
+            let mins = minimums, gap = gap, show = showingDesktop()
+            let tiles = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution.nodeRects
+            var moved: [WindowRef: Rect] = [:]
+            try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+                if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
+                var cascade: [(WindowRef, WindowState?, frame: Rect, n: Int)] = []
+                for (id, members, selected) in docked {
+                    guard let frame = tiles[id] else { continue }
+                    for (n, member) in members.enumerated().filter({ $0.offset != selected }).map(\.element).enumerated() {
+                        cascade.append((member, desk.tree.state(of: member), frame, n + 1))
+                        try desk.tree.remove(member)
+                    }
+                }
+                for group in desk.desktop.groups {
+                    let (removed, states) = try desk.desktop.removeGroup(group.id)
+                    let selected = removed.members[removed.selected]
+                    try desk.desktop.add(selected, frame: removed.frame)
+                    if let state = states[selected.identity], state != .present { try desk.desktop.setState(state, for: selected) }
+                    for (n, member) in removed.members.filter({ $0 != selected }).enumerated() {
+                        cascade.append((member, states[member.identity], removed.frame, n + 1))
+                    }
+                }
+                let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
+                for (member, state, frame, n) in cascade {
+                    let content = TabBand.content(of: frame), step = Self.moveOutCascade * Double(n)
+                    let rect = Planner.clamp(Rect(x: frame.minX + step, y: frame.minY + step, width: content.width, height: content.height), into: desktop)
+                    try desk.desktop.add(member, frame: rect)
+                    if let state, state != .present { try desk.desktop.setState(state, for: member) }
+                    moved[member] = rect
+                }
+            }
+            groups += docked.count + desk.desktop.groups.count
+            for (member, rect) in moved.sorted(by: { $0.key.identity < $1.key.identity }) {
+                wantedFrames[member.identity] = rect
+                lastRequested[member.identity] = nil
+                floated.append(member)
+            }
+        }
+        return (groups, floated)
+    }
+}
