@@ -67,6 +67,7 @@ import os
     private let collapsedPanels = CollapsedPanels()
     /// The tab strips (TABS-02). A panel is made only when a group's strip first shows.
     let tabStripPanels = TabStripPanels()
+    private let closeGroupConfirmation = CloseGroupConfirmation()
     private let ghostPanel = TearOffGhostPanel()
     /// The temporary Esc hotkeys while a tear-off ghost shows (UI-SPEC Surface 4), as for the zoom band.
     private var tearOffEscapes: [Task<Void, Never>] = []
@@ -145,7 +146,15 @@ import os
             Task { await self?.openBlock(window, displayUUID: uuid) }
         }
         tabStripPanels.onAction = { [weak self] action in
-            Task { await self?.tabAction(action) }
+            guard let self else { return }
+            // Close Group asks first (UI-SPEC Surface 4); the strip's × is its only trigger.
+            if case .closeGroup(let group) = action, let count = tabStripPanels.memberCount(of: group),
+                !closeGroupConfirmation.confirm(count: count)
+            {
+                logger.info("group \(group.node, privacy: .public): close canceled")
+                return
+            }
+            Task { await self.tabAction(action) }
         }
         tabStripPanels.bounds = { [weak self] window in
             let id = self?.arranger.windows[window.identity]?.visibleMemberID ?? window.windowID
@@ -696,6 +705,12 @@ import os
                 tabStripPanels.show(strips, on: displayUUID, space: arranger.displays.first { $0.uuid == displayUUID }?.currentSpaceID)
             case .tabRevealed(let window):
                 if zoomEnabled { zoom().captureRevealed(window) }
+            case .checkClosePrompt(let window):
+                // Its own task: the AX read waits on the app, which must never hold up the effects behind it.
+                Task {
+                    let showing = await system.showsSheet(window)
+                    await run(arranger.handle(.closePrompt(window, showing: showing), now: .now))
+                }
             case .raiseStrip(let group):
                 tabStripPanels.raise(group)
             case .tearOffGhost(let ghost?):

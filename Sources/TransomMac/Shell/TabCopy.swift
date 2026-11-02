@@ -55,6 +55,12 @@ nonisolated public enum TabCopy {
     public static let nextTab = "Next Tab"
     public static let previousTab = "Previous Tab"
 
+    /// Close Group's confirmation alert (UI-SPEC Surface 4); `count` is always 2 or more.
+    public static func closeGroupAlertMessage(_ count: Int) -> String { "Close all \(count) windows in this tab group?" }
+    public static let closeGroupAlertInformative = "Apps may ask to save changes before their windows close."
+    public static let closeGroupAlertCancel = "Cancel"
+    public static let doNotShowAgain = "Do not show this again"
+
     /// Close Group's accessibility help.
     public static func closeGroupHelp(_ count: Int) -> String { "Closes all \(count) windows in this tab group" }
 

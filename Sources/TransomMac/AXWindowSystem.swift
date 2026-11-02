@@ -349,6 +349,12 @@ import os
         return await thread.perform { MenuPress.pressCommandN(in: $0) } ?? false
     }
 
+    /// Whether the window shows a sheet now (Close Group's save-prompt check, D-06). False when it is not tracked.
+    public func showsSheet(_ window: TransomModel.WindowRef) async -> Bool {
+        guard let info = tracker.info(for: window.identity), let thread = threads[window.pid] else { return false }
+        return await thread.showsSheet(windowID: info.visibleMemberID ?? window.windowID)
+    }
+
     public func windowInfo(_ window: TransomModel.WindowRef) async -> WindowInfo? {
         tracker.info(for: window.identity)
     }

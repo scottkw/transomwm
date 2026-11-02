@@ -117,6 +117,21 @@ struct CloseQueue: Equatable, Sendable {
     var closed = 0
     /// Close Tab: one member, so a dissolve on the way is announced like any other.
     var oneTab = false
+    /// Where `current`'s wait is once past its first deadline (D-06, 2026-11-02).
+    var check = CloseCheck.pressed
+    /// `current` showed a prompt at some check: only the stop's log line differs.
+    var prompted = false
+}
+
+/// A Close Group member still open at its deadline: the shell is asked whether it shows a sheet (a save prompt).
+enum CloseCheck: Equatable, Sendable {
+    /// Pressed, or its prompt just went: still open at the deadline, it is checked.
+    case pressed
+    /// Asked, no answer yet; `afterPrompt` when a prompt showed at the last check, so no sheet now gets one more
+    /// `closeConfirmation` for the close to confirm (Save and Don't Save close it right after the sheet goes).
+    case asked(afterPrompt: Bool)
+    /// Showing a prompt: the user is answering it, so the queue waits with no bound and checks again each `closePromptPoll`.
+    case prompt
 }
 
 /// A selection waiting for its window's read-back (RESEARCH Pattern 5): until then `previous` keeps covering the
@@ -634,8 +649,11 @@ extension Arranger {
 /// Close Group and Minimize Group (D-06): the strip's buttons act on the whole group.
 extension Arranger {
     /// How long after its close press a member may stay open before Close Group stops there (RESEARCH Pitfall 10, A4).
-    /// It covers Transom's two-source close confirmation; a save prompt keeps the window open past it.
+    /// It covers Transom's two-source close confirmation; a save prompt keeps the window open past it, and the queue
+    /// then waits for the prompt's answer (`closePrompt(_:showing:now:)`).
     public static let closeConfirmation: Duration = .seconds(1)
+    /// How often a member showing a save prompt is checked again.
+    public static let closePromptPoll: Duration = .milliseconds(500)
 
     /// Starts Close Group: the selected member first, then the others in strip order. A second click after a stop
     /// starts again from the group as it is now, whose selected member is the one that stopped it.
@@ -670,18 +688,31 @@ extension Arranger {
         return [.perform([.minimize(ref.members[ref.selected])]), .info("group \(group.node): minimized")]
     }
 
-    /// Moves Close Group on: after its current member is gone the next one is shown if hidden, then pressed; past the
-    /// deadline with the member still open it stops (UI-SPEC Surface 4). Runs after events, read-backs and ticks.
+    /// Moves Close Group on: after its current member is gone the next one is shown if hidden, then pressed. Past the
+    /// deadline with the member still open the shell is asked whether it shows a prompt: while it does the queue waits;
+    /// with none (refused, or the prompt canceled) it stops (UI-SPEC Surface 4). A group changed meanwhile (a member
+    /// moved out, the group floated or docked) stops it too. Runs after events, read-backs and ticks.
     mutating func closeProgress(now: ContinuousClock.Instant) -> [ArrangerEffect] {
         guard var queue = tabs.closeQueue else { return [] }
+        // Every open window still queued must still be in the group; with the group dissolved, only the last one.
+        let open = ([queue.current].compactMap { $0 } + queue.remaining).filter { windows[$0.identity] != nil }
+        if tabGroup(queue.group).map({ group in !open.allSatisfy(group.members.contains) }) ?? (open.count > 1) {
+            tabs.closeQueue = nil
+            return [.info("group \(queue.group.node): close stopped, the group changed")]
+        }
         if let current = queue.current {
             if windows[current.identity] != nil {
                 guard let deadline = queue.deadline, now >= deadline else { return [] }
-                tabs.closeQueue = nil
-                return [.tabAnnouncement(.didNotClose(current)), .info("group \(queue.group.node): close stopped at \(current) after 1 s")]
+                if case .asked = queue.check { return stopClose(at: current, queue, why: "no prompt answer") }
+                queue.check = .asked(afterPrompt: queue.check == .prompt)
+                queue.deadline = now + Self.closeConfirmation  // an unanswered check stops it like a refusal
+                tabs.closeQueue = queue
+                return [.checkClosePrompt(current)]
             }
             queue.current = nil
             queue.deadline = nil
+            queue.check = .pressed
+            queue.prompted = false
             queue.closed += 1
         }
         queue.remaining.removeAll { windows[$0.identity] == nil }
@@ -704,6 +735,33 @@ extension Arranger {
         queue.deadline = now + Self.closeConfirmation
         tabs.closeQueue = queue
         return [.perform([.close(next)])]
+    }
+
+    /// The shell's answer to `.checkClosePrompt(window)`: a sheet keeps Close Group waiting; none stops it, except right
+    /// after a prompt, when the close gets one more `closeConfirmation` to confirm. A stale answer is ignored.
+    mutating func closePrompt(_ window: WindowRef, showing: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard var queue = tabs.closeQueue, queue.current == window, windows[window.identity] != nil,
+            case .asked(let afterPrompt) = queue.check
+        else { return [] }
+        if showing {
+            let logged: [ArrangerEffect] = queue.prompted ? [] : [.info("group \(queue.group.node): close waits on \(window)'s prompt")]
+            queue.check = .prompt
+            queue.prompted = true
+            queue.deadline = now + Self.closePromptPoll
+            tabs.closeQueue = queue
+            return logged + (nextWake.map { [.wake(at: $0)] } ?? [])
+        }
+        guard afterPrompt else { return stopClose(at: window, queue, why: queue.prompted ? "its prompt was canceled" : "no prompt after 1 s") }
+        queue.check = .pressed
+        queue.deadline = now + Self.closeConfirmation
+        tabs.closeQueue = queue
+        return nextWake.map { [.wake(at: $0)] } ?? []
+    }
+
+    /// Ends Close Group at `window`, still open: announced, and the rest stay open.
+    private mutating func stopClose(at window: WindowRef, _ queue: CloseQueue, why: String) -> [ArrangerEffect] {
+        tabs.closeQueue = nil
+        return [.tabAnnouncement(.didNotClose(window)), .info("group \(queue.group.node): close stopped at \(window), \(why)")]
     }
 }
 

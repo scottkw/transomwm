@@ -58,6 +58,8 @@ import Testing
         #expect(TabCopy.floatGroup == "Float Group" && TabCopy.dockGroup == "Dock Group")
         #expect(TabCopy.closeGroupHelp(3) == "Closes all 3 windows in this tab group")
         #expect(TabCopy.closeTab == "Close Tab" && TabCopy.moveOut == "Move Out of Group")
+        #expect(TabCopy.closeGroupAlertMessage(3) == "Close all 3 windows in this tab group?")
+        #expect(TabCopy.closeGroupAlertCancel == "Cancel" && TabCopy.doNotShowAgain == "Do not show this again")
     }
 
     /// UI-SPEC Surface 7 Debug line and the Tabs submenu copy.

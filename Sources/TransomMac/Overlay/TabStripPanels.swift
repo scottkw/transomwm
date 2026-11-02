@@ -505,6 +505,11 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     }
 
     /// The group whose selected member is `window`, when its strip is on screen.
+    /// How many windows `group`'s shown strip has; nil when no strip shows it.
+    func memberCount(of group: GroupKey) -> Int? {
+        shown.values.joined().lazy.compactMap { Self.view($0)?.strip }.first { $0.group == group }?.members.count
+    }
+
     func group(selecting window: TransomModel.WindowRef) -> GroupKey? {
         shown.values.joined().lazy.compactMap { Self.view($0)?.strip }.first { $0.members[$0.selected] == window }?.group
     }

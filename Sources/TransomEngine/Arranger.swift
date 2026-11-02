@@ -45,6 +45,8 @@ public enum ArrangerInput: Sendable {
     case camera(CameraCommand, displayUUID: String, focused: WindowRef?, pointer: Point?)
     /// A tab action (a strip click, D-08 selection); `ready` is whether Accessibility access works.
     case tab(TabAction, ready: Bool)
+    /// The answer to `.checkClosePrompt`: whether the window shows a sheet (a save prompt) now.
+    case closePrompt(WindowRef, showing: Bool)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -115,6 +117,9 @@ public enum ArrangerEffect: Equatable, Sendable {
     /// A newly selected tab is in place (its read-back matched): with zoom on the shell captures it once in the
     /// background (UI-SPEC Surface 6, Snapshots).
     case tabRevealed(WindowRef)
+    /// Close Group's member is still open past its deadline: read whether it shows a sheet (read-only AX) and answer
+    /// with `.closePrompt` (D-06, 2026-11-02).
+    case checkClosePrompt(WindowRef)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -422,6 +427,8 @@ public struct Arranger: Sendable {
             return camera(command, displayUUID: uuid, focused: focused, pointer: pointer)
         case .tab(let action, let ready):
             return tab(action, ready: ready, now: now)
+        case .closePrompt(let window, let showing):
+            return closePrompt(window, showing: showing, now: now)
         }
     }
 

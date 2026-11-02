@@ -1049,13 +1049,88 @@ private func runCloseGroup(_ arranger: inout Arranger, _ group: GroupKey, conten
         let first = arranger.handle(.tab(.closeGroup(group), ready: true), now: start)
         #expect(closes(first) == [a])
         #expect(first.contains(.wake(at: start + Arranger.closeConfirmation)), "no wake at the close deadline: \(first)")
-        #expect(!arranger.handle(.tick, now: start + .milliseconds(999)).contains(.tabAnnouncement(.didNotClose(a))))
-        let stop = arranger.handle(.tick, now: start + Arranger.closeConfirmation)
+        #expect(!arranger.handle(.tick, now: start + .milliseconds(999)).contains(.checkClosePrompt(a)))
+        #expect(arranger.handle(.tick, now: start + Arranger.closeConfirmation).contains(.checkClosePrompt(a)))
+        let stop = arranger.handle(.closePrompt(a, showing: false), now: start + Arranger.closeConfirmation)
         #expect(stop.contains(.tabAnnouncement(.didNotClose(a))))
         #expect(closes(stop).isEmpty)
         #expect(selected(arranger, group) == a, "the window that stopped Close Group is not the one shown")
         #expect(arranger.tabs.closeQueue == nil)
         #expect(closes(arranger.handle(.tab(.closeGroup(group), ready: true), now: start + .seconds(5))) == [a])
+    }
+
+    /// D-06 (2026-11-02): a save prompt keeps Close Group waiting; Save or Don't Save closes the window and the rest
+    /// close; Cancel leaves it open and stops the queue.
+    @Test func aMemberShowingAPromptWaitsPastTheDeadlineAndTheRestCloseOnceItCloses() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        _ = arranger.handle(.tab(.closeGroup(group), ready: true), now: start)
+        var now = start + Arranger.closeConfirmation
+        #expect(arranger.handle(.tick, now: now) == [.checkClosePrompt(a), .wake(at: now + Arranger.closeConfirmation)])
+        // The prompt stays up for a minute: checked again every poll, never stopped.
+        for _ in 0..<120 {
+            let waiting = arranger.handle(.closePrompt(a, showing: true), now: now)
+            #expect(waiting.contains(.wake(at: now + Arranger.closePromptPoll)) && announcements(waiting).isEmpty)
+            now = now + Arranger.closePromptPoll
+            #expect(arranger.handle(.tick, now: now).contains(.checkClosePrompt(a)))
+        }
+        // Don't Save: the sheet is gone before Transom confirms the close; it gets one more confirmation to close.
+        let gone = arranger.handle(.closePrompt(a, showing: false), now: now)
+        #expect(announcements(gone).isEmpty && arranger.tabs.closeQueue?.current == a)
+        var effects = arranger.handle(.event(.windowDestroyed(a)), now: now + .milliseconds(300)), pressed: [WindowRef] = []
+        for _ in 0..<6 {
+            if let close = closes(effects).first {
+                pressed.append(close)
+                effects = arranger.handle(.event(.windowDestroyed(close)), now: now)
+            } else if let revealed = arranger.tabs.pendingReveal?.revealed {
+                effects = arranger.handle(.event(.frameApplied(revealed, requested: content, actual: content)), now: now)
+            } else {
+                break
+            }
+        }
+        #expect(pressed == [b, f])
+        #expect(arranger.tabs.closeQueue == nil && arranger.world[mainKey]?.tree.windows.isEmpty == true)
+    }
+
+    @Test func aPromptCanceledWithTheWindowOpenStopsTheQueue() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.tab(.closeGroup(group), ready: true), now: start)
+        var now = start + Arranger.closeConfirmation
+        _ = arranger.handle(.tick, now: now)
+        _ = arranger.handle(.closePrompt(a, showing: true), now: now)
+        now = now + Arranger.closePromptPoll
+        _ = arranger.handle(.tick, now: now)
+        // Cancel: the sheet goes and the window stays. One more confirmation, then a check with no sheet stops it.
+        #expect(announcements(arranger.handle(.closePrompt(a, showing: false), now: now)).isEmpty)
+        now = now + Arranger.closeConfirmation
+        #expect(arranger.handle(.tick, now: now).contains(.checkClosePrompt(a)))
+        let stop = arranger.handle(.closePrompt(a, showing: false), now: now)
+        #expect(announcements(stop) == [.didNotClose(a)] && closes(stop).isEmpty)
+        #expect(stop.contains(.info("group \(group.node): close stopped at \(a), its prompt was canceled")))
+        #expect(arranger.tabs.closeQueue == nil && arranger.world[mainKey]?.contains(b) == true)
+    }
+
+    @Test func aCheckNeverAnsweredStopsAfterAnotherConfirmation() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.tab(.closeGroup(group), ready: true), now: start)
+        _ = arranger.handle(.tick, now: start + Arranger.closeConfirmation)
+        let stop = arranger.handle(.tick, now: start + Arranger.closeConfirmation * 2)
+        #expect(announcements(stop) == [.didNotClose(a)] && arranger.tabs.closeQueue == nil)
+        #expect(arranger.handle(.closePrompt(a, showing: true), now: start + .seconds(3)).isEmpty, "a late answer was used")
+    }
+
+    @Test func aMemberMovedOutWhileAPromptShowsStopsTheQueue() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        _ = arranger.handle(.tab(.closeGroup(group), ready: true), now: start)
+        _ = arranger.handle(.tick, now: start + Arranger.closeConfirmation)
+        _ = arranger.handle(.closePrompt(a, showing: true), now: start + Arranger.closeConfirmation)
+        _ = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: start + .seconds(2))
+        let next = arranger.handle(.tick, now: start + .seconds(2))  // the prompt's next check
+        #expect(next.contains(.info("group \(group.node): close stopped, the group changed")) && arranger.tabs.closeQueue == nil)
+        #expect(closes(arranger.handle(.event(.windowDestroyed(a)), now: start + .seconds(3))).isEmpty, "a moved-out window was closed")
     }
 
     @Test func aSecondClickWhileClosingSendsNothingMore() throws {
@@ -1899,7 +1974,8 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         let start = ContinuousClock.now
         var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
         _ = arranger.handle(.tab(.closeTab(a), ready: true), now: start)
-        let stop = arranger.handle(.tick, now: start + Arranger.closeConfirmation)
+        _ = arranger.handle(.tick, now: start + Arranger.closeConfirmation)
+        let stop = arranger.handle(.closePrompt(a, showing: false), now: start + Arranger.closeConfirmation)
         #expect(announcements(stop) == [.didNotClose(a)])
         #expect(closes(stop).isEmpty && selected(arranger, group) == a)
         #expect(arranger.tabs.closeQueue == nil, "a resumable list was kept")

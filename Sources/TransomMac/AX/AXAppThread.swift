@@ -251,6 +251,15 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         } ?? false
     }
 
+    /// Whether the cached window has an AXSheet child, such as the save prompt a close press raised (D-06). Read only;
+    /// false when the window is not cached or unreadable.
+    func showsSheet(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            return (try? AXSnapshotReader.snapshot(of: element).get())?.sheetAttached == true
+        } ?? false
+    }
+
     /// Minimises the cached window through AX (kAXMinimizedAttribute).
     func minimizeWindow(windowID: UInt32) async -> Bool {
         await perform { [self] _ -> Bool in
