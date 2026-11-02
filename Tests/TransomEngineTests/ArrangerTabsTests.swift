@@ -1704,3 +1704,43 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(announcements(up) == [.movedOut(dissolved: false)])
     }
 }
+
+/// UI-SPEC Surface 4: Esc cancels a tear-off; a lost mouse-up never commits one (T-07-18).
+@Suite struct ArrangerTearOffCancelTests {
+    @Test func cancelTearOffEndsTheSessionAndTheRestOfThePressChangesNothing() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        let before = arranger.world
+        _ = try tear(&arranger, b, of: group, to: Point(x: 1200, y: 500), at: start)
+        let tick = arranger.handle(.tick, now: start + DragSession.dwell)
+        try #require(!previews(tick).isEmpty, "no landing preview: \(tick)")
+        let cancel = arranger.handle(.tab(.cancelTearOff, ready: true), now: start + .milliseconds(200))
+        #expect(cancel.contains(.preview(nil, displayUUID: "main")), "the preview was not withdrawn: \(cancel)")
+        #expect(ghosts(cancel) == [nil])
+        #expect(announcements(cancel) == [.tearOffCanceled])
+        #expect(cancel.contains(.info("group \(group.node): tear-off canceled (esc)")))
+        #expect(arranger.drag == nil)
+        var rest = arranger.handle(pointer(.dragged, 1000, 600), now: start + .milliseconds(300))
+        rest += arranger.handle(pointer(.up, 1000, 600), now: start + .milliseconds(400))
+        #expect(rest.isEmpty, "the rest of the press did something: \(rest)")
+        #expect(arranger.world == before)
+    }
+
+    @Test func aNewPressClearsAStaleTearOffAndItsGhostWithNoCommit() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        let before = arranger.world
+        _ = try tear(&arranger, b, of: group, to: Point(x: 1200, y: 500), at: start)
+        _ = arranger.handle(.tick, now: start + DragSession.dwell)
+        let down = arranger.handle(pointer(.down, 1200, 500), now: start + .seconds(1))  // the mouse-up was lost
+        #expect(ghosts(down) == [nil], "the ghost stayed: \(down)")
+        #expect(announcements(down).isEmpty)
+        #expect(arranger.drag == nil && arranger.world == before)
+        // A stale press that never left the strip is gone too.
+        let strip = try stripRect(arranger, group)
+        _ = arranger.handle(tabPress(b, at: centre(strip)), now: start + .seconds(2))
+        _ = arranger.handle(pointer(.down, 100, 100), now: start + .seconds(3))
+        _ = arranger.handle(pointer(.dragged, 1200, 500), now: start + .seconds(3))
+        #expect(arranger.drag == nil, "a stale tab press tore off")
+    }
+}
