@@ -325,6 +325,8 @@ public struct Arranger: Sendable {
         case .command(let command, let focused):
             // Never guess a display (T-04-12): camera commands arrive as `.camera`.
             if case .camera = command { return [.fault("camera command without a display")] }
+            // Tab commands refuse with an announcement, not a bare beep (07 UI-SPEC Surface 7).
+            if case .tabs(let tab) = command { return tabCommand(tab, focused: focused, via: .hotkey, ready: true, now: now) }
             guard isAvailable(command, focused: focused) else { return [.beep] }
             do throws(LayoutError) {
                 switch (command, focused) {
@@ -348,6 +350,7 @@ public struct Arranger: Sendable {
                 case (.restoreAll, _): return try restoreAll()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
                 case (.camera, _): return [.fault("camera command without a display")]  // answered above
+                case (.tabs, _): return [.fault("tab command reached the command switch")]  // answered above
                 case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
                     (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
                     return [.beep]
@@ -773,6 +776,8 @@ public struct Arranger: Sendable {
             return true  // answered above
         case .camera(let command):
             return cameraAvailable(command, context: context)
+        case .tabs:
+            return !sessionPaused && focused.flatMap(tabGroup(holding:)) != nil
         case .toggleDesktop:
             // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
             guard let key = targetKey(focused), let desk = world[key] else { return false }

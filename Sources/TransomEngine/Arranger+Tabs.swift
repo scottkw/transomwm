@@ -103,6 +103,8 @@ public enum TabAction: Equatable, Sendable {
     case toggleGroupFloat(GroupKey)
     /// Esc during a tear-off (its temporary hotkeys).
     case cancelTearOff
+    /// Next Tab, Previous Tab or Move Out of Group on `focused`'s group, from a hotkey, menu item or URL (Surface 7).
+    case command(TabCommand, focused: WindowRef?, via: TabLeaveSource)
 }
 
 /// Close Group in progress (D-06): one member at a time, each hidden one shown first. `current` was sent its close
@@ -364,6 +366,28 @@ extension Arranger {
         case .minimizeGroup(let group): minimizeGroup(group, ready: ready, now: now)
         case .toggleGroupFloat(let group): toggleGroupFloat(group, ready: ready)
         case .cancelTearOff: cancelTearOff()
+        case .command(let command, let focused, let source): tabCommand(command, focused: focused, via: source, ready: ready, now: now)
+        }
+    }
+
+    /// Selects the next or previous tab of `focused`'s group (wrapping), or moves `focused` out of it; refusals beep,
+    /// announce and log "refused {command}: {reason}".
+    mutating func tabCommand(
+        _ command: TabCommand, focused: WindowRef?, via source: TabLeaveSource, ready: Bool, now: ContinuousClock.Instant
+    ) -> [ArrangerEffect] {
+        let name = switch command { case .next: "next tab"; case .previous: "previous tab"; case .moveOut: "move out of group" }
+        func refused(_ refusal: TabRefusal, _ why: String) -> [ArrangerEffect] {
+            [.beep, .tabAnnouncement(.refused(refusal)), .info("refused \(name): \(why)")]
+        }
+        guard pauseReasons.isEmpty, !sessionPaused else { return refused(.paused, "arranging is paused") }
+        guard ready else { return refused(.notReady, "not ready") }
+        guard let focused, let ref = tabGroup(holding: focused) else { return refused(.notInGroup, "not in a tab group") }
+        let count = ref.members.count
+        let via: TabSelectSource = switch source { case .menu: .menu; case .hotkey: .hotkey; case .url: .url; case .voiceOver: .click }
+        switch command {
+        case .next: return select(ref.members[(ref.selected + 1) % count], via: via, ready: ready, now: now)
+        case .previous: return select(ref.members[(ref.selected + count - 1) % count], via: via, ready: ready, now: now)
+        case .moveOut: return moveOut(focused, via: source, ready: ready)
         }
     }
 

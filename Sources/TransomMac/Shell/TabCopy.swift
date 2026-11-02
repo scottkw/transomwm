@@ -42,6 +42,11 @@ nonisolated public enum TabCopy {
     public static let closeTab = "Close Tab"
     public static let moveOut = "Move Out of Group"
 
+    /// The Arrange ▸ Tabs submenu and Shortcuts section (UI-SPEC Surface 7); Move Out of Group is `moveOut`.
+    public static let tabsMenu = "Tabs"
+    public static let nextTab = "Next Tab"
+    public static let previousTab = "Previous Tab"
+
     /// Close Group's accessibility help.
     public static func closeGroupHelp(_ count: Int) -> String { "Closes all \(count) windows in this tab group" }
 

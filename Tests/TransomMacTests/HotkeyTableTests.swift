@@ -17,7 +17,7 @@ import Testing
             "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight", "snapMaximize", "snapCenter",
             "arrangeAll", "floatAll", "restoreAll",
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
-            "frameDesktop", "showOverview",
+            "frameDesktop", "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
             .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
@@ -27,7 +27,7 @@ import Testing
             .arrangeAll, .floatAll, .restoreAll,
             .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
             .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
-            .camera(.overview),
+            .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
         ])
     }
 
@@ -50,6 +50,8 @@ import Testing
             .init(.m, modifiers: base), .init(.g, modifiers: base),
             // 06 UI-SPEC Surface 4: Show Overview
             .init(.a, modifiers: base),
+            // 07 UI-SPEC Surface 7: Next Tab, Previous Tab, Move Out of Group
+            .init(.t, modifiers: base), .init(.t, modifiers: shifted), .init(.l, modifiers: base),
         ]
         #expect(Hotkeys.entries.map(\.name.defaultShortcut) == expected)
     }
@@ -82,15 +84,26 @@ import Testing
     }
 
     /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, plus Show Overview (06 UI-SPEC Surface 4), which
-    /// zoom off disables with them; 33 + 12 = 45.
+    /// zoom off disables with them; 33 + 12 + the 3 tab names (07 Surface 7, enabled with zoom off) = 48.
     @Test func theZoomNamesAreTheUISpecElevenPlusShowOverview() {
         let zoom = [
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow", "frameDesktop",
             "showOverview",
         ]
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 45)
+        #expect(Hotkeys.entries.count == 48)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
+    }
+
+    /// 07 UI-SPEC Surface 7: persistent names (Pitfall 13), not zoom names.
+    @Test func theTabNamesKeepTheirRawValuesAndDefaults() {
+        #expect(KeyboardShortcuts.Name.nextTab.rawValue == "nextTab")
+        #expect(KeyboardShortcuts.Name.previousTab.rawValue == "previousTab")
+        #expect(KeyboardShortcuts.Name.moveOutOfGroup.rawValue == "moveOutOfGroup")
+        #expect(KeyboardShortcuts.Name.nextTab.defaultShortcut == .init(.t, modifiers: base))
+        #expect(KeyboardShortcuts.Name.previousTab.defaultShortcut == .init(.t, modifiers: shifted))
+        #expect(KeyboardShortcuts.Name.moveOutOfGroup.defaultShortcut == .init(.l, modifiers: base))
+        #expect(![KeyboardShortcuts.Name.nextTab, .previousTab, .moveOutOfGroup].contains { Hotkeys.zoomNames.contains($0) })
     }
 
     @Test func namesAreUnique() {

@@ -552,6 +552,13 @@ import os
             return
         }
         let context = commandContext()
+        if case .tabs(let tab) = command {
+            // The engine refuses with an announcement (Surface 7); a URL refusal only logs.
+            let via: TabLeaveSource = switch source { case .hotkey: .hotkey; case .menu: .menu; case .url: .url }
+            let effects = arranger.handle(.tab(.command(tab, focused: context.focused, via: via), ready: context.ready), now: .now)
+            guard source == .url else { return await run(effects) }
+            return await run(effects.filter { if case .beep = $0 { false } else if case .tabAnnouncement(.refused) = $0 { false } else { true } })
+        }
         guard arranger.availability(command, context: context) else {
             refuse()
             return

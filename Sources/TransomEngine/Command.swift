@@ -34,6 +34,13 @@ public enum Command: Hashable, Sendable {
     /// A zoom camera command (ZOOM-01..04, 09..11). It acts on one display, so it runs as `ArrangerInput.camera`; a
     /// bare `.command(.camera)` has no display and faults.
     case camera(CameraCommand)
+    /// A tab command on the focused window's group (07 UI-SPEC Surface 7, TABS-02, TABS-06).
+    case tabs(TabCommand)
+}
+
+/// Next Tab and Previous Tab (wrapping) and Move Out of Group (07 UI-SPEC Surface 7).
+public enum TabCommand: Hashable, Sendable {
+    case next, previous, moveOut
 }
 
 /// The camera commands every trigger (hotkey, menu, URL) sends (UI-SPEC Hotkeys and URLs).

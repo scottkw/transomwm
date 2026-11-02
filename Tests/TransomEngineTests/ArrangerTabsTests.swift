@@ -1895,3 +1895,64 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(commands(effects).isEmpty && arranger.world == before && arranger.tabs.closeQueue == nil)
     }
 }
+
+/// UI-SPEC Surface 7: Next Tab, Previous Tab and Move Out of Group act on the focused window's group.
+@Suite struct ArrangerTabCommandTests {
+    @Test func nextTabWrapsFromTheLastTabAndPreviousTabWrapsBack() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        let next = arranger.handle(.command(.tabs(.next), focused: a), now: start)
+        #expect(selected(arranger, group) == b, "next from the last tab did not wrap to the first")
+        #expect(next.contains(.tabAnnouncement(.selected(index: 1, count: 3))))
+        #expect(commands(next).contains(.focus(b)), "the reveal flow did not focus b")
+        let previous = arranger.handle(.command(.tabs(.previous), focused: b), now: start + .seconds(2))
+        #expect(selected(arranger, group) == a, "previous from the first tab did not wrap to the last")
+        #expect(previous.contains(.tabAnnouncement(.selected(index: 3, count: 3))))
+    }
+
+    @Test func aTabCommandWithNoGroupBeepsAnnouncesAndLogs() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)  // [b, f]; a docked alone
+        for focused in [a, nil] as [WindowRef?] {
+            #expect(arranger.handle(.command(.tabs(.next), focused: focused), now: start)
+                == [.beep, .tabAnnouncement(.refused(.notInGroup)), .info("refused next tab: not in a tab group")])
+        }
+        _ = arranger.handle(.setPaused(.user, true), now: start)
+        #expect(arranger.handle(.command(.tabs(.moveOut), focused: f), now: start)
+            == [.beep, .tabAnnouncement(.refused(.paused)), .info("refused move out of group: arranging is paused")])
+        #expect(arranger.handle(.tab(.command(.previous, focused: f, via: .url), ready: false), now: start).contains(
+            .tabAnnouncement(.refused(.paused))), "paused is checked before ready, as in select")
+    }
+
+    @Test func aTabCommandWithoutAccessibilityIsRefusedNotReady() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)
+        #expect(arranger.handle(.tab(.command(.next, focused: f, via: .menu), ready: false), now: start)
+            == [.beep, .tabAnnouncement(.refused(.notReady)), .info("refused next tab: not ready")])
+    }
+
+    @Test func tabCommandsAreAvailableOnlyForAGroupedFocusedWindowUnpausedAndReady() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)
+        for command in [TabCommand.next, .previous, .moveOut] {
+            #expect(arranger.availability(.tabs(command), context: CommandContext(focused: f, ready: true)))
+            #expect(arranger.availability(.tabs(command), context: CommandContext(focused: b, ready: true)), "a hidden member is in the group too")
+            #expect(!arranger.availability(.tabs(command), context: CommandContext(focused: a, ready: true)))
+            #expect(!arranger.availability(.tabs(command), context: CommandContext(focused: nil, ready: true)))
+            #expect(!arranger.availability(.tabs(command), context: CommandContext(focused: f, ready: false)))
+        }
+        _ = arranger.handle(.setPaused(.user, true), now: start)
+        #expect(!arranger.availability(.tabs(.next), context: CommandContext(focused: f, ready: true)))
+    }
+
+    @Test func moveOutOfGroupMovesTheFocusedMemberOutViaTheSource() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        let effects = arranger.handle(.tab(.command(.moveOut, focused: a, via: .url), ready: true), now: start + .seconds(1))
+        #expect(arranger.world[mainKey]?.desktop.contains(a) == true, "a does not float")
+        #expect(announcements(effects) == [.movedOut(dissolved: false)])
+        #expect(effects.contains(.info("group \(group.node): \(a) moved out via url, landed floating")))
+        let viaHotkey = arranger.handle(.command(.tabs(.moveOut), focused: f), now: start + .seconds(2))
+        #expect(viaHotkey.contains(.info("group \(group.node): \(f) moved out via hotkey, landed floating")))
+    }
+}
