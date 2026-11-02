@@ -233,7 +233,7 @@ public struct Arranger: Sendable {
     /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         let before = world, beforeHistory = history
-        let effects = process(input, now: now)
+        var effects = process(input, now: now)
         // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
         if !homeFrames.isEmpty {
             for desk in world.desks.values where desk.tree.isDesktopHidden != true {
@@ -242,6 +242,14 @@ public struct Arranger: Sendable {
         }
         guard world != before else { return effects }
         dragPlans = [:]  // the plans a drag caches are of the World before
+        // A window that left its floating group (a dissolve, an undo, a drag out) wanted the group's content rect: from
+        // now on it wants its stored frame, the whole group frame for a survivor (the band returns to it).
+        // The input's own re-plan ran before this, so plan again.
+        let left = Self.floatingGroupMembers(before).subtracting(Self.floatingGroupMembers(world))
+        if !left.isEmpty {
+            for id in left { wantedFrames[id] = nil }
+            effects += replan()
+        }
         // An undo step means a user edit: every window it gave a new desk or tile was placed by the user (OVER-06).
         if history != beforeHistory, Self.isUserEdit(input) { userPlacedSinceSwitch.formUnion(Self.placementChanges(from: before, to: world)) }
         return effects.contains(.save(.debounced)) ? effects : effects + [.save(.debounced)]
@@ -558,6 +566,10 @@ public struct Arranger: Sendable {
         var desks = stored.desks
         for key in kept { desks[key] = current[key] }
         return try World(ids: IDSource(next: max(stored.ids.next, current.ids.next)), desks: desks)
+    }
+
+    private static func floatingGroupMembers(_ world: World) -> Set<WindowIdentity> {
+        Set(world.desks.values.flatMap { $0.desktop.groups.flatMap { $0.members.map(\.identity) } })
     }
 
     private static func isUserEdit(_ input: ArrangerInput) -> Bool {

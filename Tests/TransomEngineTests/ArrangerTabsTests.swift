@@ -783,3 +783,136 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         #expect(alone.height < 632, "a plain floater got the band: \(alone)")
     }
 }
+
+/// A window of another app (TABS-05).
+private func otherApp(_ id: UInt32, frame: Rect) -> WindowInfo {
+    WindowInfo(
+        window: WindowRef(identity: WindowIdentity(windowID: id, pid: 901, bundleID: "com.example.other")), frame: frame, state: .present,
+        displayUUID: "main", kind: .dockable, isExcluded: false, learnedMinimum: nil)
+}
+
+/// f and t floating, then grouped as [t, f] (f selected) at t's frame on an Arranger with no window system, planned
+/// (f written into the content rect and read back there, t parked). Returns it with the group's key and content rect.
+private func bareFloatingGroup(at now: ContinuousClock.Instant) throws -> (Arranger, GroupKey, content: Rect) {
+    var arranger = Arranger()
+    let infos = [info(2, frame: smallF), info(5, frame: tFrame)]
+    _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: now)
+    var id = NodeID(raw: 0)
+    try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
+        id = try ids.make()
+        try desk.desktop.remove(f)
+        try desk.desktop.group(id: id, target: t, adding: f)
+    }
+    arranger.wantedFrames[f.identity] = nil  // as the drop commit leaves it
+    let content = TabBand.content(of: tFrame)
+    let planned = arranger.handle(.gap(8), now: now)
+    #expect(commands(planned).contains(.setFrame(f, content)), "f was not written into the content rect: \(planned)")
+    #expect(arranger.isParked(t), "t was not parked")
+    _ = arranger.handle(.event(.windowMoved(f, content)), now: now)  // f's echo
+    return (arranger, GroupKey(desk: mainKey, node: id), content)
+}
+
+private func floatingSelected(_ arranger: Arranger, _ group: GroupKey) -> WindowRef? {
+    arranger.world[mainKey]?.desktop.groups.first { $0.id == group.node }.map { $0.members[$0.selected] }
+}
+
+/// TABS-05, D-08, Pitfall 5: a floating group moves by its selected window and switches tabs like a docked one.
+@Suite struct ArrangerFloatingGroupBehaviourTests {
+    @Test func movingTheSelectedMemberMovesTheWholeGroup() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _) = try bareFloatingGroup(at: start)
+        let moved = Rect(x: 200, y: 300, width: 450, height: 350)
+        let effects = arranger.handle(.event(.windowMoved(f, moved)), now: start + .seconds(2))
+        let layer = try #require(arranger.world[mainKey]?.desktop)
+        #expect(layer.groups.first?.frame == TabBand.frame(ofContent: moved))
+        #expect(layer.frame(of: f) == moved && layer.frame(of: t) == moved, "the members did not follow")
+        #expect(arranger.wantedFrames[f.identity] == moved)
+        #expect(setFrames(effects)[t] == nil, "the hidden member was written")
+        let strip = try #require(strips(effects).last?.first, "the strip did not follow: \(effects)")
+        #expect(strip.group == group && strip.frame == TabBand.strip(of: TabBand.frame(ofContent: moved)))
+    }
+
+    @Test func aHiddenMembersFrameReportsChangeNothing() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, content) = try bareFloatingGroup(at: start)
+        let before = arranger.world
+        let stray = Rect(x: 20, y: 40, width: 300, height: 200)
+        #expect(arranger.handle(.event(.windowMoved(t, stray)), now: start).isEmpty)
+        #expect(arranger.handle(.event(.windowResized(t, stray)), now: start).isEmpty)
+        #expect(arranger.world == before)
+        // A previous member still covering the content rect during a reveal is not parked yet: its late report is ignored too.
+        _ = arranger.handle(.tab(.select(t, via: .click), ready: true), now: start)
+        #expect(!arranger.isParked(f))
+        let late = arranger.handle(.event(.windowMoved(f, stray)), now: start + .milliseconds(10))
+        #expect(commands(late).isEmpty, "the cover's report was answered: \(late)")
+        #expect(arranger.world[mainKey]?.desktop.groups.first?.frame == tFrame, "a hidden member's report moved the group")
+        #expect(arranger.world[mainKey]?.desktop.frame(of: t) == content)
+    }
+
+    @Test func selectingAHiddenTabRevealsThenParksThePrevious() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, content) = try bareFloatingGroup(at: start)
+        let depth = arranger.history.depth(for: mainKey)
+        let effects = arranger.handle(.tab(.select(t, via: .click), ready: true), now: start)
+        let sent = commands(effects)
+        let write = try #require(sent.firstIndex(of: .setFrame(t, content)), "t was not written into the content rect: \(sent)")
+        let focus = try #require(sent.firstIndex(of: .focus(t)), "t was not focused: \(sent)")
+        #expect(write < focus)
+        #expect(parks(effects).isEmpty, "f parked before the read-back")
+        #expect(effects.contains(.raiseStrip(group)) && effects.contains(.tabAnnouncement(.selected(index: 1, count: 2))))
+        #expect(floatingSelected(arranger, group) == t)
+        #expect(arranger.history.depth(for: mainKey) == depth, "a tab switch made an undo step")
+        let back = arranger.handle(.event(.frameApplied(t, requested: content, actual: content)), now: start + .milliseconds(40))
+        #expect(parks(back) == [.park(f, displayUUID: "main", size: Size(width: content.width, height: content.height))])
+    }
+
+    @Test func aFocusedHiddenMemberIsSelectedWithTheSuppressionRules() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, content) = try bareFloatingGroup(at: start)
+        let effects = arranger.handle(.event(.windowFocused(t)), now: start)
+        #expect(floatingSelected(arranger, group) == t)
+        #expect(commands(effects).contains(.setFrame(t, content)) && commands(effects).contains(.focus(t)), "no reveal: \(effects)")
+        #expect(!effects.contains { if case .tabAnnouncement = $0 { true } else { false } }, "an activation was announced")
+        _ = arranger.handle(.event(.frameApplied(t, requested: content, actual: content)), now: start + .milliseconds(30))
+        _ = arranger.handle(.event(.windowFocused(f)), now: start + .milliseconds(500))
+        #expect(floatingSelected(arranger, group) == t, "a focus 0.5 s after the selection switched tabs")
+        _ = arranger.handle(.event(.windowFocused(f)), now: start + .milliseconds(1100))
+        #expect(floatingSelected(arranger, group) == f, "a focus 1.1 s after the selection did not switch tabs")
+    }
+
+    @Test func aSurvivorOfADissolvedGroupTakesTheWholeFrame() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _) = try bareFloatingGroup(at: start)
+        let moved = Rect(x: 200, y: 300, width: 450, height: 350)
+        _ = arranger.handle(.event(.windowMoved(f, moved)), now: start + .seconds(2))
+        _ = arranger.handle(.event(.windowMoved(f, moved)), now: start + .seconds(2))
+        let closed = arranger.handle(.event(.windowDestroyed(t)), now: start + .seconds(3))
+        #expect(arranger.world[mainKey]?.desktop.groups.isEmpty == true)
+        #expect(arranger.world[mainKey]?.desktop.frame(of: f) == TabBand.frame(ofContent: moved))
+        #expect(setFrames(closed)[f] == TabBand.frame(ofContent: moved), "the band did not return to the survivor: \(closed)")
+        #expect(strips(closed) == [[]], "the dissolved group kept its strip")
+    }
+
+    @Test func membersFromDifferentAppsGroupDockedAndFloating() throws {
+        let start = ContinuousClock.now
+        var arranger = Arranger()
+        let x = otherApp(7, frame: Rect(x: 100, y: 500, width: 300, height: 200)), y = otherApp(8, frame: gFrame)
+        let infos = [info(1, frame: frameA), info(5, frame: tFrame), x, y]
+        _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: start)
+        _ = arranger.handle(.command(.dock, focused: a), now: start)
+        let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
+            try desk.desktop.remove(x.window)
+            try desk.tree.group(x.window, into: leaf)
+            try desk.desktop.remove(y.window)
+            try desk.desktop.group(id: try ids.make(), target: t, adding: y.window)
+        }
+        arranger.wantedFrames[y.window.identity] = nil  // as the drop commit leaves it
+        let effects = arranger.handle(.gap(8), now: start)
+        let written = Set(setFrames(effects).keys), parked = Set(parks(effects).compactMap { if case .park(let w, _, _) = $0 { w } else { nil } })
+        for (shown, hidden) in [(x.window, a), (y.window, t)] {
+            #expect(written.contains(shown) && !written.contains(hidden), "\(shown) / \(hidden) writes: \(written)")
+            #expect(parked.contains(hidden) && !parked.contains(shown), "\(shown) / \(hidden) parks: \(parked)")
+        }
+    }
+}
