@@ -581,6 +581,11 @@ extension Arranger {
         try dock(ref.members[ref.selected])
     }
 
+    /// The group a drag of `window` moves whole: its group when it is the selected member (Surface 5).
+    func movingGroup(_ window: WindowRef) -> TabGroupRef? {
+        tabGroup(holding: window).flatMap { $0.members[$0.selected] == window ? $0 : nil }
+    }
+
     /// Takes `ref`'s group off `desk` as one leaf node with its members' states: its tree leaf, or its floating group.
     static func takeGroup(_ ref: TabGroupRef, from desk: inout Desk) throws(LayoutError) -> (node: Node, states: [WindowIdentity: WindowState]) {
         guard ref.floating else { return try desk.tree.removeLeaf(ref.key.node) }

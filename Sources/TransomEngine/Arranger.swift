@@ -1470,7 +1470,8 @@ public struct Arranger: Sendable {
         let window = session.window
         _ = session.settle(at: now) { decide($0, window: window) }
         _ = session.settleGroup(at: now) { decideGroup($0, window: window) }
-        let frame = windows[window.identity]?.frame ?? session.startFrame
+        let raw = windows[window.identity]?.frame ?? session.startFrame
+        let frame = movingGroup(window) == nil ? raw : TabBand.frame(ofContent: raw)
         let preview = session.current.flatMap { decision in decision.clampInto.map { .clamp(Planner.clamp(frame, into: $0)) } ?? decision.preview }
         guard let decision = session.current, preview != session.shown else {
             drag = session
@@ -1488,7 +1489,11 @@ public struct Arranger: Sendable {
         let window = session.window
         guard let ownKey = deskKey(of: window), let ownDesk = world[ownKey], let ownPlan = dragPlan(.desk(ownKey)) else { return Hover() }
         let docked = ownDesk.tree.state(of: window) != nil
-        let frame = windows[window.identity]?.frame ?? session.startFrame
+        // The selected member of a group drags the whole group (UI-SPEC Surface 5): its frame is the group frame, and
+        // no centre groups (merging groups is out of scope, Surface 1).
+        let whole = movingGroup(window) != nil
+        let raw = windows[window.identity]?.frame ?? session.startFrame
+        let frame = whole ? TabBand.frame(ofContent: raw) : raw
         let point = session.pointer
         if session.modifiers.contains(.shift) {
             // Anywhere goes: only whether the frame would cross a docked tile, once floating, matters (TILE-02).
@@ -1516,12 +1521,12 @@ public struct Arranger: Sendable {
             case .tile(let id, .center)?:
                 // A docked leaf's centre groups after the group dwell (D-01); until then it is a miss.
                 target = nil
-                groupTarget = groupable(id, on: key) ? .tile(key, id) : nil
+                groupTarget = !whole && groupable(id, on: key) ? .tile(key, id) : nil
             default: break
             }
             // On the Desktop tile a floating window's centre groups after the group dwell (D-02); the tile's own centre
             // stays a plain floating move.
-            if overDesktop, let floating = floatingGroupTarget(at: point, on: key, dragging: window) {
+            if overDesktop, !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window) {
                 target = nil
                 groupTarget = floating
             }
@@ -1539,7 +1544,14 @@ public struct Arranger: Sendable {
         }
         let docked = ownDesk.tree.state(of: window) != nil
         let own = ownKey.displayUUID
-        let origin = ownPlan.frames[window]
+        let group = movingGroup(window)
+        // Previews show the group frame, strip included, for a whole-group drag (Surface 5).
+        func shown(_ plan: FramePlan, on desk: Desk) -> Rect? {
+            guard group != nil else { return plan.frames[window] }
+            return desk.tree.leaf(containing: window).flatMap { plan.resolution.nodeRects[$0] }
+                ?? plan.frames[window].map(TabBand.frame(ofContent:))
+        }
+        let origin = shown(ownPlan, on: ownDesk)
         let miss = docked
             ? Decision(preview: origin.map { .snapBack($0, label: nil) }, action: .miss, display: own)
             : Decision(action: .miss, display: own, clampInto: hover.crossesTiles ? ownPlan.desktopRect : nil)
@@ -1550,7 +1562,7 @@ public struct Arranger: Sendable {
                     preview: origin.map { .snapBack($0, label: Self.showDesktopToFloat) }, action: .refuse(Self.showDesktopToFloat), display: own)
             }
             guard docked else { return miss }
-            let minimum = minimums[window] ?? Size(width: 1, height: 1)
+            let minimum = (group.map { groupMinimum($0.members) } ?? minimums[window]) ?? Size(width: 1, height: 1)
             guard let plan = dragPlan(.undock), let desktop = plan.desktopRect, plan.unfit.isEmpty,
                 minimum.width <= desktop.width, minimum.height <= desktop.height
             else {
@@ -1569,10 +1581,10 @@ public struct Arranger: Sendable {
         do throws(LayoutError) {
             guard let desk = try dropping(window, on: key, at: target).world[key] else { return miss }
             let plan = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums)
-            if plan.unfit.isEmpty, let frame = plan.frames[window] {
+            if plan.unfit.isEmpty, let frame = shown(plan, on: desk) {
                 return Decision(preview: .dock(frame), action: .dock(key, target), display: uuid)
             }
-            let loose = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]).frames[window]
+            let loose = shown(try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]), on: desk)
             // D-A: with zoom on the drop is accepted and the windows without room collapse.
             if let collapsed = try collapse(desk, area: display.visibleFrame) {
                 let copy = Self.collapseCopy(collapsed.newly, moving: window)
@@ -1586,16 +1598,27 @@ public struct Arranger: Sendable {
     }
 
     /// The World and history with `window` taken off its desk and dropped on `key`'s at `target`: one undo step there.
+    /// The selected member of a group takes its whole group, as one leaf (Surface 5).
     func dropping(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> (world: World, history: UndoHistory) {
         var candidate = world, candidateHistory = history
+        let group = movingGroup(window)
+        var taken: (node: Node, states: [WindowIdentity: WindowState])?
         if let from = deskKey(of: window), from != key {
             // Leaving another display's desk is a fact of where it was dropped, not a second undo step.
             try candidate.reflow(from) { desk, _ throws(LayoutError) in
-                if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
+                if let group {
+                    taken = try Self.takeGroup(group, from: &desk)
+                } else if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
             }
             if candidate[key] == nil { try candidate.addDesk(key) }
         }
         try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
+            if let group {
+                let moved: (node: Node, states: [WindowIdentity: WindowState])
+                if let taken { moved = taken } else { moved = try Self.takeGroup(group, from: &desk) }
+                try desk.tree.applyDrop(target, leaf: moved.node, states: moved.states, ids: &ids)
+                return
+            }
             if desk.desktop.contains(window) {
                 try desk.desktop.remove(window)
             } else if desk.tree.state(of: window) != nil {
@@ -1676,12 +1699,24 @@ public struct Arranger: Sendable {
     private mutating func commitUndock(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let area = display(for: key)?.visibleFrame, let frame = windows[window.identity]?.frame
         else { return try missed(window) }
-        let gap = gap, mins = minimums
-        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in
-            try desk.tree.remove(window)
-            try desk.desktop.add(window, frame: frame)
-            if let clamped = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).frames[window] {
-                try desk.desktop.setFrame(clamped, for: window)
+        let gap = gap, mins = minimums, group = movingGroup(window)
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            guard let group else {
+                try desk.tree.remove(window)
+                try desk.desktop.add(window, frame: frame)
+                if let clamped = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).frames[window] {
+                    try desk.desktop.setFrame(clamped, for: window)
+                }
+                return
+            }
+            // The whole group floats at its group frame, clamped as one if it crosses a tile (Surface 5).
+            let taken = try Self.takeGroup(group, from: &desk)
+            let outer = TabBand.frame(ofContent: frame)
+            try desk.desktop.addGroup(
+                FloatingTabGroup(id: try ids.make(), members: group.members, selected: group.selected, frame: outer), states: taken.states)
+            let plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
+            if let desktop = plan.desktopRect, plan.resolution.windowRects.values.contains(where: outer.overlaps) {
+                try desk.desktop.setFrame(TabBand.content(of: Planner.clamp(outer, into: desktop)), for: window)
             }
         }
         undockedWanted[window.identity] = wantedFrames[window.identity]
@@ -1820,8 +1855,16 @@ public struct Arranger: Sendable {
         guard let session = drag, let key = deskKey(of: session.window), var desk = world[key], let area = display(for: key)?.visibleFrame
         else { return nil }
         do throws(LayoutError) {
-            try desk.tree.remove(session.window)
-            try desk.desktop.add(session.window, frame: session.startFrame)
+            if let group = movingGroup(session.window) {
+                var ids = world.ids
+                let taken = try Self.takeGroup(group, from: &desk)
+                let floating = FloatingTabGroup(
+                    id: try ids.make(), members: group.members, selected: group.selected, frame: TabBand.frame(ofContent: session.startFrame))
+                try desk.desktop.addGroup(floating, states: taken.states)
+            } else {
+                try desk.tree.remove(session.window)
+                try desk.desktop.add(session.window, frame: session.startFrame)
+            }
             return try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
         } catch {
             return nil
