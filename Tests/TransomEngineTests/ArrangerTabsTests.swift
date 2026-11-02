@@ -1113,3 +1113,70 @@ private func runCloseGroup(_ arranger: inout Arranger, _ group: GroupKey, conten
         #expect(arranger.isParked(b))
     }
 }
+
+/// D-12: members closing by any route (⌘W, the app quitting) keep the group consistent.
+@Suite struct ArrangerTabMemberCloseTests {
+    @Test func theSelectedMemberClosingSelectsTheRightNeighbourInTheContentRect() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        _ = arranger.handle(.tab(.select(f, via: .click), ready: true), now: start)
+        _ = arranger.handle(.event(.frameApplied(f, requested: content, actual: content)), now: start)
+        try #require(selected(arranger, group) == f && arranger.isParked(a))
+        let closed = arranger.handle(.event(.windowDestroyed(f)), now: start + .seconds(2))
+        #expect(selected(arranger, group) == a)
+        #expect(commands(closed).contains(.setFrame(a, content)), "a was not written into the content rect: \(commands(closed))")
+        #expect(!parks(closed).contains { $0.window == a })
+        #expect(!closed.contains { if case .tabAnnouncement = $0 { true } else { false } }, "a neighbour selection was announced")
+    }
+
+    @Test func theLastMemberClosingSelectsTheLeftNeighbour() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, withA: true)
+        let closed = arranger.handle(.event(.windowDestroyed(a)), now: start)
+        #expect(selected(arranger, group) == f)
+        #expect(commands(closed).contains(.setFrame(f, content)), "f was not written into the content rect: \(commands(closed))")
+    }
+
+    @Test func aHiddenMemberClosingOnlyDropsItsTab() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, frame, _) = try bareGroup(at: start, withA: true)
+        let closed = arranger.handle(.event(.windowStateChanged(b, .closed)), now: start)
+        let strip = try #require(strips(closed).first?.first, "the strip was not sent again: \(closed)")
+        #expect(strip.members == [f, a] && strip.selected == 1 && strip.frame == TabBand.strip(of: frame))
+        #expect(!commands(closed).contains { $0.window == a }, "the selected member was moved: \(commands(closed))")
+        #expect(!closed.contains(.tabAnnouncement(.ended)))
+        #expect(selected(arranger, group) == a)
+    }
+
+    @Test func aDockedGroupLeftWithOneMemberDissolvesIntoAPlainTileUnderTheSameNode() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, frame, _) = try bareGroup(at: start)  // [b, f], f selected
+        let closed = arranger.handle(.event(.windowDestroyed(f)), now: start)
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .panel(b))
+        #expect(setFrames(closed)[b] == frame, "b did not take the whole group frame: \(closed)")
+        #expect(strips(closed) == [[]])
+        #expect(closed.contains(.tabAnnouncement(.ended)))
+        #expect(closed.contains(.info("group \(group.node): dissolved, \(b) keeps the tile")))
+    }
+
+    @Test func aFloatingGroupLeftWithOneMemberDissolvesIntoAFloater() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _) = try bareFloatingGroup(at: start)  // [t, f], f selected
+        let closed = arranger.handle(.event(.windowDestroyed(t)), now: start + .seconds(1))
+        #expect(closed.contains(.tabAnnouncement(.ended)))
+        #expect(closed.contains(.info("group \(group.node): dissolved, \(f) keeps the frame")))
+    }
+
+    @Test func closeGroupDoesNotAnnounceTheDissolveOnTheWay() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        var effects = arranger.handle(.tab(.closeGroup(group), ready: true), now: start), all = effects
+        for _ in 0..<4 {
+            guard let close = closes(effects).first else { break }
+            effects = arranger.handle(.event(.windowDestroyed(close)), now: start)
+            all += effects
+        }
+        #expect(arranger.world[mainKey]?.tree.windows == [a], "not every member closed: \(all)")
+        #expect(!all.contains(.tabAnnouncement(.ended)), "Close Group announced the dissolve")
+    }
+}

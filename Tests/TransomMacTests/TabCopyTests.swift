@@ -29,6 +29,9 @@ import Testing
         (.refused(.notInGroup), "TextEdit", "The focused window isn't in a tab group"),
         (.refused(.paused), "TextEdit", "Arranging is paused"),
         (.refused(.notReady), "TextEdit", "Transom needs Accessibility access"),
+        (.didNotClose(textEdit), "TextEdit", "\u{201C}TextEdit\u{201D} didn't close"),
+        (.didNotClose(textEdit), long, "\u{201C}\(String(repeating: "A", count: 32))\u{2026}\u{201D} didn't close"),
+        (.ended, "TextEdit", "Tab group ended"),
     ])
     func selectionAndRefusalsMatchTheContract(announcement: TabAnnouncement, app: String, expected: String) {
         #expect(TabCopy.announcement(announcement, appName: { _ in app }) == expected)
@@ -44,5 +47,11 @@ import Testing
         #expect(TabCopy.moreTabsHelp(3) == "3 more tabs")
         #expect(TabCopy.titleOrApp(title: "", app: "Notes") == "Notes")
         #expect(TabCopy.titleOrApp(title: "List", app: "Notes") == "List")
+    }
+
+    @Test func theGroupButtonsMatchTheContract() {
+        #expect(TabCopy.closeGroup == "Close Group")
+        #expect(TabCopy.minimizeGroup == "Minimize Group")
+        #expect(TabCopy.closeGroupHelp(3) == "Closes all 3 windows in this tab group")
     }
 }
