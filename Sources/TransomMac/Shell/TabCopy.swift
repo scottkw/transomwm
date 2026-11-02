@@ -14,6 +14,8 @@ nonisolated public enum TabCopy {
         case .refused(.notInGroup): "The focused window isn't in a tab group"
         case .refused(.paused): "Arranging is paused"
         case .refused(.notReady): OverviewCopy.refusedNotReady
+        case .didNotClose(let window): "\u{201C}\(MenuCopy.truncatedAppName(appName(window)))\u{201D} didn't close"
+        case .ended: "Tab group ended"
         }
     }
 
@@ -27,6 +29,13 @@ nonisolated public enum TabCopy {
     }
 
     public static func tabHelp(index: Int, count: Int) -> String { "Tab \(index) of \(count)" }
+
+    /// The group buttons' tooltips and labels (UI-SPEC Surface 4).
+    public static let closeGroup = "Close Group"
+    public static let minimizeGroup = "Minimize Group"
+
+    /// Close Group's accessibility help.
+    public static func closeGroupHelp(_ count: Int) -> String { "Closes all \(count) windows in this tab group" }
 
     /// The overflow button's tooltip and label.
     public static let moreTabs = "More Tabs"

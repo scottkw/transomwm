@@ -238,6 +238,27 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         } ?? false
     }
 
+    /// Presses the cached window's own close button (D-06), so its app may ask to save first. False when the window has
+    /// no close button or the press failed.
+    func closeWindow(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            var button: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXCloseButtonAttribute as CFString, &button) == .success, let button,
+                CFGetTypeID(button) == AXUIElementGetTypeID()
+            else { return false }
+            return AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success  // type checked above
+        } ?? false
+    }
+
+    /// Minimises the cached window through AX (kAXMinimizedAttribute).
+    func minimizeWindow(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            return AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanTrue) == .success
+        } ?? false
+    }
+
     /// Sets the app element's AXFrontmost: the activation fallback when `NSRunningApplication.activate` was declined.
     func setFrontmost() async -> Bool {
         await perform { app -> Bool in

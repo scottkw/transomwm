@@ -37,7 +37,7 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     var onAction: ((TabAction) -> Void)?
 
     /// What the pointer is over.
-    private enum Target: Equatable { case tab(Int), overflow }
+    private enum Target: Equatable { case tab(Int), overflow, button(TabStripButton) }
     private var hovered: Target?
     private var press: (target: Target?, at: NSPoint)?
     /// The hover / pressed fill, faded in over 80 ms and out over 120 ms.
@@ -60,16 +60,22 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     /// Under this a press is still a click (UI-SPEC Spacing xs).
     private static let clickTravel: CGFloat = 4
 
-    // shortcut: no group buttons yet; 07-05 passes Close and Minimize, 07-06 Float / Dock.
+    // shortcut: Close and Minimize only; 07-06 adds Float / Dock.
+    private static let buttons: [TabStripButton] = [.closeGroup, .minimizeGroup]
+
     private var layout: TabStripLayout {
-        TabStripLayout(width: bounds.width, tabCount: strip.members.count, selected: strip.selected, buttons: [])
+        TabStripLayout(width: bounds.width, tabCount: strip.members.count, selected: strip.selected, buttons: Self.buttons)
     }
+
+    /// The group buttons laid out (none under 116 pt), with their rects.
+    private var buttonRects: [(TabStripButton, Rect)] { Array(zip(Self.buttons, layout.buttonRects)) }
 
     private static func ns(_ rect: Rect) -> NSRect { NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height) }
 
     private func target(at point: NSPoint) -> Target? {
         let layout = layout
         if let button = layout.overflow?.button, Self.ns(button).contains(point) { return .overflow }
+        if let button = buttonRects.first(where: { Self.ns($0.1).contains(point) }) { return .button(button.0) }
         return layout.tabRects.first { Self.ns($0.value).contains(point) }.map { .tab($0.key) }
     }
 
@@ -86,6 +92,7 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         let layout = layout
         for rect in layout.tabRects.values { addToolTip(Self.ns(rect), owner: self, userData: nil) }
         if let button = layout.overflow?.button { addToolTip(Self.ns(button), owner: self, userData: nil) }
+        for (_, rect) in buttonRects { addToolTip(Self.ns(rect), owner: self, userData: nil) }
         updateHover()
     }
 
@@ -98,8 +105,37 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         switch target(at: point) {
         case .tab(let i)?: title(i)
         case .overflow?: TabCopy.moreTabs
+        case .button(let button)?: Self.label(button)
         case nil: ""
         }
+    }
+
+    private static func label(_ button: TabStripButton) -> String {
+        switch button {
+        case .closeGroup: TabCopy.closeGroup
+        case .minimizeGroup: TabCopy.minimizeGroup
+        case .floatGroup, .dockGroup: ""  // 07-06
+        }
+    }
+
+    private static func symbol(_ button: TabStripButton) -> String {
+        switch button {
+        case .closeGroup: "xmark"
+        case .minimizeGroup: "minus"
+        case .floatGroup: "macwindow"
+        case .dockGroup: "rectangle.split.2x1"
+        }
+    }
+
+    /// An SF Symbol centred in `rect`, `labelColor` when hovered or pressed, else `secondaryLabelColor`.
+    private func drawGlyph(_ name: String, in rect: NSRect, active: Bool) {
+        let color: NSColor = active ? .labelColor : .secondaryLabelColor
+        let config = NSImage.SymbolConfiguration(textStyle: .body, scale: .small).applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+        guard let glyph = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(config) else { return }
+        let size = glyph.size
+        glyph.draw(
+            in: NSRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height),
+            from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -112,16 +148,9 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         outline.stroke()
         let layout = layout
         for (i, rect) in layout.tabRects { drawTab(i, Self.ns(rect), titled: layout.mode == .titled, contrast: contrast) }
-        if let button = layout.overflow?.button {
-            let rect = Self.ns(button), color: NSColor = hovered == .overflow ? .labelColor : .secondaryLabelColor
-            let config = NSImage.SymbolConfiguration(textStyle: .body, scale: .small).applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-            if let glyph = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?.withSymbolConfiguration(config) {
-                let size = glyph.size
-                glyph.draw(
-                    in: NSRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height),
-                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            }
-        }
+        if let button = layout.overflow?.button { drawGlyph("chevron.down", in: Self.ns(button), active: hovered == .overflow) }
+        let active = hovered
+        for (button, rect) in buttonRects { drawGlyph(Self.symbol(button), in: Self.ns(rect), active: active == .button(button)) }
         updateHover()  // the fill colour re-resolves with the appearance and Increase Contrast
     }
 
@@ -158,10 +187,12 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     /// Places the hover fill (`labelColor` 8%, pressed 16%, × 1.5 with Increase Contrast) on the hovered or pressed
     /// unselected tab or the overflow button, fading it in over 80 ms and out over 120 ms.
     private func updateHover() {
-        let target = press?.target ?? hovered, layout = layout
+        // A press shows its fill only while the pointer is over what it pressed.
+        let target = press.map { $0.target == hovered ? $0.target : nil } ?? hovered, layout = layout
         let rect: Rect? = switch target {
         case .tab(let i)? where i != strip.selected: layout.tabRects[i]
         case .overflow?: layout.overflow?.button
+        case .button(let button)?: buttonRects.first { $0.0 == button }?.1
         default: nil
         }
         let alpha = (press == nil ? 0.08 : 0.16) * (NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1.5 : 1)
@@ -212,6 +243,15 @@ final class TabStripView: NSView, NSViewToolTipOwner {
             button.setAccessibilityFrameInParentSpace(overflowFrame)
             made.append(button)
         }
+        for (kind, rect) in buttonRects {
+            let button = PressElement { [weak self] in self?.press(kind) }
+            button.setAccessibilityRole(.button)
+            button.setAccessibilityLabel(Self.label(kind))
+            if kind == .closeGroup { button.setAccessibilityHelp(TabCopy.closeGroupHelp(count)) }
+            button.setAccessibilityParent(self)
+            button.setAccessibilityFrameInParentSpace(Self.ns(rect))
+            made.append(button)
+        }
         elements = made
         return made
     }
@@ -227,6 +267,12 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     }
 
     override func mouseMoved(with event: NSEvent) { setHovered(target(at: convert(event.locationInWindow, from: nil))) }
+
+    /// A pressed button shows its pressed fill only while the pointer is still over it (standard button tracking).
+    override func mouseDragged(with event: NSEvent) {
+        guard case .button? = press?.target else { return }
+        setHovered(target(at: convert(event.locationInWindow, from: nil)))
+    }
     override func mouseExited(with event: NSEvent) { setHovered(nil) }
 
     private func setHovered(_ target: Target?) {
@@ -239,21 +285,36 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         press = (target(at: point), point)
+        hovered = press?.target
         updateHover()
+        needsDisplay = true  // a pressed button's glyph
     }
 
     /// A click on a tab selects it, on the overflow button opens its menu, on the background focuses the selected
-    /// member. A double-click is one click.
+    /// member. A double-click is one click. A group button acts on mouse-up inside it, however far the pointer
+    /// travelled meanwhile; released outside, it does nothing.
     override func mouseUp(with event: NSEvent) {
         guard let press else { return }
         self.press = nil
         updateHover()
+        needsDisplay = true
         let point = convert(event.locationInWindow, from: nil)
-        guard hypot(point.x - press.at.x, point.y - press.at.y) < Self.clickTravel, target(at: point) == press.target, event.clickCount <= 1 else { return }
+        guard target(at: point) == press.target, event.clickCount <= 1 else { return }
+        if case .button(let button)? = press.target { return self.press(button) }
+        guard hypot(point.x - press.at.x, point.y - press.at.y) < Self.clickTravel else { return }
         switch press.target {
         case .overflow?: openOverflow()
         case .tab(let i)?: select(i, via: .click)
+        case .button?: break
         case nil: select(strip.selected, via: .click)
+        }
+    }
+
+    private func press(_ button: TabStripButton) {
+        switch button {
+        case .closeGroup: onAction?(.closeGroup(strip.group))
+        case .minimizeGroup: onAction?(.minimizeGroup(strip.group))
+        case .floatGroup, .dockGroup: break  // 07-06
         }
     }
 

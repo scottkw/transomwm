@@ -977,3 +977,91 @@ private func dockedBesideFloatingGroup(at now: ContinuousClock.Instant) throws -
         #expect(!docked.isHiddenTab(window(99)), "an unknown window is hidden")
     }
 }
+
+// MARK: Close Group and Minimize Group (07-05)
+
+private func closes(_ effects: [ArrangerEffect]) -> [WindowRef] {
+    commands(effects).compactMap { if case .close(let window) = $0 { window } else { nil } }
+}
+
+/// Runs Close Group on a bare Arranger: every close press is answered by the window's destruction and every reveal by
+/// its read-back. Returns the windows in the order they were pressed, each checked to be the shown, read-back member.
+private func runCloseGroup(_ arranger: inout Arranger, _ group: GroupKey, content: Rect, at now: ContinuousClock.Instant) -> [WindowRef] {
+    var effects = arranger.handle(.tab(.closeGroup(group), ready: true), now: now), pressed: [WindowRef] = []
+    for _ in 0..<12 {
+        if let close = closes(effects).first {
+            #expect(!arranger.isHiddenTab(close) && arranger.tabs.pendingReveal == nil, "\(close) was closed while hidden or not yet shown")
+            pressed.append(close)
+            effects = arranger.handle(.event(.windowDestroyed(close)), now: now)
+        } else if let revealed = arranger.tabs.pendingReveal?.revealed, commands(effects).contains(.setFrame(revealed, content)) {
+            effects = arranger.handle(.event(.frameApplied(revealed, requested: content, actual: content)), now: now)
+        } else {
+            break
+        }
+    }
+    return pressed
+}
+
+/// TABS-03, D-06: Close Group closes the members one at a time with the app's own close; it stops at one still open.
+@Suite struct ArrangerCloseGroupTests {
+    @Test func closeGroupClosesTheSelectedFirstThenStripOrderShowingEachHiddenMemberFirst() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        #expect(runCloseGroup(&arranger, group, content: content, at: start) == [a, b, f])
+        #expect(arranger.tabs.closeQueue == nil)
+        #expect(arranger.world[mainKey]?.tree.windows.isEmpty == true)
+    }
+
+    @Test func aMemberStillOpenAfterTheConfirmationStopsTheQueueAndASecondClickResumesWithIt() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
+        let first = arranger.handle(.tab(.closeGroup(group), ready: true), now: start)
+        #expect(closes(first) == [a])
+        #expect(first.contains(.wake(at: start + Arranger.closeConfirmation)), "no wake at the close deadline: \(first)")
+        #expect(!arranger.handle(.tick, now: start + .milliseconds(999)).contains(.tabAnnouncement(.didNotClose(a))))
+        let stop = arranger.handle(.tick, now: start + Arranger.closeConfirmation)
+        #expect(stop.contains(.tabAnnouncement(.didNotClose(a))))
+        #expect(closes(stop).isEmpty)
+        #expect(selected(arranger, group) == a, "the window that stopped Close Group is not the one shown")
+        #expect(arranger.tabs.closeQueue == nil)
+        #expect(closes(arranger.handle(.tab(.closeGroup(group), ready: true), now: start + .seconds(5))) == [a])
+    }
+
+    @Test func aSecondClickWhileClosingSendsNothingMore() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.tab(.closeGroup(group), ready: true), now: start)
+        #expect(closes(arranger.handle(.tab(.closeGroup(group), ready: true), now: start + .milliseconds(100))).isEmpty)
+    }
+
+    @Test(arguments: [true, false])
+    func aRefusedCloseGroupBeepsAndSendsNothing(paused: Bool) throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        if paused { _ = arranger.handle(.setPaused(.user, true), now: start) }
+        let effects = arranger.handle(.tab(.closeGroup(group), ready: paused), now: start)
+        #expect(effects.contains(.beep) && effects.contains(.tabAnnouncement(.refused(paused ? .paused : .notReady))))
+        #expect(commands(effects).isEmpty)
+    }
+
+    @Test func onTheFakeEveryMemberCloses() async throws {
+        var (harness, plan) = try await docked()
+        await groupFWithB(&harness, try #require(plan.frames[b]))
+        let leaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: b))
+        await harness.send(.tab(.closeGroup(GroupKey(desk: mainKey, node: leaf)), ready: true))
+        let open = await harness.fake.windows.filter { $0.value.axValid }.keys.sorted()
+        #expect(open == [1], "members still open: \(open)")
+        #expect(harness.arranger.world[mainKey]?.contains(b) == false && harness.arranger.world[mainKey]?.contains(f) == false)
+        #expect(harness.arranger.tabs.closeQueue == nil)
+    }
+
+    @Test func anExcludedMembersCloseNeverReachesTheSystem() async throws {
+        var (harness, plan) = try await docked()
+        await groupFWithB(&harness, try #require(plan.frames[b]))
+        let leaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: b))
+        await harness.fake.setExcluded(["com.example.arranger"])
+        await harness.send(.tab(.closeGroup(GroupKey(desk: mainKey, node: leaf)), ready: true))
+        #expect(await harness.fake.dropped.contains(.close(f)), "the close was not dropped")
+        #expect(await harness.fake.windows[2]?.axValid == true, "the excluded window closed")
+    }
+}

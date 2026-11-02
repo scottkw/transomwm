@@ -158,6 +158,9 @@ public enum WindowCommand: Equatable, Sendable {
     case focus(WindowRef)
     case raise(WindowRef)
     case setHidden(WindowRef, Bool)
+    /// Presses the window's own close button, so its app may ask to save first (D-06); never a force close.
+    case close(WindowRef)
+    case minimize(WindowRef)
 }
 
 /// Boundary between the engine and the OS window system.

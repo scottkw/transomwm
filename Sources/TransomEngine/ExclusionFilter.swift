@@ -25,7 +25,8 @@ extension WindowCommand {
     /// The window the command addresses.
     public var window: WindowRef {
         switch self {
-        case .setFrame(let ref, _), .park(let ref, _, _), .focus(let ref), .raise(let ref), .setHidden(let ref, _): ref
+        case .setFrame(let ref, _), .park(let ref, _, _), .focus(let ref), .raise(let ref), .setHidden(let ref, _), .close(let ref),
+            .minimize(let ref): ref
         }
     }
 }

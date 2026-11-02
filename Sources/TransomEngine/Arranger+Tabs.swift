@@ -12,6 +12,10 @@ public enum TabAnnouncement: Equatable, Sendable {
     case selected(index: Int, count: Int)
     /// A tab action that changed no window.
     case refused(TabRefusal)
+    /// Close Group stopped: this member was still open `closeConfirmation` after its close press (UI-SPEC Surface 4).
+    case didNotClose(WindowRef)
+    /// The group was left with one window and dissolved (D-12).
+    case ended
 }
 
 /// Why a tab action changed no window (UI-SPEC Surface 2, "While paused, or Accessibility not ready").
@@ -51,14 +55,27 @@ public struct TabStrip: Equatable, Sendable {
     }
 }
 
-/// Where a tab selection came from: only `.activation` (D-08) is not announced.
+/// Where a tab selection came from: `.activation` (D-08) and `.close` (Close Group showing a hidden member before
+/// its close) are not announced.
 public enum TabSelectSource: Equatable, Sendable {
-    case click, overflow, hotkey, menu, url, activation
+    case click, overflow, hotkey, menu, url, activation, close
 }
 
 /// A tab action from the strip, a hotkey, a menu or a URL.
 public enum TabAction: Equatable, Sendable {
     case select(WindowRef, via: TabSelectSource)
+    case closeGroup(GroupKey)
+    case minimizeGroup(GroupKey)
+}
+
+/// Close Group in progress (D-06): one member at a time, each hidden one shown first. `current` was sent its close
+/// press and must be gone by `deadline`.
+struct CloseQueue: Equatable, Sendable {
+    var group: GroupKey
+    var remaining: [WindowRef]
+    var current: WindowRef?
+    var deadline: ContinuousClock.Instant?
+    var closed = 0
 }
 
 /// A selection waiting for its window's read-back (RESEARCH Pattern 5): until then `previous` keeps covering the
@@ -75,6 +92,7 @@ struct PendingReveal: Equatable, Sendable {
 /// The engine's tab-group state.
 struct TabGroupState: Sendable {
     var pendingReveal: PendingReveal?
+    var closeQueue: CloseQueue?
     /// Per group, until when a focus of a hidden member does not select it (Pitfall 6).
     var suppressedUntil: [GroupKey: ContinuousClock.Instant] = [:]
     /// The strips last sent per display, so only a change is sent again.
@@ -264,6 +282,15 @@ extension Arranger {
         }
     }
 
+    /// The group `key` names, docked or floating.
+    func tabGroup(_ key: GroupKey) -> TabGroupRef? {
+        guard let desk = world[key.desk] else { return nil }
+        if case .tabs(let members, let selected)? = desk.tree.node(key.node) {
+            return TabGroupRef(key: key, members: members, selected: selected, floating: false)
+        }
+        return desk.desktop.groups.first { $0.id == key.node }.map { TabGroupRef(key: key, members: $0.members, selected: $0.selected, floating: true) }
+    }
+
     /// Whether `window` is a non-selected member of a docked or floating group: it never shows in focus moves or the overview.
     public func isHiddenTab(_ window: WindowRef) -> Bool {
         tabGroup(holding: window).map { $0.members[$0.selected] != window } ?? false
@@ -288,16 +315,18 @@ extension Arranger {
     mutating func tab(_ action: TabAction, ready: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch action {
         case .select(let window, let source): select(window, via: source, ready: ready, now: now)
+        case .closeGroup(let group): closeGroup(group, ready: ready, now: now)
+        case .minimizeGroup(let group): minimizeGroup(group, ready: ready, now: now)
         }
     }
 
     /// Makes `window` its group's selected tab (no undo step). The new member is written into the content rect and
     /// focused; the previous one parks only after that write reads back (`revealed(_:actual:now:)`).
     mutating func select(_ window: WindowRef, via source: TabSelectSource, ready: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, window, "arranging is paused") }
-        guard ready else { return refuse(.notReady, window, "Accessibility is not ready") }
+        guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, "select \(window)", "arranging is paused") }
+        guard ready else { return refuse(.notReady, "select \(window)", "Accessibility is not ready") }
         guard let ref = tabGroup(holding: window), let index = ref.members.firstIndex(of: window) else {
-            return refuse(.notInGroup, window, "not in a tab group")
+            return refuse(.notInGroup, "select \(window)", "not in a tab group")
         }
         let group = ref.key, leaf = ref.key.node, members = ref.members, previous = members[ref.selected]
         guard previous != window else { return [.perform([.focus(window)])] }
@@ -321,13 +350,13 @@ extension Arranger {
             // Nothing covers the content rect (the camera parked the group): nothing to wait for.
             tabs.pendingReveal = nil
         }
-        let spoken: [ArrangerEffect] = source == .activation ? [] : [.tabAnnouncement(.selected(index: index + 1, count: members.count))]
+        let spoken: [ArrangerEffect] = source == .activation || source == .close ? [] : [.tabAnnouncement(.selected(index: index + 1, count: members.count))]
         let logged: [ArrangerEffect] = tabs.pendingReveal == nil ? [.info("group \(leaf): select \(window) via \(source)")] : []
         return spoken + logged + replan() + [.raiseStrip(group)] + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
-    private func refuse(_ refusal: TabRefusal, _ window: WindowRef, _ why: String) -> [ArrangerEffect] {
-        [.beep, .tabAnnouncement(.refused(refusal)), .info("group: select \(window) refused, \(why)")]
+    private func refuse(_ refusal: TabRefusal, _ what: String, _ why: String) -> [ArrangerEffect] {
+        [.beep, .tabAnnouncement(.refused(refusal)), .info("group: \(what) refused, \(why)")]
     }
 
     /// A read-back of the pending reveal's window within 2 pt of its content rect: the previous member parks now.
@@ -337,7 +366,7 @@ extension Arranger {
         else { return nil }
         tabs.pendingReveal = nil
         let ms = Int((now - pending.started) / .milliseconds(1))
-        return [.info("group \(pending.group.node): select \(window) via \(pending.source), \(ms) ms")] + replan()
+        return [.info("group \(pending.group.node): select \(window) via \(pending.source), \(ms) ms")] + replan() + closeProgress(now: now)
     }
 
     /// On every tick: expired focus suppressions go, and a pending reveal whose deadline passed with no matching
@@ -346,6 +375,8 @@ extension Arranger {
         tabs.suppressedUntil = tabs.suppressedUntil.filter { $0.value > now }
         guard let pending = tabs.pendingReveal, now >= pending.deadline else { return [] }
         tabs.pendingReveal = nil
+        // Close Group never closes a member it could not show: it stops, as at a window still open.
+        if tabs.closeQueue?.group == pending.group { tabs.closeQueue = nil }
         guard let ref = tabGroup(holding: pending.previous), ref.key == pending.group else { return replan() }
         do throws(LayoutError) {
             try selectInWorld(pending.previous, in: ref)
@@ -415,5 +446,70 @@ extension Arranger {
             tabs.shownStrips[uuid] = next.isEmpty ? nil : next
             return .tabStrips(next, displayUUID: uuid)
         }
+    }
+}
+
+/// Close Group and Minimize Group (D-06): the strip's buttons act on the whole group.
+extension Arranger {
+    /// How long after its close press a member may stay open before Close Group stops there (RESEARCH Pitfall 10, A4).
+    /// It covers Transom's two-source close confirmation; a save prompt keeps the window open past it.
+    public static let closeConfirmation: Duration = .seconds(1)
+
+    /// Starts Close Group: the selected member first, then the others in strip order. A second click after a stop
+    /// starts again from the group as it is now, whose selected member is the one that stopped it.
+    mutating func closeGroup(_ group: GroupKey, ready: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, "close group \(group.node)", "arranging is paused") }
+        guard ready else { return refuse(.notReady, "close group \(group.node)", "Accessibility is not ready") }
+        guard let ref = tabGroup(group) else { return refuse(.notInGroup, "close group \(group.node)", "no such group") }
+        guard tabs.closeQueue?.group != group else { return [] }  // already closing
+        let selected = ref.members[ref.selected]
+        tabs.closeQueue = CloseQueue(group: group, remaining: [selected] + ref.members.filter { $0 != selected })
+        return closeProgress(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
+    }
+
+    /// Minimises the selected member only (D-07): hidden members stay parked, and the participation rule hides the
+    /// strip once it reads back absent. macOS focusing another member of the same app then must not flip the group.
+    mutating func minimizeGroup(_ group: GroupKey, ready: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, "minimize group \(group.node)", "arranging is paused") }
+        guard ready else { return refuse(.notReady, "minimize group \(group.node)", "Accessibility is not ready") }
+        guard let ref = tabGroup(group) else { return refuse(.notInGroup, "minimize group \(group.node)", "no such group") }
+        tabs.suppressedUntil[group] = now + Self.focusSuppression
+        return [.perform([.minimize(ref.members[ref.selected])]), .info("group \(group.node): minimized")]
+    }
+
+    /// Moves Close Group on: after its current member is gone the next one is shown if hidden, then pressed; past the
+    /// deadline with the member still open it stops (UI-SPEC Surface 4). Runs after events, read-backs and ticks.
+    mutating func closeProgress(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard var queue = tabs.closeQueue else { return [] }
+        if let current = queue.current {
+            if windows[current.identity] != nil {
+                guard let deadline = queue.deadline, now >= deadline else { return [] }
+                tabs.closeQueue = nil
+                return [.tabAnnouncement(.didNotClose(current)), .info("group \(queue.group.node): close stopped at \(current) after 1 s")]
+            }
+            queue.current = nil
+            queue.deadline = nil
+            queue.closed += 1
+        }
+        queue.remaining.removeAll { windows[$0.identity] == nil }
+        guard let next = queue.remaining.first else {
+            tabs.closeQueue = nil
+            return [.info("group \(queue.group.node): close \(queue.closed) windows")]
+        }
+        tabs.closeQueue = queue
+        if tabs.pendingReveal?.revealed == next { return [] }  // shown, waiting for its read-back
+        if isHiddenTab(next) {
+            let shown = select(next, via: .close, ready: true, now: now)
+            guard !isHiddenTab(next) else {
+                tabs.closeQueue = nil
+                return shown + [.info("group \(queue.group.node): close stopped, could not show \(next)")]
+            }
+            return shown + closeProgress(now: now)
+        }
+        queue.remaining.removeFirst()
+        queue.current = next
+        queue.deadline = now + Self.closeConfirmation
+        tabs.closeQueue = queue
+        return [.perform([.close(next)])]
     }
 }

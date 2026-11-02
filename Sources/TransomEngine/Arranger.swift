@@ -887,7 +887,7 @@ public struct Arranger: Sendable {
         }
         // CONTEXT E: focus outside the view widens the camera.
         let widened = if case .windowFocused(let window) = event { widen(toShow: window, new: false) } else { [ArrangerEffect]() }
-        guard case .windowCreated(let info) = event else { return faults + hidden + selected + widened + replan() }
+        guard case .windowCreated(let info) = event else { return faults + hidden + selected + widened + replan() + closeProgress(now: now) }
         do throws(LayoutError) {
             let taken = try takeFinderWindow(info, now: now)
             return faults + taken + widen(toShow: info.window, new: true) + replan()
@@ -1055,7 +1055,7 @@ public struct Arranger: Sendable {
             return world.desks.values.contains { $0.tree.state(of: info.window) == .present } && !Self.near(info.frame, tile, within: 2)
         }
         let effects = off.isEmpty ? [] : correct(off, now: now)
-        return missed + revealTimedOut(now: now) + effects + settleDrag(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
+        return missed + revealTimedOut(now: now) + effects + closeProgress(now: now) + settleDrag(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
     /// Forgets the tile last sent, so the re-plan writes it again.
@@ -1072,7 +1072,7 @@ public struct Arranger: Sendable {
         let dwell = drag?.kind == .move ? drag?.dwellEnds : nil
         let groupDwell = drag?.kind == .move ? drag?.groupDwellEnds : nil
         return (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } }
-            + [finderExpectation?.deadline, dwell, groupDwell, tabs.pendingReveal?.deadline].compactMap { $0 }).min()
+            + [finderExpectation?.deadline, dwell, groupDwell, tabs.pendingReveal?.deadline, tabs.closeQueue?.deadline].compactMap { $0 }).min()
     }
 
     /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own

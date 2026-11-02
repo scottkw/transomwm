@@ -159,4 +159,36 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         #expect(group.arrange.arranger.world[group.key]?.tree.node(group.leaf) == .tabs(windows: [group.hidden, group.selected], selected: 0))
         #expect(group.arrange.arranger.isParked(group.selected))
     }
+
+    /// The AX commands Close Group and Minimize Group send: a minimise reads back absent, and a close press on the
+    /// window's own button is confirmed closed by both sources within `Arranger.closeConfirmation` (A4).
+    @Test(.timeLimit(.minutes(1)))
+    func closeAndMinimizeCommandsActOnFixtureWindows() async throws {
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
+        defer { fixture.terminate() }
+        let fixturePID = fixture.pid
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        await system.start()
+        let ids = fixture.windows.sorted { $0.index < $1.index }.map(\.id)
+        var refs: [TransomModel.WindowRef] = []
+        _ = await waitUntil(timeout: .seconds(3)) {
+            let inventory = await system.inventory()
+            refs = ids.compactMap { id in inventory.windows.first { $0.window.windowID == id && $0.state == .present }?.window }
+            return inventory.initialRefreshComplete && refs.count == 2
+        }
+        try #require(refs.count == 2, "the fixture windows were never tracked")
+
+        await system.perform([.minimize(refs[1])])
+        let minimized = await waitUntil(timeout: .seconds(2)) { await system.windowInfo(refs[1])?.state == .absent }
+        let state = await system.windowInfo(refs[1])?.state
+        #expect(minimized, "window 1 never read back minimised: \(String(describing: state))")
+
+        let pressed = ContinuousClock.now
+        await system.perform([.close(refs[0])])
+        let closed = await waitUntil(timeout: .seconds(3)) { await system.windowInfo(refs[0]) == nil }
+        let latency = pressed.duration(to: .now)
+        print("close-confirmation latency: \(latency)")
+        #expect(closed, "window 0 was never confirmed closed")
+        #expect(latency < Arranger.closeConfirmation, "the close took \(latency) to confirm")
+    }
 }

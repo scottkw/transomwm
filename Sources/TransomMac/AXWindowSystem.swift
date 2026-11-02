@@ -204,7 +204,7 @@ import os
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
     /// `Geometry.maxCoordinate`, and windows Transom does not track, are dropped and logged (T-02-32). `.park` is a
     /// frame write through the same slot, to its display's `parkedFrame` at the given size (a hidden tab's content size), else the window's tracked size (Pattern 15).
-    /// `.focus` and `.raise` run as jobs on the app's thread and never hold up the caller (`focus(_:of:on:)`).
+    /// `.focus`, `.raise`, `.close` and `.minimize` run as jobs on the app's thread and never hold up the caller (`focus(_:of:on:)`).
     /// `setHidden` is logged and dropped: no phase needs it yet, and it stays in the protocol for later ones.
     /// Commands for an excluded app are dropped before anything else, logged once per bundle ID (D-12).
     public func perform(_ commands: [WindowCommand]) async {
@@ -239,6 +239,14 @@ import os
                     if !(await thread.raiseWindow(windowID: windowID)) {
                         logger.info("raise of \(ref.description, privacy: .public) failed")
                     }
+                }
+            case .close:
+                Task {
+                    if !(await thread.closeWindow(windowID: windowID)) { logger.info("close of \(ref.description, privacy: .public) failed") }
+                }
+            case .minimize:
+                Task {
+                    if !(await thread.minimizeWindow(windowID: windowID)) { logger.info("minimize of \(ref.description, privacy: .public) failed") }
                 }
             case .setHidden:
                 logger.info("dropping setHidden for \(ref.description, privacy: .public): not implemented yet")
