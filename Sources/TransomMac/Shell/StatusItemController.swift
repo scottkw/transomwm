@@ -130,6 +130,7 @@ import os
         menu.addItem(commands.moveMenu)
         menu.addItem(commands.splitMenu)
         menu.addItem(commands.snapMenu)
+        menu.addItem(commands.tabsMenu)
         menu.addItem(.separator())
         menu.addItem(commands.item(for: .arrangeAll))
         menu.addItem(commands.item(for: .floatAll))

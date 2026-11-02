@@ -17,7 +17,7 @@ import TransomModel
         .arrangeAll, .floatAll, .restoreAll,
         .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
         .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
-        .camera(.overview),
+        .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
     ]
 
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
@@ -25,6 +25,7 @@ import TransomModel
     let moveMenu = NSMenuItem(title: MenuCopy.moveMenu, action: nil, keyEquivalent: "")
     let snapMenu = NSMenuItem(title: MenuCopy.snapMenu, action: nil, keyEquivalent: "")
     let moveViewMenu = NSMenuItem(title: ZoomCopy.moveViewMenu, action: nil, keyEquivalent: "")
+    let tabsMenu = NSMenuItem(title: TabCopy.tabsMenu, action: nil, keyEquivalent: "")
     private let dispatch: (Command) -> Void
     private var items: [Command: NSMenuItem] = [:]
     /// Snap Floating Window's halves: the one deliberate duplicate (UI-SPEC). Each runs its Move Window item's command
@@ -61,6 +62,7 @@ import TransomModel
         for (index, edge) in Self.edges.enumerated() { snap.insertItem(halfItem(edge), at: index) }
         snapMenu.submenu = snap
         moveViewMenu.submenu = submenu(ZoomCopy.moveViewMenu, Self.edges.map { .camera(.pan($0)) })
+        tabsMenu.submenu = submenu(TabCopy.tabsMenu, [.tabs(.next), .tabs(.previous), .tabs(.moveOut)])
     }
 
     /// The Zoom section (UI-SPEC Surface 6; 06 Surface 4 puts Show Overview first): the header, the camera items, `previews` (nil while Screen Recording is

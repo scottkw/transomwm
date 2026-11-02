@@ -33,6 +33,19 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse(string) == nil)
     }
 
+    /// 07 UI-SPEC Surface 7: the three tab commands.
+    @Test(arguments: [("next-tab", TabCommand.next), ("previous-tab", .previous), ("move-out-of-group", .moveOut)])
+    func theTabCommandsParse(host: String, command: TabCommand) {
+        #expect(parse("transom://\(host)") == .tabs(command))
+        #expect(parse("transom://\(host)/") == .tabs(command))
+    }
+
+    @Test(arguments: ["transom://next-tab?x=1", "transom://NEXT-TAB", "transom://next-tab#f", "transom://next-tab/extra", "transom://Move-Out-Of-Group",
+        "transom://move-out", "transom://previous-tab:80"])
+    func malformedTabURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
     @Test(arguments: [
         "transom://Restore", "transom://restore?x=1", "transom://restore?", "transom://restore#a", "transom://user@restore",
         "transom://user:secret@restore", "transom://restore:80", "transom://restore/extra", "transom://zoom", "transom-debug://restore",

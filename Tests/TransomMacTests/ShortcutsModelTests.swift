@@ -3,17 +3,17 @@ import TransomEngine
 @testable import TransomMac
 import Testing
 
-/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 45 in all (06 UI-SPEC Surface 4 adds Show Overview), in the
+/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 48 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows), in the
 /// Surface 8 sections and titles.
 @Suite @MainActor struct ShortcutsModelTests {
     @Test func theSectionsFollowSurface8() {
-        #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Arrange", "Split", "Snap Floating Window", "Safety", "Exclusions"])
+        #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Arrange", "Split", "Snap Floating Window", "Tabs", "Safety", "Exclusions"])
     }
 
-    @Test func the45RowsBindTheHotkeyNamesOnceEach() {
+    @Test func the48RowsBindTheHotkeyNamesOnceEach() {
         let names = ShortcutsModel.sections.flatMap(\.rows).map(\.name)
-        #expect(names.count == 45)
-        #expect(Set(names).count == 45)
+        #expect(names.count == 48)
+        #expect(Set(names).count == 48)
         #expect(Set(names) == Set(Hotkeys.entries.map(\.name)))
     }
 
@@ -34,6 +34,7 @@ import Testing
                 "Left Third", "Center Third", "Right Third", "Top Left Quarter", "Top Right Quarter", "Bottom Left Quarter",
                 "Bottom Right Quarter", "Maximize", "Center",
             ],
+            ["Next Tab", "Previous Tab", "Move Out of Group"],
             ["Pause or Resume Arranging", "Restore All Windows"],
             ["Don't Arrange Frontmost App"],
         ])
@@ -44,10 +45,16 @@ import Testing
         let dock = KeyboardShortcuts.Shortcut(.d, modifiers: [.control, .option, .command])
         #expect(ShortcutsModel.conflictMessage(for: dock, excluding: .float) == "This shortcut is already used by \u{201C}Dock Window\u{201D} in Transom.")
         #expect(ShortcutsModel.conflictMessage(for: dock, excluding: .dock) == nil, "a row's own chord is not a conflict")
-        #expect(ShortcutsModel.conflictMessage(for: .init(.l, modifiers: [.control, .option, .command]), excluding: .float) == nil)
+        #expect(ShortcutsModel.conflictMessage(for: .init(.y, modifiers: [.control, .option, .command]), excluding: .float) == nil)
         #expect(
             ShortcutsModel.conflictMessage(for: .init(.a, modifiers: [.control, .option, .command]), excluding: .float)
                 == "This shortcut is already used by \u{201C}Show Overview\u{201D} in Transom.")
+    }
+
+    @Test func theTabsSectionFollowsSnapWithItsThreeNames() {
+        let titles = ShortcutsModel.sections.map(\.title)
+        #expect(titles.firstIndex(of: "Tabs") == titles.firstIndex(of: "Snap Floating Window").map { $0 + 1 })
+        #expect(ShortcutsModel.sections.first { $0.title == "Tabs" }?.rows.map(\.name) == [.nextTab, .previousTab, .moveOutOfGroup])
     }
 
     @Test func showOverviewIsTheFirstZoomRowAndTheZoomSectionHasTheTakeoverFooter() {

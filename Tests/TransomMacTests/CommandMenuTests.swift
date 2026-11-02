@@ -105,6 +105,23 @@ import Testing
         ])
     }
 
+    /// 07 UI-SPEC Surface 7: the Tabs submenu's items carry their hotkeys, dispatch their commands and follow availability.
+    @Test func theTabsSubmenuHoldsTheThreeTabCommandsWithTheirShortcuts() throws {
+        var sent: [Command] = []
+        let menu = CommandMenu { sent.append($0) }
+        #expect(menu.tabsMenu.title == "Tabs")
+        let items = try #require(menu.tabsMenu.submenu).items
+        #expect(items.map(\.title) == ["Next Tab", "Previous Tab", "Move Out of Group"])
+        #expect(items.map(\.keyEquivalent) == ["t", "t", "l"])
+        #expect(items.map(\.keyEquivalentModifierMask) == [base, base.union(.shift), base])
+        for item in items { _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item) }
+        #expect(sent == [.tabs(.next), .tabs(.previous), .tabs(.moveOut)])
+        menu.update { if case .tabs = $0 { false } else { true } }
+        #expect(items.allSatisfy { !$0.isEnabled }, "with no group every Tabs item is disabled")
+        #expect(items.map(\.title) == ["Next Tab", "Previous Tab", "Move Out of Group"], "disabled items keep their titles")
+        #expect(menu.tabsMenu.isEnabled, "the submenu item itself stays enabled")
+    }
+
     @Test func theFocusAndSplitSubmenusHoldThePersistentItems() {
         let menu = CommandMenu { _ in }
         #expect(menu.focusMenu.title == "Focus")
