@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-11-02T01:12:07.442Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-11-02T01:24:48.897Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: 77f48f36f06d8c6874df3b0a367ddf127137c5d3
+state_head: f16ff19790f7de1350ece727ac06a6050a107d54
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 81
+  completed_plans: 82
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 3 of 12
+Plan: 4 of 12
 Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
@@ -135,6 +135,7 @@ Progress: [███████░░░] 67%
 | Phase 06 P12 | 13min | 2 tasks | 3 files |
 | Phase 07 P01 | 18min | 3 tasks | 25 files |
 | Phase 07 P02 | 10min | 3 tasks | 8 files |
+| Phase 7 P03 | 10min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -371,6 +372,9 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-02: a tab reveal waits for a read-back only when something covers the content rect; the previous member parks after a 2 pt match with the last requested content rect, else reverts at 1 s
 - [Phase 07]: 07-02: D-08 activation runs before the camera widen; 1 s per-group focus suppression after a selection change or a member going absent/closed (Arranger.focusSuppression)
 - [Phase 07]: 07-02: strip presses feed a pointer .down with no press window (stale drags abandoned, no window drag behind); TabCopy owns app-name truncation
+- [Phase 7]: Strip backstop follows a drift only when two 500 ms ticks agree; a return to the plan snaps back at once
+- [Phase 7]: leftOnAnotherSpace is asked only of visible strip panels; ordered-out ones are reused (VM: same panel back)
+- [Phase 7]: TabStripPanels remembers the Space each display's strips were shown for, so a return while paused fades them back in
 
 ### Quick Tasks Completed
 
@@ -411,8 +415,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T01:12:07.018Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-11-02T01:24:48.466Z
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
 
 ## Deferred Verification
