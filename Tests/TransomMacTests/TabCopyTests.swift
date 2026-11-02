@@ -32,6 +32,9 @@ import Testing
         (.didNotClose(textEdit), "TextEdit", "\u{201C}TextEdit\u{201D} didn't close"),
         (.didNotClose(textEdit), long, "\u{201C}\(String(repeating: "A", count: 32))\u{2026}\u{201D} didn't close"),
         (.ended, "TextEdit", "Tab group ended"),
+        (.movedOut(dissolved: false), "TextEdit", "Moved out of the tab group"),
+        (.movedOut(dissolved: true), "TextEdit", "Moved out of the tab group. Tab group ended."),
+        (.tearOffCanceled, "TextEdit", "Tab move canceled"),
     ])
     func selectionAndRefusalsMatchTheContract(announcement: TabAnnouncement, app: String, expected: String) {
         #expect(TabCopy.announcement(announcement, appName: { _ in app }) == expected)

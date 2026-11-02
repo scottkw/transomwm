@@ -1598,3 +1598,109 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(announcements(up) == [.movedOut(dissolved: true)])
     }
 }
+
+/// UI-SPEC Surface 4 release table and D-12 for tear-offs.
+@Suite struct ArrangerTearOffReleaseTests {
+    private func tileOfA(_ arranger: Arranger) throws -> Rect {
+        let desk = try #require(arranger.world[mainKey])
+        return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[a])
+    }
+
+    @Test func aReleaseOverADockPreviewDocksTheTabOutOfItsGroupInOneUndoStep() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [a | [b, f]], f selected
+        let ra = try tileOfA(arranger)
+        let point = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
+        _ = try tear(&arranger, f, of: group, to: point, at: start)
+        let tick = arranger.handle(.tick, now: start + DragSession.dwell)
+        #expect(previews(tick).contains { if case .dock = $0 { true } else { false } }, "no Dock preview: \(tick)")
+        let depth = arranger.history.depth(for: mainKey)
+        let up = arranger.handle(pointer(.up, point.x, point.y), now: start + .milliseconds(200))
+        let tree = try #require(arranger.world[mainKey]?.tree)
+        #expect(tree.node(try #require(tree.leaf(containing: f))) == .panel(f), "f did not dock as its own tile")
+        #expect(tree.windows.first == f, "f did not dock left of a: \(tree.windows)")
+        #expect(tree.node(group.node) == .panel(b), "the group did not dissolve into b")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1, "the dock is not one undo step")
+        #expect(announcements(up) == [.movedOut(dissolved: true)])
+        #expect(up.contains(.info("group \(group.node): \(f) moved out via tear-off, landed docked")))
+    }
+
+    @Test func aReleaseOverAGroupPreviewFormsThatGroupSelected() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [a | [b, f]], f selected, b hidden
+        let ra = try tileOfA(arranger)
+        _ = try tear(&arranger, b, of: group, to: centre(ra), at: start)
+        let tick = arranger.handle(.tick, now: start + DragSession.groupDwell)
+        #expect(!groupPreviews(tick).isEmpty, "no Group preview: \(tick)")
+        let up = arranger.handle(pointer(.up, ra.midX, ra.midY), now: start + .milliseconds(450))
+        let tree = try #require(arranger.world[mainKey]?.tree)
+        let aLeaf = try #require(tree.leaf(containing: a))
+        #expect(tree.node(aLeaf) == .tabs(windows: [a, b], selected: 1), "b did not group with a: \(String(describing: tree.node(aLeaf)))")
+        #expect(tree.node(group.node) == .panel(f), "the old group did not dissolve into f")
+        #expect(announcements(up) == [.grouped(tabs: 2)])
+    }
+
+    @Test func itsOwnGroupsCentreIsNeverAGroupTarget() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
+        _ = try tear(&arranger, b, of: group, to: centre(content), at: start)
+        let tick = arranger.handle(.tick, now: start + .milliseconds(450))
+        #expect(groupPreviews(tick).isEmpty, "its own group was offered: \(tick)")
+        #expect(previews(tick).contains { if case .clamp = $0 { true } else { false } }, "no landing ghost: \(tick)")
+    }
+
+    @Test func aReleaseBackOverTheSourceStripCancelsWithNoChange() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        let strip = try stripRect(arranger, group)
+        let before = arranger.world
+        _ = try tear(&arranger, b, of: group, to: Point(x: 1200, y: 500), at: start)
+        _ = arranger.handle(.tick, now: start + DragSession.dwell)
+        var effects = arranger.handle(pointer(.dragged, strip.midX, strip.midY), now: start + .milliseconds(200))
+        effects += arranger.handle(.tick, now: start + .milliseconds(400))
+        #expect(previews(effects).isEmpty, "a preview showed over the strip: \(effects)")
+        let up = arranger.handle(pointer(.up, strip.midX, strip.midY), now: start + .milliseconds(450))
+        #expect(arranger.world == before, "the release over the strip changed the World")
+        #expect(announcements(up).isEmpty)
+        #expect(up.contains(.info("group \(group.node): tear-off canceled (strip)")))
+        #expect(ghosts(up) == [nil])
+    }
+
+    @Test func commandNeverOffersSwap() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        let ra = try tileOfA(arranger)
+        var effects = try tear(&arranger, b, of: group, to: centre(ra), [.command], at: start)
+        effects += arranger.handle(.tick, now: start + .milliseconds(450))
+        #expect(!previews(effects).contains { if case .swap = $0 { true } else { false } }, "a swap was offered: \(previews(effects))")
+    }
+
+    @Test func shiftBypassesTheDockToTheFloat() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
+        let ra = try tileOfA(arranger)
+        // ⇧ over a's edge band: no Dock, the float at the clamped landing frame.
+        var effects: [ArrangerEffect]
+        let point = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
+        let desktop = try desktopRect(arranger)
+        let expected = Planner.clamp(landing(arranger, b, content: content, at: point), into: desktop)
+        effects = try tear(&arranger, b, of: group, to: point, [.shift], at: start + .seconds(1))
+        effects += arranger.handle(.tick, now: start + .seconds(1) + DragSession.dwell)
+        #expect(previews(effects) == [.clamp(expected)], "⇧ did not bypass: \(previews(effects))")
+        _ = arranger.handle(pointer(.up, point.x, point.y, [.shift]), now: start + .seconds(2))
+        #expect(arranger.world[mainKey]?.desktop.frame(of: b) == expected)
+    }
+
+    @Test func tearingTheSelectedTabSelectsItsRightNeighbour() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a]
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in try desk.tree.selectTab(f) }
+        _ = arranger.handle(.gap(8), now: start)  // re-plans, sends the strip
+        let desktop = try desktopRect(arranger)
+        _ = try tear(&arranger, f, of: group, to: centre(desktop), at: start)
+        let up = arranger.handle(pointer(.up, desktop.midX, desktop.midY), now: start + .milliseconds(200))
+        #expect(selected(arranger, group) == a, "the right neighbour was not selected")
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, a], selected: 1))
+        #expect(announcements(up) == [.movedOut(dissolved: false)])
+    }
+}
