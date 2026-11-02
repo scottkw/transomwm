@@ -9,6 +9,7 @@ nonisolated public enum TabCopy {
         switch announcement {
         case .grouped(let tabs): "Grouped as tabs, \(count(tabs))"
         case .added(let tabs): "Added as a tab, \(count(tabs))"
+        case .couldNotShow, .selected, .refused: ""  // stand-in until 07-02 Task 3
         }
     }
 

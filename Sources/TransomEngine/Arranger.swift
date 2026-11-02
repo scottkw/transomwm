@@ -43,6 +43,8 @@ public enum ArrangerInput: Sendable {
     case cameraSettle(displayUUID: String, moveID: UInt64)
     /// A camera command on that display (the pointer's), with the focused window and the pointer Step In reads.
     case camera(CameraCommand, displayUUID: String, focused: WindowRef?, pointer: Point?)
+    /// A tab action (a strip click, D-08 selection); `ready` is whether Accessibility access works.
+    case tab(TabAction, ready: Bool)
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -104,6 +106,10 @@ public enum ArrangerEffect: Equatable, Sendable {
     case collapsedBlocks([CollapsedBlock], displayUUID: String)
     /// Speak this tab-group change (the shell formats it with `TabCopy`).
     case tabAnnouncement(TabAnnouncement)
+    /// The tab strips to show on that display; empty hides them (UI-SPEC Surface 2).
+    case tabStrips([TabStrip], displayUUID: String)
+    /// Order this group's strip front: one of its members was just selected (UI-SPEC Surface 2 ordering).
+    case raiseStrip(GroupKey)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -145,7 +151,7 @@ public struct Arranger: Sendable {
     public private(set) var pauseReasons: Set<PauseReason> = []
     /// The last frame requested for each window that is still planned; a frame within 0.5 pt of it is not written
     /// again, so an app echoing frames cannot cause a write storm (T-03-08).
-    private var lastRequested: [WindowIdentity: Rect] = [:]
+    var lastRequested: [WindowIdentity: Rect] = [:]
     /// Locked or asleep: nothing is written until the session resumes, then every visible desk is re-planned.
     var sessionPaused = false
     /// The Spaces-off fallback (A7) is reported once per session.
@@ -170,7 +176,7 @@ public struct Arranger: Sendable {
     /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
     private var launch: LaunchMode = .normal
     /// Windows a `park` was sent for and that are still parked, so each is parked once, not on every re-plan.
-    private var parkRequested: Set<WindowIdentity> = []
+    var parkRequested: Set<WindowIdentity> = []
     /// The size each sized park (a hidden tab) was sent at: a content size that changes parks the window again (Pitfall 1).
     private var parkedSize: [WindowIdentity: Size] = [:]
     /// Whether a park was sent for `window` and it is still parked (the overview's camera-move pick, 06-09).
@@ -187,6 +193,8 @@ public struct Arranger: Sendable {
     private var liveGap: (handle: GapHandle, delta: Double)?
     /// The zoom camera (Arranger+Camera.swift).
     var camera = CameraState()
+    /// Tab strips shown and the selection waiting for its read-back (Arranger+Tabs.swift).
+    var tabs = TabGroupState()
     /// Displays are reconfiguring (`.displaysSettling`): no display-based re-homing, no frames.
     public private(set) var settling = false
     /// The World when settling began: stored as the old arrangement's layout set at the settle.
@@ -394,6 +402,8 @@ public struct Arranger: Sendable {
             return cameraSettle(displayUUID: uuid, moveID: moveID)
         case .camera(let command, let uuid, let focused, let pointer):
             return camera(command, displayUUID: uuid, focused: focused, pointer: pointer)
+        case .tab(let action, let ready):
+            return tab(action, ready: ready, now: now)
         }
     }
 
@@ -797,6 +807,8 @@ public struct Arranger: Sendable {
                 if let home = homeFrames.removeValue(forKey: from.identity) { homeFrames[to.window.identity] = home }
                 if let wanted = wantedFrames.removeValue(forKey: from.identity) { wantedFrames[to.window.identity] = wanted }
                 if let wanted = undockedWanted.removeValue(forKey: from.identity) { undockedWanted[to.window.identity] = wanted }
+                if tabs.pendingReveal?.revealed == from { tabs.pendingReveal?.revealed = to.window }
+                if tabs.pendingReveal?.previous == from { tabs.pendingReveal?.previous = to.window }
                 if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 subject = to.window.identity
@@ -805,6 +817,7 @@ public struct Arranger: Sendable {
                 return try moved(window, to: frame, now: now)
             case .frameApplied(let window, let requested, let actual):
                 lastApplied[window.identity] = actual
+                if let shown = revealed(window, actual: actual, now: now) { return shown }
                 if isFloating(window) {
                     let t = MinimumSizeLearner.tolerance, old = floaterFloors[window.identity] ?? Size(width: 0, height: 0)
                     let floor = Size(
@@ -930,6 +943,8 @@ public struct Arranger: Sendable {
         camera.collapsible.remove(window.identity)
         camera.unparkedNew.remove(window.identity)
         focusOrder.removeAll { $0 == window.identity }
+        // The model picks the group's selection when a member goes; nothing is left to wait for.
+        if tabs.pendingReveal?.revealed == window || tabs.pendingReveal?.previous == window { tabs.pendingReveal = nil }
     }
 
     // MARK: Moves
@@ -1020,7 +1035,7 @@ public struct Arranger: Sendable {
             return world.desks.values.contains { $0.tree.state(of: info.window) == .present } && !Self.near(info.frame, tile, within: 2)
         }
         let effects = off.isEmpty ? [] : correct(off, now: now)
-        return missed + effects + settleDrag(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
+        return missed + revealTimedOut(now: now) + effects + settleDrag(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
     /// Forgets the tile last sent, so the re-plan writes it again.
@@ -1033,11 +1048,11 @@ public struct Arranger: Sendable {
     }
 
     /// The earliest instant a waiting correction, the Finder deadline or a drag's dwell is due: the shell keeps one wake.
-    private var nextWake: ContinuousClock.Instant? {
+    var nextWake: ContinuousClock.Instant? {
         let dwell = drag?.kind == .move ? drag?.dwellEnds : nil
         let groupDwell = drag?.kind == .move ? drag?.groupDwellEnds : nil
         return (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } }
-            + [finderExpectation?.deadline, dwell, groupDwell].compactMap { $0 }).min()
+            + [finderExpectation?.deadline, dwell, groupDwell, tabs.pendingReveal?.deadline].compactMap { $0 }).min()
     }
 
     /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
@@ -1803,6 +1818,7 @@ public struct Arranger: Sendable {
         var lost: [WindowRef] = []
         var handles: [String: [GapHandle]] = [:]
         var blocks: [String: [CollapsedBlock]] = [:]
+        var strips: [String: [TabStrip]] = [:]
         var fitAtHome: Set<WindowIdentity> = []
         let mins = minimums
         for display in displays {
@@ -1833,6 +1849,7 @@ public struct Arranger: Sendable {
                 continue
             }
             guard let desk = world[key] else { continue }
+            strips[display.uuid] = tabStrips(key, desk: desk, plan: plan)
             // A gap drag edits home weights, so a zoomed display shows no handles.
             if drag?.kind != .move {
                 handles[display.uuid] = view == .home ? GapHandles.handles(tree: desk.tree, resolution: plan.resolution, gap: gap) : []
@@ -1842,7 +1859,10 @@ public struct Arranger: Sendable {
             var desired = plan.frames.filter { windows[$0.key.identity]?.isExcluded == false }
             let desktopHidden = desk.tree.isDesktopHidden == true
             // A just-created window outside the view stays where it opened until its widen move settles (Pitfall 3).
-            for window in plan.parks where windows[window.identity]?.isExcluded == false && !camera.unparkedNew.contains(window.identity) {
+            // A tab being replaced keeps covering the content rect until the new one reads back (Pattern 5).
+            for window in plan.parks
+            where windows[window.identity]?.isExcluded == false && !camera.unparkedNew.contains(window.identity) && window != tabs.pendingReveal?.previous
+            {
                 parkedNow.insert(window.identity)
                 let size = plan.parkSizes[window]
                 let resized = size.map { new in
@@ -1870,6 +1890,7 @@ public struct Arranger: Sendable {
                 if let last = lastRequested[window.identity], Self.near(last, rect) { continue }
                 lastRequested[window.identity] = rect
                 commands.append(.setFrame(window, rect))
+                if window == tabs.pendingReveal?.revealed { commands.append(.focus(window)) }
             }
         }
         // A window that left the plan (absent, fullscreen, floating clear of tiles) is written again when it returns.
@@ -1893,6 +1914,7 @@ public struct Arranger: Sendable {
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
             + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles) + showBlocks(blocks)
+            + showStrips(strips)
     }
 
     /// Sends each display's collapsed blocks that changed; a display with none (or gone) gets an empty list.

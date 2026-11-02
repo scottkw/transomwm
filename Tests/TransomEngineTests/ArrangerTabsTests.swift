@@ -381,3 +381,141 @@ extension ArrangerTabsTests {
         #expect(desk.tree.node(try #require(desk.tree.leaf(containing: b))) == .panel(b), "one undo did not take the group apart")
     }
 }
+
+/// a and b docked by the keyboard, then f grouped into b's leaf ([b, f], f selected) on an Arranger with no window
+/// system, and planned: f in the content rect, b parked. Returns it with the group's key, frame and content rect.
+private func bareGroup(at now: ContinuousClock.Instant) throws -> (Arranger, GroupKey, frame: Rect, content: Rect) {
+    var arranger = Arranger()
+    let infos = [info(1, frame: frameA), info(2, frame: smallF), info(3, frame: frameB)]
+    _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: now)
+    _ = arranger.handle(.command(.dock, focused: a), now: now)
+    _ = arranger.handle(.command(.dock, focused: b), now: now)
+    let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: b))
+    try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in
+        try desk.desktop.remove(f)
+        try desk.tree.group(f, into: leaf)
+    }
+    _ = arranger.handle(.gap(8), now: now)  // re-plans
+    #expect(arranger.isParked(b), "b was not parked")
+    let plan = try Planner.plan(desk: try #require(arranger.world[mainKey]), area: area, gap: 8, mins: [:])
+    let frame = try #require(plan.resolution.nodeRects[leaf])
+    return (arranger, GroupKey(desk: mainKey, node: leaf), frame, TabBand.content(of: frame))
+}
+
+private func commands(_ effects: [ArrangerEffect]) -> [WindowCommand] {
+    effects.flatMap { effect -> [WindowCommand] in if case .perform(let commands) = effect { commands } else { [] } }
+}
+
+private func strips(_ effects: [ArrangerEffect]) -> [[TabStrip]] {
+    effects.compactMap { if case .tabStrips(let strips, "main") = $0 { strips } else { nil } }
+}
+
+private func selected(_ arranger: Arranger, _ group: GroupKey) -> WindowRef? {
+    guard case .tabs(let members, let index)? = arranger.world[mainKey]?.tree.node(group.node) else { return nil }
+    return members[index]
+}
+
+/// TABS-02, D-04, D-05, D-08: the strip and the reveal-then-park tab switch.
+@Suite struct ArrangerTabSelectTests {
+    @Test func selectingAHiddenTabWritesAndFocusesItWithoutParkingThePrevious() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
+        let effects = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        let sent = commands(effects)
+        let write = try #require(sent.firstIndex(of: .setFrame(b, content)), "b was not written into the content rect: \(sent)")
+        let focus = try #require(sent.firstIndex(of: .focus(b)), "b was not focused: \(sent)")
+        #expect(write < focus, "the focus came before the write")
+        #expect(parks(effects).isEmpty, "a member parked before the read-back: \(parks(effects))")
+        #expect(effects.contains(.tabAnnouncement(.selected(index: 1, count: 2))))
+        #expect(effects.contains(.raiseStrip(group)))
+        #expect(effects.contains(.wake(at: start + .seconds(1))), "no wake at the reveal deadline")
+        #expect(selected(arranger, group) == b)
+    }
+
+    @Test func aReadBackWithin2ptParksThePreviousAtTheContentSize() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, content) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        let off = Rect(x: content.x + 3, y: content.y, width: content.width, height: content.height)
+        #expect(parks(arranger.handle(.event(.frameApplied(b, requested: content, actual: off)), now: start)).isEmpty, "a read-back 3 pt off parked f")
+        let near = Rect(x: content.x + 1.5, y: content.y, width: content.width, height: content.height)
+        let back = arranger.handle(.event(.frameApplied(b, requested: content, actual: near)), now: start + .milliseconds(40))
+        #expect(parks(back) == [.park(f, displayUUID: "main", size: Size(width: content.width, height: content.height))])
+        #expect(arranger.isParked(f))
+    }
+
+    @Test func noReadBackWithin1sRevertsAndKeepsThePrevious() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        #expect(!arranger.handle(.tick, now: start + .milliseconds(999)).contains(.beep))
+        let late = arranger.handle(.tick, now: start + .seconds(1))
+        #expect(late.contains(.beep))
+        #expect(late.contains(.tabAnnouncement(.couldNotShow(b))))
+        #expect(selected(arranger, group) == f, "the selection did not revert")
+        #expect(!parks(late).contains { if case .park(f, _, _) = $0 { true } else { false } }, "the previous member parked")
+        #expect(parks(late).contains(.park(b, displayUUID: "main", size: Size(width: content.width, height: content.height))))
+        #expect(!arranger.isParked(f))
+    }
+
+    @Test func clickingTheSelectedTabOnlyFocusesIt() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)
+        #expect(arranger.handle(.tab(.select(f, via: .click), ready: true), now: start) == [.perform([.focus(f)])])
+    }
+
+    @Test func aStripIsSentOnceAndAgainOnlyWhenATitleChanges() throws {
+        let start = ContinuousClock.now
+        var arranger = try bareGroup(at: start).0
+        let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: b))
+        let desk = try #require(arranger.world[mainKey])
+        let frame = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).resolution.nodeRects[leaf])
+        let expected = TabStrip(
+            group: GroupKey(desk: mainKey, node: leaf), frame: TabBand.strip(of: frame), members: [b, f], titles: ["", ""], selected: 1, floating: false)
+        #expect(arranger.tabs.shownStrips["main"] == [expected])
+        #expect(strips(arranger.handle(.gap(8), now: start)).isEmpty, "an unchanged replan sent the strip again")
+        var renamed = info(2, frame: smallF)
+        renamed.window.titleHint = "Notes"
+        let changed = strips(arranger.handle(.event(.windowChanged(renamed)), now: start))
+        #expect(changed.count == 1 && changed.first?.first?.titles == ["", "Notes"], "a title change gave \(changed)")
+    }
+
+    @Test func groupingSendsTheStripAndUngroupingHidesIt() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b])
+        _ = await drag(&harness, f, from: smallF, to: centre(rb))
+        harness.now += .milliseconds(400)
+        await harness.send(.tick)
+        let up = await harness.send(pointer(.up, rb.midX, rb.midY))
+        #expect(strips(up).count == 1 && strips(up).first?.count == 1, "no strip with the group: \(strips(up))")
+        let undo = await harness.send(.command(.undo, focused: f))
+        #expect(strips(undo) == [[]], "undo did not hide the strip")
+    }
+
+    @Test func aTabSwitchOnTheFakeEndsWithTheNewMemberShownAndTheOldParked() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b])
+        await groupFWithB(&harness, rb)
+        let leaf = try #require(harness.arranger.world[mainKey]?.tree.leaf(containing: b))
+        let desk = try #require(harness.arranger.world[mainKey])
+        let frame = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).resolution.nodeRects[leaf])
+        let content = TabBand.content(of: frame)
+        await harness.send(.tab(.select(b, via: .click), ready: true))
+        #expect(await harness.frame(b) == content)
+        let parked = try #require(await harness.frame(f))
+        #expect(parked.width == content.width && parked.height == content.height && harness.arranger.isParked(f))
+        #expect(harness.arranger.tabs.pendingReveal == nil)
+    }
+
+    @Test(arguments: [true, false])
+    func aRefusedSelectBeepsAndChangesNothing(paused: Bool) throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        if paused { _ = arranger.handle(.setPaused(.user, true), now: start) }
+        let effects = arranger.handle(.tab(.select(b, via: .click), ready: paused), now: start)
+        #expect(effects.contains(.beep))
+        #expect(effects.contains(.tabAnnouncement(.refused(paused ? .paused : .notReady))))
+        #expect(commands(effects).isEmpty)
+        #expect(selected(arranger, group) == f)
+    }
+}

@@ -64,6 +64,8 @@ import os
     private let gapPanels = GapHandlePanels()
     /// The collapsed blocks at rest (ZOOM-13). A panel is made only when a block first shows.
     private let collapsedPanels = CollapsedPanels()
+    /// The tab strips (TABS-02). A panel is made only when a group's strip first shows.
+    private let tabStripPanels = TabStripPanels()
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
@@ -136,6 +138,9 @@ import os
         }
         collapsedPanels.onDoubleClick = { [weak self] window, uuid in
             Task { await self?.openBlock(window, displayUUID: uuid) }
+        }
+        tabStripPanels.onAction = { [weak self] action in
+            Task { await self?.tabAction(action) }
         }
     }
 
@@ -386,7 +391,9 @@ import os
             await zoomInput.tapEvent(kind, event)
             return
         }
-        if event.type == .leftMouseDown { zoomInput.pointerDown(event) }
+        // A press on a tab strip is the strip's own AppKit click: never a window drag on the window behind (Pitfall 4).
+        let onStrip = event.type == .leftMouseDown && tabStripPanels.windowNumbers.contains(Int(event.windowUnderPointer))
+        if event.type == .leftMouseDown, !onStrip { zoomInput.pointerDown(event) }
         if case .greenButton(let id) = event.kind {
             guard let window = trackedWindow(cgID: id) else { return }
             await run(arranger.handle(.greenButton(window), now: .now))
@@ -401,7 +408,7 @@ import os
         default: return
         }
         let location = Point(x: event.location.x, y: event.location.y)
-        let press = kind == .down ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
+        let press = kind == .down && !onStrip ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
         let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press)
         let session = arranger.drag  // mouse-up ends it
         if kind == .dragged { dragTrace.dragged += 1 }
@@ -579,6 +586,11 @@ import os
         await run(arranger.handle(.command(command, focused: focused), now: .now))
     }
 
+    /// A tab action from a strip (and later the menu, hotkeys and URLs); the engine refuses it while paused or not ready.
+    func tabAction(_ action: TabAction) async {
+        await run(arranger.handle(.tab(action, ready: isReady()), now: .now))
+    }
+
     /// The bundle ID Don't Arrange would toggle for `app`: a regular app other than Transom, with a valid bundle ID.
     static func excludableBundleID(of app: NSRunningApplication?) -> String? {
         guard let app, let id = app.bundleIdentifier, app.processIdentifier != getpid(), app.activationPolicy == .regular,
@@ -634,6 +646,10 @@ import os
                 gapPanels.show(handles, on: displayUUID)
             case .collapsedBlocks(let blocks, let displayUUID):
                 collapsedPanels.show(blocks, on: displayUUID)
+            case .tabStrips(let strips, let displayUUID):
+                tabStripPanels.show(strips, on: displayUUID)
+            case .raiseStrip(let group):
+                tabStripPanels.raise(group)
             case .tabAnnouncement(let announcement):
                 let text = TabCopy.announcement(announcement) { MenuCopy.truncatedAppName(Self.appName($0)) }
                 logger.info("\(text, privacy: .public)")
