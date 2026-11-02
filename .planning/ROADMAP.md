@@ -349,7 +349,7 @@ Plans:
   5. Tab groups work for windows from different apps, both docked and floating on the Desktop tile
   6. Right-clicking a tab offers close and move-out
 
-**Plans:** 6/12 plans executed
+**Plans:** 7/12 plans executed
 
 Plans:
 **Wave 1**
@@ -371,7 +371,7 @@ Plans:
 - [x] 07-06-PLAN.md — Whole-group moves: Float/Dock Group, Dock/Float Window, green button, title-bar drag, Arrange/Float All, rehome
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 07-07-PLAN.md — Tear-off: tab drag out through the pointer pipeline, ghost, dock/group/float/cancel, Esc
+- [x] 07-07-PLAN.md — Tear-off: tab drag out through the pointer pipeline, ghost, dock/group/float/cancel, Esc
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [ ] 07-08-PLAN.md — Tab context menu: Close Tab and Move Out of Group, VoiceOver custom actions
@@ -440,6 +440,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
 | 6. Overview, Spaces & Displays | 12/12 | Complete    | 2026-11-01 |
-| 7. Tab Groups | 6/12 | In Progress | - |
+| 7. Tab Groups | 7/12 | In Progress | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |
