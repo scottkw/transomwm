@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-05-PLAN.md
-last_updated: "2026-11-02T01:56:16.063Z"
+stopped_at: Completed 07-06-PLAN.md
+last_updated: "2026-11-02T02:16:40.621Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: 9758712f318633c9fe57535cdc3290383eac64b3
+state_head: 49efad9ed42e1a5c7523652bcd53bfbe342d83d8
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 84
+  completed_plans: 85
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 6 of 12
+Plan: 7 of 12
 Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
@@ -138,6 +138,7 @@ Progress: [███████░░░] 67%
 | Phase 7 P03 | 10min | 3 tasks | 11 files |
 | Phase 7 P04 | 13 min | 3 tasks | 9 files |
 | Phase 07 P05 | 9min | 3 tasks | 14 files |
+| Phase 07 P06 | 16min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -384,6 +385,10 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-05: focusSuppression stays 1 s (VM: hidden same-app window became key after Minimize Group; group stayed minimised)
 - [Phase 07]: 07-05: a stopped Close Group clears its queue; a second click rebuilds it selected-first, which resumes with the stopping member
 - [Phase 07]: 07-05: Tab group ended is not spoken while Close Group runs through the group
+- [Phase 07]: 07-06: removeGroup/addGroup carry member states so Float/Dock Group keep an absent member's state
+- [Phase 07]: 07-06: Dock Group is Dock Window on the selected member (dock() branches on a floating group at the group frame's centre)
+- [Phase 07]: 07-06: a window leaving a floating group by docking keeps its wanted (pre-dock) frame; only windows still floating lose it
+- [Phase 07]: 07-06: keyboard Swap lets the focused window be a group member; the other must be a plain panel (same as the command-drag rule)
 
 ### Quick Tasks Completed
 
@@ -424,8 +429,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T01:56:15.301Z
-Stopped at: Completed 07-05-PLAN.md
+Last session: 2026-11-02T02:16:39.671Z
+Stopped at: Completed 07-06-PLAN.md
 Resume file: None
 
 ## Deferred Verification
