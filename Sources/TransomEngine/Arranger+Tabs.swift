@@ -540,14 +540,17 @@ extension Arranger {
         else { return [] }
         if let until = tabs.suppressedUntil[ref.key], now < until {
             // WR-02: with the group minimised, the parked member macOS focused would be an invisible key window. The last
-            // window focused that is on screen gets focus back; with none, the member is shown.
+            // window focused that is on screen gets focus back; with none, the member is minimised with its group (D-06).
             guard windows[ref.members[ref.selected].identity]?.state != .present else { return [] }
             let shown = Set(displays.map(Self.key))
             let back = focusOrder.compactMap { windows[$0] }.first { info in
                 info.window != window && info.state == .present && !parkRequested.contains(info.window.identity)
                     && !isHiddenTab(info.window) && deskKey(of: info.window).map(shown.contains) == true
             }
-            guard let back else { return select(window, via: .activation, ready: true, now: now) }
+            guard let back else {
+                tabs.minimizing.insert(window.identity)
+                return [.perform([.minimize(window)]), .info("group \(ref.key.node): minimized, \(window) focused while parked, minimized too")]
+            }
             return [.perform([.focus(back.window)]), .info("group \(ref.key.node): minimized, focus of \(window) handed to \(back.window)")]
         }
         return select(window, via: .activation, ready: true, now: now)

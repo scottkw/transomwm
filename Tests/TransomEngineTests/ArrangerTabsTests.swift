@@ -1135,14 +1135,17 @@ private func runCloseGroup(_ arranger: inout Arranger, _ group: GroupKey, conten
         #expect(commands(focus) == [.focus(a)], "focus was not handed back: \(commands(focus))")
     }
 
-    @Test func withNoWindowOnScreenToFocusTheFocusedHiddenMemberIsShown() throws {
+    @Test func withNoWindowOnScreenToFocusTheFocusedHiddenMemberIsMinimisedWithTheGroup() throws {
         let start = ContinuousClock.now
-        var (arranger, group, _, content) = try bareGroup(at: start)
+        var (arranger, group, _, _) = try bareGroup(at: start)
         _ = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
         _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start + .milliseconds(200))
         let focus = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(700))
-        #expect(selected(arranger, group) == b, "an invisible key window was left")
-        #expect(commands(focus).contains(.setFrame(b, content)), "b was not shown: \(focus)")
+        #expect(commands(focus) == [.minimize(b)], "the parked key window was left: \(commands(focus))")
+        _ = arranger.handle(.event(.windowStateChanged(b, .absent)), now: start + .milliseconds(900))
+        #expect(selected(arranger, group) == f, "the group changed its selected tab")
+        let back = arranger.handle(.event(.windowStateChanged(f, .present)), now: start + .seconds(5))
+        #expect(selected(arranger, group) == f && setFrames(back)[f] != nil, "restoring the selected member did not bring the group back: \(back)")
     }
 
     @Test func restoringTheSelectedMemberBringsTheGroupBackWithTheSameTab() throws {
