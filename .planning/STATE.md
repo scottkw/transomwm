@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
-status: planning
-stopped_at: Phase 7 planned (12 plans, verified)
-last_updated: "2026-11-02T00:33:16.345Z"
-last_activity: 2026-11-01
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: 7e2e6b4d66f4693e9d2a96436e40d2e6de479de4
+status: executing
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-11-02T00:55:41.970Z"
+last_activity: 2026-11-02
+last_activity_desc: Completed 07-01 (tab group tracer)
+state_head: e4290c052c6dd841c67cc025d428f81a1cd31cfb
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 79
+  completed_plans: 80
   percent: 67
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 6 — Overview, Spaces & Displays
+**Current focus:** Phase 7 — Tab Groups
 
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-11-01 — Phase 6 complete, transitioned to Phase 7
+Plan: 2 of 12
+Status: In progress
+Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
 Progress: [███████░░░] 67%
 
@@ -133,6 +133,7 @@ Progress: [███████░░░] 67%
 | Phase 06 P10 | 12min | 3 tasks | 9 files |
 | Phase 06 P11 | 11min | 3 tasks | 15 files |
 | Phase 06 P12 | 13min | 2 tasks | 3 files |
+| Phase 07 P01 | 18min | 3 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -363,6 +364,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-11: Restore macOS Window Settings lifts the takeover through ConflictController.takeover (canRestore true while on; N8 after)
 - [Phase 06]: 06-11: N10 posted in ArrangeController.start after N2/N3; launch-time N11 posted when ArrangeController.takeover is wired
 - [Phase 06]: 06-12: the intermittent VM Esc failure in OverviewIntegrationTests is recorded (deferred-items.md, WINDOWS.md), not patched, until a cause is found
+- [Phase 07]: 07-01: only a tab group's selected member is an unfit candidate; a group whose selected member is absent takes no part
+- [Phase 07]: 07-01: hidden tabs are sized parks (WindowCommand.park size, FramePlan.parkSizes); re-park when content size changes >0.5 pt
+- [Phase 07]: 07-01: commitGroup reuses commitDock at .tile(id,.center); Arranger decide/dropping/commitDock/missed are now internal
 
 ### Quick Tasks Completed
 
@@ -403,9 +407,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T00:33:15.675Z
-Stopped at: Phase 7 planned (12 plans, verified)
-Resume file: .planning/phases/07-tab-groups/07-01-PLAN.md
+Last session: 2026-11-02T00:55:41.269Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None
 
 ## Deferred Verification
 

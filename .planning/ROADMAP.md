@@ -349,11 +349,11 @@ Plans:
   5. Tab groups work for windows from different apps, both docked and floating on the Desktop tile
   6. Right-clicking a tab offers close and move-out
 
-**Plans:** 12 plans
+**Plans:** 1/12 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — Tracer: centre drop after 400 ms groups two docked windows; 32 pt band in `resolve`, sized parks, Group preview, VM park test
+- [x] 07-01-PLAN.md — Tracer: centre drop after 400 ms groups two docked windows; 32 pt band in `resolve`, sized parks, Group preview, VM park test
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 07-02-PLAN.md — Tab strip panels and click-to-switch (reveal, read back, then park); D-08 activation with focus guard; VM switch test
@@ -440,6 +440,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
 | 6. Overview, Spaces & Displays | 12/12 | Complete    | 2026-11-01 |
-| 7. Tab Groups | 0/TBD | Not started | - |
+| 7. Tab Groups | 1/12 | In Progress | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |
