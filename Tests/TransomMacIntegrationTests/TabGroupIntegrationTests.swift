@@ -218,4 +218,27 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         #expect(group.arrange.arranger.world[group.key]?.tree.node(group.leaf) == .tabs(windows: [group.hidden, group.selected], selected: 1),
             "the group changed its selected tab")
     }
+
+    /// D-07: the quit restore puts both members of a re-formed group (the hidden one parked) at the content rect, the
+    /// selected one raised last. Arranging is paused right after, standing in for Transom's exit.
+    @Test(.timeLimit(.minutes(1)))
+    func quitPlacesEveryGroupMemberAtTheContentRect() async throws {
+        let group = try await SavedGroup.start()
+        defer { group.close() }
+        defer { withExtendedLifetime(group.arrange) {} }
+        let (formed, last, content) = await group.formed()
+        try #require(formed, "the group never formed: windows at \(last)")
+        let rect = try #require(content)
+        try #require(group.arrange.arranger.isParked(group.hidden), "the hidden member was not parked")
+
+        let restored = group.arrange.restoreForTermination(limit: .seconds(2))
+        await group.arrange.setPaused(.user, true)  // no await before this: nothing reacts to the restore's moves
+        #expect(restored >= 1, "the hidden member was not written")
+        var frames: [Rect] = []
+        let placed = await waitUntil(timeout: .seconds(2)) {
+            frames = await group.frames()
+            return frames.count == 2 && frames.allSatisfy { near($0, rect, within: 2) }
+        }
+        #expect(placed, "windows at \(frames), content rect \(rect)")
+    }
 }

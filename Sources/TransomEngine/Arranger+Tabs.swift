@@ -344,6 +344,38 @@ extension Arranger {
         }
     }
 
+    /// The quit restore's group targets (D-07, Pitfall 3): every member of every group on every desk, at home or not, at
+    /// its group's home-view content rect (a docked group's leaf rect, a floating group's planned or stored frame, minus
+    /// the band). A collapsed group or a desk that cannot be planned gives none, so its members keep the stranded rule.
+    public func groupContentRects() -> [WindowIdentity: Rect] {
+        var rects: [WindowIdentity: Rect] = [:]
+        for (key, desk) in world.desks {
+            guard let display = displays.first(where: { $0.uuid == key.displayUUID }),
+                let plan = try? ViewPlanner.plan(
+                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                    collapsible: camera.collapsible)
+            else { continue }
+            for case let (id, .tabs(members, selected)) in desk.tree.nodes where plan.collapsed[members[selected]] == nil {
+                guard let rect = plan.resolution.nodeRects[id] else { continue }
+                for member in members { rects[member.identity] = TabBand.content(of: rect) }
+            }
+            for group in desk.desktop.groups {
+                let content = plan.frames[group.members[group.selected]] ?? TabBand.content(of: group.frame)
+                for member in group.members { rects[member.identity] = content }
+            }
+        }
+        return rects
+    }
+
+    /// Every group's selected member that is present, every desk: the quit restore raises these last, over their hidden members.
+    public func selectedGroupMembers() -> [WindowRef] {
+        world.desks.values.flatMap { desk in
+            desk.tree.nodes.values.compactMap { if case .tabs(let members, let selected) = $0 { members[selected] } else { nil } }
+                + desk.desktop.groups.map { $0.members[$0.selected] }
+        }
+        .filter { windows[$0.identity]?.state == .present }
+    }
+
     /// Whether `window` is a non-selected member of a docked or floating group: it never shows in focus moves or the overview.
     public func isHiddenTab(_ window: WindowRef) -> Bool {
         tabGroup(holding: window).map { $0.members[$0.selected] != window } ?? false

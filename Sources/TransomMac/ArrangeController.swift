@@ -954,17 +954,22 @@ import os
 
     /// Before Transom exits (SAFE-01, D-15): every parked or off-screen window Transom may move goes back on screen, within
     /// `limit` in total; a docked window parked or zoomed by the camera goes back to its home-view tile (D-D). Synchronous,
-    /// so it never waits on MainActor work (Pitfall 14). Returns how many writes finished.
+    /// so it never waits on MainActor work (Pitfall 14). Every member of every tab group goes to its group's content rect
+    /// and each group's selected window is raised last (D-07). Returns how many writes finished.
     @discardableResult
     public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
         gestures.stop(reason: "quit")
-        let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) })
+        let groupRects = arranger.groupContentRects()
+        let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) }).union(groupRects.keys)
         let plan = Recovery.terminationPlan(
             windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked,
-            homeTiles: arranger.homeTiles())
+            homeTiles: arranger.homeTiles().merging(groupRects) { $1 })
         guard !plan.isEmpty else { return 0 }
         let (seconds, attoseconds) = limit.components
-        let restored = system.restoreForTermination(plan, deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)
+        let restored = system.restoreForTermination(
+            plan, raising: arranger.selectedGroupMembers(), deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)
+        let members = plan.keys.filter { groupRects[$0.identity] != nil }.count
+        if members > 0 { logger.info("quit: \(members, privacy: .public) group members placed at their content rects") }
         logger.info("quit restore: \(restored, privacy: .public) of \(plan.count, privacy: .public) windows")
         return restored
     }

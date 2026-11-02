@@ -257,9 +257,12 @@ import os
     /// The quit restore (SAFE-01, Pattern 11, Pitfall 14): writes each frame synchronously on its app's thread, one
     /// app per worker, and blocks the caller until every write finished or `deadline` passed. Nothing here needs the main
     /// queue, which AppKit runs in modal-panel mode during `terminateLater`. Excluded apps, untracked windows and invalid
-    /// rects are skipped, as in `perform`. Returns how many writes finished.
-    public func restoreForTermination(_ frames: [TransomModel.WindowRef: Rect], deadline: DispatchTime) -> Int {
-        var jobs: [Int32: (thread: AXAppThread, writes: [(UInt32, Rect)])] = [:]
+    /// rects are skipped, as in `perform`. Each app's `raising` windows are raised after its writes, within the same
+    /// deadline (D-07: a group's selected window over its hidden members). Returns how many writes finished.
+    public func restoreForTermination(
+        _ frames: [TransomModel.WindowRef: Rect], raising: [TransomModel.WindowRef] = [], deadline: DispatchTime
+    ) -> Int {
+        var jobs: [Int32: (thread: AXAppThread, writes: [(UInt32, Rect)], raises: [UInt32])] = [:]
         for (ref, rect) in frames {
             guard rect.isValidGeometry, !ExclusionFilter.isExcluded(ref.bundleID, in: excluded), let info = tracker.info(for: ref.identity),
                 let thread = threads[ref.pid]
@@ -267,15 +270,21 @@ import os
                 logger.info("quit restore skips \(ref.description, privacy: .public)")
                 continue
             }
-            jobs[ref.pid, default: (thread, [])].writes.append((info.visibleMemberID ?? ref.windowID, rect))
+            jobs[ref.pid, default: (thread, [], [])].writes.append((info.visibleMemberID ?? ref.windowID, rect))
+        }
+        for ref in raising {
+            guard !ExclusionFilter.isExcluded(ref.bundleID, in: excluded), let info = tracker.info(for: ref.identity), let thread = threads[ref.pid]
+            else { continue }
+            jobs[ref.pid, default: (thread, [], [])].raises.append(info.visibleMemberID ?? ref.windowID)
         }
         let finished = OSAllocatedUnfairLock(initialState: 0)
         let group = DispatchGroup()
-        for (thread, writes) in jobs.values {
+        for (thread, writes, raises) in jobs.values {
             DispatchQueue.global(qos: .userInitiated).async(group: group) {
                 for (windowID, rect) in writes where thread.writeForTermination(windowID: windowID, rect: rect, deadline: deadline) {
                     finished.withLock { $0 += 1 }
                 }
+                for windowID in raises where DispatchTime.now() < deadline { _ = thread.raiseForTermination(windowID: windowID, deadline: deadline) }
             }
         }
         if group.wait(timeout: deadline) == .timedOut { logger.notice("quit restore: an app did not answer in time; abandoned") }

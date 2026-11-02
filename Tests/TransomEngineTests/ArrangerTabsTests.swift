@@ -1972,3 +1972,30 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(viaHotkey.contains(.info("group \(group.node): \(f) moved out via hotkey, landed floating")))
     }
 }
+
+/// D-07, RESEARCH Pitfall 3: safety paths for hidden tabs (quit, Restore All, crash relaunch).
+@Suite struct ArrangerTabSafetyTests {
+    @Test func groupContentRectsHoldsEveryMemberOfADockedGroupOnADeskAtHome() throws {
+        let start = ContinuousClock.now
+        let (arranger, _, _, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected, b and f parked
+        let rects = arranger.groupContentRects()
+        #expect(rects == [a.identity: content, b.identity: content, f.identity: content])
+        #expect(arranger.homeTiles().isEmpty, "the desk is at home, so homeTiles alone gives no target for the hidden members")
+        #expect(arranger.selectedGroupMembers() == [a])
+    }
+
+    @Test func groupContentRectsHoldsEveryMemberOfAFloatingGroup() throws {
+        let start = ContinuousClock.now
+        let (arranger, _, content) = try bareFloatingGroup(at: start)  // [t, f], f selected, t parked
+        #expect(arranger.groupContentRects() == [t.identity: content, f.identity: content])
+        #expect(arranger.selectedGroupMembers() == [f])
+    }
+
+    @Test func groupContentRectsUsesTheHomeViewWhileZoomedIn() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, zoom: true)
+        let leafA = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        _ = arranger.handle(.zoomTo(.node(leafA), displayUUID: "main"), now: start)
+        #expect(arranger.groupContentRects()[b.identity] == content, "group \(group.node) was not planned at home")
+    }
+}
