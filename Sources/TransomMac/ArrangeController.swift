@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import TransomEngine
 import TransomModel
 import TransomPrivate
@@ -67,6 +68,8 @@ import os
     /// The tab strips (TABS-02). A panel is made only when a group's strip first shows.
     let tabStripPanels = TabStripPanels()
     private let ghostPanel = TearOffGhostPanel()
+    /// The temporary Esc hotkeys while a tear-off ghost shows (UI-SPEC Surface 4), as for the zoom band.
+    private var tearOffEscapes: [Task<Void, Never>] = []
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
@@ -597,6 +600,18 @@ import os
         await run(arranger.handle(.command(command, focused: focused), now: .now))
     }
 
+    /// Registers Esc, ⇧Esc, ⌘Esc and ⌘⇧Esc (never ⌥⌘Esc, Force Quit) for the tear-off's duration; any cancels it.
+    private func listenForTearOffEscape() {
+        for task in tearOffEscapes { task.cancel() }
+        tearOffEscapes = ZoomInput.escapeModifiers.map { modifiers in
+            Task { [weak self] in
+                for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape, modifiers: modifiers)) where key == .keyDown {
+                    await self?.tabAction(.cancelTearOff)
+                }
+            }
+        }
+    }
+
     /// A tab action from a strip (and later the menu, hotkeys and URLs); the engine refuses it while paused or not ready.
     func tabAction(_ action: TabAction) async {
         await run(arranger.handle(.tab(action, ready: isReady()), now: .now))
@@ -662,9 +677,16 @@ import os
             case .raiseStrip(let group):
                 tabStripPanels.raise(group)
             case .tearOffGhost(let ghost?):
-                if ghostPanel.isShown { ghostPanel.move(to: ghost.pointer) } else { ghostPanel.show(ghost) }
+                if ghostPanel.isShown {
+                    ghostPanel.move(to: ghost.pointer)
+                } else {
+                    ghostPanel.show(ghost)
+                    listenForTearOffEscape()
+                }
             case .tearOffGhost(nil):
                 ghostPanel.hide()
+                for task in tearOffEscapes { task.cancel() }  // each stream unregisters its hotkey (T-07-17)
+                tearOffEscapes = []
             case .tabAnnouncement(let announcement):
                 let text = TabCopy.announcement(announcement, appName: Self.appName)
                 logger.info("\(text, privacy: .public)")

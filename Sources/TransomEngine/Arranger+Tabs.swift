@@ -92,6 +92,8 @@ public enum TabAction: Equatable, Sendable {
     case minimizeGroup(GroupKey)
     /// The strip's Float Group (docked group) or Dock Group (floating group) button.
     case toggleGroupFloat(GroupKey)
+    /// Esc during a tear-off (its temporary hotkeys).
+    case cancelTearOff
 }
 
 /// Close Group in progress (D-06): one member at a time, each hidden one shown first. `current` was sent its close
@@ -348,6 +350,7 @@ extension Arranger {
         case .closeGroup(let group): closeGroup(group, ready: ready, now: now)
         case .minimizeGroup(let group): minimizeGroup(group, ready: ready, now: now)
         case .toggleGroupFloat(let group): toggleGroupFloat(group, ready: ready)
+        case .cancelTearOff: cancelTearOff()
         }
     }
 
@@ -687,6 +690,13 @@ extension Arranger {
         } catch {
             return Decision(action: .miss)
         }
+    }
+
+    /// Esc: the tear-off ends with nothing changed; the rest of its press finds no session and does nothing.
+    mutating func cancelTearOff() -> [ArrangerEffect] {
+        tabs.tearPress = nil
+        guard let group = drag?.tearOffGroup else { return [] }
+        return endDrag() + [.tabAnnouncement(.tearOffCanceled), .info("group \(group.node): tear-off canceled (esc)")]
     }
 
     /// Mouse-up of a tear-off (UI-SPEC Surface 4 release table): over the source strip it cancels; otherwise exactly

@@ -1454,7 +1454,7 @@ public struct Arranger: Sendable {
     }
 
     /// Ends the session: stops the poll and withdraws the preview.
-    private mutating func endDrag() -> [ArrangerEffect] {
+    mutating func endDrag() -> [ArrangerEffect] {
         guard let session = drag else { return [] }
         drag = nil
         dragPlans = [:]
