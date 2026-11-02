@@ -46,6 +46,18 @@ import Testing
         #expect(beeps == 1)
     }
 
+    /// 07 UAT Bug 2: `open` activates Transom to deliver a URL, so a URL acts on the app frontmost before Transom; with
+    /// `open -g` Transom stays in the background and the frontmost app is used, as hotkeys and the menu always do.
+    @Test func aURLActsOnTheAppFrontmostBeforeTransom() {
+        let own: Int32 = 100
+        #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .url, own: own) == 7)
+        #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: nil, from: .url, own: own) == nil)
+        #expect(ArrangeController.commandPID(frontmost: 8, beforeTransom: 7, from: .url, own: own) == 8)
+        #expect(ArrangeController.commandPID(frontmost: nil, beforeTransom: 7, from: .url, own: own) == nil)
+        #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .hotkey, own: own) == own)
+        #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .menu, own: own) == own)
+    }
+
     private func waitFor(_ condition: () -> Bool) async -> Bool {
         for _ in 0..<100 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
         return condition()

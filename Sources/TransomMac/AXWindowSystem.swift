@@ -42,6 +42,9 @@ import os
     private var spaceObserver: (any NSObjectProtocol)?
     /// `NSWorkspace.didActivateApplicationNotification`: the activated app's AXMain window is reported focused (D-08).
     private var activationObserver: (any NSObjectProtocol)?
+    /// The last app other than Transom to become frontmost (at start, the frontmost one): `open` activates Transom to
+    /// deliver a URL, so the URL's command acts on this app's focused window (07 UAT Bug 2).
+    public private(set) var lastOtherFrontmostPID: Int32?
     private var spaceSwitches = SpaceSwitchMarks()
     private let spacesLogger = Logger(subsystem: "com.eightabyte.transom", category: "spaces")
     /// The latest Spaces list, nil while the lookup is off: refreshed at start and on Space and display changes.
@@ -147,6 +150,9 @@ import os
                 self.spaceSwitches.spaceDidChange(pids: self.threads.keys)
                 self.spaceDidChange()
             }
+        }
+        if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier, pid != ProcessInfo.processInfo.processIdentifier {
+            lastOtherFrontmostPID = pid
         }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -587,6 +593,7 @@ import os
     /// same (a hidden tab, 07 UAT Bug 1), so its refresh reads AXMain on the app's thread and reports it focused, once
     /// even when an AX focus hint for the same change comes too (`PendingFocus.activated`).
     private func appActivated(_ pid: Int32) {
+        if pid != ProcessInfo.processInfo.processIdentifier { lastOtherFrontmostPID = pid }
         guard threads[pid] != nil else { return }
         pendingFocus.activated(pid: pid)
         scheduler?.schedule(pid: pid)

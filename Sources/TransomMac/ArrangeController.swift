@@ -516,10 +516,19 @@ import os
     public var isReady: () -> Bool = { true }
 
     /// The frontmost app's focused tracked window and the access state: what availability depends on.
-    public func commandContext() -> CommandContext {
-        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+    public func commandContext(from source: CommandSource = .hotkey) -> CommandContext {
+        let pid = Self.commandPID(
+            frontmost: NSWorkspace.shared.frontmostApplication?.processIdentifier, beforeTransom: system.lastOtherFrontmostPID, from: source)
         return CommandContext(
             focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady(), displayUUID: pointerDisplay().uuid)
+    }
+
+    /// The app whose focused window a command acts on: the frontmost one, except that a URL arriving with Transom
+    /// frontmost acts on the app frontmost before it, since `open` activates Transom to deliver the URL (07 UAT Bug 2).
+    static func commandPID(
+        frontmost: Int32?, beforeTransom: Int32?, from source: CommandSource, own: Int32 = ProcessInfo.processInfo.processIdentifier
+    ) -> Int32? {
+        source == .url && frontmost == own ? beforeTransom : frontmost
     }
 
     /// The pointer in top-left global points and the display under it: where every camera command acts (UI-SPEC: hotkeys,
@@ -552,7 +561,7 @@ import os
             await dispatchCamera(camera, from: source)
             return
         }
-        let context = commandContext()
+        let context = commandContext(from: source)
         if case .tabs(let tab) = command {
             // The engine refuses with an announcement (Surface 7); a URL refusal only logs.
             let via: TabLeaveSource = switch source { case .hotkey: .hotkey; case .menu: .menu; case .url: .url }
@@ -576,7 +585,7 @@ import os
             if source == .url { zoomInputLog.info("url \(String(describing: camera), privacy: .public) ignored: zoom off") }
             return
         }
-        let context = commandContext()
+        let context = commandContext(from: source)
         if case .overview = camera {  // the shell's: it needs no pointer display and is allowed while paused
             guard context.ready else {
                 let text = OverviewCopy.refusedNotReady
