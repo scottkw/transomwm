@@ -2354,3 +2354,19 @@ private func parkedFrame(_ content: Rect) -> Rect {
         #expect(!arranger.isHiddenTab(b))
     }
 }
+
+/// WR-04: the window under the pointer is never parked before mouse-up, even when a tab switch hides it mid-drag.
+@Suite struct ArrangerTabDragParkTests {
+    @Test func aTabSwitchDuringAWholeGroupDragNeverParksTheDraggedWindow() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)  // [b, f], f selected
+        _ = drag(&arranger, f, from: content, to: Point(x: 1200, y: 600), at: start)
+        try #require(arranger.drag?.window == f, "no drag session on f")
+        let next = arranger.handle(.tab(.command(.next, focused: f, via: .hotkey), ready: true), now: start + .milliseconds(100))
+        #expect(selected(arranger, group) == b, "the tab command did not select b: \(next)")
+        let back = arranger.handle(.event(.frameApplied(b, requested: content, actual: content)), now: start + .milliseconds(140))
+        #expect(!parks(back).contains { $0.window == f }, "the dragged window was parked: \(parks(back))")
+        #expect(!arranger.isParked(f))
+        #expect(!parks(arranger.handle(.gap(8), now: start + .milliseconds(200))).contains { $0.window == f }, "a later replan parked it")
+    }
+}

@@ -2025,6 +2025,11 @@ public struct Arranger: Sendable {
             for window in plan.parks
             where windows[window.identity]?.isExcluded == false && !camera.unparkedNew.contains(window.identity) && window != tabs.pendingReveal?.previous
             {
+                // Never written before mouse-up (D-23), a tab switched mid-drag included (WR-04); one already parked stays so.
+                if window == drag?.window {
+                    if parkRequested.contains(window.identity) { parkedNow.insert(window.identity) }
+                    continue
+                }
                 parkedNow.insert(window.identity)
                 let size = plan.parkSizes[window]
                 let resized = size.map { new in
