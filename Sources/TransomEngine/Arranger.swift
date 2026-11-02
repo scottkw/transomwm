@@ -112,6 +112,9 @@ public enum ArrangerEffect: Equatable, Sendable {
     case raiseStrip(GroupKey)
     /// Show or move the tear-off ghost at this pointer; nil hides it (UI-SPEC Surface 4).
     case tearOffGhost(TearOffGhost?)
+    /// A newly selected tab is in place (its read-back matched): with zoom on the shell captures it once in the
+    /// background (UI-SPEC Surface 6, Snapshots).
+    case tabRevealed(WindowRef)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.

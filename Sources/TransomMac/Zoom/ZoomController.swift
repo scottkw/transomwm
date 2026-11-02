@@ -412,6 +412,20 @@ import os
 
     func cachedSnapshot(_ id: CGWindowID) -> CGImage? { capture.cached(id) }
 
+    /// A newly selected tab is in place (07 UI-SPEC Surface 6): captured once in the background at its frame (the content
+    /// rect) × the backing scale, into the cache only, so the next move or overview shows it. Nothing on screen changes;
+    /// without Screen Recording nothing is captured.
+    func captureRevealed(_ window: TransomModel.WindowRef) {
+        guard checkPermission(), let id = cgWindow(window), let info = windowInfo(window.identity) else { return }
+        let scale = info.displayUUID.flatMap { Displays.screen(uuid: $0) }?.backingScaleFactor ?? 2
+        let size = CGSize(width: info.frame.width * scale, height: info.frame.height * scale)
+        Task { [weak self] in
+            guard let self else { return }
+            await self.capture.refresh([(id, size)])
+            self.updateFailing()
+        }
+    }
+
     // MARK: Screen Recording (UI-SPEC Surface 2)
 
     /// Read at every move start. The state is logged the first time and on every change; a revoke once per session,

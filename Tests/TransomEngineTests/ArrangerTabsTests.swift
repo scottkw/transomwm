@@ -2195,3 +2195,27 @@ private func cameraMoves(_ effects: [ArrangerEffect]) -> [CameraMove] {
         #expect(blocks?.first?.groupSize == 2)
     }
 }
+
+/// UI-SPEC Surface 6, Snapshots: a tab in place is announced to the shell once, so it can be captured in the background.
+@Suite struct ArrangerTabRevealedTests {
+    private func revealed(_ effects: [ArrangerEffect]) -> [WindowRef] {
+        effects.compactMap { if case .tabRevealed(let window) = $0 { window } else { nil } }
+    }
+
+    @Test func aMatchedReadBackEmitsTabRevealedOnce() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, content) = try bareGroup(at: start)
+        let select = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        #expect(revealed(select).isEmpty, "revealed before the read-back")
+        let back = arranger.handle(.event(.frameApplied(b, requested: content, actual: content)), now: start + .milliseconds(40))
+        #expect(revealed(back) == [b])
+        #expect(revealed(arranger.handle(.event(.frameApplied(b, requested: content, actual: content)), now: start + .milliseconds(80))).isEmpty)
+    }
+
+    @Test func aRevealThatTimesOutEmitsNone() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        #expect(revealed(arranger.handle(.tick, now: start + .seconds(1))).isEmpty)
+    }
+}

@@ -683,6 +683,8 @@ import os
                 collapsedPanels.show(blocks, on: displayUUID)
             case .tabStrips(let strips, let displayUUID):
                 tabStripPanels.show(strips, on: displayUUID, space: arranger.displays.first { $0.uuid == displayUUID }?.currentSpaceID)
+            case .tabRevealed(let window):
+                if zoomEnabled { zoom().captureRevealed(window) }
             case .raiseStrip(let group):
                 tabStripPanels.raise(group)
             case .tearOffGhost(let ghost?):

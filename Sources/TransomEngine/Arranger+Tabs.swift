@@ -484,6 +484,7 @@ extension Arranger {
         tabs.pendingReveal = nil
         let ms = Int((now - pending.started) / .milliseconds(1))
         return [.info("group \(pending.group.node): select \(window) via \(pending.source), \(ms) ms")] + replan() + closeProgress(now: now)
+            + [.tabRevealed(window)]
     }
 
     /// On every tick: expired focus suppressions go, and a pending reveal whose deadline passed with no matching
