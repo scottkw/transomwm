@@ -553,19 +553,23 @@ override func rightMouseDown(with event: NSEvent) {
 | A6 | Parking at the content size works for every app (no app refuses an off-screen frame of that size) | Pattern 5 | Same risk as Phase 4 parking, which passed UAT; the 1 s reveal failure rule covers refusals |
 | A7 | `.stationary` collection behaviour leaves the strip in place during Mission Control while member windows shrink (cosmetic) | Pattern 6 | Cosmetic only; Transom's Mission Control takeover may make it moot |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Floating group model shape**
    - What we know: a sidecar on `DesktopLayer` keeps every existing path working and decodes old files; a separate list is cleaner but touches ~80 call sites.
    - Recommendation: sidecar (Pattern 2). Planner should make this the first model task and include a call-site audit task for the rules listed in Pattern 2.
+   - RESOLVED: sidecar group list on `DesktopLayer`, schema stays 2 (07-04).
 2. **Focus suppression length (A1)**
    - Recommendation: 1 s per group after minimise/close/selection change; constant in the engine; tune in the VM test.
+   - RESOLVED: 1 s engine constant, tuned in the VM test (07-02, 07-05).
 3. **Strip follow source during a drag**
    - Recommendation: shell-side via the existing `DragFramePoller` callback with an engine-tested geometry helper; no 60 Hz effects.
+   - RESOLVED: shell-side `DragFramePoller` follow with an engine-tested geometry helper and a 500 ms backstop (07-03).
 4. **Rehome of a floating group member to another display/Space**
-   - What's unclear: whether to move the whole group or break the member out.
+   - Question: whether to move the whole group or break the member out.
    - Recommendation: move the whole group when the **selected** member is rehomed; ignore hidden members (they are parked, already guarded by `parkRequested` in `rehome`).
-5. **UI-SPEC subrole spelling** — use `.tabButtonSubrole` (Pitfall 11); no product decision needed.
+   - RESOLVED: whole-group rehome when the selected member is rehomed; hidden members ignored (07-06).
+5. **UI-SPEC subrole spelling** — use `.tabButtonSubrole` (Pitfall 11); no product decision needed. RESOLVED: `.tabButtonSubrole` (07-03).
 
 ## Environment Availability
 
