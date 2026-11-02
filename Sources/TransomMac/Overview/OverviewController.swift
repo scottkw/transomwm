@@ -626,7 +626,8 @@ import os
             let list = spaces?.displays.first { $0.displayUUID == display.uuid }
             let current = list?.current ?? display.currentSpaceID
             let shown = arranger.windows.values.compactMap { info -> (WindowInfo, Int)? in
-                guard info.displayUUID == display.uuid, !info.isExcluded, info.state == .present else { return nil }
+                // A hidden tab is never shown, docked or floating (UI-SPEC Surface 3).
+                guard info.displayUUID == display.uuid, !info.isExcluded, info.state == .present, !arranger.isHiddenTab(info.window) else { return nil }
                 if let current, let on = info.spaces, !on.contains(current) { return nil }
                 let id = info.visibleMemberID ?? info.window.windowID
                 guard let depth else { return (info, 0) }
@@ -654,7 +655,7 @@ import os
         guard let desk = arranger.world[key] else { return [] }
         let planned = (try? Planner.plan(desk: desk, area: area, gap: arranger.gap, mins: [:]).frames) ?? [:]
         let docked = desk.tree.windows.compactMap { window in planned[window].map { OverviewWindow(window: window, frame: $0) } }
-        let floating = desk.desktop.windows.filter { $0.state == .present }.compactMap { floater in
+        let floating = desk.desktop.windows.filter { $0.state == .present && !arranger.isHiddenTab($0.window) }.compactMap { floater in
             (planned[floater.window] ?? arranger.windows[floater.window.identity]?.frame).map { OverviewWindow(window: floater.window, frame: $0) }
         }
         return docked + floating

@@ -1247,7 +1247,8 @@ public struct Arranger: Sendable {
         let resolution = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution
         let leaf = desk.tree.leaf(containing: window)
         guard let rect = leaf.flatMap({ resolution.nodeRects[$0] }) ?? desk.desktop.frame(of: window) else { return [.beep] }
-        let floating = desk.desktop.windows.filter { $0.state == .present }.map(\.window)
+        // A hidden tab never takes focus this way (UI-SPEC Surface 3); its group's selected member stands for it.
+        let floating = desk.desktop.windows.filter { $0.state == .present && !isHiddenTab($0.window) }.map(\.window)
         guard let id = Neighbours.neighbour(
             of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: resolution, gap: gap, recency: recency(on: desk))
         else { return [.beep] }
