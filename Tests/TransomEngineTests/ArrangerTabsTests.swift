@@ -546,7 +546,8 @@ private func selected(_ arranger: Arranger, _ group: GroupKey) -> WindowRef? {
         var (arranger, group, _, _) = try bareGroup(at: start)
         _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
         let echo = arranger.handle(.event(.windowFocused(b)), now: start + .seconds(2))
-        #expect(commands(echo).isEmpty && !echo.contains(.raiseStrip(group)), "the echo selected again: \(echo)")
+        #expect(commands(echo).isEmpty && !echo.contains { if case .tabAnnouncement = $0 { true } else { false } }, "the echo selected again: \(echo)")
+        #expect(selected(arranger, group) == b)
         #expect(arranger.tabs.pendingReveal?.revealed == b, "the echo ended the reveal")
     }
 
@@ -582,6 +583,24 @@ private func selected(_ arranger: Arranger, _ group: GroupKey) -> WindowRef? {
         #expect(selected(arranger, group) == after, "a focus after a close switched tabs")
         _ = arranger.handle(.event(.windowFocused(other)), now: start + .milliseconds(1500))
         #expect(selected(arranger, group) == other)
+    }
+
+    @Test func focusingTheSelectedMemberRaisesItsStripAndAReplanNever() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        let focused = arranger.handle(.event(.windowFocused(f)), now: start)
+        #expect(focused.filter { $0 == .raiseStrip(group) }.count == 1, "no single raise on focus: \(focused)")
+        #expect(commands(focused).isEmpty, "focusing the selected member wrote a window: \(focused)")
+        #expect(!arranger.handle(.gap(8), now: start).contains(.raiseStrip(group)), "an unchanged replan raised the strip")
+        #expect(!arranger.handle(.event(.windowFocused(a)), now: start).contains { if case .raiseStrip = $0 { true } else { false } },
+            "a window outside the group raised a strip")
+    }
+
+    @Test func anActivationRaisesTheStripOnce() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        let effects = arranger.handle(.event(.windowFocused(b)), now: start)
+        #expect(effects.filter { $0 == .raiseStrip(group) }.count == 1, "an activation raised \(effects)")
     }
 
     @Test func theCameraWidenRunsAfterTheSelectionOnTheGroupsLeaf() throws {

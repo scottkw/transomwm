@@ -134,9 +134,15 @@ final class TabStripView: NSView {
 /// excluded from capture. A panel covers only the strip rect, which no window occupies, so it steals no click.
 @MainActor final class TabStripPanels {
     var onAction: ((TabAction) -> Void)?
+    /// The CG bounds of a member's window now (its visible tab), for the 500 ms backstop; nil when it has none.
+    var bounds: ((TransomModel.WindowRef) -> Rect?)?
     private var shown: [String: [StripPanel]] = [:]
     private var pool: [StripPanel] = []
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+    private var backstop: Timer?
+    /// Per group, the drifted strip rect the last backstop tick saw: a drift is followed only when two ticks agree,
+    /// so a revealed member still at its park for a moment never pulls the strip there.
+    private var drift: [GroupKey: Rect] = [:]
 
     /// The window numbers of the strips on screen: a press on one is never a window drag (Pitfall 4).
     var windowNumbers: Set<Int> { Set(shown.values.joined().map(\.windowNumber)) }
@@ -167,13 +173,67 @@ final class TabStripView: NSView {
                 view.strip = strip
                 view.onAction = { [weak self] in self?.onAction?($0) }
             }
-            let rect = Coordinates.appKit(fromTopLeft: strip.frame, primaryHeight: primaryHeight)
-            panel.setFrame(NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height), display: true)
+            place(panel, strip.frame, primaryHeight: primaryHeight)
             if kept == nil || !panel.isVisible { fadeIn(panel) }
             next.append(panel)
         }
         for panel in old { fadeOut(panel) }
         shown[displayUUID] = next.isEmpty ? nil : next
+        updateBackstop()
+    }
+
+    /// The group whose selected member is `window`, when its strip is on screen.
+    func group(selecting window: TransomModel.WindowRef) -> GroupKey? {
+        shown.values.joined().lazy.compactMap { Self.view($0)?.strip }.first { $0.members[$0.selected] == window }?.group
+    }
+
+    /// Moves `group`'s strip over the content rect its selected window has now (a drag, or the app moving it), with
+    /// no animation (UI-SPEC Surface 2, Following the group).
+    func follow(_ group: GroupKey, contentBounds: Rect) {
+        guard let panel = shown.values.joined().first(where: { Self.view($0)?.strip.group == group }) else { return }
+        place(panel, TabBand.strip(of: TabBand.frame(ofContent: contentBounds)), primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
+    }
+
+    private func place(_ panel: StripPanel, _ frame: Rect, primaryHeight: CGFloat) {
+        let rect = Coordinates.appKit(fromTopLeft: frame, primaryHeight: primaryHeight)
+        let target = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
+        guard panel.frame != target else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        panel.setFrame(target, display: true)
+        CATransaction.commit()
+    }
+
+    /// Runs only while a strip is shown (T-07-09): CG bounds reads, no AX.
+    private func updateBackstop() {
+        if shown.isEmpty {
+            backstop?.invalidate()
+            backstop = nil
+            drift = [:]
+        } else if backstop == nil {
+            backstop = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.checkDrift() }
+            }
+        }
+    }
+
+    /// The 500 ms backstop (D-04): a strip whose selected window sits more than 2 pt from the planned content rect
+    /// follows it; once the window is back, the strip returns to the planned frame.
+    private func checkDrift() {
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        var seen: [GroupKey: Rect] = [:]
+        for panel in shown.values.joined() {
+            guard let strip = Self.view(panel)?.strip, let now = bounds?(strip.members[strip.selected]) else { continue }
+            let followed = TabBand.strip(of: TabBand.frame(ofContent: now))
+            let planned = abs(followed.x - strip.frame.x) <= 2 && abs(followed.y - strip.frame.y) <= 2 && abs(followed.width - strip.frame.width) <= 2
+            if planned {
+                place(panel, strip.frame, primaryHeight: primaryHeight)
+            } else {
+                if drift[strip.group] == followed { place(panel, followed, primaryHeight: primaryHeight) }
+                seen[strip.group] = followed
+            }
+        }
+        drift = seen
     }
 
     /// Orders this group's strip front (one of its members was just selected).

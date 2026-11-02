@@ -142,6 +142,10 @@ import os
         tabStripPanels.onAction = { [weak self] action in
             Task { await self?.tabAction(action) }
         }
+        tabStripPanels.bounds = { [weak self] window in
+            let id = self?.arranger.windows[window.identity]?.visibleMemberID ?? window.windowID
+            return id < WindowIdentity.syntheticIDBase ? DragFramePoller.bounds(of: id) : nil
+        }
     }
 
     /// A new gap from the Gaps submenu: applied at once, or on Resume while paused (D-27).
@@ -490,6 +494,8 @@ import os
                 self.dragTrace.polls += 1
                 if self.dragTrace.firstCG == nil { self.dragTrace.firstCG = frame }
                 self.dragTrace.lastCG = frame
+                // The dragged window is a group's selected member: its strip moves with it every poll (D-04).
+                if let group = self.tabStripPanels.group(selecting: window) { self.tabStripPanels.follow(group, contentBounds: frame) }
                 await self.run(self.arranger.handle(.dragFrame(window.identity, frame), now: .now))
             }
         }

@@ -853,6 +853,7 @@ public struct Arranger: Sendable {
                 focusOrder.insert(window.identity, at: 0)
                 // D-08: a hidden member is selected before the widen below, which then sees the group's leaf.
                 selected = activated(window, now: now)
+                if selected.isEmpty { selected = raisedStrip(of: window) }
             case .appTerminated(let pid):
                 // Its tracked windows are still in `windows` here and close on their own windowDestroyed.
                 faults += closeDormant { $0.pid == pid }

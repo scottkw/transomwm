@@ -233,6 +233,15 @@ extension Arranger {
         return select(window, via: .activation, ready: true, now: now)
     }
 
+    /// The selected member of a group was focused: its strip comes front (UI-SPEC Surface 2 Ordering), so a floating
+    /// window raised over the group earlier stops covering it. Only on focus, never on a replan.
+    func raisedStrip(of window: WindowRef) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let leaf = world[key]?.tree.leaf(containing: window),
+            case .tabs(let members, let selected)? = world[key]?.tree.node(leaf), members[selected] == window
+        else { return [] }
+        return [.raiseStrip(GroupKey(desk: key, node: leaf))]
+    }
+
     /// A member of a group closed or went absent: macOS may focus another member next, which must not flip the group.
     mutating func suppressFocus(ofGroupHolding window: WindowRef, now: ContinuousClock.Instant) {
         guard let key = deskKey(of: window), let leaf = world[key]?.tree.leaf(containing: window),
