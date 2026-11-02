@@ -14,7 +14,7 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
 
 /// A saved group [0, 1] with window 1 selected, re-formed by a fresh controller over two fixture windows. The store
 /// is a temporary directory, never the user's real layout.json.
-@MainActor private struct SavedGroup {
+@MainActor struct SavedGroup {
     let fixture: FixtureProcess
     let directory: URL
     let arrange: ArrangeController

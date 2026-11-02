@@ -65,7 +65,7 @@ import os
     /// The collapsed blocks at rest (ZOOM-13). A panel is made only when a block first shows.
     private let collapsedPanels = CollapsedPanels()
     /// The tab strips (TABS-02). A panel is made only when a group's strip first shows.
-    private let tabStripPanels = TabStripPanels()
+    let tabStripPanels = TabStripPanels()
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
@@ -214,6 +214,8 @@ import os
         Task { [weak self, system] in
             for await event in system.events {
                 guard let self else { return }
+                // Before the replan, which sends the new desk's strips.
+                if case .spaceChanged(let uuid, let space) = event { self.tabStripPanels.spaceChanged(displayUUID: uuid, to: space) }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
                 if case .spaceChanged(let uuid, let space) = event {
@@ -653,7 +655,7 @@ import os
             case .collapsedBlocks(let blocks, let displayUUID):
                 collapsedPanels.show(blocks, on: displayUUID)
             case .tabStrips(let strips, let displayUUID):
-                tabStripPanels.show(strips, on: displayUUID)
+                tabStripPanels.show(strips, on: displayUUID, space: arranger.displays.first { $0.uuid == displayUUID }?.currentSpaceID)
             case .raiseStrip(let group):
                 tabStripPanels.raise(group)
             case .tabAnnouncement(let announcement):

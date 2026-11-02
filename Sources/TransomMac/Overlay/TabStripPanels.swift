@@ -1,6 +1,7 @@
 import AppKit
 import TransomEngine
 import TransomModel
+import os
 
 /// Never key or main: a click on a tab leaves the frontmost app frontmost and never activates Transom (T-07-03).
 private final class StripPanel: NSPanel {
@@ -310,6 +311,9 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     /// Per group, the drifted strip rect the last backstop tick saw: a drift is followed only when two ticks agree,
     /// so a revealed member still at its park for a moment never pulls the strip there.
     private var drift: [GroupKey: Rect] = [:]
+    /// Per display, the Space its shown strips belong to.
+    private var spaces: [String: UInt64] = [:]
+    private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "tabs")
 
     /// The window numbers of the strips on screen: a press on one is never a window drag (Pitfall 4).
     var windowNumbers: Set<Int> { Set(shown.values.joined().map(\.windowNumber)) }
@@ -329,7 +333,8 @@ final class TabStripView: NSView, NSViewToolTipOwner {
 
     /// Shows exactly `strips` on that display; empty hides them. A new group's strip fades in over 120 ms, a gone one
     /// fades out over 120 ms; a selection or title change redraws at once.
-    func show(_ strips: [TabStrip], on displayUUID: String) {
+    func show(_ strips: [TabStrip], on displayUUID: String, space: UInt64?) {
+        spaces[displayUUID] = space
         var old = shown[displayUUID] ?? []
         var next: [StripPanel] = []
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
@@ -403,9 +408,22 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         drift = seen
     }
 
-    /// Orders this group's strip front (one of its members was just selected).
+    /// Orders this group's strip front (one of its members was just selected). A strip out for a Space change stays out.
     func raise(_ group: GroupKey) {
-        shown.values.joined().first { Self.view($0)?.strip.group == group }?.orderFrontRegardless()
+        shown.values.joined().first { $0.isVisible && Self.view($0)?.strip.group == group }?.orderFrontRegardless()
+    }
+
+    /// The display now shows `space`, before the Arranger re-plans (UI-SPEC Surface 2, Space changes): its strips are
+    /// ordered out at once (macOS is animating), or faded back in when they belong to `space`, which covers a return
+    /// while arranging is paused and no new strips come. The replan's strips for the new desk then replace them.
+    func spaceChanged(displayUUID: String, to space: UInt64?) {
+        guard let space else { return }  // Spaces unknown: macOS keeps each strip on its own Space
+        let panels = shown[displayUUID] ?? []
+        if space == spaces[displayUUID] {
+            for panel in panels where !panel.isVisible { fadeIn(panel) }
+        } else {
+            for panel in panels { panel.orderOut(nil) }
+        }
     }
 
     private func fadeIn(_ panel: StripPanel) {
@@ -447,9 +465,14 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         return panel
     }
 
-    /// `panel`, or a new one with its strip when macOS left it on another Space (`leftOnAnotherSpace`).
+    /// `panel`, or a new one with its strip when macOS left it, still ordered in, on another Space
+    /// (`leftOnAnotherSpace`). Never asked of a hidden panel: an ordered-out one reports off the active Space too,
+    /// and ordering it in brings it to the shown one (Pitfall 8, no churn).
     private func onShownSpace(_ panel: StripPanel, _ displayUUID: String) -> StripPanel {
-        guard let view = Self.view(panel), panel.leftOnAnotherSpace("display \(displayUUID): tab strip panel") else { return panel }
+        guard panel.isVisible, let view = Self.view(panel),
+            panel.leftOnAnotherSpace("display \(displayUUID): tab strip for group \(view.strip.group.node)")
+        else { return panel }
+        Self.logger.info("strip for group \(view.strip.group.node, privacy: .public) replaced: left on another Space")
         panel.orderOut(nil)
         let new = makePanel(view.strip)
         new.setFrame(panel.frame, display: false)
