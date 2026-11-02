@@ -33,4 +33,16 @@ import Testing
     func selectionAndRefusalsMatchTheContract(announcement: TabAnnouncement, app: String, expected: String) {
         #expect(TabCopy.announcement(announcement, appName: { _ in app }) == expected)
     }
+
+    @Test func theStripReadsAsATabGroup() {
+        #expect(TabCopy.stripLabel(count: 2) == "Tab group, 2 windows")
+        #expect(TabCopy.tabLabel(app: "Notes", title: "") == "\u{201C}Notes\u{201D}")
+        #expect(TabCopy.tabLabel(app: "Notes", title: "List") == "\u{201C}Notes\u{201D}, List")
+        #expect(TabCopy.tabHelp(index: 2, count: 3) == "Tab 2 of 3")
+        #expect(TabCopy.moreTabs == "More Tabs")
+        #expect(TabCopy.moreTabsHelp(1) == "1 more tab")
+        #expect(TabCopy.moreTabsHelp(3) == "3 more tabs")
+        #expect(TabCopy.titleOrApp(title: "", app: "Notes") == "Notes")
+        #expect(TabCopy.titleOrApp(title: "List", app: "Notes") == "List")
+    }
 }
