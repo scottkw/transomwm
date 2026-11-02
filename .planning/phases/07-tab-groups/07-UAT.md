@@ -59,6 +59,7 @@ Re-run on the rebuilt HEAD `1267086` (2026-11-01):
 
 5. Type in TextEdit without saving, then click Close Group. *Expected: TextEdit asks whether to save, in view in the group's place; nothing else closes until you answer.*
    result: pending
+   fix (2026-11-02, for the re-check): the first host run found that Close Group stopped 1 s after TextEdit's prompt appeared, so the rest of the group stayed open even after Save or Delete, and that it started with no confirmation. Now: clicking Close Group first shows "Close all {n} windows in this tab group?" (Close Group / Cancel, "Do not show this again"). After Close Group, TextEdit's prompt appears and Transom waits for it (log "close waits on …'s prompt"). **Save or Delete:** TextEdit closes and the other members close too. **Cancel:** TextEdit stays open and selected, nothing else closes, VoiceOver/log says "“TextEdit” didn't close" about 1.5-2.5 s after Cancel. Checking "Do not show this again" and choosing Close Group stops the alert for later clicks (`defaults delete com.eightabyte.transom.debug tabs.confirmCloseGroup` brings it back). Engine behaviour is covered by `ArrangerCloseGroupTests`; the AX sheet read and the alert were not run on the host or in the VM.
 
 ## 2. VM checks (Tart VM pane-test, fixture windows, one at a time)
 
