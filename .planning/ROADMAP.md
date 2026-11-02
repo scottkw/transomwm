@@ -349,7 +349,7 @@ Plans:
   5. Tab groups work for windows from different apps, both docked and floating on the Desktop tile
   6. Right-clicking a tab offers close and move-out
 
-**Plans:** 11/12 plans executed
+**Plans:** 12/12 plans executed
 
 Plans:
 **Wave 1**
@@ -386,7 +386,7 @@ Plans:
 - [x] 07-11-PLAN.md — Groups on the zoom stage and in the overview: strip layer, collapsed group label, counts, background capture
 
 **Wave 12** *(blocked on Wave 11 completion)*
-- [ ] 07-12-PLAN.md — Phase gate: full suite, VM suites one at a time, Debug build, 07-UAT.md (host checklist, VM checks, backstops)
+- [x] 07-12-PLAN.md — Phase gate: full suite, VM suites one at a time, Debug build, 07-UAT.md (host checklist, VM checks, backstops)
 
 **UI hint**: yes
 **Research**: Standard patterns; builds on `Node.tabs` (Phase 1), native-tab detection (Phase 2) and window parking (Phase 4)
@@ -440,6 +440,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Zoom Camera | 8/8 | Complete    | 2026-10-28 |
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
 | 6. Overview, Spaces & Displays | 12/12 | Complete    | 2026-11-01 |
-| 7. Tab Groups | 11/12 | In Progress | - |
+| 7. Tab Groups | 12/12 | In Progress | - |
 | 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |
