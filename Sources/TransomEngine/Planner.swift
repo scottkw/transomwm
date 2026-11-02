@@ -80,8 +80,13 @@ public enum Planner {
             let tiles = Array(resolution.windowRects.values)
             for window in floating {
                 let want = wanted[window.window.identity] ?? window.frame
-                let target = tiles.contains(where: want.overlaps) ? clamp(want, into: desktop) : want
-                if tiles.contains(where: window.frame.overlaps) || !near(target, window.frame, within: 0.5) { frames[window.window] = target }
+                // A group's selected member stands for its whole group frame: the strip band is clamped with it.
+                let grouped = selectedMembers.contains(window.window)
+                let outer = grouped ? TabBand.frame(ofContent: want) : want
+                let clamped = clamp(outer, into: desktop)
+                let target = tiles.contains(where: outer.overlaps) ? (grouped ? TabBand.content(of: clamped) : clamped) : want
+                let now = grouped ? TabBand.frame(ofContent: window.frame) : window.frame
+                if tiles.contains(where: now.overlaps) || !near(target, window.frame, within: 0.5) { frames[window.window] = target }
             }
         }
         let presentSet = Set(present.map(\.window)), parkedByDesktop = Set(parks)

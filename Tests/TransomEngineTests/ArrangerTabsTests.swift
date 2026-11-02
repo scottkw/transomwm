@@ -769,6 +769,20 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         #expect(plan.parkSizes[f] == nil, "the selected member parks at its own size")
     }
 
+    @Test func aFloatingGroupCrossingATileIsClampedWholeStripIncluded() throws {
+        var desk = Desk()
+        var ids = IDSource()
+        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        let desktop = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
+        // Over a's tile on the left, its strip above the Desktop's top edge, its content rect inside it.
+        let frame = Rect(x: desktop.minX - 50, y: desktop.minY - 20, width: 400, height: 300)
+        try desk.desktop.add(t, frame: frame)
+        try desk.desktop.group(id: try ids.make(), target: t, adding: f)
+        let planned = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[f])
+        #expect(planned == TabBand.content(of: Planner.clamp(frame, into: desktop)), "planned \(planned) in \(desktop)")
+        #expect(TabBand.frame(ofContent: planned).minY >= desktop.minY, "the strip sticks out past the Desktop's top edge")
+    }
+
     @Test func theSelectedMembersBandCountsTowardTheDesktopMinimum() throws {
         var desk = Desk()
         var ids = IDSource()
