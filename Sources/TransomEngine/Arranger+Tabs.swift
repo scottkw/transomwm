@@ -407,6 +407,16 @@ extension Arranger {
         return [.raiseStrip(ref.key)]
     }
 
+    /// D-12: `window` left `group` (the model already picked the right, else left, neighbour). A group left with one
+    /// window has dissolved under the same NodeID, its survivor taking the whole frame: "Tab group ended", except on
+    /// Close Group's way through the members, where the windows vanishing is the feedback.
+    func dissolved(_ group: TabGroupRef, losing window: WindowRef) -> [ArrangerEffect] {
+        guard group.members.count == 2, let survivor = group.members.first(where: { $0 != window }), tabGroup(holding: survivor) == nil
+        else { return [] }
+        let spoken: [ArrangerEffect] = tabs.closeQueue?.group == group.key ? [] : [.tabAnnouncement(.ended)]
+        return spoken + [.info("group \(group.key.node): dissolved, \(survivor) keeps the \(group.floating ? "frame" : "tile")")]
+    }
+
     /// A member of a group closed or went absent: macOS may focus another member next, which must not flip the group.
     mutating func suppressFocus(ofGroupHolding window: WindowRef, now: ContinuousClock.Instant) {
         guard let ref = tabGroup(holding: window) else { return }

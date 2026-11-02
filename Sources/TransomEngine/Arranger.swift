@@ -798,6 +798,7 @@ public struct Arranger: Sendable {
         var hidden: [ArrangerEffect] = []
         var faults: [ArrangerEffect] = []
         var selected: [ArrangerEffect] = []
+        var dissolved: [ArrangerEffect] = []
         do throws(LayoutError) {
             switch event {
             case .windowCreated(let info), .windowChanged(let info):
@@ -874,7 +875,12 @@ public struct Arranger: Sendable {
             case .appResponsiveness, .appLaunched, .displaysChanged:
                 break
             }
+            let leaving: (group: TabGroupRef, window: WindowRef)? = switch event {
+            case .windowDestroyed(let window), .windowStateChanged(let window, .closed): tabGroup(holding: window).map { ($0, window) }
+            default: nil
+            }
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
+            if let leaving { dissolved = self.dissolved(leaving.group, losing: leaving.window) }
             if case .windowChanged(let info) = event {
                 try release(info)
                 // The pressed window may be crossing displays; where it lands is decided at mouse-up.
@@ -887,7 +893,9 @@ public struct Arranger: Sendable {
         }
         // CONTEXT E: focus outside the view widens the camera.
         let widened = if case .windowFocused(let window) = event { widen(toShow: window, new: false) } else { [ArrangerEffect]() }
-        guard case .windowCreated(let info) = event else { return faults + hidden + selected + widened + replan() + closeProgress(now: now) }
+        guard case .windowCreated(let info) = event else {
+            return faults + hidden + selected + dissolved + widened + replan() + closeProgress(now: now)
+        }
         do throws(LayoutError) {
             let taken = try takeFinderWindow(info, now: now)
             return faults + taken + widen(toShow: info.window, new: true) + replan()
