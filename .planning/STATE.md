@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-11-02T01:42:06.897Z"
+stopped_at: Completed 07-05-PLAN.md
+last_updated: "2026-11-02T01:56:16.063Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: 508cbeb8394a8de18332b4a61c0155bd67d49670
+state_head: 9758712f318633c9fe57535cdc3290383eac64b3
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 83
+  completed_plans: 84
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
@@ -137,6 +137,7 @@ Progress: [███████░░░] 67%
 | Phase 07 P02 | 10min | 3 tasks | 8 files |
 | Phase 7 P03 | 10min | 3 tasks | 11 files |
 | Phase 7 P04 | 13 min | 3 tasks | 9 files |
+| Phase 07 P05 | 9min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -379,6 +380,10 @@ Recent decisions affecting current work:
 - [Phase 7]: 07-04: floating groups are add-alongside: FloatingTabGroup sidecar over FloatingWindow records (members stay floaters at the content rect); promote only if groups need z-order/nesting or member frames drift
 - [Phase 7]: 07-04: World.undo keeps snapshot frames for windows whose floating group the undone edit changed
 - [Phase 7]: 07-04: a floating group's wanted frame follows its selected member; a window leaving a group loses its wanted frame and the input replans once more
+- [Phase 07]: 07-05: closeConfirmation stays 1 s (VM close confirmation 110-120 ms)
+- [Phase 07]: 07-05: focusSuppression stays 1 s (VM: hidden same-app window became key after Minimize Group; group stayed minimised)
+- [Phase 07]: 07-05: a stopped Close Group clears its queue; a second click rebuilds it selected-first, which resumes with the stopping member
+- [Phase 07]: 07-05: Tab group ended is not spoken while Close Group runs through the group
 
 ### Quick Tasks Completed
 
@@ -419,8 +424,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T01:42:06.462Z
-Stopped at: Completed 07-04-PLAN.md
+Last session: 2026-11-02T01:56:15.301Z
+Stopped at: Completed 07-05-PLAN.md
 Resume file: None
 
 ## Deferred Verification
