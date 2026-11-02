@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-09-PLAN.md
-last_updated: "2026-11-02T02:53:35.773Z"
+stopped_at: Completed 07-10-PLAN.md
+last_updated: "2026-11-02T03:15:05.441Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: e6f7e2f58d48bd23214855273ab1f1ff06b82d2b
+state_head: c8b76beea35ab500c04a9a61876fb53f4e6c2745
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 88
+  completed_plans: 89
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 10 of 12
+Plan: 11 of 12
 Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
@@ -142,6 +142,7 @@ Progress: [███████░░░] 67%
 | Phase 7 P07 | 17 min | 3 tasks | 11 files |
 | Phase 07 P08 | 5min | 2 tasks | 6 files |
 | Phase 07 P09 | 6min | 3 tasks | 17 files |
+| Phase 07 P10 | 25min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -399,6 +400,8 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-08: Close Tab is a one-member CloseQueue flagged oneTab so its dissolve is announced; a ctrl-click on a strip never starts a tear press
 - [Phase 07]: 07-09: tab commands reach the engine as TabAction.command with the shell's ready flag and source, so not-ready refusals announce; URL refusals drop beep and announcement
 - [Phase 07]: 07-09: Next/Previous Tab step from the group's selected index, wrapping; hotkeys nextTab ⌃⌥⌘T, previousTab ⇧⌃⌥⌘T, moveOutOfGroup ⌃⌥⌘L are not zoom names
+- [Phase 07]: 07-10: quit plan treats every tab group member as docked with groupContentRects (every desk, at home or not) merged over homeTiles; a minimised-selected docked group falls to the stranded rule
+- [Phase 07]: 07-10: Restore All dissolves groups first (one undo step per desk, cascade 24 pt), spares them from the rescue, counts them in N6; per-desk failures log a fault and never block the rescue
 
 ### Quick Tasks Completed
 
@@ -439,8 +442,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T02:53:34.949Z
-Stopped at: Completed 07-09-PLAN.md
+Last session: 2026-11-02T03:15:04.591Z
+Stopped at: Completed 07-10-PLAN.md
 Resume file: None
 
 ## Deferred Verification
