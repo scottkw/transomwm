@@ -191,4 +191,31 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         #expect(closed, "window 0 was never confirmed closed")
         #expect(latency < Arranger.closeConfirmation, "the close took \(latency) to confirm")
     }
+
+    /// Minimize Group on a group of two windows of one app (Pitfall 6, A1): macOS then focuses the other, hidden
+    /// window, which must not bring the group back. After 2 s the selected window is still minimised, the hidden one
+    /// still a sliver at the content size, and the model keeps the same selected member.
+    @Test(.timeLimit(.minutes(1)))
+    func minimizeGroupWithTwoWindowsOfOneAppStaysMinimized() async throws {
+        let group = try await SavedGroup.start()
+        defer { group.close() }
+        defer { withExtendedLifetime(group.arrange) {} }
+        let (formed, last, content) = await group.formed()
+        try #require(formed, "the group never formed: windows at \(last)")
+        let rect = try #require(content)
+
+        // Logged, not asserted: macOS moves focus to the other window only when the fixture is the active app.
+        print("before minimize: \(try await group.fixture.send("frontmost").first ?? "")")
+        await group.arrange.tabAction(.minimizeGroup(GroupKey(desk: group.key, node: group.leaf)))
+        try await Task.sleep(for: .seconds(2))
+        print("after minimize: \(try await group.fixture.send("frontmost").first ?? "")")
+        #expect(group.arrange.arranger.world[group.key]?.state(of: group.selected) == .absent, "the selected window is not minimised")
+        let frames = await group.frames()
+        try #require(frames.count == 2)
+        let sliver = intersection(frames[0], group.visible)
+        #expect(sliver.width * sliver.height < 40 * 40, "the hidden window came on screen at \(frames[0])")
+        #expect(abs(frames[0].width - rect.width) <= 1 && abs(frames[0].height - rect.height) <= 1, "the hidden window was resized to \(frames[0])")
+        #expect(group.arrange.arranger.world[group.key]?.tree.node(group.leaf) == .tabs(windows: [group.hidden, group.selected], selected: 1),
+            "the group changed its selected tab")
+    }
 }

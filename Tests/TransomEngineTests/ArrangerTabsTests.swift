@@ -1065,3 +1065,51 @@ private func runCloseGroup(_ arranger: inout Arranger, _ group: GroupKey, conten
         #expect(await harness.fake.windows[2]?.axValid == true, "the excluded window closed")
     }
 }
+
+/// TABS-03, D-06, D-07, Pitfall 6: Minimize Group minimises the selected member only and comes back with the same tab.
+@Suite struct ArrangerMinimizeGroupTests {
+    @Test func minimizeGroupMinimisesOnlyTheSelectedMemberAndParksNothing() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [b, f], f selected, b parked
+        let effects = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
+        #expect(commands(effects) == [.minimize(f)])
+        #expect(effects.contains(.info("group \(group.node): minimized")))
+        #expect(arranger.tabs.suppressedUntil[group] == start + Arranger.focusSuppression)
+    }
+
+    @Test func onceTheSelectedMemberIsAbsentTheGroupHasNoStripAndTheHiddenMemberStaysParked() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
+        let absent = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start + .milliseconds(200))
+        #expect(strips(absent) == [[]], "the strip did not go: \(strips(absent))")
+        // The group takes no part, so the engine plans no park for b, but nothing moves it off its park either.
+        #expect(!commands(absent).contains { $0.window == b }, "the hidden member was moved: \(commands(absent))")
+        #expect(selected(arranger, group) == f)
+        let slot = try Planner.plan(desk: try #require(arranger.world[mainKey]), area: area, gap: 8, mins: [:])
+        #expect(slot.frames[f] == nil && slot.frames[b] == nil, "an absent group was planned on screen")
+    }
+
+    @Test func macOSFocusingTheHiddenMemberAfterTheMinimiseDoesNotBringTheGroupBack() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
+        _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start + .milliseconds(200))
+        let focus = arranger.handle(.event(.windowFocused(b)), now: start + .milliseconds(700))
+        #expect(selected(arranger, group) == f, "the same-app focus switched tabs")
+        #expect(commands(focus).isEmpty, "the focus moved a window: \(commands(focus))")
+    }
+
+    @Test func restoringTheSelectedMemberBringsTheGroupBackWithTheSameTab() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, frame, content) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.minimizeGroup(group), ready: true), now: start)
+        _ = arranger.handle(.event(.windowStateChanged(f, .absent)), now: start)
+        let back = arranger.handle(.event(.windowStateChanged(f, .present)), now: start + .seconds(5))
+        let strip = try #require(strips(back).first?.first, "no strip on restore: \(back)")
+        #expect(strip.group == group && strip.selected == 1 && strip.members == [b, f] && strip.frame == TabBand.strip(of: frame))
+        let plan = try Planner.plan(desk: try #require(arranger.world[mainKey]), area: area, gap: 8, mins: [:])
+        #expect(plan.frames[f] == content)
+        #expect(arranger.isParked(b))
+    }
+}
