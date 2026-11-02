@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-11-02T00:55:41.970Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-11-02T01:12:07.442Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: e4290c052c6dd841c67cc025d428f81a1cd31cfb
+state_head: 77f48f36f06d8c6874df3b0a367ddf127137c5d3
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 80
+  completed_plans: 81
   percent: 67
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 2 of 12
-Status: In progress
+Plan: 3 of 12
+Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
 Progress: [███████░░░] 67%
@@ -134,6 +134,7 @@ Progress: [███████░░░] 67%
 | Phase 06 P11 | 11min | 3 tasks | 15 files |
 | Phase 06 P12 | 13min | 2 tasks | 3 files |
 | Phase 07 P01 | 18min | 3 tasks | 25 files |
+| Phase 07 P02 | 10min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -367,6 +368,9 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-01: only a tab group's selected member is an unfit candidate; a group whose selected member is absent takes no part
 - [Phase 07]: 07-01: hidden tabs are sized parks (WindowCommand.park size, FramePlan.parkSizes); re-park when content size changes >0.5 pt
 - [Phase 07]: 07-01: commitGroup reuses commitDock at .tile(id,.center); Arranger decide/dropping/commitDock/missed are now internal
+- [Phase 07]: 07-02: a tab reveal waits for a read-back only when something covers the content rect; the previous member parks after a 2 pt match with the last requested content rect, else reverts at 1 s
+- [Phase 07]: 07-02: D-08 activation runs before the camera widen; 1 s per-group focus suppression after a selection change or a member going absent/closed (Arranger.focusSuppression)
+- [Phase 07]: 07-02: strip presses feed a pointer .down with no press window (stale drags abandoned, no window drag behind); TabCopy owns app-name truncation
 
 ### Quick Tasks Completed
 
@@ -407,8 +411,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T00:55:41.269Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-11-02T01:12:07.018Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
 
 ## Deferred Verification
