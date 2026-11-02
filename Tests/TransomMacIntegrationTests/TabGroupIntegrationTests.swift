@@ -293,4 +293,58 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         }
         #expect(placed, "windows at \(frames), content rect \(rect)")
     }
+
+    /// D-10 on hardware-shaped events: a press on a tab with the window-under-pointer field left 0 (what macOS 27
+    /// sends from a real trackpad) still starts the tear-off, found by the strip under the point.
+    @Test(.timeLimit(.minutes(1)))
+    func aTabDraggedOutWithNoWindowUnderPointerLeavesTheGroup() async throws {
+        let group = try await SavedGroup.start()
+        defer { group.close() }
+        defer { withExtendedLifetime(group.arrange) {} }
+        let (formed, last, _) = await group.formed()
+        try #require(formed, "the group never formed: windows at \(last)")
+        try #require(group.arrange.startTap(), "the event tap was refused")
+        defer { group.arrange.stopTap() }
+
+        var strip: CGRect?
+        _ = await waitUntil(timeout: .seconds(2)) {
+            let numbers = group.arrange.tabStripPanels.windowNumbers
+            let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+            strip = list.first { numbers.contains($0[kCGWindowNumber as String] as? Int ?? -1) }
+                .flatMap { ($0[kCGWindowBounds as String] as? NSDictionary).flatMap { CGRect(dictionaryRepresentation: $0) } }
+            return strip != nil
+        }
+        let bounds = try #require(strip, "no tab strip on screen")
+        let grab = CGPoint(x: bounds.minX + bounds.width * 0.3, y: bounds.midY)  // window 0's tab, right of the group buttons
+        let number = try #require(group.arrange.tabStripPanels.panelNumber(underPointer: 0, at: Point(x: grab.x, y: grab.y)))
+        try #require(group.arrange.tabStripPanels.member(atWindowNumber: number, point: Point(x: grab.x, y: grab.y)) == group.hidden)
+
+        let saved = CGEvent(source: nil)?.location ?? grab
+        let end = CGPoint(x: group.visible.x + 4, y: group.visible.y + group.visible.height / 2)  // the left edge zone
+        var released = false
+        func post(_ type: CGEventType, _ point: CGPoint) {
+            CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+            if type == .leftMouseUp { released = true }
+        }
+        defer {
+            if !released { post(.leftMouseUp, end) }
+            CGWarpMouseCursorPosition(saved)
+        }
+        post(.leftMouseDown, grab)
+        try await Task.sleep(for: .milliseconds(50))
+        for i in 1...20 {
+            let t = Double(i) / 20
+            post(.leftMouseDragged, CGPoint(x: grab.x + (end.x - grab.x) * t, y: grab.y + (end.y - grab.y) * t))
+            try await Task.sleep(for: .milliseconds(16))
+        }
+        post(.leftMouseUp, end)
+
+        let left = await waitUntil(timeout: .seconds(3)) {
+            guard let tree = group.arrange.arranger.world[group.key]?.tree else { return false }
+            guard let leaf = tree.leaf(containing: group.hidden) else { return true }  // floating
+            if case .tabs = tree.node(leaf) { return false }
+            return true
+        }
+        #expect(left, "window 0 is still in the group: \(String(describing: group.arrange.arranger.world[group.key]?.tree))")
+    }
 }

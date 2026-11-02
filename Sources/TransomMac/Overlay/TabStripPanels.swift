@@ -435,12 +435,24 @@ final class TabStripView: NSView, NSViewToolTipOwner {
     /// The window numbers of the strips on screen: a press on one is never a window drag (Pitfall 4).
     var windowNumbers: Set<Int> { Set(shown.values.joined().map(\.windowNumber)) }
 
+    /// The strip panel a press at global top-left `point` lands on. Hardware events on macOS 27 leave the
+    /// window-under-pointer field 0, so with no matching `number` the visible strip under `point` answers.
+    func panelNumber(underPointer number: Int, at point: Point) -> Int? {
+        let panels = Array(shown.values.joined())
+        if panels.contains(where: { $0.windowNumber == number }) { return number }
+        let screenPoint = Self.screenPoint(point)
+        return panels.first { $0.isVisible && $0.isOnActiveSpace && $0.frame.contains(screenPoint) }?.windowNumber
+    }
+
     /// The member whose tab is under global top-left `point` on strip panel `number`: a press there may tear it off.
     func member(atWindowNumber number: Int, point: Point) -> TransomModel.WindowRef? {
         guard let panel = shown.values.joined().first(where: { $0.windowNumber == number }), let view = Self.view(panel) else { return nil }
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-        let local = panel.convertPoint(fromScreen: NSPoint(x: point.x, y: primaryHeight - point.y))
+        let local = panel.convertPoint(fromScreen: Self.screenPoint(point))
         return view.member(at: view.convert(local, from: nil))
+    }
+
+    private static func screenPoint(_ point: Point) -> NSPoint {
+        NSPoint(x: point.x, y: (NSScreen.screens.first?.frame.height ?? 0) - point.y)
     }
 
     init() {

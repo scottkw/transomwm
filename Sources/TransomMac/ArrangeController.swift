@@ -403,7 +403,10 @@ import os
             return
         }
         // A press on a tab strip is the strip's own AppKit click: never a window drag on the window behind (Pitfall 4).
-        let onStrip = event.type == .leftMouseDown && tabStripPanels.windowNumbers.contains(Int(event.windowUnderPointer))
+        let location = Point(x: event.location.x, y: event.location.y)
+        let strip = event.type == .leftMouseDown
+            ? tabStripPanels.panelNumber(underPointer: Int(event.windowUnderPointer), at: location) : nil
+        let onStrip = strip != nil
         if event.type == .leftMouseDown, !onStrip { zoomInput.pointerDown(event) }
         if case .greenButton(let id) = event.kind {
             guard let window = trackedWindow(cgID: id) else { return }
@@ -418,12 +421,10 @@ import os
         case .flagsChanged: kind = .flagsChanged
         default: return
         }
-        let location = Point(x: event.location.x, y: event.location.y)
         let press = kind == .down && !onStrip ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
         // A press on a tab may tear it off (Pattern 7); on a button or the background it is only the strip's click.
         // A ⌃-click opens the tab context menu, so it never tears the tab off (the menu's tracking drags must not).
-        let tab = onStrip && !event.flags.contains(.maskControl)
-            ? tabStripPanels.member(atWindowNumber: Int(event.windowUnderPointer), point: location) : nil
+        let tab = strip.flatMap { event.flags.contains(.maskControl) ? nil : tabStripPanels.member(atWindowNumber: $0, point: location) }
         let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press, pressTab: tab)
         let session = arranger.drag  // mouse-up ends it
         if kind == .dragged { dragTrace.dragged += 1 }
