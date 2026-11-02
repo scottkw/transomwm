@@ -3,7 +3,7 @@ status: testing
 phase: 07-tab-groups
 source: 07-UI-SPEC.md "User host checklist" (items 1-5, verbatim) and backstop rows; RESEARCH Assumption A3; 07-01..07-11-SUMMARY.md items left to UAT
 started: 2026-11-02
-updated: 2026-11-02 (VM run, agent)
+updated: 2026-11-02 (VM run, agent; fixes after VM UAT)
 ---
 
 ## Current Test
@@ -66,12 +66,14 @@ Run by the verifier in the VM, never on the host. Leave the guest on Desktop 1 a
 
 V1. Float a group of two fixture windows, then raise another floating window over it. *Expected: that window covers the group's strip too. Clicking the group's window brings window and strip back in front together.*
    result: partial (VM, synthetic events) — **Bug 1.** Float Group (a HID click on the strip button) floated the group ("group n30: floated"), and the front app stayed the fixture. A floating window of another app raised over the group covered the strip (CG order: covering window, strip, group window). **Clicking the group's window did not bring the strip back.** After the click the order was group window, covering window, strip, and it was the same 2 s later (`.build/0713-uat-vm-shots/v1-crossapp-after-click.png`). A third fixture app gave the same result. When the covering window came from the **same** app as the group's window, the click did raise the strip (order: strip, group window, covering window). So the strip comes front only when the click changes the app's focused window. It does not when the click only activates an app whose focused window was already the group's window. Cause: Bug 1 below
+   **Fixes after VM UAT:** fixed by `5a48451` (an app activation now reports the activated app's AXMain window as focused, so `raisedStrip` runs). VM proof with the rebuilt Debug app (2026-11-02): fixture C raised over a floating group's strip (CG order C, group window, strip); a click on the group window's uncovered part gave CG order **strip, group window, C** (`.build/0714-vm-check/`)
 
 V2. With another app frontmost, click a hidden tab once. *Expected: it switches at once; the frontmost app becomes the tab's app, never Transom.*
    result: pass (VM, synthetic events) — with another fixture app frontmost, one HID click on the hidden tab switched at once ("group n32: select window 4094 … via click, 11 ms"). At 150, 300 and 600 ms the frontmost app was the tab's app (pid 23059), never Transom
 
 V3. ⌘Tab to the app of a hidden member. *Expected: that tab becomes selected and its window fills the content rect.*
    result: fail (VM, synthetic events) — **Bug 1.** ⌘Tab (⌘ held, Tab pressed twice) to the hidden member's app made that app frontmost, but there was no tab switch. Its hidden window stayed parked at the 1 pt sliver (1023,689) as the app's focused, main window, so it was an invisible key window. It was the same 3 s later (`v3-after-cmdtab.png`). A stock app reproduced it during the V14 setup: `open -a "Font Book"`, while Font Book's only window was a hidden tab, left the window parked and Font Book frontmost. In both cases the app's focused window was already the hidden member, so macOS sent no focused-window change
+   **Fixes after VM UAT:** fixed by `5a48451`. VM proof: the new `TabGroupIntegrationTests.activatingTheAppOfAHiddenMemberSelectsIt` (two fixture apps; the hidden member's app activated by AXFrontmost, its parked window key) failed with the hook disabled (window stayed at 1023,687, selected tab unchanged, `.build/0714-vm-red.log`) and passes with it: "Test run with 6 tests in 1 suite passed after 14.044 seconds" (`.build/0714-vm-TabGroupIntegrationTests.log`). With the rebuilt Debug app, a synthetic ⌘Tab to the hidden member's app logged "group n30: select window 4335 … via activation, 6 ms" and the window filled the content rect (40,112 320×200) while the other member parked. `open -a` and a Dock click take the same activation path; they were not re-run
 
 V4. Tear a tab off to a screen edge and release. *Expected: it docks there, with the normal drop preview while dragging.*
    result: pass (VM, synthetic events) — a tab dragged to the left screen edge and released logged "moved out via tear-off, landed docked". It docked at 8,33 246×676, and the other member kept the tile. Mid-drag, the CG list showed the tear-off ghost (layer 4, 54×24 beside the pointer) and the full-screen drop preview panel (layer 3). Both panels are `sharingType = .none`, so screenshots don't show them. **Harness note:** the synthetic events had to carry the strip's window number in `kCGMouseEventWindowUnderMousePointer`. With the field at 0 (plain synthetic events), Transom logged "press … on CG window 0: no tracked window" and no tear-off began. Real hardware events most likely fill the field, so this looks like a harness limit; host item 3 is the real check
@@ -113,6 +115,7 @@ V13. Press ⌃⌥⌘T, ⇧⌃⌥⌘T and ⌃⌥⌘L with a group focused, then o
    - With no group focused, the URL only logged "refused next tab: not in a tab group". URLs have no announcement path, and the beep can't be heard in the VM.
    - **With a group focused, `open "transom-debug://next-tab"` was refused the same way.** `open -g` (background) worked ("select … via url"). A plain `open` makes Transom Debug the frontmost app, and the tab command reads the frontmost app's focused window.
    - Note: the Debug build's scheme is `transom-debug://`. `transom://` went to the older release Transom.app in the guest (see the run notes)
+   **Fixes after VM UAT:** fixed by `bdd2d22` (a URL that arrives with Transom frontmost acts on the focused window of the app frontmost before Transom; every URL command that needs the focused window, i.e. the tab commands and `frame-window`). Unit test `AppDelegateTests.aURLActsOnTheAppFrontmostBeforeTransom`. VM proof with the rebuilt Debug app: with a group member focused, `open "transom-debug://next-tab"` (no -g) logged "group n30: select window 4335 … via url, 4 ms"; a second run, with an activation watcher, showed Transom Debug activated, then "select window 4340 … via url, 5 ms" and the tab's app activated 25 ms later
 
 V14. (CR-01) Choose Don't Arrange (⌃⌥⌘E or the menu) for an app whose window is a hidden tab, once in a docked group and once in a floating group. *Expected: the hidden window comes back on screen at the group's content rect, the group loses it (dissolves if one is left), nothing is stranded at the 1 pt parked sliver.* Remove the exclusion afterwards.
    result: pass (VM, synthetic events) — **Docked:** Font Book's only window was the hidden tab of a docked group (content rect 8,65 1008×532), with Font Book frontmost. ⌃⌥⌘E logged "exclusion releases window 4186 … back on screen". The window came back at 8,65 1008×532, the group was gone, and the fixture kept the tile. **Floating:** with the group's content rect at 8,206, Font Book came back at 8,206, the group dissolved, and the survivor took the group's frame. Nothing stayed at the parked sliver. The exclusion was removed both times (`excludedBundleIDs` empty)
@@ -165,9 +168,9 @@ Guest state afterwards (checked again with the VM lock held):
 
 | Item | Result |
 |---|---|
-| V1 | partial: covered strip not raised by a cross-app click (Bug 1) |
+| V1 | partial: covered strip not raised by a cross-app click (Bug 1); fixed `5a48451`, VM re-check pass |
 | V2 | pass |
-| V3 | fail: ⌘Tab leaves the hidden member parked and key (Bug 1) |
+| V3 | fail: ⌘Tab leaves the hidden member parked and key (Bug 1); fixed `5a48451`, VM re-check pass |
 | V4 | pass (window-number field set by the harness) |
 | V5 | pass |
 | V6 | pass |
@@ -177,7 +180,7 @@ Guest state afterwards (checked again with the VM lock held):
 | V10 | pass |
 | V11 | partial: behaviour pass; visuals and tooltips not capturable; strip lingers ~2 s after Minimize Group |
 | V12 | partial: stage and overview pass; collapsed label and fade length not checked |
-| V13 | partial: hotkeys and menu pass; tab URL refused when `open` activates Transom (Bug 2) |
+| V13 | partial: hotkeys and menu pass; tab URL refused when `open` activates Transom (Bug 2); fixed `bdd2d22`, VM re-check pass |
 | V14 | pass (docked and floating) |
 | V15 | pass |
 | V16 | pass |
@@ -197,6 +200,19 @@ Minor observations (not filed as bugs):
 - N2 has no parked-member count (V7).
 - After Minimize Group or a restore, the strip changes only after the ~2 s display-change debounce the Dock sets off (V11).
 - A hidden tab moved on screen by another program stays there until it is selected once (run incidents).
+
+### Fixes after VM UAT (2026-11-02)
+
+| Bug | Commit | Root cause | Proof |
+|---|---|---|---|
+| 1 (V1, V3) | `5a48451` | Only `kAXFocusedWindowChanged` / `kAXMainWindowChanged` became focus hints; an app activation that keeps the app's focused window sent Transom nothing | 5 `PendingFocusTests`; VM `TabGroupIntegrationTests` red without the hook, 6/6 green with it; Debug app ⌘Tab and cross-app click re-checks |
+| 2 (V13) | `bdd2d22` | `commandContext()` read Transom's own focused window once `open` activated Transom to deliver the URL | `AppDelegateTests.aURLActsOnTheAppFrontmostBeforeTransom`; Debug app `open` (no -g) re-check |
+
+- Host `swift test` (full): 219 + 391 + 94 + 966 tests passed (`.build/0714-host-full-fix2.log`); `scripts/check-no-appkit.sh` OK (55 files).
+- VM regressions: `TabStripSpaceIntegrationTests` 1 passed, `FocusParkIntegrationTests` 2 passed.
+- Debug app rebuilt by `scripts/build-debug.sh` (main binary sha1 `ff9b4638…`); installed in the guest only for the re-check, then the previous build (`52c7fc84…`) was put back. Guest `layout.json`, `min-size-hints.json` and defaults were restored (cmp equal), and the guest was left on Desktop 1.
+- Behaviour change to know: ⌘Tab or a Dock click to an app now counts as focusing its main window, so the focus order updates, a selected member's strip comes front, and (zoom on) a window outside the view widens the camera, as an AX focus change always did.
+- Not changed: N2 still has no parked-member count (V7). `Notice.crashRecovered` only carries windows that couldn't be placed, so a count needs new N2 copy, which is a copy decision.
 
 ## Known gaps
 
