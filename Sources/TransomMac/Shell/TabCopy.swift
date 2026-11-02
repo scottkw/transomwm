@@ -16,6 +16,8 @@ nonisolated public enum TabCopy {
         case .refused(.notReady): OverviewCopy.refusedNotReady
         case .didNotClose(let window): "\u{201C}\(MenuCopy.truncatedAppName(appName(window)))\u{201D} didn't close"
         case .ended: "Tab group ended"
+        case .movedOut(let dissolved): dissolved ? "Moved out of the tab group. Tab group ended." : "Moved out of the tab group"
+        case .tearOffCanceled: "Tab move canceled"
         }
     }
 

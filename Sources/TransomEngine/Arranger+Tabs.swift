@@ -16,6 +16,30 @@ public enum TabAnnouncement: Equatable, Sendable {
     case didNotClose(WindowRef)
     /// The group was left with one window and dissolved (D-12).
     case ended
+    /// A window left its group (tear-off); `dissolved` when that left the group with one window (D-12).
+    case movedOut(dissolved: Bool)
+    /// Esc canceled a tear-off; nothing changed.
+    case tearOffCanceled
+}
+
+/// The tear-off ghost (UI-SPEC Surface 4): the torn tab's window, its live title, and the pointer it follows.
+public struct TearOffGhost: Equatable, Sendable {
+    public var member: WindowRef
+    public var title: String
+    public var pointer: Point
+
+    public init(member: WindowRef, title: String, pointer: Point) {
+        self.member = member
+        self.title = title
+        self.pointer = pointer
+    }
+}
+
+/// A press on a strip tab (D-10): a tear-off once the pointer leaves `strip`, else the strip's own click.
+struct TearPress: Equatable, Sendable {
+    var member: WindowRef
+    var group: GroupKey
+    var strip: Rect
 }
 
 /// Why a tab action changed no window (UI-SPEC Surface 2, "While paused, or Accessibility not ready").
@@ -99,6 +123,10 @@ struct TabGroupState: Sendable {
     var suppressedUntil: [GroupKey: ContinuousClock.Instant] = [:]
     /// The strips last sent per display, so only a change is sent again.
     var shownStrips: [String: [TabStrip]] = [:]
+    /// The tab pressed and not yet torn off or released.
+    var tearPress: TearPress?
+    /// The torn-off tab, which moves alone (never its whole group), from the tear until its release commits.
+    var tearing: WindowRef?
 }
 
 /// A tab group holding some window, docked or floating, as select, reveal, D-08 and strips see it.
@@ -581,9 +609,11 @@ extension Arranger {
         try dock(ref.members[ref.selected])
     }
 
-    /// The group a drag of `window` moves whole: its group when it is the selected member (Surface 5).
+    /// The group a drag of `window` moves whole: its group when it is the selected member (Surface 5), unless it is
+    /// a torn-off tab, which moves alone (D-10).
     func movingGroup(_ window: WindowRef) -> TabGroupRef? {
-        tabGroup(holding: window).flatMap { $0.members[$0.selected] == window ? $0 : nil }
+        guard tabs.tearing != window else { return nil }
+        return tabGroup(holding: window).flatMap { $0.members[$0.selected] == window ? $0 : nil }
     }
 
     /// Takes `ref`'s group off `desk` as one leaf node with its members' states: its tree leaf, or its floating group.
@@ -591,5 +621,135 @@ extension Arranger {
         guard ref.floating else { return try desk.tree.removeLeaf(ref.key.node) }
         let (group, states) = try desk.desktop.removeGroup(ref.key.node)
         return (.tabs(windows: group.members, selected: group.selected), states)
+    }
+}
+
+/// Tearing a tab out (D-10, RESEARCH Pattern 7): a press on a strip tab that leaves the strip becomes a move session of
+/// that tab's window, through the same hover, dwell, dry run and preview as a title-bar drag.
+extension Arranger {
+    /// A press on `member`'s tab: remembered until the pointer leaves the strip. Nothing starts while paused, for a
+    /// window not present, excluded or never-dock, or a group whose strip is not on screen.
+    mutating func pressTab(_ member: WindowRef) {
+        guard pauseReasons.isEmpty, !sessionPaused, let ref = tabGroup(holding: member), let info = windows[member.identity],
+            info.state == .present, !info.isExcluded, info.kind == .dockable,
+            let strip = tabs.shownStrips.values.joined().first(where: { $0.group == ref.key })?.frame
+        else { return }
+        tabs.tearPress = TearPress(member: member, group: ref.key, strip: strip)
+    }
+
+    /// The pointer left the pressed tab's strip: the tear-off session starts, already a move, with no frame poll (the
+    /// window stays put until release). It lands at its saved pre-group size, else the content size.
+    mutating func tearOff(_ press: TearPress, at point: Point, modifiers: Modifiers) {
+        tabs.tearPress = nil
+        guard let ref = tabGroup(press.group), ref.members.contains(press.member), let content = contentRect(of: ref) else { return }
+        let size = wantedFrames[press.member.identity].map { Size(width: $0.width, height: $0.height) }
+            ?? Size(width: content.width, height: content.height)
+        var session = DragSession(window: press.member, start: point, startFrame: content, modifiers: modifiers)
+        session.origin = .tearOff(press.group, stripRect: press.strip, landingSize: size)
+        session.kind = .move
+        drag = session
+        tabs.tearing = press.member
+    }
+
+    /// The ghost at the session's pointer.
+    func tearOffGhost(_ session: DragSession) -> ArrangerEffect {
+        .tearOffGhost(TearOffGhost(member: session.window, title: windows[session.window.identity]?.window.titleHint ?? "", pointer: session.pointer))
+    }
+
+    /// A group's content rect: its planned leaf rect minus the band, or its floating frame minus the band.
+    func contentRect(of ref: TabGroupRef) -> Rect? {
+        guard let desk = world[ref.key.desk] else { return nil }
+        if ref.floating { return desk.desktop.groups.first { $0.id == ref.key.node }.map { TabBand.content(of: $0.frame) } }
+        guard let area = display(for: ref.key.desk)?.visibleFrame,
+            let rect = try? Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution.nodeRects[ref.key.node]
+        else { return nil }
+        return TabBand.content(of: rect)
+    }
+
+    /// The Desktop rect a torn-off `window` floats into on `key`'s desk: with it out of its group and the Desktop shown.
+    func tearOffDesktop(_ window: WindowRef, on key: DeskKey) throws(LayoutError) -> Rect? {
+        guard let area = display(for: key)?.visibleFrame else { return nil }
+        var desk = world[key] ?? Desk()
+        if desk.desktop.contains(window) { try desk.desktop.remove(window) } else if desk.tree.state(of: window) != nil { try desk.tree.remove(window) }
+        try desk.tree.setDesktopHidden(false)
+        return try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).desktopRect
+    }
+
+    /// A tear-off with no dock or group target: the float, its landing frame shown as the clamp ghost (always, since
+    /// the window is not under the pointer). Back over the strip: no preview.
+    func tearOffMiss(_ hover: Hover, window: WindowRef) -> Decision {
+        guard !hover.overStrip, let uuid = hover.displayUUID, let display = displays.first(where: { $0.uuid == uuid }) else {
+            return Decision(action: .miss)
+        }
+        let key = Self.key(display)
+        do throws(LayoutError) {
+            return Decision(action: .tearOffFloat(key), display: uuid, clampInto: try tearOffDesktop(window, on: key) ?? display.visibleFrame)
+        } catch {
+            return Decision(action: .miss)
+        }
+    }
+
+    /// Mouse-up of a tear-off (UI-SPEC Surface 4 release table): over the source strip it cancels; otherwise exactly
+    /// the decision shown (Dock, Group, a refusal), else the float at the landing frame under the pointer.
+    mutating func releaseTearOff(_ session: DragSession) -> [ArrangerEffect] {
+        guard case .tearOff(let group, let strip, _) = session.origin else { return [] }
+        let window = session.window
+        if strip.contains(session.pointer) { return [.info("group \(group.node): tear-off canceled (strip)")] }
+        guard let ref = tabGroup(holding: window), ref.key == group else { return replan() }
+        tabs.tearing = window  // the commit takes the tab alone
+        defer { tabs.tearing = nil }
+        let floatKey = displays.first { $0.frame.contains(session.pointer) }.map(Self.key)
+        let action = session.current?.action ?? floatKey.map(DropAction.tearOffFloat) ?? .miss
+        do throws(LayoutError) {
+            switch action {
+            case .tearOffFloat(let key):
+                return try commitTearOff(window, from: ref, landing: session.landingFrame(at: session.pointer), on: key)
+            case .dock(let key, let target):
+                let effects = try commitDock(window, on: key, at: target)
+                guard tabGroup(holding: window)?.key != ref.key else { return effects }  // refused: still in the group
+                return effects + movedOut(window, from: ref, landed: "docked")
+            case .group(let key, let target):
+                return try commitGroup(window, on: key, into: target)
+            case .refuse(let text):
+                return [.announce(text)]
+            case .miss, .swap, .undock:
+                return []
+            }
+        } catch {
+            return [.fault("group \(group.node): tear-off of \(window) failed: \(error)")] + replan()
+        }
+    }
+
+    /// The float: `window` leaves its group and floats at `landing` clamped into the Desktop of `key`'s desk, a hidden
+    /// Desktop shown first (D-31). One undo step; raised and focused.
+    mutating func commitTearOff(_ window: WindowRef, from ref: TabGroupRef, landing: Rect, on key: DeskKey) throws(LayoutError) -> [ArrangerEffect] {
+        guard let from = deskKey(of: window), let area = display(for: key)?.visibleFrame else { return replan() }
+        let show = showingDesktop(), gap = gap, mins = minimums
+        var frame = landing
+        if from != key {
+            // Leaving another display's desk is a fact of where it was dropped, not a second undo step.
+            try world.reflow(from) { desk, _ throws(LayoutError) in
+                if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
+            }
+            if world[key] == nil { try world.addDesk(key) }
+        }
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            if from == key {
+                if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
+            }
+            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
+            frame = Planner.clamp(landing, into: try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area)
+            try desk.desktop.add(window, frame: frame)
+        }
+        wantedFrames[window.identity] = frame
+        lastRequested[window.identity] = nil
+        return replan() + [.perform([.raise(window), .focus(window)])] + movedOut(window, from: ref, landed: "floating")
+    }
+
+    /// "Moved out of the tab group", joined with "Tab group ended" when that dissolved it (D-12), and the Leave log line.
+    func movedOut(_ window: WindowRef, from ref: TabGroupRef, landed: String) -> [ArrangerEffect] {
+        let ended = dissolved(ref, losing: window).filter { if case .tabAnnouncement = $0 { false } else { true } }
+        return [.tabAnnouncement(.movedOut(dissolved: !ended.isEmpty)), .info("group \(ref.key.node): \(window) moved out via tear-off, landed \(landed)")]
+            + ended
     }
 }

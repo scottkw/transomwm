@@ -13,7 +13,8 @@ public struct Modifiers: OptionSet, Hashable, Sendable {
 }
 
 /// One left-button or modifier event from the event tap, in global top-left points. `pressWindow` is resolved by the
-/// shell on `down` only (RESEARCH Pattern 4).
+/// shell on `down` only (RESEARCH Pattern 4); a press on a strip tab carries `pressTab` instead, never `pressWindow`
+/// (Pattern 7, Pitfall 4).
 public struct PointerEvent: Equatable, Sendable {
     public enum Kind: Equatable, Sendable { case down, dragged, up, flagsChanged }
 
@@ -21,12 +22,14 @@ public struct PointerEvent: Equatable, Sendable {
     public var location: Point
     public var modifiers: Modifiers
     public var pressWindow: WindowRef?
+    public var pressTab: WindowRef?
 
-    public init(kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil) {
+    public init(kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil, pressTab: WindowRef? = nil) {
         self.kind = kind
         self.location = location
         self.modifiers = modifiers
         self.pressWindow = pressWindow
+        self.pressTab = pressTab
     }
 }
 
@@ -88,6 +91,8 @@ enum DropAction: Equatable, Sendable {
     case undock
     /// The miss rules: a docked window snaps back, a floating one stays where released (clamped if it crosses a tile).
     case miss
+    /// A torn-off tab with no dock or group target: it floats at its landing frame on this desk (D-10).
+    case tearOffFloat(DeskKey)
     /// Announce `text`, then the miss rules.
     case refuse(String)
 }
@@ -103,6 +108,8 @@ struct Hover: Equatable, Sendable {
     var crossesTiles = false
     /// The centre under the pointer that groups after `DragSession.groupDwell`; `target` is nil meanwhile.
     var groupTarget: GroupTarget?
+    /// A tear-off's pointer is back over its source strip: no preview, and a release cancels (D-10).
+    var overStrip = false
 }
 
 /// The dry run's verdict for one hover (UI-SPEC Surface 2 state matrix).
@@ -129,6 +136,13 @@ public struct DragSession: Equatable, Sendable {
     /// How far the pointer may wander from where the group dwell started before it restarts there (D-01).
     public static let groupRest = 16.0
 
+    /// What the press grabbed: a window's title bar, or a tab torn out of its strip (D-10), whose window does not move
+    /// until release and lands at `landingSize` under the pointer.
+    public enum Origin: Equatable, Sendable {
+        case window
+        case tearOff(GroupKey, stripRect: Rect, landingSize: Size)
+    }
+
     public enum Kind: Equatable, Sendable {
         /// The origin moved with the size unchanged: a title-bar drag.
         case move
@@ -139,6 +153,7 @@ public struct DragSession: Equatable, Sendable {
     public let window: WindowRef
     public let start: Point
     public let startFrame: Rect
+    public internal(set) var origin: Origin = .window
     public internal(set) var pointer: Point
     public internal(set) var modifiers: Modifiers
     /// nil until the press is classified; the first verdict sticks.
@@ -167,6 +182,18 @@ public struct DragSession: Equatable, Sendable {
         self.startFrame = startFrame
         pointer = start
         self.modifiers = modifiers
+    }
+
+    /// The group a tear-off leaves; nil for a window drag.
+    public var tearOffGroup: GroupKey? {
+        if case .tearOff(let group, _, _) = origin { group } else { nil }
+    }
+
+    /// Where a torn-off tab would land with the pointer at `pointer` (UI-SPEC Surface 4): its landing size centred on
+    /// the pointer, top edge 12 pt above it so the title bar is under it. A window drag's start frame.
+    public func landingFrame(at pointer: Point) -> Rect {
+        guard case .tearOff(_, _, let size) = origin else { return startFrame }
+        return Rect(x: pointer.x - size.width / 2, y: pointer.y - 12, width: size.width, height: size.height)
     }
 
     /// The drop the held hover decided, for the shell's drag log (WR-03); "none" until a dwell has passed.

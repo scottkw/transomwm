@@ -110,6 +110,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case tabStrips([TabStrip], displayUUID: String)
     /// Order this group's strip front: one of its members was just selected (UI-SPEC Surface 2 ordering).
     case raiseStrip(GroupKey)
+    /// Show or move the tear-off ghost at this pointer; nil hides it (UI-SPEC Surface 4).
+    case tearOffGhost(TearOffGhost?)
 }
 
 /// The pure layout owner (RESEARCH Pattern 1): window-system inputs and user commands in, commands and effects out.
@@ -182,7 +184,7 @@ public struct Arranger: Sendable {
     /// Whether a park was sent for `window` and it is still parked (the overview's camera-move pick, 06-09).
     public func isParked(_ window: WindowRef) -> Bool { parkRequested.contains(window.identity) }
     /// The left-button press in progress, if any (TILE-01).
-    public private(set) var drag: DragSession?
+    public internal(set) var drag: DragSession?
     /// A title-bar drag is under way (plan 16 defers alerts while it is).
     public var isDragging: Bool { drag?.kind == .move }
     /// Desk plans a drag hit-tests against, computed once per drag (and again after the World changes).
@@ -1389,14 +1391,30 @@ public struct Arranger: Sendable {
         switch event.kind {
         case .down:
             let stale = abandonDrag()
+            tabs.tearPress = nil  // a press whose mouse-up never arrived
+            if let tab = event.pressTab {
+                pressTab(tab)
+                return stale
+            }
             guard let pressed = event.pressWindow, let info = windows[pressed.identity], canDrag(info) else { return stale }
             drag = DragSession(window: info.window, start: event.location, startFrame: info.frame, modifiers: event.modifiers)
             return stale
         case .dragged, .flagsChanged:
+            if drag == nil, event.kind == .dragged, let press = tabs.tearPress, !press.strip.contains(event.location) {
+                guard pauseReasons.isEmpty else {
+                    tabs.tearPress = nil
+                    return []
+                }
+                tearOff(press, at: event.location, modifiers: event.modifiers)
+            }
             guard var session = drag else { return [] }
             guard pauseReasons.isEmpty else { return endDrag() }
             session.pointer = event.location
             session.modifiers = event.modifiers
+            if session.tearOffGroup != nil {
+                drag = session
+                return [tearOffGhost(session)] + follow(now: now)
+            }
             var effects: [ArrangerEffect] = []
             if !session.polling, session.travelled {
                 session.polling = true
@@ -1408,6 +1426,7 @@ public struct Arranger: Sendable {
             drag = session
             return effects + follow(now: now)
         case .up:
+            tabs.tearPress = nil  // released inside the strip: the strip's own click
             guard drag != nil else { return [] }
             drag?.modifiers = event.modifiers
             return release(now: now)
@@ -1418,7 +1437,8 @@ public struct Arranger: Sendable {
     private mutating func abandonDrag() -> [ArrangerEffect] {
         guard let session = drag else { return [] }
         let effects = endDrag()
-        guard session.kind != nil, deskKey(of: session.window) != nil else { return effects }
+        // A tear-off is never committed without its release: the tab stays in its group.
+        guard session.kind != nil, session.tearOffGroup == nil, deskKey(of: session.window) != nil else { return effects }
         do throws(LayoutError) {
             return effects + (try missed(session.window))
         } catch {
@@ -1438,7 +1458,10 @@ public struct Arranger: Sendable {
         guard let session = drag else { return [] }
         drag = nil
         dragPlans = [:]
+        tabs.tearPress = nil
+        tabs.tearing = nil
         return (session.polling ? [.pollDragFrame(nil)] : []) + (session.shown != nil ? [.preview(nil, displayUUID: session.shownOn)] : [])
+            + (session.tearOffGroup != nil ? [.tearOffGhost(nil)] : [])
     }
 
     /// A move session's pointer or frame changed: a new hover withdraws the preview and restarts the dwell; a held one
@@ -1471,7 +1494,7 @@ public struct Arranger: Sendable {
         _ = session.settle(at: now) { decide($0, window: window) }
         _ = session.settleGroup(at: now) { decideGroup($0, window: window) }
         let raw = windows[window.identity]?.frame ?? session.startFrame
-        let frame = movingGroup(window) == nil ? raw : TabBand.frame(ofContent: raw)
+        let frame = session.tearOffGroup != nil ? session.landingFrame(at: session.pointer) : movingGroup(window) == nil ? raw : TabBand.frame(ofContent: raw)
         let preview = session.current.flatMap { decision in decision.clampInto.map { .clamp(Planner.clamp(frame, into: $0)) } ?? decision.preview }
         guard let decision = session.current, preview != session.shown else {
             drag = session
@@ -1488,13 +1511,20 @@ public struct Arranger: Sendable {
     private mutating func hover(for session: DragSession) -> Hover {
         let window = session.window
         guard let ownKey = deskKey(of: window), let ownDesk = world[ownKey], let ownPlan = dragPlan(.desk(ownKey)) else { return Hover() }
-        let docked = ownDesk.tree.state(of: window) != nil
+        // A tear-off (D-10) hit-tests the pointer: back over its strip it shows nothing; it has no tile to swap from or
+        // snap back to, and its own group is never a group target.
+        let torn = session.tearOffGroup
+        if case .tearOff(_, let strip, _) = session.origin, strip.contains(session.pointer) { return Hover(overStrip: true) }
+        let docked = torn == nil && ownDesk.tree.state(of: window) != nil
         // The selected member of a group drags the whole group (UI-SPEC Surface 5): its frame is the group frame, and
         // no centre groups (merging groups is out of scope, Surface 1).
         let whole = movingGroup(window) != nil
         let raw = windows[window.identity]?.frame ?? session.startFrame
         let frame = whole ? TabBand.frame(ofContent: raw) : raw
         let point = session.pointer
+        if session.modifiers.contains(.shift), torn != nil {
+            return Hover(displayUUID: displays.first { $0.frame.contains(point) }?.uuid, modifiers: [.shift])
+        }
         if session.modifiers.contains(.shift) {
             // Anywhere goes: only whether the frame would cross a docked tile, once floating, matters (TILE-02).
             let plan = ownDesk.tree.isDesktopHidden == true ? nil : docked ? dragPlan(.undock) : ownPlan
@@ -1521,19 +1551,21 @@ public struct Arranger: Sendable {
             case .tile(let id, .center)?:
                 // A docked leaf's centre groups after the group dwell (D-01); until then it is a miss.
                 target = nil
-                groupTarget = !whole && groupable(id, on: key) ? .tile(key, id) : nil
+                groupTarget = !whole && GroupKey(desk: key, node: id) != torn && groupable(id, on: key) ? .tile(key, id) : nil
             default: break
             }
             // On the Desktop tile a floating window's centre groups after the group dwell (D-02); the tile's own centre
             // stays a plain floating move.
-            if overDesktop, !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window) {
+            if overDesktop, !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window),
+                floating != torn.map({ .floatingGroup($0.desk, $0.node) })
+            {
                 target = nil
                 groupTarget = floating
             }
         }
         return Hover(
             displayUUID: display?.uuid, target: target,
-            crossesTiles: !docked && target == nil && Self.crosses(frame, ownPlan, except: window), groupTarget: groupTarget)
+            crossesTiles: torn == nil && !docked && target == nil && Self.crosses(frame, ownPlan, except: window), groupTarget: groupTarget)
     }
 
     /// The dry run for one held hover (UI-SPEC Surface 2 state matrix): a copy of the World with the drop applied, then
@@ -1552,9 +1584,13 @@ public struct Arranger: Sendable {
                 ?? plan.frames[window].map(TabBand.frame(ofContent:))
         }
         let origin = shown(ownPlan, on: ownDesk)
-        let miss = docked
+        let torn = tabs.tearing == window
+        let miss = torn
+            ? tearOffMiss(hover, window: window)
+            : docked
             ? Decision(preview: origin.map { .snapBack($0, label: nil) }, action: .miss, display: own)
             : Decision(action: .miss, display: own, clampInto: hover.crossesTiles ? ownPlan.desktopRect : nil)
+        if torn, hover.overStrip || hover.modifiers.contains(.shift) { return miss }  // ⇧ bypasses: the float
         if hover.modifiers.contains(.shift) {
             // A floating window can't exist while the Desktop tile is hidden (D-31).
             if ownDesk.tree.isDesktopHidden == true {
@@ -1646,6 +1682,7 @@ public struct Arranger: Sendable {
                 return effects + [.fault("could not answer the frame change of \(window): \(error)")] + replan()
             }
         }
+        if session.tearOffGroup != nil { return effects + releaseTearOff(session) }
         let action = kind == .move ? session.current?.action ?? .miss : .miss
         do throws(LayoutError) {
             if kind == .resize, let key = deskKey(of: window), world[key]?.tree.state(of: window) != nil,
@@ -1661,7 +1698,7 @@ public struct Arranger: Sendable {
             case .swap(let other): effects += try commitSwap(window, with: other)
             case .undock: effects += try commitUndock(window)
             case .refuse(let text): effects += [.announce(text)] + (try missed(window))
-            case .miss: effects += try missed(window)
+            case .miss, .tearOffFloat: effects += try missed(window)
             }
         } catch {
             effects += [.fault("drop of \(window) failed: \(error)")] + replan()

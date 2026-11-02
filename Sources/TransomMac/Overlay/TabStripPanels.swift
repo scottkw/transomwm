@@ -79,6 +79,12 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         return layout.tabRects.first { Self.ns($0.value).contains(point) }.map { .tab($0.key) }
     }
 
+    /// The member whose tab is at `point` (view coordinates); nil over a button, the overflow button or the background.
+    func member(at point: NSPoint) -> TransomModel.WindowRef? {
+        guard case .tab(let i)? = target(at: point), strip.members.indices.contains(i) else { return nil }
+        return strip.members[i]
+    }
+
     /// Tab `i`'s tooltip and overflow item: its title, else its app name.
     private func title(_ i: Int) -> String {
         TabCopy.titleOrApp(title: strip.titles.indices.contains(i) ? strip.titles[i] : "", app: Self.appName(strip.members[i]))
@@ -379,6 +385,14 @@ final class TabStripView: NSView, NSViewToolTipOwner {
 
     /// The window numbers of the strips on screen: a press on one is never a window drag (Pitfall 4).
     var windowNumbers: Set<Int> { Set(shown.values.joined().map(\.windowNumber)) }
+
+    /// The member whose tab is under global top-left `point` on strip panel `number`: a press there may tear it off.
+    func member(atWindowNumber number: Int, point: Point) -> TransomModel.WindowRef? {
+        guard let panel = shown.values.joined().first(where: { $0.windowNumber == number }), let view = Self.view(panel) else { return nil }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let local = panel.convertPoint(fromScreen: NSPoint(x: point.x, y: primaryHeight - point.y))
+        return view.member(at: view.convert(local, from: nil))
+    }
 
     init() {
         let center = NotificationCenter.default, workspace = NSWorkspace.shared.notificationCenter

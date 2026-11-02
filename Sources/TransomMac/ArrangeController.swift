@@ -66,6 +66,7 @@ import os
     private let collapsedPanels = CollapsedPanels()
     /// The tab strips (TABS-02). A panel is made only when a group's strip first shows.
     let tabStripPanels = TabStripPanels()
+    private let ghostPanel = TearOffGhostPanel()
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
@@ -415,7 +416,9 @@ import os
         }
         let location = Point(x: event.location.x, y: event.location.y)
         let press = kind == .down && !onStrip ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
-        let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press)
+        // A press on a tab may tear it off (Pattern 7); on a button or the background it is only the strip's click.
+        let tab = onStrip ? tabStripPanels.member(atWindowNumber: Int(event.windowUnderPointer), point: location) : nil
+        let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press, pressTab: tab)
         let session = arranger.drag  // mouse-up ends it
         if kind == .dragged { dragTrace.dragged += 1 }
         await run(arranger.handle(.pointer(pointer), now: .now))
@@ -658,6 +661,10 @@ import os
                 tabStripPanels.show(strips, on: displayUUID, space: arranger.displays.first { $0.uuid == displayUUID }?.currentSpaceID)
             case .raiseStrip(let group):
                 tabStripPanels.raise(group)
+            case .tearOffGhost(let ghost?):
+                if ghostPanel.isShown { ghostPanel.move(to: ghost.pointer) } else { ghostPanel.show(ghost) }
+            case .tearOffGhost(nil):
+                ghostPanel.hide()
             case .tabAnnouncement(let announcement):
                 let text = TabCopy.announcement(announcement, appName: Self.appName)
                 logger.info("\(text, privacy: .public)")

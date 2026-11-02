@@ -1485,3 +1485,116 @@ private func groupDocked(_ arranger: Arranger, _ leaf: NodeID, at edge: Edge, of
         #expect(tree.node(try #require(tree.leaf(containing: a))) == .panel(a))
     }
 }
+
+// MARK: Tear-off (D-10, TABS-04)
+
+private func tabPress(_ member: WindowRef, at point: Point, _ modifiers: Modifiers = []) -> ArrangerInput {
+    .pointer(PointerEvent(kind: .down, location: point, modifiers: modifiers, pressTab: member))
+}
+
+private func ghosts(_ effects: [ArrangerEffect]) -> [TearOffGhost?] {
+    effects.compactMap { if case .tearOffGhost(let ghost) = $0 { ghost } else { nil } }
+}
+
+private func announcements(_ effects: [ArrangerEffect]) -> [TabAnnouncement] {
+    effects.compactMap { if case .tabAnnouncement(let announcement) = $0 { announcement } else { nil } }
+}
+
+/// The strip shown for `group` on the main display.
+private func stripRect(_ arranger: Arranger, _ group: GroupKey) throws -> Rect {
+    try #require(arranger.tabs.shownStrips["main"]?.first { $0.group == group }?.frame, "no strip shown for \(group)")
+}
+
+/// Presses `member`'s tab at the strip's centre, drags 2 pt inside the strip, then out to `point`.
+private func tear(
+    _ arranger: inout Arranger, _ member: WindowRef, of group: GroupKey, to point: Point, _ modifiers: Modifiers = [],
+    at now: ContinuousClock.Instant
+) throws -> [ArrangerEffect] {
+    let strip = try stripRect(arranger, group)
+    var effects = arranger.handle(tabPress(member, at: centre(strip), modifiers), now: now)
+    effects += arranger.handle(pointer(.dragged, strip.midX + 2, strip.midY, modifiers), now: now)
+    effects += arranger.handle(pointer(.dragged, point.x, point.y, modifiers), now: now)
+    return effects
+}
+
+/// The frame a tear-off of `member` lands at with the pointer at `point`, before the clamp.
+private func landing(_ arranger: Arranger, _ member: WindowRef, content: Rect, at point: Point) -> Rect {
+    let wanted = arranger.wantedFrames[member.identity]
+    let width = wanted?.width ?? content.width, height = wanted?.height ?? content.height
+    return Rect(x: point.x - width / 2, y: point.y - 12, width: width, height: height)
+}
+
+private func desktopRect(_ arranger: Arranger) throws -> Rect {
+    let desk = try #require(arranger.world[mainKey])
+    return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
+}
+
+@Suite struct ArrangerTearOffTests {
+    @Test func aTabPressWithDragsInsideTheStripStartsNothingAndChangesNothing() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [b, f], f selected
+        let strip = try stripRect(arranger, group)
+        let before = arranger.world
+        var effects = arranger.handle(tabPress(b, at: centre(strip)), now: start)
+        effects += arranger.handle(pointer(.dragged, strip.midX + 30, strip.midY), now: start)
+        #expect(arranger.drag == nil, "a session started inside the strip")
+        effects += arranger.handle(pointer(.up, strip.midX + 30, strip.midY), now: start)
+        #expect(effects.isEmpty, "a press inside the strip did something: \(effects)")
+        #expect(arranger.world == before)
+        // The press is gone: a later drag outside the strip starts nothing.
+        _ = arranger.handle(pointer(.dragged, strip.midX, strip.maxY + 200), now: start)
+        #expect(arranger.drag == nil)
+    }
+
+    @Test func leavingTheStripStartsAMoveSessionWithNoFramePollAndShowsTheGhost() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        let point = Point(x: 1200, y: 500)
+        let effects = try tear(&arranger, b, of: group, to: point, at: start)
+        let session = try #require(arranger.drag, "no tear-off session")
+        #expect(session.window == b && session.kind == .move && session.tearOffGroup == group)
+        #expect(!effects.contains { if case .pollDragFrame = $0 { true } else { false } }, "a frame poll was asked for: \(effects)")
+        #expect(ghosts(effects).last == TearOffGhost(member: b, title: "", pointer: point))
+        #expect(arranger.isDragging)
+    }
+
+    @Test func aReleaseOverEmptyDesktopFloatsTheTabAtTheClampedLandingFrameInOneUndoStep() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        let desktop = try desktopRect(arranger)
+        arranger.wantedFrames[b.identity] = Rect(x: 0, y: 0, width: desktop.width - 40, height: desktop.height - 40)  // its pre-group frame
+        let point = centre(desktop)  // the landing frame (top 12 pt above the pointer) must be clamped up
+        let expected = Planner.clamp(landing(arranger, b, content: content, at: point), into: desktop)
+        _ = try tear(&arranger, b, of: group, to: point, at: start)
+        let tick = arranger.handle(.tick, now: start + DragSession.dwell)
+        #expect(previews(tick) == [.clamp(expected)], "tick gave \(tick)")
+        let depth = arranger.history.depth(for: mainKey)
+        let grouped = arranger.world
+        let up = arranger.handle(pointer(.up, point.x, point.y), now: start + .milliseconds(200))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.desktop.frame(of: b) == expected, "b floats at \(String(describing: desk.desktop.frame(of: b)))")
+        #expect(desk.tree.node(group.node) == .tabs(windows: [f, a], selected: 1), "the group lost more than b")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1, "the tear-off is not one undo step")
+        #expect(announcements(up) == [.movedOut(dissolved: false)])
+        #expect(ghosts(up) == [nil], "the ghost was not hidden: \(up)")
+        #expect(commands(up).contains(.focus(b)))
+        #expect(up.contains(.info("group \(group.node): \(b) moved out via tear-off, landed floating")))
+        #expect(arranger.drag == nil)
+        _ = arranger.handle(.command(.undo, focused: b), now: start + .milliseconds(300))
+        #expect(arranger.world[mainKey]?.tree == grouped[mainKey]?.tree, "Undo did not restore the group")
+        #expect(arranger.world[mainKey]?.desktop.contains(b) == false)
+    }
+
+    @Test func tearingFromATwoTabGroupDissolvesIt() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, frame, _) = try bareGroup(at: start)  // [b, f], f selected
+        let desktop = try desktopRect(arranger)
+        _ = try tear(&arranger, f, of: group, to: centre(desktop), at: start)
+        let up = arranger.handle(pointer(.up, desktop.midX, desktop.midY), now: start + .milliseconds(200))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.node(group.node) == .panel(b), "the group did not dissolve into b")
+        #expect(desk.desktop.contains(f))
+        #expect(setFrames(up)[b] == frame, "b did not take the whole group frame: \(up)")
+        #expect(announcements(up) == [.movedOut(dissolved: true)])
+    }
+}
