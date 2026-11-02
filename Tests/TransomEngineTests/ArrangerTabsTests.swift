@@ -2324,3 +2324,33 @@ private func parkedFrame(_ content: Rect) -> Rect {
         #expect(selected(arranger, group) == f)
     }
 }
+
+/// WR-03: a hidden member cannot be moved to another Space by a frame write, so a Space move never carries the group.
+@Suite struct ArrangerTabSpaceRehomeTests {
+    @Test func movingTheSelectedMemberToAnotherSpaceTakesItOutAloneAndTheRestStayOnTheOldDesk() throws {
+        let start = ContinuousClock.now
+        let spaced = DisplayInfo(uuid: "main", frame: mainDisplay.frame, visibleFrame: area, currentSpaceID: 1)
+        let one = DeskKey(displayUUID: "main", spaceID: 1), two = DeskKey(displayUUID: "main", spaceID: 2)
+        func onSpace(_ id: UInt32, _ frame: Rect, _ space: UInt64) -> WindowInfo {
+            WindowInfo(window: window(id), frame: frame, state: .present, displayUUID: "main", kind: .dockable, spaces: [space])
+        }
+        var arranger = Arranger()
+        let infos = [onSpace(1, frameA, 1), onSpace(2, smallF, 1), onSpace(3, frameB, 1)]
+        _ = arranger.handle(.inventory(WindowInventory(displays: [spaced], windows: infos, initialRefreshComplete: true)), now: start)
+        _ = arranger.handle(.command(.dock, focused: a), now: start)
+        _ = arranger.handle(.command(.dock, focused: b), now: start)
+        let leaf = try #require(arranger.world[one]?.tree.leaf(containing: b))
+        try arranger.world.edit(one, history: &arranger.history) { desk, _ throws(LayoutError) in
+            try desk.desktop.remove(f)
+            try desk.tree.group(f, into: leaf)  // [b, f], f selected
+        }
+        _ = arranger.handle(.gap(8), now: start)
+        try #require(arranger.isParked(b), "b was not parked")
+        let away = Rect(x: 300, y: 200, width: 400, height: 300)
+        _ = arranger.handle(.event(.windowChanged(onSpace(2, away, 2))), now: start + .seconds(1))
+        #expect(arranger.world[one]?.tree.node(leaf) == .panel(b), "the hidden member did not keep the leaf on its own Space")
+        #expect(arranger.world[two]?.desktop.groups.isEmpty == true, "the group followed to a Space its hidden member is not on")
+        #expect(arranger.world[two]?.desktop.frame(of: f) == away && arranger.world[one]?.contains(f) == false)
+        #expect(!arranger.isHiddenTab(b))
+    }
+}

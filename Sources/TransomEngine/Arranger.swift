@@ -1153,8 +1153,10 @@ public struct Arranger: Sendable {
         guard to.displayUUID != from.displayUUID || leftSpace else { return }
         // While displays settle, a display move is macOS's: the tile is kept for the re-plug (Pitfall 4).
         if settling, to.displayUUID != from.displayUUID { return }
-        // A group's selected member takes the whole group, which floats there as one (UI-SPEC Surface 5).
-        let group = tabGroup(holding: info.window)
+        // A group's selected member takes the whole group to another display, where it floats as one (UI-SPEC Surface 5).
+        // A frame write cannot move a hidden member to another Space of the same display, so a Space move takes the
+        // selected member out alone and the rest stay grouped on the old desk, a neighbour selected (WR-03).
+        let group = to.displayUUID != from.displayUUID ? tabGroup(holding: info.window) : nil
         var taken: (node: Node, states: [WindowIdentity: WindowState])?
         var candidate = world
         try candidate.reflow(from) { desk, _ throws(LayoutError) in
