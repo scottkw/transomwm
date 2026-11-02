@@ -785,6 +785,7 @@ public struct Arranger: Sendable {
         var subject: WindowIdentity?
         var hidden: [ArrangerEffect] = []
         var faults: [ArrangerEffect] = []
+        var selected: [ArrangerEffect] = []
         do throws(LayoutError) {
             switch event {
             case .windowCreated(let info), .windowChanged(let info):
@@ -831,9 +832,11 @@ public struct Arranger: Sendable {
                 }
                 return retryRefusal(window, requested: requested, actual: actual, now: now)
             case .windowStateChanged(let window, let state):
+                if state == .closed || state == .absent { suppressFocus(ofGroupHolding: window, now: now) }
                 if state == .closed { forget(window) } else { windows[window.identity]?.state = state }
                 subject = window.identity
             case .windowDestroyed(let window):
+                suppressFocus(ofGroupHolding: window, now: now)
                 forget(window)
             case .sessionPaused(let paused):
                 sessionPaused = paused
@@ -848,6 +851,8 @@ public struct Arranger: Sendable {
             case .windowFocused(let window):
                 focusOrder.removeAll { $0 == window.identity }
                 focusOrder.insert(window.identity, at: 0)
+                // D-08: a hidden member is selected before the widen below, which then sees the group's leaf.
+                selected = activated(window, now: now)
             case .appTerminated(let pid):
                 // Its tracked windows are still in `windows` here and close on their own windowDestroyed.
                 faults += closeDormant { $0.pid == pid }
@@ -869,7 +874,7 @@ public struct Arranger: Sendable {
         }
         // CONTEXT E: focus outside the view widens the camera.
         let widened = if case .windowFocused(let window) = event { widen(toShow: window, new: false) } else { [ArrangerEffect]() }
-        guard case .windowCreated(let info) = event else { return faults + hidden + widened + replan() }
+        guard case .windowCreated(let info) = event else { return faults + hidden + selected + widened + replan() }
         do throws(LayoutError) {
             let taken = try takeFinderWindow(info, now: now)
             return faults + taken + widen(toShow: info.window, new: true) + replan()

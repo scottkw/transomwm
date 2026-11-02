@@ -203,9 +203,10 @@ extension Arranger {
         return [.info("group \(pending.group.node): select \(window) via \(pending.source), \(ms) ms")] + replan()
     }
 
-    /// The pending reveal's deadline passed with no matching read-back: the selection reverts and the previous member,
-    /// never parked, stays (UI-SPEC Surface 3 error state).
+    /// On every tick: expired focus suppressions go, and a pending reveal whose deadline passed with no matching
+    /// read-back reverts; the previous member, never parked, stays (UI-SPEC Surface 3 error state).
     mutating func revealTimedOut(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        tabs.suppressedUntil = tabs.suppressedUntil.filter { $0.value > now }
         guard let pending = tabs.pendingReveal, now >= pending.deadline else { return [] }
         tabs.pendingReveal = nil
         let key = pending.group.desk
