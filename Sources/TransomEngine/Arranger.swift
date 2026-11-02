@@ -1109,16 +1109,22 @@ public struct Arranger: Sendable {
         wantedFrames[info.window.identity] = info.frame
     }
 
-    /// A docked window whose app was just excluded floats on its desk's Desktop at its current frame (D-29, TILE-18).
-    /// An OS fact: it goes through `World.reflow`, with no undo step, and its neighbours take its room at the re-plan.
+    /// A docked window, or a floating group's member, whose app was just excluded floats on its desk's Desktop at its
+    /// current frame, out of any group (D-29, TILE-18). A hidden member floats at its group's content rect instead, where
+    /// the window system's last write before the exclusion put it (`releaseFrames(forExcluding:)`, CR-01). An OS fact:
+    /// it goes through `World.reflow`, with no undo step, and its neighbours take its room at the re-plan.
     private mutating func release(_ info: WindowInfo) throws(LayoutError) {
-        guard info.isExcluded, let key = deskKey(of: info.window), let state = world[key]?.tree.state(of: info.window) else { return }
+        guard info.isExcluded, let key = deskKey(of: info.window), let state = world[key]?.state(of: info.window) else { return }
+        let docked = world[key]?.tree.state(of: info.window) != nil
+        let group = tabGroup(holding: info.window)
+        guard docked || group != nil else { return }
+        let frame = group.flatMap { $0.members[$0.selected] != info.window ? contentRect(of: $0) : nil } ?? info.frame
         try world.reflow(key) { desk, _ throws(LayoutError) in
-            try desk.tree.remove(info.window)
-            try desk.desktop.add(info.window, frame: info.frame)
+            if docked { try desk.tree.remove(info.window) } else { try desk.desktop.remove(info.window) }
+            try desk.desktop.add(info.window, frame: frame)
             if state != .present { try desk.desktop.setState(state, for: info.window) }
         }
-        wantedFrames[info.window.identity] = info.frame
+        wantedFrames[info.window.identity] = frame
     }
 
     /// The desk a window belongs on (D-25): its display's, on the shown Space unless its known Spaces exclude that

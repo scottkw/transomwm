@@ -2219,3 +2219,45 @@ private func cameraMoves(_ effects: [ArrangerEffect]) -> [CameraMove] {
         #expect(revealed(arranger.handle(.tick, now: start + .seconds(1))).isEmpty)
     }
 }
+
+// MARK: Code review 07 fixes
+
+private func excluded(_ window: WindowRef, at frame: Rect) -> WindowInfo {
+    WindowInfo(window: window, frame: frame, state: .present, displayUUID: "main", kind: .dockable, isExcluded: true)
+}
+
+private func parkedFrame(_ content: Rect) -> Rect {
+    mainDisplay.parkedFrame(size: Size(width: content.width, height: content.height), among: [mainDisplay])
+}
+
+/// CR-01: excluding an app first writes its hidden tabs back on screen, then takes them out of their groups.
+@Suite struct ArrangerTabExclusionTests {
+    @Test func anExcludedHiddenDockedMemberComesBackAtTheContentRectOutOfItsGroup() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)  // [b, f], f selected, b parked
+        _ = arranger.handle(.event(.windowMoved(b, parkedFrame(content))), now: start)  // b's park echo
+        _ = arranger.handle(.event(.windowMoved(f, content)), now: start)  // f's echo
+        #expect(arranger.releaseFrames(forExcluding: ["com.example.other"]).isEmpty)
+        #expect(arranger.releaseFrames(forExcluding: ["com.example.arranger"]) == [b: content], "the hidden member is not written back first")
+        let effects = arranger.handle(.event(.windowChanged(excluded(b, at: parkedFrame(content)))), now: start + .seconds(2))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.node(group.node) == .panel(f), "b is still in the group")
+        #expect(desk.desktop.frame(of: b) == content, "b floats at its parked frame")
+        #expect(arranger.tabGroup(holding: b) == nil && !arranger.isHiddenTab(b))
+        #expect(!commands(effects).contains { $0.window == b }, "the excluded window was written: \(commands(effects))")
+    }
+
+    @Test func anExcludedHiddenFloatingMemberComesBackAtTheContentRectAndTheGroupDissolves() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, content) = try bareFloatingGroup(at: start)  // [t, f], f selected, t parked
+        _ = arranger.handle(.event(.windowMoved(t, parkedFrame(content))), now: start)
+        #expect(arranger.releaseFrames(forExcluding: ["com.example.arranger"]) == [t: content], "the hidden member is not written back first")
+        let effects = arranger.handle(.event(.windowChanged(excluded(t, at: parkedFrame(content)))), now: start + .seconds(2))
+        let layer = try #require(arranger.world[mainKey]?.desktop)
+        #expect(layer.groups.isEmpty, "the group left with one member did not dissolve")
+        #expect(layer.frame(of: t) == content, "t floats at its parked frame")
+        #expect(layer.frame(of: f) == tFrame, "the survivor did not take the whole frame")
+        #expect(arranger.tabGroup(holding: t) == nil && !parks(effects).contains { $0.window == t })
+        #expect(setFrames(effects)[f] == tFrame, "the survivor was not written into the group frame: \(effects)")
+    }
+}

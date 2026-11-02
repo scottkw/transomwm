@@ -134,6 +134,7 @@ import os
         self.exclusions = exclusions
         self.zoomEnabled = zoomEnabled
         arranger = Arranger(gap: gap)
+        system.releaseFramesBeforeExcluding = { [weak self] bundleIDs in self?.arranger.releaseFrames(forExcluding: bundleIDs) ?? [:] }
         gapPanels.onDrag = { [weak self] handle, delta, ended in
             Task { [weak self] in
                 guard let self else { return }
@@ -974,12 +975,9 @@ import os
     @discardableResult
     public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
         gestures.stop(reason: "quit")
-        let groupRects = arranger.groupContentRects()
-        let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) }).union(groupRects.keys)
-        let plan = Recovery.terminationPlan(
-            windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked,
-            homeTiles: arranger.homeTiles().merging(groupRects) { $1 })
+        let plan = arranger.restorePlan()
         guard !plan.isEmpty else { return 0 }
+        let groupRects = arranger.groupContentRects()
         let (seconds, attoseconds) = limit.components
         let restored = system.restoreForTermination(
             plan, raising: arranger.selectedGroupMembers(), deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)

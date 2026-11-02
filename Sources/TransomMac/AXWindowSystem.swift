@@ -181,12 +181,27 @@ import os
         )
     }
 
-    /// The user's exclusion list (D-12): those apps' windows stay tracked, marked `isExcluded`, and never touched.
+    /// Asked by `setExcludedBundleIDs` for the windows of the new list that must come back on screen first (CR-01):
+    /// `Arranger.releaseFrames(forExcluding:)`.
+    public var releaseFramesBeforeExcluding: ((Set<String>) -> [TransomModel.WindowRef: Rect])?
+
+    /// The user's exclusion list (D-12): those apps' windows stay tracked, marked `isExcluded`, and never touched. A
+    /// parked one (a hidden tab, a camera park) is written back on screen once first, or nothing would ever unpark it (CR-01).
     public func setExcludedBundleIDs(_ bundleIDs: Set<String>) {
+        let releasing = releaseFramesBeforeExcluding?(bundleIDs) ?? [:]
         excluded = bundleIDs
         loggedExcluded = loggedExcluded.filter { ExclusionFilter.isExcluded($0, in: bundleIDs) }
         // Frames already queued, or held while an app was degraded, must not be written either (WR-04).
         for thread in threads.values { thread.excluded = ExclusionFilter.isExcluded(thread.bundleID, in: bundleIDs) }
+        // Queued on each app's thread after the flip dropped its waiting frames, so no older park can land after it.
+        for (ref, rect) in releasing {
+            guard rect.isValidGeometry, let info = tracker.info(for: ref.identity), let thread = threads[ref.pid] else { continue }
+            let windowID = info.visibleMemberID ?? ref.windowID
+            logger.info("exclusion releases \(ref.description, privacy: .public) back on screen")
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = thread.writeForTermination(windowID: windowID, rect: rect, deadline: .now() + 1)
+            }
+        }
         emit(tracker.setExcluded(bundleIDs))
     }
 

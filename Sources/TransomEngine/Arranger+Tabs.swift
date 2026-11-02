@@ -368,6 +368,23 @@ extension Arranger {
         return rects
     }
 
+    /// The quit restore's writes (SAFE-01, D-D, D-07): every parked or off-screen window Transom may move, back on
+    /// screen; a camera-parked or zoomed docked window at its home-view tile, every group member at its content rect.
+    public func restorePlan() -> [WindowRef: Rect] {
+        let groupRects = groupContentRects()
+        let docked = Set(world.desks.values.flatMap { $0.tree.windows.map(\.identity) }).union(groupRects.keys)
+        return Recovery.terminationPlan(
+            windows: Array(windows.values), homeFrames: homeFrames, displays: displays, docked: docked,
+            homeTiles: homeTiles().merging(groupRects) { $1 })
+    }
+
+    /// CR-01: the windows of apps about to join the exclusion list that the restore would move, and where: once
+    /// excluded they are never written again, so a hidden tab must leave its park first. The window system writes these
+    /// before it applies the list.
+    public func releaseFrames(forExcluding bundleIDs: Set<String>) -> [WindowRef: Rect] {
+        restorePlan().filter { ExclusionFilter.isExcluded($0.key.bundleID, in: bundleIDs) }
+    }
+
     /// Every group's selected member that is present, every desk: the quit restore raises these last, over their hidden members.
     public func selectedGroupMembers() -> [WindowRef] {
         world.desks.values.flatMap { desk in
