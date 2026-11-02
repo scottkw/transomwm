@@ -916,3 +916,64 @@ private func floatingSelected(_ arranger: Arranger, _ group: GroupKey) -> Window
         }
     }
 }
+
+/// a docked left of the Desktop, t and f floating on it, both focused (t last), then grouped as [t, f] with f selected.
+private func dockedBesideFloatingGroup(at now: ContinuousClock.Instant) throws -> (Arranger, GroupKey) {
+    var arranger = Arranger()
+    let infos = [info(1, frame: frameA), info(2, frame: smallF), info(5, frame: tFrame)]
+    _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: now)
+    _ = arranger.handle(.command(.dock, focused: a), now: now)
+    _ = arranger.handle(.event(.windowFocused(f)), now: now)
+    _ = arranger.handle(.event(.windowFocused(t)), now: now)
+    var id = NodeID(raw: 0)
+    try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
+        id = try ids.make()
+        try desk.desktop.remove(f)
+        try desk.desktop.group(id: id, target: t, adding: f)
+    }
+    arranger.wantedFrames[f.identity] = nil  // as the drop commit leaves it
+    _ = arranger.handle(.gap(8), now: now)
+    try #require(arranger.focusOrder.first == t.identity, "t is not the most recently focused")
+    return (arranger, GroupKey(desk: mainKey, node: id))
+}
+
+/// UI-SPEC Surface 3 "What the user never sees": hidden members stay out of focus moves; a hidden Desktop parks the group.
+@Suite struct FloatingGroupVisibilityTests {
+    @Test func aFocusMoveOntoTheDesktopPicksTheSelectedMemberNotAHiddenOne() throws {
+        let start = ContinuousClock.now
+        var (arranger, _) = try dockedBesideFloatingGroup(at: start)
+        let effects = arranger.handle(.command(.focus(.right), focused: a), now: start)
+        #expect(commands(effects) == [.focus(f)], "the focus move picked \(commands(effects))")
+    }
+
+    @Test func aHiddenDesktopParksEveryMemberAndShowingItBringsBackOnlyTheSelected() throws {
+        let start = ContinuousClock.now
+        var (arranger, _) = try dockedBesideFloatingGroup(at: start)
+        // t's frame crosses a's tile, so the group's content rect is clamped into the Desktop.
+        let desk = try #require(arranger.world[mainKey])
+        let desktop = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
+        let content = Planner.clamp(TabBand.content(of: tFrame), into: desktop)
+        _ = arranger.handle(.event(.windowMoved(f, content)), now: start)  // f's echo
+        let hide = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
+        #expect(arranger.isParked(f) && arranger.isParked(t), "not every member parked: \(hide)")
+        #expect(parks(hide).filter { if case .park(t, _, _) = $0 { true } else { false } }.isEmpty, "t parked twice")
+        #expect(strips(hide) == [[]], "the strip stayed on a hidden Desktop")
+        for window in [f, t] {  // the parks' echoes: slivers at the display's corner
+            _ = arranger.handle(.event(.windowMoved(window, Rect(x: 1439, y: 899, width: content.width, height: content.height))), now: start)
+        }
+        let show = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
+        #expect(setFrames(show)[f] == content, "f did not come back at the content rect: \(show)")
+        #expect(setFrames(show)[t] == nil, "the hidden member came back")
+        #expect(arranger.isParked(t) && !arranger.isParked(f))
+        #expect(strips(show).last?.first?.floating == true, "the strip did not come back")
+    }
+
+    @Test func isHiddenTabIsTrueExactlyForNonSelectedMembers() throws {
+        let start = ContinuousClock.now
+        let (floating, _) = try dockedBesideFloatingGroup(at: start)
+        #expect(floating.isHiddenTab(t) && !floating.isHiddenTab(f) && !floating.isHiddenTab(a))
+        let (docked, _, _, _) = try bareGroup(at: start)
+        #expect(docked.isHiddenTab(b) && !docked.isHiddenTab(f) && !docked.isHiddenTab(a))
+        #expect(!docked.isHiddenTab(window(99)), "an unknown window is hidden")
+    }
+}
