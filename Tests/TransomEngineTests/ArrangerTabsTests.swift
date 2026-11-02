@@ -2261,3 +2261,36 @@ private func parkedFrame(_ content: Rect) -> Rect {
         #expect(setFrames(effects)[f] == tFrame, "the survivor was not written into the group frame: \(effects)")
     }
 }
+
+/// WR-01: an app that snaps its size (whole character cells) still reveals; a failed reveal gives focus back.
+@Suite struct ArrangerTabRevealToleranceTests {
+    @Test func aReadBackAtTheOriginButSnappedShorterParksThePrevious() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, content) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        let snapped = Rect(x: content.x, y: content.y, width: content.width - 7, height: content.height - 10)
+        let back = arranger.handle(.event(.frameApplied(b, requested: content, actual: snapped)), now: start + .milliseconds(40))
+        #expect(parks(back) == [.park(f, displayUUID: "main", size: Size(width: content.width, height: content.height))], "\(back)")
+        #expect(arranger.tabs.pendingReveal == nil && selected(arranger, group) == b)
+        #expect(!arranger.handle(.tick, now: start + .seconds(2)).contains(.beep), "the snapped reveal timed out")
+    }
+
+    @Test func aReadBackFarLargerThanTheContentRectIsNoReveal() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, content) = try bareGroup(at: start)
+        _ = arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)
+        let refused = Rect(x: content.x, y: content.y, width: content.width, height: content.height + MinimumSizeLearner.refusalMargin + 8)
+        #expect(parks(arranger.handle(.event(.frameApplied(b, requested: content, actual: refused)), now: start)).isEmpty)
+        #expect(arranger.tabs.pendingReveal?.revealed == b)
+    }
+
+    @Test func aRevealThatTimesOutFocusesTheKeptMemberAgain() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)
+        #expect(commands(arranger.handle(.tab(.select(b, via: .click), ready: true), now: start)).contains(.focus(b)))
+        let late = commands(arranger.handle(.tick, now: start + .seconds(1)))
+        #expect(late.contains(.focus(f)), "f did not get focus back: \(late)")
+        #expect(late.contains { if case .park(b, _, _) = $0 { true } else { false } }, "b was not parked again: \(late)")
+        #expect(selected(arranger, group) == f)
+    }
+}

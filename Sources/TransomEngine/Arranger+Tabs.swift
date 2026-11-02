@@ -493,10 +493,13 @@ extension Arranger {
         [.beep, .tabAnnouncement(.refused(refusal)), .info("group: \(what) refused, \(why)")]
     }
 
-    /// A read-back of the pending reveal's window within 2 pt of its content rect: the previous member parks now.
+    /// A read-back of the pending reveal's window at its content rect's origin (2 pt), at any smaller size and at most
+    /// the docked correction's margin larger (an app that snaps its size to whole cells, WR-01): the previous member parks now.
     mutating func revealed(_ window: WindowRef, actual: Rect, now: ContinuousClock.Instant) -> [ArrangerEffect]? {
+        let t = 2.0, margin = MinimumSizeLearner.refusalMargin
         guard let pending = tabs.pendingReveal, pending.revealed == window, let planned = lastRequested[window.identity],
-            Planner.near(actual, planned, within: 2)
+            abs(actual.x - planned.x) <= t, abs(actual.y - planned.y) <= t,
+            actual.width <= planned.width + margin, actual.height <= planned.height + margin
         else { return nil }
         tabs.pendingReveal = nil
         let ms = Int((now - pending.started) / .milliseconds(1))
@@ -520,7 +523,9 @@ extension Arranger {
             return [.fault("group \(pending.group.node): could not keep \(pending.previous): \(error)")] + replan()
         }
         tabs.suppressedUntil[pending.group] = now + Self.focusSuppression
-        return [.beep, .tabAnnouncement(.couldNotShow(pending.revealed)),
+        // The reveal focused its window, which the replan parks again: the kept member takes focus back (WR-01).
+        let refocus: [ArrangerEffect] = windows[pending.previous.identity]?.state == .present ? [.perform([.focus(pending.previous)])] : []
+        return refocus + [.beep, .tabAnnouncement(.couldNotShow(pending.revealed)),
             .info("group \(pending.group.node): select \(pending.revealed) failed, no read-back after 1 s; kept \(pending.previous)")]
             + replan()
     }
