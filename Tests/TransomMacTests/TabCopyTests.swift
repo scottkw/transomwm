@@ -59,4 +59,12 @@ import Testing
         #expect(TabCopy.closeGroupHelp(3) == "Closes all 3 windows in this tab group")
         #expect(TabCopy.closeTab == "Close Tab" && TabCopy.moveOut == "Move Out of Group")
     }
+
+    /// UI-SPEC Surface 7 Debug line and the Tabs submenu copy.
+    @Test func theDebugLineHasExplicitGroupBranches() {
+        #expect(TabCopy.debugLine(groups: 0, tabs: 0) == "Tab groups: none")
+        #expect(TabCopy.debugLine(groups: 1, tabs: 3) == "Tab groups: 1 group, 3 tabs")
+        #expect(TabCopy.debugLine(groups: 2, tabs: 5) == "Tab groups: 2 groups, 5 tabs")
+        #expect(TabCopy.tabsMenu == "Tabs" && TabCopy.nextTab == "Next Tab" && TabCopy.previousTab == "Previous Tab")
+    }
 }

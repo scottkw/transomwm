@@ -58,5 +58,14 @@ nonisolated public enum TabCopy {
     /// A tab's tooltip and overflow item: its title, else its app name.
     public static func titleOrApp(title: String, app: String) -> String { title.isEmpty ? MenuCopy.truncatedAppName(app) : title }
 
+    /// The Debug submenu's line; a group always has 2 or more tabs, so "tabs" needs no singular branch.
+    public static func debugLine(groups: Int, tabs: Int) -> String {
+        switch groups {
+        case 0: "Tab groups: none"
+        case 1: "Tab groups: 1 group, \(tabs) tabs"
+        default: "Tab groups: \(groups) groups, \(tabs) tabs"
+        }
+    }
+
     private static func count(_ tabs: Int) -> String { tabs == 1 ? "1 tab" : "\(tabs) tabs" }
 }

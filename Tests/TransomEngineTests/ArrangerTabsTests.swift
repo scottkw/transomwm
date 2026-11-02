@@ -1945,6 +1945,22 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(!arranger.availability(.tabs(.next), context: CommandContext(focused: f, ready: true)))
     }
 
+    @Test func tabGroupCountsCountsDockedAndFloatingGroupsOnEveryDeskAndEveryMember() throws {
+        let start = ContinuousClock.now
+        #expect(Arranger().tabGroupCounts() == (groups: 0, tabs: 0))
+        var (arranger, _, _, _) = try bareGroup(at: start, withA: true)  // docked [b, f, a]
+        #expect(arranger.tabGroupCounts() == (groups: 1, tabs: 3))
+        let c = window(4), d = window(5), e = window(6), g = window(7)
+        let away = DeskKey(displayUUID: "away", spaceID: nil)
+        try arranger.world.addDesk(away)
+        try arranger.world.reflow(away) { desk, ids throws(LayoutError) in
+            for (window, frame) in [(c, frameA), (d, frameB), (e, smallF), (g, frameA)] { try desk.desktop.add(window, frame: frame) }
+            try desk.desktop.group(id: try ids.make(), target: c, adding: d)
+            try desk.desktop.group(id: try ids.make(), target: e, adding: g)
+        }
+        #expect(arranger.tabGroupCounts() == (groups: 3, tabs: 7), "a dormant desk's floating groups count too")
+    }
+
     @Test func moveOutOfGroupMovesTheFocusedMemberOutViaTheSource() throws {
         let start = ContinuousClock.now
         var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected

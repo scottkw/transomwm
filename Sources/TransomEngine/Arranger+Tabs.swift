@@ -336,6 +336,14 @@ extension Arranger {
         return desk.desktop.groups.first { $0.id == key.node }.map { TabGroupRef(key: key, members: $0.members, selected: $0.selected, floating: true) }
     }
 
+    /// Docked and floating groups on every desk, and their members: the Debug line (UI-SPEC Surface 7).
+    public func tabGroupCounts() -> (groups: Int, tabs: Int) {
+        world.desks.values.reduce(into: (groups: 0, tabs: 0)) { counts, desk in
+            for case .tabs(let members, _) in desk.tree.nodes.values { counts = (counts.groups + 1, counts.tabs + members.count) }
+            for group in desk.desktop.groups { counts = (counts.groups + 1, counts.tabs + group.members.count) }
+        }
+    }
+
     /// Whether `window` is a non-selected member of a docked or floating group: it never shows in focus moves or the overview.
     public func isHiddenTab(_ window: WindowRef) -> Bool {
         tabGroup(holding: window).map { $0.members[$0.selected] != window } ?? false
