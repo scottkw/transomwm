@@ -73,7 +73,7 @@ created: "2026-11-01"
 | 07-11-02 | 11 | 11 | TABS-01 | — | N/A | unit | `swift test --filter 'ArrangerTabsTests\|TabCopyTests\|OverviewCopyTests\|OverviewLayoutTests'` | ✅ | ✅ green |
 | 07-11-03 | 11 | 11 | TABS-01 | T-07-24 | Captures stay in memory | unit | `swift test` + `scripts/check-no-appkit.sh` | ✅ | ✅ green |
 | 07-12-01 | 12 | 12 | TABS-01..06 | T-07-25 | Live suites only in the VM | full + VM | `swift test` + each VM suite via `scripts/vm-live-test.sh` + `scripts/build-debug.sh` | ✅ | ✅ green |
-| 07-12-02 | 12 | 12 | TABS-01..06 | — | N/A | doc check | 07-UAT.md phrase check loop | ❌ W0 | ⬜ pending |
+| 07-12-02 | 12 | 12 | TABS-01..06 | — | N/A | doc check | 07-UAT.md phrase check loop | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
