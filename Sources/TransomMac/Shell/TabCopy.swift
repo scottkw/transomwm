@@ -38,6 +38,10 @@ nonisolated public enum TabCopy {
     public static let floatGroup = "Float Group"
     public static let dockGroup = "Dock Group"
 
+    /// The tab context menu's items and VoiceOver custom actions (UI-SPEC Surface 4).
+    public static let closeTab = "Close Tab"
+    public static let moveOut = "Move Out of Group"
+
     /// Close Group's accessibility help.
     public static func closeGroupHelp(_ count: Int) -> String { "Closes all \(count) windows in this tab group" }
 

@@ -85,9 +85,18 @@ public enum TabSelectSource: Equatable, Sendable {
     case click, overflow, hotkey, menu, url, activation, close
 }
 
+/// Where a Move Out of Group came from (logged).
+public enum TabLeaveSource: Equatable, Sendable {
+    case menu, hotkey, url, voiceOver
+}
+
 /// A tab action from the strip, a hotkey, a menu or a URL.
 public enum TabAction: Equatable, Sendable {
     case select(WindowRef, via: TabSelectSource)
+    /// The tab context menu's Move Out of Group (D-11): the member floats beside its group.
+    case moveOut(WindowRef, via: TabLeaveSource)
+    /// The tab context menu's Close Tab: one member through the close queue.
+    case closeTab(WindowRef)
     case closeGroup(GroupKey)
     case minimizeGroup(GroupKey)
     /// The strip's Float Group (docked group) or Dock Group (floating group) button.
@@ -104,6 +113,8 @@ struct CloseQueue: Equatable, Sendable {
     var current: WindowRef?
     var deadline: ContinuousClock.Instant?
     var closed = 0
+    /// Close Tab: one member, so a dissolve on the way is announced like any other.
+    var oneTab = false
 }
 
 /// A selection waiting for its window's read-back (RESEARCH Pattern 5): until then `previous` keeps covering the
@@ -347,6 +358,8 @@ extension Arranger {
     mutating func tab(_ action: TabAction, ready: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch action {
         case .select(let window, let source): select(window, via: source, ready: ready, now: now)
+        case .moveOut(let window, let source): moveOut(window, via: source, ready: ready)
+        case .closeTab(let window): closeTab(window, ready: ready, now: now)
         case .closeGroup(let group): closeGroup(group, ready: ready, now: now)
         case .minimizeGroup(let group): minimizeGroup(group, ready: ready, now: now)
         case .toggleGroupFloat(let group): toggleGroupFloat(group, ready: ready)
@@ -447,7 +460,8 @@ extension Arranger {
     func dissolved(_ group: TabGroupRef, losing window: WindowRef) -> [ArrangerEffect] {
         guard group.members.count == 2, let survivor = group.members.first(where: { $0 != window }), tabGroup(holding: survivor) == nil
         else { return [] }
-        let spoken: [ArrangerEffect] = tabs.closeQueue?.group == group.key ? [] : [.tabAnnouncement(.ended)]
+        let closing = tabs.closeQueue.map { $0.group == group.key && !$0.oneTab } ?? false
+        let spoken: [ArrangerEffect] = closing ? [] : [.tabAnnouncement(.ended)]
         return spoken + [.info("group \(group.key.node): dissolved, \(survivor) keeps the \(group.floating ? "frame" : "tile")")]
     }
 
@@ -508,6 +522,16 @@ extension Arranger {
         guard tabs.closeQueue?.group != group else { return [] }  // already closing
         let selected = ref.members[ref.selected]
         tabs.closeQueue = CloseQueue(group: group, remaining: [selected] + ref.members.filter { $0 != selected })
+        return closeProgress(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
+    }
+
+    /// Close Tab: `member` alone through the close queue, shown first if hidden; a stop keeps nothing to resume.
+    mutating func closeTab(_ member: WindowRef, ready: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, "close tab \(member)", "arranging is paused") }
+        guard ready else { return refuse(.notReady, "close tab \(member)", "Accessibility is not ready") }
+        guard let ref = tabGroup(holding: member) else { return refuse(.notInGroup, "close tab \(member)", "not in a tab group") }
+        guard tabs.closeQueue?.group != ref.key else { return [] }  // already closing
+        tabs.closeQueue = CloseQueue(group: ref.key, remaining: [member], oneTab: true)
         return closeProgress(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
@@ -732,7 +756,9 @@ extension Arranger {
 
     /// The float: `window` leaves its group and floats at `landing` clamped into the Desktop of `key`'s desk, a hidden
     /// Desktop shown first (D-31). One undo step; raised and focused.
-    mutating func commitTearOff(_ window: WindowRef, from ref: TabGroupRef, landing: Rect, on key: DeskKey) throws(LayoutError) -> [ArrangerEffect] {
+    mutating func commitTearOff(
+        _ window: WindowRef, from ref: TabGroupRef, landing: Rect, on key: DeskKey, via source: String = "tear-off"
+    ) throws(LayoutError) -> [ArrangerEffect] {
         guard let from = deskKey(of: window), let area = display(for: key)?.visibleFrame else { return replan() }
         let show = showingDesktop(), gap = gap, mins = minimums
         var frame = landing
@@ -753,13 +779,50 @@ extension Arranger {
         }
         wantedFrames[window.identity] = frame
         lastRequested[window.identity] = nil
-        return replan() + [.perform([.raise(window), .focus(window)])] + movedOut(window, from: ref, landed: "floating")
+        return replan() + [.perform([.raise(window), .focus(window)])] + movedOut(window, from: ref, landed: "floating", via: source)
     }
 
     /// "Moved out of the tab group", joined with "Tab group ended" when that dissolved it (D-12), and the Leave log line.
-    func movedOut(_ window: WindowRef, from ref: TabGroupRef, landed: String) -> [ArrangerEffect] {
+    func movedOut(_ window: WindowRef, from ref: TabGroupRef, landed: String, via source: String = "tear-off") -> [ArrangerEffect] {
         let ended = dissolved(ref, losing: window).filter { if case .tabAnnouncement = $0 { false } else { true } }
-        return [.tabAnnouncement(.movedOut(dissolved: !ended.isEmpty)), .info("group \(ref.key.node): \(window) moved out via tear-off, landed \(landed)")]
+        return [.tabAnnouncement(.movedOut(dissolved: !ended.isEmpty)), .info("group \(ref.key.node): \(window) moved out via \(source), landed \(landed)")]
             + ended
+    }
+}
+
+/// Move Out of Group (D-11, UI-SPEC Surface 4): the member floats beside its group.
+extension Arranger {
+    /// The gap between the group and the moved-out window, and the cascade offset when neither side has room.
+    static let moveOutGap = 8.0, moveOutCascade = 24.0
+
+    /// Where a moved-out window of `size` lands: 8 pt right of `group`, top edges aligned; else 8 pt left; else its
+    /// top-left 24 pt right of and below the group's. A side "fits" when it lies inside `desktop`; the result is clamped.
+    static func moveOutFrame(size: Size, group: Rect, desktop: Rect) -> Rect {
+        func inside(_ r: Rect) -> Bool { r.minX >= desktop.minX && r.maxX <= desktop.maxX && r.minY >= desktop.minY && r.maxY <= desktop.maxY }
+        let right = Rect(x: group.maxX + moveOutGap, y: group.minY, width: size.width, height: size.height)
+        if inside(right) { return right }
+        let left = Rect(x: group.minX - moveOutGap - size.width, y: group.minY, width: size.width, height: size.height)
+        if inside(left) { return left }
+        let cascade = Rect(x: group.minX + moveOutCascade, y: group.minY + moveOutCascade, width: size.width, height: size.height)
+        return Planner.clamp(cascade, into: desktop)
+    }
+
+    /// Move Out of Group: `member` leaves its group and floats at `moveOutFrame` (its saved pre-group size, else the
+    /// content size), a hidden Desktop shown first; raised and focused. One undo step (the tear-off float commit).
+    mutating func moveOut(_ member: WindowRef, via source: TabLeaveSource, ready: Bool) -> [ArrangerEffect] {
+        guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, "move out \(member)", "arranging is paused") }
+        guard ready else { return refuse(.notReady, "move out \(member)", "Accessibility is not ready") }
+        guard let ref = tabGroup(holding: member), let content = contentRect(of: ref) else {
+            return refuse(.notInGroup, "move out \(member)", "not in a tab group")
+        }
+        let key = ref.key.desk
+        let size = wantedFrames[member.identity]?.size ?? content.size
+        do throws(LayoutError) {
+            guard let desktop = try tearOffDesktop(member, on: key) else { return [.beep] }
+            let landing = Self.moveOutFrame(size: size, group: TabBand.frame(ofContent: content), desktop: desktop)
+            return try commitTearOff(member, from: ref, landing: landing, on: key, via: "\(source)")
+        } catch {
+            return [.beep, .fault("group \(ref.key.node): move out of \(member) failed: \(error)")] + replan()
+        }
     }
 }

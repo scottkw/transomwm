@@ -1758,3 +1758,83 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(arranger.drag == nil, "a stale tab press tore off")
     }
 }
+
+// MARK: Move Out of Group and Close Tab (07-08, D-11, TABS-06)
+
+/// D-11 landing rule and Move Out of Group from the tab context menu.
+@Suite struct ArrangerTabsMoveOutTests {
+    private let desktop = Rect(x: 0, y: 25, width: 1440, height: 875)
+
+    @Test func theMovedOutWindowLandsEightPointsRightOfTheGroupTopsAligned() {
+        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 300), group: Rect(x: 100, y: 100, width: 800, height: 600), desktop: desktop)
+        #expect(frame == Rect(x: 908, y: 100, width: 400, height: 300))
+    }
+
+    @Test func withNoRoomOnTheRightItLandsEightPointsLeft() {
+        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 300), group: Rect(x: 900, y: 100, width: 500, height: 600), desktop: desktop)
+        #expect(frame == Rect(x: 492, y: 100, width: 400, height: 300))
+    }
+
+    @Test func withNoRoomOnEitherSideItCascadesThenClamps() {
+        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 400), group: Rect(x: 300, y: 600, width: 800, height: 300), desktop: desktop)
+        #expect(frame == Rect(x: 324, y: 500, width: 400, height: 400), "cascade (324, 624) clamped up to the Desktop's bottom")
+    }
+
+    @Test func moveOutFloatsTheMemberBesideTheGroupInOneUndoStep() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, frame, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        let size = arranger.wantedFrames[b.identity]?.size ?? content.size
+        let expected = Arranger.moveOutFrame(size: size, group: frame, desktop: try desktopRect(arranger))
+        let depth = arranger.history.depth(for: mainKey), grouped = arranger.world
+        let effects = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.desktop.frame(of: b) == expected, "b floats at \(String(describing: desk.desktop.frame(of: b)))")
+        #expect(desk.tree.node(group.node) == .tabs(windows: [f, a], selected: 1), "the group lost more than b")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1, "Move Out is not one undo step")
+        #expect(announcements(effects) == [.movedOut(dissolved: false)])
+        #expect(commands(effects).contains(.raise(b)) && commands(effects).contains(.focus(b)))
+        #expect(effects.contains(.info("group \(group.node): \(b) moved out via menu, landed floating")))
+        _ = arranger.handle(.command(.undo, focused: b), now: start + .seconds(2))
+        #expect(arranger.world[mainKey]?.tree == grouped[mainKey]?.tree, "Undo did not restore the group")
+        #expect(arranger.world[mainKey]?.desktop.contains(b) == false)
+    }
+
+    @Test func movingOutTheSelectedMemberSelectsTheLeftNeighbourWhenItWasLast() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
+        _ = arranger.handle(.tab(.moveOut(a, via: .menu), ready: true), now: start + .seconds(1))
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f], selected: 1))
+        #expect(arranger.world[mainKey]?.desktop.contains(a) == true)
+    }
+
+    @Test func movingOutOfATwoTabGroupDissolvesIt() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [b, f], f selected
+        let effects = arranger.handle(.tab(.moveOut(f, via: .menu), ready: true), now: start + .seconds(1))
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .panel(b))
+        #expect(announcements(effects) == [.movedOut(dissolved: true)])
+    }
+
+    @Test func aHiddenDesktopIsShownFirst() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start, withA: true)
+        _ = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
+        try #require(arranger.world[mainKey]?.tree.isDesktopHidden == true, "the Desktop did not hide")
+        _ = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.isDesktopHidden != true, "the Desktop was not shown")
+        let floated = try #require(desk.desktop.frame(of: b), "b does not float")
+        #expect(floated == Planner.clamp(floated, into: try desktopRect(arranger)), "b is outside the Desktop tile")
+    }
+
+    @Test(arguments: [true, false])
+    func aRefusedMoveOutBeepsAndChangesNothing(paused: Bool) throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)
+        if paused { _ = arranger.handle(.setPaused(.user, true), now: start) }
+        let before = arranger.world
+        let effects = arranger.handle(.tab(.moveOut(b, via: .menu), ready: paused), now: start)
+        #expect(effects.contains(.beep) && effects.contains(.tabAnnouncement(.refused(paused ? .paused : .notReady))))
+        #expect(arranger.world == before)
+    }
+}

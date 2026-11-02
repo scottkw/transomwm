@@ -57,5 +57,6 @@ import Testing
         #expect(TabCopy.minimizeGroup == "Minimize Group")
         #expect(TabCopy.floatGroup == "Float Group" && TabCopy.dockGroup == "Dock Group")
         #expect(TabCopy.closeGroupHelp(3) == "Closes all 3 windows in this tab group")
+        #expect(TabCopy.closeTab == "Close Tab" && TabCopy.moveOut == "Move Out of Group")
     }
 }

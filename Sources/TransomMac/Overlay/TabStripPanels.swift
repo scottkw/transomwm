@@ -291,6 +291,7 @@ final class TabStripView: NSView, NSViewToolTipOwner {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if event.modifierFlags.contains(.control) { return contextMenu(at: point) }
         press = (target(at: point), point)
         hovered = press?.target
         updateHover()
@@ -315,6 +316,40 @@ final class TabStripView: NSView, NSViewToolTipOwner {
         case .button?: break
         case nil: select(strip.selected, via: .click)
         }
+    }
+
+    override func rightMouseDown(with event: NSEvent) { contextMenu(at: convert(event.locationInWindow, from: nil)) }
+
+    /// The tab context menu (UI-SPEC Surface 4, D-11) at `point`, the tab showing the pressed fill while it is open.
+    /// Over a button or the background: nothing. shortcut: `popUp(positioning:at:in:)` from a never-active app is
+    /// Assumption A3; if UAT shows it does not track, use `NSMenu.popUpContextMenu(_:with:for:)` instead.
+    private func contextMenu(at point: NSPoint) {
+        guard case .tab(let i)? = target(at: point), strip.members.indices.contains(i) else { return }
+        let member = strip.members[i], menu = NSMenu()
+        for (title, action) in [(TabCopy.closeTab, #selector(chooseCloseTab(_:))), (TabCopy.moveOut, #selector(chooseMoveOut(_:)))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = member
+            menu.addItem(item)
+        }
+        menu.autoenablesItems = false  // both always enabled; a refusal is the engine's
+        press = (.tab(i), point)
+        hovered = .tab(i)
+        updateHover()
+        menu.popUp(positioning: nil, at: point, in: self)
+        press = nil
+        hovered = window.map { target(at: convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? nil
+        updateHover()
+    }
+
+    @objc private func chooseCloseTab(_ item: NSMenuItem) {
+        guard let member = item.representedObject as? TransomModel.WindowRef else { return }
+        onAction?(.closeTab(member))
+    }
+
+    @objc private func chooseMoveOut(_ item: NSMenuItem) {
+        guard let member = item.representedObject as? TransomModel.WindowRef else { return }
+        onAction?(.moveOut(member, via: .menu))
     }
 
     private func press(_ button: TabStripButton) {

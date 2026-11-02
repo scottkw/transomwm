@@ -420,7 +420,9 @@ import os
         let location = Point(x: event.location.x, y: event.location.y)
         let press = kind == .down && !onStrip ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
         // A press on a tab may tear it off (Pattern 7); on a button or the background it is only the strip's click.
-        let tab = onStrip ? tabStripPanels.member(atWindowNumber: Int(event.windowUnderPointer), point: location) : nil
+        // A ⌃-click opens the tab context menu, so it never tears the tab off (the menu's tracking drags must not).
+        let tab = onStrip && !event.flags.contains(.maskControl)
+            ? tabStripPanels.member(atWindowNumber: Int(event.windowUnderPointer), point: location) : nil
         let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press, pressTab: tab)
         let session = arranger.drag  // mouse-up ends it
         if kind == .dragged { dragTrace.dragged += 1 }
