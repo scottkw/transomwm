@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 7
 current_phase_name: Tab Groups
 status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-11-02T01:24:48.897Z"
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-11-02T01:42:06.897Z"
 last_activity: 2026-11-02
 last_activity_desc: Completed 07-01 (tab group tracer)
-state_head: f16ff19790f7de1350ece727ac06a6050a107d54
+state_head: 508cbeb8394a8de18332b4a61c0155bd67d49670
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 91
-  completed_plans: 82
+  completed_plans: 83
   percent: 67
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 7 — Tab Groups
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
 Last activity: 2026-11-02 — Completed 07-01 (tab group tracer: band, sized parks, group dwell)
 
@@ -136,6 +136,7 @@ Progress: [███████░░░] 67%
 | Phase 07 P01 | 18min | 3 tasks | 25 files |
 | Phase 07 P02 | 10min | 3 tasks | 8 files |
 | Phase 7 P03 | 10min | 3 tasks | 11 files |
+| Phase 7 P04 | 13 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -375,6 +376,9 @@ Recent decisions affecting current work:
 - [Phase 7]: Strip backstop follows a drift only when two 500 ms ticks agree; a return to the plan snaps back at once
 - [Phase 7]: leftOnAnotherSpace is asked only of visible strip panels; ordered-out ones are reused (VM: same panel back)
 - [Phase 7]: TabStripPanels remembers the Space each display's strips were shown for, so a return while paused fades them back in
+- [Phase 7]: 07-04: floating groups are add-alongside: FloatingTabGroup sidecar over FloatingWindow records (members stay floaters at the content rect); promote only if groups need z-order/nesting or member frames drift
+- [Phase 7]: 07-04: World.undo keeps snapshot frames for windows whose floating group the undone edit changed
+- [Phase 7]: 07-04: a floating group's wanted frame follows its selected member; a window leaving a group loses its wanted frame and the input replans once more
 
 ### Quick Tasks Completed
 
@@ -415,8 +419,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T01:24:48.466Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-11-02T01:42:06.462Z
+Stopped at: Completed 07-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification
