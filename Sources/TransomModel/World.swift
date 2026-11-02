@@ -108,7 +108,8 @@ public struct World: Codable, Equatable, Sendable {
         try validate()
     }
 
-    /// Every desk is valid, no window (docked or floating) is on two desks, and every NodeID came from `ids`.
+    /// Every desk is valid, no window (docked or floating) is on two desks, and every NodeID (floating group IDs
+    /// included, none equal to a tree node of its desk) came from `ids`.
     public func validate() throws(LayoutError) {
         var seen: Set<WindowIdentity> = []
         for (_, desk) in desks.sorted(by: { $0.key < $1.key }) {
@@ -118,6 +119,12 @@ public struct World: Codable, Equatable, Sendable {
             }
             if let id = desk.tree.nodes.keys.first(where: { $0.raw >= ids.next }) {
                 throw .invariantViolated("node \(id) is not below the ID source's next value \(ids.next)")
+            }
+            for group in desk.desktop.groups {
+                guard group.id.raw < ids.next else {
+                    throw .invariantViolated("floating group \(group.id) is not below the ID source's next value \(ids.next)")
+                }
+                guard desk.tree.nodes[group.id] == nil else { throw .invariantViolated("floating group \(group.id) reuses a tree node ID") }
             }
         }
     }
@@ -244,7 +251,10 @@ public struct World: Codable, Equatable, Sendable {
                 revived.append(window) // a window on another desk instead makes validate() throw below
             }
         }
-        for floating in snapshot.desktop.windows {
+        // A window whose floating group the undone edit changed got its frame from that edit (the content rect), not
+        // from the OS: it keeps the snapshot's.
+        for floating in snapshot.desktop.windows
+        where current.desktop.group(containing: floating.window)?.id == snapshot.desktop.group(containing: floating.window)?.id {
             if let frame = current.desktop.frame(of: floating.window) { try snapshot.desktop.setFrame(frame, for: floating.window) }
         }
         var candidate = self

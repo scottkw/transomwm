@@ -70,9 +70,12 @@ public enum CollapseCopy {
     }
 }
 
-/// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group.
+/// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain
+/// floating window (the middle 50% of its frame) or a floating group (the middle 50% of its content rect).
 enum GroupTarget: Equatable, Sendable {
     case tile(DeskKey, NodeID)
+    case floating(DeskKey, WindowRef)
+    case floatingGroup(DeskKey, NodeID)
 }
 
 /// What a release does once a hover has been held for the dwell.

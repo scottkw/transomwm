@@ -19,7 +19,7 @@ public enum TabRefusal: Equatable, Sendable {
     case notInGroup, paused, notReady
 }
 
-/// One docked tab group: its desk and its leaf.
+/// One tab group: its desk and its leaf, or for a floating group its ID (minted from the same IDSource, so never equal).
 public struct GroupKey: Hashable, Sendable {
     public var desk: DeskKey
     public var node: NodeID
@@ -81,6 +81,14 @@ struct TabGroupState: Sendable {
     var shownStrips: [String: [TabStrip]] = [:]
 }
 
+/// A tab group holding some window, docked or floating, as select, reveal, D-08 and strips see it.
+struct TabGroupRef: Equatable, Sendable {
+    var key: GroupKey
+    var members: [WindowRef]
+    var selected: Int
+    var floating: Bool
+}
+
 /// Making tab groups by a centre drop (D-01 to D-03). Each drop is one `World.edit`, dry-run first like a dock (Pattern 4).
 extension Arranger {
     /// Whether a drop on leaf `id` of `key`'s desk may group (UI-SPEC Surface 1): a docked panel or an existing group,
@@ -101,6 +109,11 @@ extension Arranger {
     /// World, then planned. The preview is the group frame that plan gives; with no room it is Blocked (zoom off) or
     /// Collapsed (zoom on), over the frame ignoring minimums. A target gone stale is the Phase 3 decision.
     mutating func decideGroup(_ hover: Hover, window: WindowRef) -> Decision {
+        switch hover.groupTarget {
+        case .floating(let key, _)?, .floatingGroup(let key, _)?:
+            return decideFloatingGroup(hover, on: key, window: window)
+        case .tile?, nil: break
+        }
         guard case .tile(let key, let id)? = hover.groupTarget, let display = display(for: key), let node = world[key]?.tree.node(id) else {
             return decide(hover, window: window)
         }
@@ -129,7 +142,7 @@ extension Arranger {
     /// A release on a held group preview: the dock commit at the target's centre, which groups (one undo step), then
     /// the announcement. A collapse speaks its own announcement instead (Phase 4), and a refusal its own.
     mutating func commitGroup(_ window: WindowRef, on key: DeskKey, into target: GroupTarget) throws(LayoutError) -> [ArrangerEffect] {
-        guard case .tile(_, let id) = target else { return try missed(window) }
+        guard case .tile(_, let id) = target else { return try commitFloatingGroup(window, on: key, into: target) }
         let before = world[key]?.tree.node(id)
         let effects = try commitDock(window, on: key, at: .tile(id, .center))
         guard case .tabs(let members, _)? = world[key]?.tree.node(id), members.last == window,
@@ -139,6 +152,128 @@ extension Arranger {
             return effects + [.tabAnnouncement(.grouped(tabs: 2)), .info("group \(id): created from \(window) + \(other) (docked)")]
         }
         return effects + [.tabAnnouncement(.added(tabs: members.count)), .info("group \(id): added \(window), \(members.count) tabs")]
+    }
+}
+
+/// Floating tab groups (D-02, TABS-05): made on the Desktop tile, kept as a sidecar on `DesktopLayer`.
+extension Arranger {
+    /// The floating centre under `point` on `key`'s desk (RESEARCH Pattern 3): the topmost floating window under the
+    /// pointer, never `dragged` or a hidden member, if `point` is in the middle 50% of its frame. A group's selected
+    /// member stands for its group (its frame is the content rect). An excluded or never-dock window there groups nothing.
+    func floatingGroupTarget(at point: Point, on key: DeskKey, dragging dragged: WindowRef) -> GroupTarget? {
+        guard let desk = world[key], desk.tree.isDesktopHidden != true else { return nil }
+        let layer = desk.desktop
+        guard let top = layer.windows.reversed().first(where: { floating in
+            guard floating.window != dragged, floating.state == .present else { return false }
+            if let group = layer.group(containing: floating.window), group.members[group.selected] != floating.window { return false }
+            return (windows[floating.window.identity]?.frame ?? floating.frame).contains(point)
+        }) else { return nil }
+        guard let info = windows[top.window.identity], !info.isExcluded, info.kind == .dockable else { return nil }
+        let frame = info.frame, band = DropZones.edgeBandFraction
+        let fx = (point.x - frame.minX) / frame.width, fy = (point.y - frame.minY) / frame.height
+        guard (band...(1 - band)).contains(fx), (band...(1 - band)).contains(fy) else { return nil }
+        if let group = layer.group(containing: top.window) { return .floatingGroup(key, group.id) }
+        return .floating(key, top.window)
+    }
+
+    /// The World and history with `window` taken off its desk and dropped into the floating `target` on `key`'s desk:
+    /// grouped with a plain floater at its frame, or added as a group's last tab. One undo step there (Pattern 4).
+    func droppingIntoFloating(_ window: WindowRef, on key: DeskKey, target: GroupTarget) throws(LayoutError) -> (world: World, history: UndoHistory) {
+        var candidate = world, candidateHistory = history
+        if let from = deskKey(of: window), from != key {
+            // Leaving another display's desk is a fact of where it was dropped, not a second undo step.
+            try candidate.reflow(from) { desk, _ throws(LayoutError) in
+                if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
+            }
+        }
+        try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
+            if desk.desktop.contains(window) {
+                try desk.desktop.remove(window)
+            } else if desk.tree.state(of: window) != nil {
+                try desk.tree.remove(window)
+            }
+            switch target {
+            case .floating(_, let other): try desk.desktop.group(id: try ids.make(), target: other, adding: window)
+            case .floatingGroup(_, let id): try desk.desktop.addTab(window, to: id)
+            case .tile(_, let id): throw .notATabGroup(id)
+            }
+        }
+        return (candidate, candidateHistory)
+    }
+
+    /// The group dry run on a floating centre: the drop applied to a copy of the World, then planned. The preview is the
+    /// group frame (the target's frame, or the group's, clamped like any floater); with no room for the selected member
+    /// plus its band it is Blocked (zoom off) or Collapsed (zoom on) over that frame.
+    private mutating func decideFloatingGroup(_ hover: Hover, on key: DeskKey, window: WindowRef) -> Decision {
+        guard let target = hover.groupTarget, let display = display(for: key) else { return decide(hover, window: window) }
+        let action = DropAction.group(key, target)
+        let label = if case .floatingGroup = target { GroupCopy.addTab } else { GroupCopy.newGroup }
+        func preview(_ frame: Rect) -> PreviewState { .group(frame: frame, strip: TabBand.strip(of: frame), label: label) }
+        do throws(LayoutError) {
+            guard let desk = try droppingIntoFloating(window, on: key, target: target).world[key], let group = desk.desktop.group(containing: window)
+            else { return decide(hover, window: window) }
+            let plan = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums)
+            let frame = TabBand.frame(ofContent: plan.frames[window] ?? TabBand.content(of: group.frame))
+            if plan.unfit.isEmpty { return Decision(preview: preview(frame), action: action, display: display.uuid) }
+            if let collapsed = try collapse(desk, area: display.visibleFrame) {
+                let copy = Self.collapseCopy(collapsed.newly, moving: window)
+                return Decision(preview: copy.map { .collapsed(frame, label: $0.label) } ?? preview(frame), action: action, display: display.uuid)
+            }
+            return Decision(preview: .blocked(frame), action: .refuse(Self.noRoom), display: display.uuid)
+        } catch {
+            return decide(hover, window: window)  // the target went stale since the hit test
+        }
+    }
+
+    /// A release on a held floating group preview: the drop (one undo step), then the announcement, unless a collapse
+    /// spoke its own. The dragged window, now selected, takes over the wanted frame of the tab it replaced.
+    private mutating func commitFloatingGroup(_ window: WindowRef, on key: DeskKey, into target: GroupTarget) throws(LayoutError) -> [ArrangerEffect] {
+        let candidate = try droppingIntoFloating(window, on: key, target: target)
+        guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key], let group = desk.desktop.group(containing: window) else {
+            return [.announce(Self.noRoom)] + (try missed(window))
+        }
+        var collapsed: Collapse?
+        if try !Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty {
+            guard let collapse = try collapse(desk, area: area) else { return [.announce(Self.noRoom)] + (try missed(window)) }
+            collapsed = collapse
+        }
+        let replaced: WindowRef? = if case .floatingGroup(_, let id) = target, let old = world[key]?.desktop.groups.first(where: { $0.id == id }) {
+            old.members[old.selected]
+        } else { nil }
+        world = candidate.world
+        history = candidate.history
+        lastRequested[window.identity] = nil
+        wantedFrames[window.identity] = replaced.flatMap { wantedFrames.removeValue(forKey: $0.identity) }
+        let note = accept(collapsed, moving: window)
+        let effects = replan() + note
+        guard !note.contains(where: { if case .announce = $0 { true } else { false } }) else { return effects }
+        if case .floating(_, let other) = target {
+            return effects + [.tabAnnouncement(.grouped(tabs: 2)), .info("group \(group.id): created from \(window) + \(other) (floating)")]
+        }
+        return effects + [.tabAnnouncement(.added(tabs: group.members.count)), .info("group \(group.id): added \(window), \(group.members.count) tabs")]
+    }
+
+    /// The group holding `window`, docked or floating.
+    func tabGroup(holding window: WindowRef) -> TabGroupRef? {
+        guard let key = deskKey(of: window), let desk = world[key] else { return nil }
+        if let leaf = desk.tree.leaf(containing: window), case .tabs(let members, let selected)? = desk.tree.node(leaf) {
+            return TabGroupRef(key: GroupKey(desk: key, node: leaf), members: members, selected: selected, floating: false)
+        }
+        return desk.desktop.group(containing: window).map {
+            TabGroupRef(key: GroupKey(desk: key, node: $0.id), members: $0.members, selected: $0.selected, floating: true)
+        }
+    }
+
+    /// Whether `window` is a non-selected member of a docked or floating group: it never shows in focus moves or the overview.
+    public func isHiddenTab(_ window: WindowRef) -> Bool {
+        tabGroup(holding: window).map { $0.members[$0.selected] != window } ?? false
+    }
+
+    /// Makes `window` the selected tab of `group` in the World: an OS-level fact of which tab shows, so no undo step.
+    mutating func selectInWorld(_ window: WindowRef, in group: TabGroupRef) throws(LayoutError) {
+        try world.reflow(group.key.desk) { desk, _ throws(LayoutError) in
+            if group.floating { try desk.desktop.selectTab(window) } else { try desk.tree.selectTab(window) }
+        }
     }
 }
 
@@ -161,19 +296,21 @@ extension Arranger {
     mutating func select(_ window: WindowRef, via source: TabSelectSource, ready: Bool, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, window, "arranging is paused") }
         guard ready else { return refuse(.notReady, window, "Accessibility is not ready") }
-        guard let key = deskKey(of: window), let leaf = world[key]?.tree.leaf(containing: window),
-            case .tabs(let members, let selected)? = world[key]?.tree.node(leaf), let index = members.firstIndex(of: window)
-        else { return refuse(.notInGroup, window, "not in a tab group") }
-        let group = GroupKey(desk: key, node: leaf), previous = members[selected]
+        guard let ref = tabGroup(holding: window), let index = ref.members.firstIndex(of: window) else {
+            return refuse(.notInGroup, window, "not in a tab group")
+        }
+        let group = ref.key, leaf = ref.key.node, members = ref.members, previous = members[ref.selected]
         guard previous != window else { return [.perform([.focus(window)])] }
-        guard world[key]?.tree.state(of: window) == .present else {
+        guard world[group.desk]?.state(of: window) == .present else {
             return [.beep, .tabAnnouncement(.couldNotShow(window)), .info("group \(leaf): select \(window) via \(source) refused, not present")]
         }
         do throws(LayoutError) {
-            try world.reflow(key) { desk, _ throws(LayoutError) in try desk.tree.selectTab(window) }
+            try selectInWorld(window, in: ref)
         } catch {
             return [.beep, .fault("group \(leaf): select \(window) failed: \(error)")]
         }
+        // A floating group's wanted frame belongs to whichever member shows (Planner plans the selected one).
+        if ref.floating { wantedFrames[window.identity] = wantedFrames.removeValue(forKey: previous.identity) }
         tabs.suppressedUntil[group] = now + Self.focusSuppression
         // The window covering the content rect now: a reveal still pending in this group keeps its cover.
         let cover = tabs.pendingReveal?.group == group ? tabs.pendingReveal?.previous : previous
@@ -209,10 +346,10 @@ extension Arranger {
         tabs.suppressedUntil = tabs.suppressedUntil.filter { $0.value > now }
         guard let pending = tabs.pendingReveal, now >= pending.deadline else { return [] }
         tabs.pendingReveal = nil
-        let key = pending.group.desk
-        guard world[key]?.tree.leaf(containing: pending.previous) == pending.group.node else { return replan() }
+        guard let ref = tabGroup(holding: pending.previous), ref.key == pending.group else { return replan() }
         do throws(LayoutError) {
-            try world.reflow(key) { desk, _ throws(LayoutError) in try desk.tree.selectTab(pending.previous) }
+            try selectInWorld(pending.previous, in: ref)
+            if ref.floating { wantedFrames[pending.previous.identity] = wantedFrames.removeValue(forKey: pending.revealed.identity) }
         } catch {
             return [.fault("group \(pending.group.node): could not keep \(pending.previous): \(error)")] + replan()
         }
@@ -225,42 +362,48 @@ extension Arranger {
     /// D-08: a hidden member focused another way (⌘Tab, the Dock, its app) becomes the selected tab, unless it is the
     /// window being revealed or its group changed within `focusSuppression`. Runs before the camera widen.
     mutating func activated(_ window: WindowRef, now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        guard pauseReasons.isEmpty, !sessionPaused, tabs.pendingReveal?.revealed != window, let key = deskKey(of: window),
-            let leaf = world[key]?.tree.leaf(containing: window), case .tabs(let members, let selected)? = world[key]?.tree.node(leaf),
-            members[selected] != window
+        guard pauseReasons.isEmpty, !sessionPaused, tabs.pendingReveal?.revealed != window, let ref = tabGroup(holding: window),
+            ref.members[ref.selected] != window
         else { return [] }
-        if let until = tabs.suppressedUntil[GroupKey(desk: key, node: leaf)], now < until { return [] }
+        if let until = tabs.suppressedUntil[ref.key], now < until { return [] }
         return select(window, via: .activation, ready: true, now: now)
     }
 
     /// The selected member of a group was focused: its strip comes front (UI-SPEC Surface 2 Ordering), so a floating
     /// window raised over the group earlier stops covering it. Only on focus, never on a replan.
     func raisedStrip(of window: WindowRef) -> [ArrangerEffect] {
-        guard let key = deskKey(of: window), let leaf = world[key]?.tree.leaf(containing: window),
-            case .tabs(let members, let selected)? = world[key]?.tree.node(leaf), members[selected] == window
-        else { return [] }
-        return [.raiseStrip(GroupKey(desk: key, node: leaf))]
+        guard let ref = tabGroup(holding: window), ref.members[ref.selected] == window else { return [] }
+        return [.raiseStrip(ref.key)]
     }
 
     /// A member of a group closed or went absent: macOS may focus another member next, which must not flip the group.
     mutating func suppressFocus(ofGroupHolding window: WindowRef, now: ContinuousClock.Instant) {
-        guard let key = deskKey(of: window), let leaf = world[key]?.tree.leaf(containing: window),
-            case .tabs? = world[key]?.tree.node(leaf)
-        else { return }
-        tabs.suppressedUntil[GroupKey(desk: key, node: leaf)] = now + Self.focusSuppression
+        guard let ref = tabGroup(holding: window) else { return }
+        tabs.suppressedUntil[ref.key] = now + Self.focusSuppression
     }
 
     /// One strip per docked group of `desk` whose selected member is planned on screen (not parked, collapsed,
-    /// absent or fullscreen), in node order. Titles are the live ones (Pitfall 7, D-09).
+    /// absent or fullscreen), and per floating group whose selected member is present and not parked (a hidden Desktop,
+    /// a zoomed view), over its planned or stored content rect; in ID order. Titles are the live ones (Pitfall 7, D-09).
     func tabStrips(_ key: DeskKey, desk: Desk, plan: FramePlan) -> [TabStrip] {
-        desk.tree.nodes.compactMap { id, node -> TabStrip? in
+        func titles(_ members: [WindowRef]) -> [String] { members.map { windows[$0.identity]?.window.titleHint ?? "" } }
+        let docked = desk.tree.nodes.compactMap { id, node -> TabStrip? in
             guard case .tabs(let members, let selected) = node, plan.frames[members[selected]] != nil, let rect = plan.resolution.nodeRects[id]
             else { return nil }
             return TabStrip(
-                group: GroupKey(desk: key, node: id), frame: TabBand.strip(of: rect), members: members,
-                titles: members.map { windows[$0.identity]?.window.titleHint ?? "" }, selected: selected, floating: false)
+                group: GroupKey(desk: key, node: id), frame: TabBand.strip(of: rect), members: members, titles: titles(members),
+                selected: selected, floating: false)
         }
-        .sorted { $0.group.node < $1.group.node }
+        let parked = Set(plan.parks)
+        let floating = desk.desktop.groups.compactMap { group -> TabStrip? in
+            let shown = group.members[group.selected]
+            guard desk.desktop.windows.contains(where: { $0.window == shown && $0.state == .present }), !parked.contains(shown) else { return nil }
+            let content = plan.frames[shown] ?? TabBand.content(of: group.frame)
+            return TabStrip(
+                group: GroupKey(desk: key, node: group.id), frame: TabBand.strip(of: TabBand.frame(ofContent: content)), members: group.members,
+                titles: titles(group.members), selected: group.selected, floating: true)
+        }
+        return (docked + floating).sorted { $0.group.node < $1.group.node }
     }
 
     /// Sends each display's strips that changed; a display with none (or gone) gets an empty list.

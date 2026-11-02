@@ -617,3 +617,169 @@ private func selected(_ arranger: Arranger, _ group: GroupKey) -> WindowRef? {
         #expect(widen.first?.to != .node(leafA), "the widen stayed on a's leaf")
     }
 }
+
+// MARK: Floating groups (07-04)
+
+private let t = window(5), g = window(4)
+private let tFrame = Rect(x: 400, y: 200, width: 500, height: 400)
+private let gFrame = Rect(x: 950, y: 120, width: 300, height: 200)
+
+/// a, f, g and t floating on the main Desktop, nothing docked.
+private func floaters() async -> Harness {
+    await Harness.started(frames: [1: frameA, 2: smallF, 4: gFrame, 5: tFrame])
+}
+
+/// f dragged onto t's centre, held 400 ms and released: the floating group [t, f] at t's frame.
+private func groupFOntoT(_ harness: inout Harness) async -> [ArrangerEffect] {
+    _ = await drag(&harness, f, from: smallF, to: centre(tFrame))
+    harness.now += .milliseconds(400)
+    await harness.send(.tick)
+    return await harness.send(pointer(.up, tFrame.midX, tFrame.midY))
+}
+
+private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
+    harness.arranger.world[mainKey]?.desktop.groups ?? []
+}
+
+/// D-02, D-03, TABS-05: a centre drop on a floating window makes a floating group at that window's frame.
+@Suite struct ArrangerFloatingTabsTests {
+    @Test func aFloatingCentreHeld400msPreviewsTheGroupAtTheTargetsFrame() async throws {
+        var harness = await floaters()
+        _ = await drag(&harness, f, from: smallF, to: centre(tFrame))
+        harness.now += .milliseconds(399)
+        #expect(groupPreviews(await harness.send(.tick)).isEmpty, "the group preview came before 400 ms")
+        harness.now += .milliseconds(1)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.group(frame: tFrame, strip: TabBand.strip(of: tFrame), label: "Group as tabs")], "tick gave \(tick)")
+    }
+
+    @Test func releaseFormsAFloatingGroupWithOneWriteAndOneSizedPark() async throws {
+        var harness = await floaters()
+        let depth = harness.arranger.history.depth(for: mainKey)
+        let up = await groupFOntoT(&harness)
+        let content = TabBand.content(of: tFrame)
+        let group = try #require(floatingGroups(harness).first)
+        #expect(group.members == [t, f] && group.selected == 1 && group.frame == tFrame)
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1, "grouping is not one undo step")
+        #expect(up.contains(.tabAnnouncement(.grouped(tabs: 2))))
+        #expect(setFrames(up).filter { $0.key == f || $0.key == t } == [f: content], "group writes: \(setFrames(up))")
+        #expect(parks(up) == [.park(t, displayUUID: "main", size: Size(width: content.width, height: content.height))])
+        #expect(await harness.frame(f) == content)
+        #expect(harness.arranger.isParked(t))
+        let strip = try #require(strips(up).last?.first, "no strip: \(up)")
+        #expect(strip.floating && strip.frame == TabBand.strip(of: tFrame) && strip.members == [t, f] && strip.selected == 1)
+        #expect(strip.group == GroupKey(desk: mainKey, node: group.id))
+        #expect(harness.arranger.isHiddenTab(t) && !harness.arranger.isHiddenTab(f))
+    }
+
+    @Test func aFloatingGroupsCentreAddsTheDraggedWindowAsTheLastSelectedTab() async throws {
+        var harness = await floaters()
+        _ = await groupFOntoT(&harness)
+        let content = TabBand.content(of: tFrame)
+        _ = await drag(&harness, g, from: gFrame, to: centre(content))
+        harness.now += .milliseconds(400)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.group(frame: tFrame, strip: TabBand.strip(of: tFrame), label: "Add as a tab")], "tick gave \(tick)")
+        let up = await harness.send(pointer(.up, content.midX, content.midY))
+        let group = try #require(floatingGroups(harness).first)
+        #expect(group.members == [t, f, g] && group.selected == 2)
+        #expect(up.contains(.tabAnnouncement(.added(tabs: 3))))
+        #expect(setFrames(up).filter { [t, f, g].contains($0.key) } == [g: content])
+        #expect(parks(up) == [.park(f, displayUUID: "main", size: Size(width: content.width, height: content.height))])
+    }
+
+    @Test func theDesktopTilesOwnCentreFormsNothing() async throws {
+        var harness = await floaters()
+        let empty = Point(x: 380, y: 650)  // in the Desktop tile's centre zone, clear of every floater
+        _ = await drag(&harness, f, from: smallF, to: empty)
+        harness.now += .milliseconds(400)
+        #expect(groupPreviews(await harness.send(.tick)).isEmpty)
+        let depth = harness.arranger.history.depth(for: mainKey)
+        await harness.send(pointer(.up, empty.x, empty.y))
+        #expect(floatingGroups(harness).isEmpty)
+        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+    }
+
+    @Test func aFloatersEdgeBandFormsNothing() async throws {
+        var harness = await floaters()
+        let edge = Point(x: tFrame.minX + 20, y: tFrame.midY)
+        _ = await drag(&harness, f, from: smallF, to: edge)
+        harness.now += .milliseconds(400)
+        #expect(groupPreviews(await harness.send(.tick)).isEmpty)
+        await harness.send(pointer(.up, edge.x, edge.y))
+        #expect(floatingGroups(harness).isEmpty)
+    }
+
+    @Test func undoAfterAFloatingGroupRestoresBothFloaters() async throws {
+        var harness = await floaters()
+        _ = await groupFOntoT(&harness)
+        await harness.send(.command(.undo, focused: f))
+        #expect(floatingGroups(harness).isEmpty)
+        #expect(await harness.frame(t) == tFrame)
+        #expect(await harness.frame(f) == smallF)
+        #expect(!harness.arranger.isParked(t))
+        #expect(harness.arranger.world[mainKey]?.desktop.frame(of: t) == tFrame)
+    }
+
+    @Test func aDockedWindowDroppedOnAFloaterGroupsOnTheDesktop() async throws {
+        var harness = await floaters()
+        await harness.send(.command(.dock, focused: a))
+        let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
+        let ra = try #require(plan.frames[a])
+        let desktop = try #require(plan.desktopRect)
+        let target = try #require(harness.arranger.world[mainKey]?.desktop.frame(of: t))
+        try #require(desktop.contains(centre(target)), "t is not on the Desktop tile")
+        _ = await drag(&harness, a, from: ra, to: centre(target))
+        harness.now += .milliseconds(400)
+        await harness.send(.tick)
+        await harness.send(pointer(.up, target.midX, target.midY))
+        let group = try #require(floatingGroups(harness).first)
+        #expect(group.members == [t, a])
+        #expect(harness.arranger.world[mainKey]?.tree.state(of: a) == nil, "a is still docked")
+    }
+}
+
+/// The Planner side of floating groups: the selected member at the content rect, hidden members parked once at the content size.
+@Suite struct FloatingGroupPlannerTests {
+    private func groupedDesk(hidden: Bool = false) throws -> Desk {
+        var desk = Desk()
+        var ids = IDSource()
+        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try desk.desktop.add(t, frame: tFrame)
+        try desk.desktop.group(id: try ids.make(), target: t, adding: f)
+        if hidden { try desk.tree.setDesktopHidden(true) }
+        return desk
+    }
+
+    @Test func hiddenMembersParkAtTheContentSize() throws {
+        let plan = try Planner.plan(desk: try groupedDesk(), area: area, gap: 8, mins: [:])
+        let content = TabBand.content(of: tFrame)
+        #expect(plan.parks == [t])
+        #expect(plan.parkSizes[t] == Size(width: content.width, height: content.height))
+        #expect(plan.frames[t] == nil)
+    }
+
+    @Test func aHiddenDesktopParksEveryMemberOnce() throws {
+        let plan = try Planner.plan(desk: try groupedDesk(hidden: true), area: area, gap: 8, mins: [:])
+        let content = TabBand.content(of: tFrame)
+        #expect(plan.parks.filter { $0 == t }.count == 1 && plan.parks.filter { $0 == f }.count == 1, "parks: \(plan.parks)")
+        #expect(plan.parkSizes[t] == Size(width: content.width, height: content.height))
+        #expect(plan.parkSizes[f] == nil, "the selected member parks at its own size")
+    }
+
+    @Test func theSelectedMembersBandCountsTowardTheDesktopMinimum() throws {
+        var desk = Desk()
+        var ids = IDSource()
+        try desk.tree.insert(a, at: .top, of: .desktop, ids: &ids)
+        try desk.desktop.add(t, frame: tFrame)
+        try desk.desktop.group(id: try ids.make(), target: t, adding: f)
+        let mins = [f: Size(width: 100, height: 600), a: Size(width: 100, height: 100)]
+        let grouped = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: mins).desktopRect)
+        #expect(grouped.height >= 632, "the band did not raise the Desktop minimum: \(grouped)")
+        var plain = Desk()
+        try plain.tree.insert(a, at: .top, of: .desktop, ids: &ids)
+        try plain.desktop.add(f, frame: tFrame)
+        let alone = try #require(try Planner.plan(desk: plain, area: area, gap: 8, mins: mins).desktopRect)
+        #expect(alone.height < 632, "a plain floater got the band: \(alone)")
+    }
+}

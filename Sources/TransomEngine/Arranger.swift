@@ -971,6 +971,8 @@ public struct Arranger: Sendable {
         // A parked sliver is off its tile on purpose: neither recorded nor corrected (RESEARCH Pitfall 1).
         guard !parkRequested.contains(window.identity) else { return [] }
         let floating = desk.desktop.contains(window)
+        // A floating group's hidden member is parked or about to be: its reports never move the group (Pitfall 5).
+        if floating, let group = desk.desktop.group(containing: window), group.members[group.selected] != window { return [] }
         // A parked window keeps its Desktop frame: the move is the park, and showing the Desktop brings it back there.
         if floating, desk.tree.isDesktopHidden == true { return [] }
         if floating { try world.recordFloatingFrame(frame, for: window) }
@@ -1461,6 +1463,7 @@ public struct Arranger: Sendable {
         if let display, let plan = dragPlan(.desk(Self.key(display))) {
             let key = Self.key(display)
             target = DropZones.target(at: point, in: display.visibleFrame, tree: (world[key] ?? Desk()).tree, resolution: plan.resolution)
+            let overDesktop = if case .tile(.desktop, _)? = target { true } else { target == nil }
             switch target {
             case .tile(let id, _)? where docked && key == ownKey && id == ownDesk.tree.leaf(containing: window): target = nil
             case .tile(let id, .center)?:
@@ -1468,6 +1471,12 @@ public struct Arranger: Sendable {
                 target = nil
                 groupTarget = groupable(id, on: key) ? .tile(key, id) : nil
             default: break
+            }
+            // On the Desktop tile a floating window's centre groups after the group dwell (D-02); the tile's own centre
+            // stays a plain floating move.
+            if overDesktop, let floating = floatingGroupTarget(at: point, on: key, dragging: window) {
+                target = nil
+                groupTarget = floating
             }
         }
         return Hover(
@@ -1885,6 +1894,7 @@ public struct Arranger: Sendable {
             for floating in desk.desktop.windows
             where !desktopHidden && floating.state == .present && desired[floating.window] == nil
                 && windows[floating.window.identity]?.isExcluded != true && !parkedNow.contains(floating.window.identity)
+                && desk.desktop.group(containing: floating.window).map({ $0.members[$0.selected] == floating.window }) ?? true
             {
                 if let actual = windows[floating.window.identity]?.frame, !Self.near(actual, floating.frame) {
                     desired[floating.window] = floating.frame
