@@ -575,8 +575,16 @@ extension Arranger {
         return replan() + [.info("group \(ref.key.node): floated")]
     }
 
-    /// Dock Group (07-06 Task 2).
+    /// Dock Group: the floating group docks where Dock Window would dock a window at the group frame's centre; with no
+    /// room it is refused with the Blocked flash and "Not enough room". One undo step.
     mutating func dockGroup(_ ref: TabGroupRef) throws(LayoutError) -> [ArrangerEffect] {
-        [.beep]
+        try dock(ref.members[ref.selected])
+    }
+
+    /// Takes `ref`'s group off `desk` as one leaf node with its members' states: its tree leaf, or its floating group.
+    static func takeGroup(_ ref: TabGroupRef, from desk: inout Desk) throws(LayoutError) -> (node: Node, states: [WindowIdentity: WindowState]) {
+        guard ref.floating else { return try desk.tree.removeLeaf(ref.key.node) }
+        let (group, states) = try desk.desktop.removeGroup(ref.key.node)
+        return (.tabs(windows: group.members, selected: group.selected), states)
     }
 }

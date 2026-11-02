@@ -385,10 +385,12 @@ extension ArrangerTabsTests {
 /// a and b docked by the keyboard, then f grouped into b's leaf ([b, f], f selected) on an Arranger with no window
 /// system, and planned: f in the content rect, b parked. Returns it with the group's key, frame and content rect.
 /// `withA` groups a too ([b, f, a], a selected); `zoom` turns zoom on first.
-private func bareGroup(at now: ContinuousClock.Instant, withA: Bool = false, zoom: Bool = false) throws -> (Arranger, GroupKey, frame: Rect, content: Rect) {
+private func bareGroup(
+    at now: ContinuousClock.Instant, withA: Bool = false, zoom: Bool = false, displays: [DisplayInfo] = [mainDisplay]
+) throws -> (Arranger, GroupKey, frame: Rect, content: Rect) {
     var arranger = Arranger()
     let infos = [info(1, frame: frameA), info(2, frame: smallF), info(3, frame: frameB)]
-    _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: now)
+    _ = arranger.handle(.inventory(WindowInventory(displays: displays, windows: infos, initialRefreshComplete: true)), now: now)
     if zoom { _ = arranger.handle(.zoomEnabled(true), now: now) }
     _ = arranger.handle(.command(.dock, focused: a), now: now)
     _ = arranger.handle(.command(.dock, focused: b), now: now)
@@ -793,9 +795,9 @@ private func otherApp(_ id: UInt32, frame: Rect) -> WindowInfo {
 
 /// f and t floating, then grouped as [t, f] (f selected) at t's frame on an Arranger with no window system, planned
 /// (f written into the content rect and read back there, t parked). Returns it with the group's key and content rect.
-private func bareFloatingGroup(at now: ContinuousClock.Instant) throws -> (Arranger, GroupKey, content: Rect) {
+private func bareFloatingGroup(at now: ContinuousClock.Instant, fMinimum: Size? = nil) throws -> (Arranger, GroupKey, content: Rect) {
     var arranger = Arranger()
-    let infos = [info(2, frame: smallF), info(5, frame: tFrame)]
+    let infos = [info(2, frame: smallF, minimum: fMinimum), info(5, frame: tFrame)]
     _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: now)
     var id = NodeID(raw: 0)
     try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
@@ -1204,6 +1206,127 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
         _ = arranger.handle(.command(.undo, focused: f), now: start + .seconds(1))
         #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f], selected: 1), "Undo did not restore the docked leaf")
         #expect(floatingGroup(arranger) == nil)
+    }
+
+    @Test func dockGroupDocksTheWholeFloatingGroupAsOneLeafAtItsCentre() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _) = try bareFloatingGroup(at: start)  // [t, f] at tFrame, f selected
+        let depth = arranger.history.depth(for: mainKey)
+        let effects = arranger.handle(.tab(.toggleGroupFloat(group), ready: true), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        let leaf = try #require(desk.tree.leaf(containing: f), "the group did not dock: \(effects)")
+        #expect(desk.tree.node(leaf) == .tabs(windows: [t, f], selected: 1))
+        #expect(desk.desktop.groups.isEmpty && desk.desktop.windows.isEmpty)
+        // tFrame's centre is in the Desktop's centre zone, nearer the top: Dock Window's edge rule.
+        #expect(desk.tree.parent(of: leaf).flatMap { desk.tree.node($0) }.map { if case .split(.vertical, let children, _) = $0 { children.first == leaf } else { false } } == true)
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+        #expect(effects.contains(.info("group \(group.node): docked")))
+        _ = arranger.handle(.command(.undo, focused: f), now: start + .seconds(2))
+        #expect(arranger.world[mainKey]?.desktop.groups.first?.members == [t, f], "Undo did not restore the floating group")
+    }
+
+    @Test func dockGroupWithNoRoomFlashesBlockedAndChangesNothing() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _) = try bareFloatingGroup(at: start, fMinimum: Size(width: 300, height: 860))
+        let before = arranger.world, depth = arranger.history.depth(for: mainKey)
+        let effects = arranger.handle(.tab(.toggleGroupFloat(group), ready: true), now: start + .seconds(1))
+        #expect(effects.contains(.beep) && effects.contains(.announce(Arranger.noRoom)), "not refused: \(effects)")
+        #expect(effects.contains { if case .flashBlocked = $0 { true } else { false } })
+        #expect(arranger.world == before && arranger.history.depth(for: mainKey) == depth)
+    }
+
+    @Test func floatAndDockWindowOnAMemberMoveTheWholeGroup() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [b, f] docked, f selected
+        _ = arranger.handle(.command(.float, focused: f), now: start)
+        let floated = try #require(floatingGroup(arranger), "Float Window tore f out")
+        #expect(floated.members == [b, f] && floated.selected == 1)
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == nil)
+        _ = arranger.handle(.command(.dock, focused: f), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.leaf(containing: b) == desk.tree.leaf(containing: f) && desk.tree.leaf(containing: f) != nil, "Dock Window docked one member")
+        #expect(desk.desktop.groups.isEmpty)
+    }
+
+    @Test func theGreenButtonOnTheSelectedMemberTogglesTheWholeGroup() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _, _) = try bareGroup(at: start)
+        _ = arranger.handle(.greenButton(f), now: start)
+        #expect(floatingGroup(arranger)?.members == [b, f], "the green button did not float the group")
+        _ = arranger.handle(.greenButton(f), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(floatingGroup(arranger) == nil)
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: f))) == .tabs(windows: [b, f], selected: 1))
+    }
+
+    @Test func arrangeAllDocksAFloatingGroupAsOneLeaf() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _) = try bareFloatingGroup(at: start)
+        let effects = arranger.handle(.command(.arrangeAll, focused: f), now: start + .seconds(1))
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.tree.node(try #require(desk.tree.leaf(containing: t))) == .tabs(windows: [t, f], selected: 1))
+        #expect(desk.desktop.groups.isEmpty)
+        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "the group was counted as leftovers: \(effects)")
+    }
+
+    @Test func floatAllFloatsADockedGroupAsOneGroupCountedOnce() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, frame, _) = try bareGroup(at: start)  // [a | [b, f] | Desktop]
+        let effects = arranger.handle(.command(.floatAll, focused: a), now: start)
+        #expect(effects.contains(.notice(.floatedAll(count: 2))), "a and the group are not two: \(effects)")
+        let floated = try #require(floatingGroup(arranger))
+        #expect(floated.members == [b, f] && floated.selected == 1)
+        #expect(floated.frame.width == frame.width && floated.frame.height == frame.height, "the group frame is not its tile rect")
+        #expect(arranger.world[mainKey]?.tree.windows.isEmpty == true)
+    }
+
+    @Test func rehomingTheSelectedMemberMovesTheWholeGroupAndAHiddenMembersReportIsIgnored() throws {
+        let start = ContinuousClock.now
+        let side = DisplayInfo(
+            uuid: "side", frame: Rect(x: 1440, y: 0, width: 1280, height: 800), visibleFrame: Rect(x: 1440, y: 25, width: 1280, height: 775),
+            currentSpaceID: nil)
+        var (arranger, group, _, _) = try bareGroup(at: start, displays: [mainDisplay, side])
+        let sideKey = DeskKey(displayUUID: "side", spaceID: nil)
+        let away = Rect(x: 1600, y: 200, width: 400, height: 300)
+        let hidden = WindowInfo(window: b, frame: away, state: .present, displayUUID: "side", kind: .dockable, isExcluded: false)
+        _ = arranger.handle(.event(.windowChanged(hidden)), now: start)
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f], selected: 1), "a hidden member's report moved something")
+        var moved = hidden
+        moved.window = f
+        _ = arranger.handle(.event(.windowChanged(moved)), now: start + .seconds(1))
+        #expect(arranger.world[mainKey]?.contains(b) == false && arranger.world[mainKey]?.contains(f) == false)
+        let there = try #require(arranger.world[sideKey]?.desktop.groups.first, "the group did not follow f")
+        #expect(there.members == [b, f] && there.selected == 1 && there.frame == TabBand.frame(ofContent: away))
+    }
+
+    @Test func treeCommandsActOnTheGroupsLeafAndFocusLandsOnTheSelectedTab() throws {
+        let start = ContinuousClock.now
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [a | [b, f] | Desktop]
+        #expect(commands(arranger.handle(.command(.focus(.right), focused: a), now: start)) == [.focus(f)])
+        let grown = arranger.handle(.command(.growTile, focused: f), now: start)
+        #expect(!grown.contains(.beep), "Grow refused: \(grown)")
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f], selected: 1))
+        _ = arranger.handle(.command(.moveOrSnap(.left), focused: f), now: start)
+        let desk = try #require(arranger.world[mainKey])
+        let leaf = try #require(desk.tree.leaf(containing: f))
+        #expect(desk.tree.node(leaf) == .tabs(windows: [b, f], selected: 1), "Move tore the group apart")
+        #expect(desk.tree.windows.first == b, "the group did not move left of a: \(desk.tree.windows)")
+        _ = arranger.handle(.event(.windowFocused(a)), now: start)
+        _ = arranger.handle(.event(.windowFocused(f)), now: start)
+        _ = arranger.handle(.command(.swapPrevious, focused: f), now: start)
+        #expect(arranger.world[mainKey]?.tree.windows == [a, b, f], "Swap did not exchange the group and a")
+    }
+
+    @Test func snapOnAFloatingGroupMemberSnapsTheGroupFrame() throws {
+        let start = ContinuousClock.now
+        var (arranger, _, _) = try bareFloatingGroup(at: start)
+        let before = try #require(arranger.world[mainKey])
+        let desktop = try #require(try Planner.plan(desk: before, area: area, gap: 8, mins: [:]).desktopRect)
+        _ = arranger.handle(.command(.snap(.leftHalf), focused: f), now: start + .seconds(1))
+        let group = try #require(floatingGroup(arranger))
+        let expected = Snap.frame(.leftHalf, window: tFrame, desktop: desktop, gap: 8)
+        #expect(group.frame == expected, "the group frame did not snap: \(group.frame)")
+        #expect(arranger.world[mainKey]?.desktop.frame(of: f) == TabBand.content(of: expected))
     }
 
     @Test(arguments: [true, false])

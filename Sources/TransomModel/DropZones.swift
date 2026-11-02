@@ -62,3 +62,19 @@ extension LayoutTree {
         }
     }
 }
+
+extension LayoutTree {
+    /// `applyDrop` for a whole leaf (a panel or a tab group) with its members' states (Pattern 9). A centre throws:
+    /// groups never merge (UI-SPEC Surface 1).
+    public mutating func applyDrop(
+        _ target: DropTarget, leaf node: Node, states: [WindowIdentity: WindowState], ids: inout IDSource
+    ) throws(LayoutError) {
+        switch target {
+        case .emptyLayout: try insertRootLeaf(node, states: states, ids: &ids)
+        case let .tile(id, .edge(edge)): try insertLeaf(node, states: states, at: edge, of: id, ids: &ids)
+        case let .tile(id, .center): throw .notALeaf(id)
+        case let .layoutEdge(edge):
+            if let root { try insertLeaf(node, states: states, at: edge, of: root, ids: &ids) } else { try insertRootLeaf(node, states: states, ids: &ids) }
+        }
+    }
+}

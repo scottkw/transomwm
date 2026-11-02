@@ -18,10 +18,10 @@ extension Arranger {
         else { return [.beep] }
         // A sibling's near edge is the window's own slot, so docking there changes nothing: it goes past the sibling.
         let side = desk.tree.parent(of: leaf) == desk.tree.parent(of: neighbour) ? edge : edge.opposite
-        // The neighbour's NodeID survives the remove: only splits collapse.
+        // The neighbour's NodeID survives the remove: only splits collapse. A tab group moves as its whole leaf.
         return try commit(key, flashing: window, collapsible: true) { desk, ids throws(LayoutError) in
-            try desk.tree.remove(window)
-            try desk.tree.insert(window, at: side, of: neighbour, ids: &ids)
+            let taken = try desk.tree.removeLeaf(leaf)
+            try desk.tree.insertLeaf(taken.node, states: taken.states, at: side, of: neighbour, ids: &ids)
         }
     }
 
@@ -36,15 +36,18 @@ extension Arranger {
         return (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + [.notice(.restored(count: moves.count))]
     }
 
-    /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step.
+    /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step. A floating
+    /// group's member snaps the group frame, band included (UI-SPEC Surface 5).
     mutating func snap(_ window: WindowRef, to target: SnapTarget) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let frame = desk.desktop.frame(of: window),
             let area = display(for: key)?.visibleFrame,
             let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).desktopRect
         else { return [.beep] }
-        let snapped = Snap.frame(target, window: frame, desktop: desktop, gap: gap)
-        try world.recordFloatingFrame(snapped, for: window)
-        wantedFrames[window.identity] = snapped
+        let group = desk.desktop.group(containing: window)
+        let snapped = Snap.frame(target, window: group?.frame ?? frame, desktop: desktop, gap: gap)
+        let shown = group.map { $0.members[$0.selected] } ?? window, content = group == nil ? snapped : TabBand.content(of: snapped)
+        try world.recordFloatingFrame(content, for: shown)
+        wantedFrames[shown.identity] = content
         return replan()
     }
 
@@ -83,8 +86,9 @@ extension Arranger {
     /// blocked frame flashes.
     mutating func arrangeAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        // A floating group docks as one leaf, standing in the order and the count as its selected member (Surface 5).
         let order = desk.desktop.windows.filter { floating in
-            floating.state == .present
+            floating.state == .present && !isHiddenTab(floating.window)
                 && windows[floating.window.identity].map { $0.kind == .dockable && !$0.isExcluded && $0.state == .present } == true
         }
         .sorted { ($0.frame.minY, $0.frame.minX, $0.window.identity) < ($1.frame.minY, $1.frame.minX, $1.window.identity) }
@@ -97,14 +101,21 @@ extension Arranger {
         try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
             for window in order {
                 var trial = desk, trialIDs = ids
-                try trial.desktop.remove(window)
+                let node: Node, states: [WindowIdentity: WindowState]
+                if let group = trial.desktop.group(containing: window) {
+                    let removed = try trial.desktop.removeGroup(group.id)
+                    (node, states) = (.tabs(windows: removed.group.members, selected: removed.group.selected), removed.states)
+                } else {
+                    try trial.desktop.remove(window)
+                    (node, states) = (.panel(window), [window.identity: .present])
+                }
                 let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
                 guard let (target, rect) = Self.largestTile(resolution, in: trial.tree) else {
                     skipped += 1
                     continue
                 }
                 do {
-                    try trial.tree.insert(window, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
+                    try trial.tree.insertLeaf(node, states: states, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
                 } catch {
                     skipped += 1  // a full split
                     continue
@@ -114,7 +125,10 @@ extension Arranger {
                     ids = trialIDs
                 } else {
                     skipped += 1
-                    if blocked == nil { blocked = try Planner.plan(desk: trial, area: area, gap: gap, mins: [:]).frames[window] }
+                    if blocked == nil {
+                        let loose = try Planner.plan(desk: trial, area: area, gap: gap, mins: [:])
+                        blocked = trial.tree.leaf(containing: window).flatMap { loose.resolution.nodeRects[$0] }
+                    }
                 }
             }
         }
@@ -130,24 +144,48 @@ extension Arranger {
         guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame, !desk.tree.windows.isEmpty
         else { return [.beep] }
         let plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
-        let docked = desk.tree.windows.map { window in
-            (window, desk.tree.state(of: window) ?? .present, plan.frames[window] ?? windows[window.identity]?.frame ?? area)
+        // One unit per leaf in tree order: a tab group floats as one group at its group frame and counts once (Surface 5).
+        var leaves: [NodeID] = []
+        for window in desk.tree.windows {
+            if let leaf = desk.tree.leaf(containing: window), !leaves.contains(leaf) { leaves.append(leaf) }
+        }
+        let docked = leaves.map { leaf -> (NodeID, Rect) in
+            let shown: WindowRef? = switch desk.tree.node(leaf) {
+            case .panel(let window)?: window
+            case .tabs(let members, let selected)?: members[selected]
+            default: nil
+            }
+            let grouped = if case .tabs? = desk.tree.node(leaf) { true } else { false }
+            let actual = shown.flatMap { windows[$0.identity]?.frame }.map { grouped ? TabBand.frame(ofContent: $0) : $0 }
+            return (leaf, plan.resolution.nodeRects[leaf] ?? actual ?? area)
         }
         let gap = gap, mins = minimums, show = showingDesktop()
+        var shown: [WindowRef] = []
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
             if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
-            for (window, _, _) in docked { try desk.tree.remove(window) }
+            var taken: [NodeID: (node: Node, states: [WindowIdentity: WindowState])] = [:]
+            for (leaf, _) in docked { taken[leaf] = try desk.tree.removeLeaf(leaf) }  // leaf IDs survive: only splits collapse
             let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
-            for (window, state, tile) in docked {
-                try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
-                if state != .present { try desk.desktop.setState(state, for: window) }
+            for (leaf, tile) in docked {
+                guard let (node, states) = taken[leaf] else { continue }
+                switch node {
+                case .panel(let window):
+                    try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
+                    if let state = states[window.identity], state != .present { try desk.desktop.setState(state, for: window) }
+                    shown.append(window)
+                case .tabs(let members, let selected):
+                    let group = FloatingTabGroup(id: try ids.make(), members: members, selected: selected, frame: Planner.clamp(tile, into: desktop))
+                    try desk.desktop.addGroup(group, states: states)
+                    shown.append(members[selected])
+                case .split, .desktop: throw .notALeaf(leaf)
+                }
             }
         }
-        for (window, _, _) in docked {
+        for window in shown {
             undockedWanted[window.identity] = wantedFrames[window.identity]
             wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
         }
-        return replan() + [.notice(.floatedAll(count: docked.count))]
+        return replan() + [.notice(.floatedAll(count: shown.count))]
     }
 
     /// The largest placed leaf (the Desktop tile included); ties go to the smaller NodeID.
@@ -157,9 +195,10 @@ extension Arranger {
             .map { ($0.key, $0.value) }
     }
 
-    /// The docked panel focused most recently before `window` on its desk, when `window` is a present docked panel.
+    /// The docked panel focused most recently before `window` on its desk, when `window` is present and docked; a tab
+    /// group's window swaps its whole leaf with that panel (two groups never swap, UI-SPEC Surface 5).
     func previousDocked(before window: WindowRef) -> WindowRef? {
-        guard let key = deskKey(of: window), let tree = world[key]?.tree, Self.isPresentPanel(window, in: tree) else { return nil }
+        guard let key = deskKey(of: window), let tree = world[key]?.tree, tree.state(of: window) == .present else { return nil }
         return focusOrder.lazy.filter { $0 != window.identity }
             .compactMap { id in tree.windows.first { $0.identity == id } }
             .first { Self.isPresentPanel($0, in: tree) }

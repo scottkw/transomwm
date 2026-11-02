@@ -245,7 +245,9 @@ public struct Arranger: Sendable {
         // A window that left its floating group (a dissolve, an undo, a drag out) wanted the group's content rect: from
         // now on it wants its stored frame, the whole group frame for a survivor (the band returns to it).
         // The input's own re-plan ran before this, so plan again.
-        let left = Self.floatingGroupMembers(before).subtracting(Self.floatingGroupMembers(world))
+        // One that left docked (Dock Group) keeps it as its pre-dock frame, as Dock Window keeps a floater's.
+        let floating = Set(world.desks.values.flatMap { $0.desktop.windows.map(\.window.identity) })
+        let left = Self.floatingGroupMembers(before).subtracting(Self.floatingGroupMembers(world)).intersection(floating)
         if !left.isEmpty {
             for id in left { wantedFrames[id] = nil }
             effects += replan()
@@ -1125,6 +1127,7 @@ public struct Arranger: Sendable {
         guard info.state == .present, let from = deskKey(of: info.window), let desk = world[from], desk.state(of: info.window) == .present,
             !(desk.tree.isDesktopHidden == true && desk.desktop.contains(info.window)),  // parked: off its display on purpose
             !parkRequested.contains(info.window.identity),  // camera-parked too (RESEARCH Pitfall 1)
+            !isHiddenTab(info.window),  // a hidden member never moves on its own; its group follows the selected one
             let to = home(of: info), to != from
         else { return }
         let spaces = info.spaces ?? []
@@ -1132,13 +1135,25 @@ public struct Arranger: Sendable {
         guard to.displayUUID != from.displayUUID || leftSpace else { return }
         // While displays settle, a display move is macOS's: the tile is kept for the re-plug (Pitfall 4).
         if settling, to.displayUUID != from.displayUUID { return }
+        // A group's selected member takes the whole group, which floats there as one (UI-SPEC Surface 5).
+        let group = tabGroup(holding: info.window)
+        var taken: (node: Node, states: [WindowIdentity: WindowState])?
         var candidate = world
         try candidate.reflow(from) { desk, _ throws(LayoutError) in
-            if desk.desktop.contains(info.window) { try desk.desktop.remove(info.window) } else { try desk.tree.remove(info.window) }
+            if let group {
+                taken = try Self.takeGroup(group, from: &desk)
+            } else if desk.desktop.contains(info.window) { try desk.desktop.remove(info.window) } else { try desk.tree.remove(info.window) }
         }
         if candidate[to] == nil { try candidate.addDesk(to) }
         if candidate[to]?.tree.isDesktopHidden == true { try candidate.reflow(to, showingDesktop()) }  // D-31
-        try candidate.reflow(to) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
+        try candidate.reflow(to) { desk, ids throws(LayoutError) in
+            if let taken, case .tabs(let members, let selected) = taken.node {
+                let frame = TabBand.frame(ofContent: info.frame)
+                try desk.desktop.addGroup(FloatingTabGroup(id: try ids.make(), members: members, selected: selected, frame: frame), states: taken.states)
+            } else {
+                try desk.desktop.add(info.window, frame: info.frame)
+            }
+        }
         world = candidate
         // An OS fact, not a user action: a frame from the desk it left would pull it back there.
         wantedFrames[info.window.identity] = info.frame
@@ -1147,20 +1162,29 @@ public struct Arranger: Sendable {
     // MARK: Commands
 
     /// Docks a floating window where a drop at its centre would land (D-12). A dock that would leave any window
-    /// without room is refused and changes nothing (D-26).
-    private mutating func dock(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+    /// without room is refused and changes nothing (D-26). A floating group's member docks the whole group, at the
+    /// group frame's centre (Dock Group, UI-SPEC Surface 5).
+    mutating func dock(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let group = tabGroup(holding: window).flatMap { $0.floating ? $0 : nil }
+        let shown = group.map { $0.members[$0.selected] } ?? window
         let mins = minimums
         let current = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
         // Where the window is, or is about to be when Transom has just clamped it.
-        guard let frame = current.frames[window] ?? desk.desktop.frame(of: window),
-            let target = Planner.dockTarget(at: Point(x: frame.midX, y: frame.midY), desk: desk, area: area, resolution: current.resolution)
+        guard let content = current.frames[shown] ?? desk.desktop.frame(of: shown) else { return [.beep] }
+        let frame = group == nil ? content : TabBand.frame(ofContent: content)
+        guard let target = Planner.dockTarget(at: Point(x: frame.midX, y: frame.midY), desk: desk, area: area, resolution: current.resolution)
         else { return [.beep] }
         if case .tile(_, .center) = target { return [.beep] }  // dockTarget never gives a centre: keyboard commands never group
         var candidate = world, candidateHistory = history
         try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
-            try desk.desktop.remove(window)
-            try desk.tree.applyDrop(target, window: window, ids: &ids)
+            if let group {
+                let taken = try Self.takeGroup(group, from: &desk)
+                try desk.tree.applyDrop(target, leaf: taken.node, states: taken.states, ids: &ids)
+            } else {
+                try desk.desktop.remove(window)
+                try desk.tree.applyDrop(target, window: window, ids: &ids)
+            }
         }
         guard let docked = candidate[key] else { return [.beep] }
         var collapsed: Collapse?
@@ -1169,14 +1193,15 @@ public struct Arranger: Sendable {
             collapsed = try collapse(docked, area: area)
             guard collapsed != nil else {
                 // Keyboard parity (UI-SPEC Surface 2): the blocked preview flashes at the frame it would have had.
-                let frame = try Planner.plan(desk: docked, area: area, gap: gap, mins: [:]).frames[window]
+                let loose = try Planner.plan(desk: docked, area: area, gap: gap, mins: [:])
+                let frame = group == nil ? loose.frames[window] : docked.tree.leaf(containing: shown).flatMap { loose.resolution.nodeRects[$0] }
                 return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
             }
         }
         world = candidate
         history = candidateHistory
-        let note = accept(collapsed, moving: window)
-        return replan() + note
+        let note = accept(collapsed, moving: shown)
+        return replan() + note + (group.map { [.info("group \($0.key.node): docked")] } ?? [])
     }
 
     /// Undocks a window to the Desktop (TILE-09); the green button floats through here too. It goes to its pre-dock
@@ -1184,6 +1209,7 @@ public struct Arranger: Sendable {
     /// the tile, to a centred frame 90% of the tile (`Planner.floatFrame`). Docking fills the tile (D-12), so the toggle
     /// always moves the window (G-03-4).
     private mutating func float(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect] {
+        if let group = tabGroup(holding: window), !group.floating { return try floatGroup(group) }  // the whole group (Surface 5)
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame,
             let state = desk.tree.state(of: window)
         else { return [.beep] }

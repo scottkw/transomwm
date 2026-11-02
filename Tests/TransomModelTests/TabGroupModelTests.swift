@@ -418,3 +418,21 @@ private func decodeLayer(_ json: String) throws -> DesktopLayer {
         #expect(two == before)
     }
 }
+
+@Suite struct WholeGroupDropTests {
+    @Test func aLeafDropDocksTheWholeGroupOnAnEdgeAndNeverOnACentre() throws {
+        var tree = LayoutTree.withDesktop()
+        var ids = IDSource()
+        let group = Node.tabs(windows: [a, b], selected: 1), states = [a.identity: WindowState.present, b.identity: .present]
+        try tree.insert(c, at: .left, of: .desktop, ids: &ids)
+        let target = try #require(tree.leaf(containing: c))
+        let before = tree
+        #expect(throws: LayoutError.notALeaf(target)) { try tree.applyDrop(.tile(target, .center), leaf: group, states: states, ids: &ids) }
+        #expect(tree == before)
+        try tree.applyDrop(.tile(target, .edge(.bottom)), leaf: group, states: states, ids: &ids)
+        #expect(tree.node(try #require(tree.leaf(containing: a))) == group)
+        var other = LayoutTree.withDesktop()
+        try other.applyDrop(.layoutEdge(.right), leaf: group, states: states, ids: &ids)
+        #expect(other.node(try #require(other.leaf(containing: b))) == group)
+    }
+}
