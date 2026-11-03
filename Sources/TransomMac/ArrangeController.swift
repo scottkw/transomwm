@@ -201,11 +201,11 @@ import os
                 }
             }
             if let saved = store.contents {
-                let (world, layoutSets) = rekeyed(saved)
+                let (world, layoutSets, views) = rekeyed(saved)
                 await run(arranger.handle(
                     .restore(
                         world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap, arrangement: saved.arrangement,
-                        layoutSets: layoutSets, views: saved.views,
+                        layoutSets: layoutSets, views: views,
                         bootChanged: BootSession.changed(saved: saved.session.bootSession, current: BootSession.current())),
                     now: .now))
                 launchSettlePending = !saved.arrangement.isUnknown && saved.arrangement != ArrangementID(inventory.displays.map(\.uuid))
@@ -1025,16 +1025,16 @@ import os
         write(cleanExit: true)
     }
 
-    /// D-13: the saved World and every layout set (CR-02) with each desk moved to its Space's current ID, before
-    /// `.restore`. A Space the file's table lacks (every Space of a migrated schema-1 file) is taken as unchanged since
+    /// D-13: the saved World, every layout set (CR-02) and every saved view with each desk moved to its Space's current
+    /// ID, before `.restore`. A Space the file's table lacks (every Space of a migrated schema-1 file) is taken as unchanged since
     /// the save: the same-login assumption (RESEARCH Pattern 2). With the Spaces lookup off the desks keep their saved IDs.
-    private func rekeyed(_ saved: LayoutFile) -> (World, [LayoutSet]) {
+    private func rekeyed(_ saved: LayoutFile) -> (World, [LayoutSet], [SavedView]) {
         guard let live = system.spacesSnapshot else {
             logger.info("spaces lookup off: \(LayoutStore.fileName, privacy: .public) desks keep their saved Space IDs")
-            return (saved.world, saved.layoutSets)
+            return (saved.world, saved.layoutSets, saved.views)
         }
         do {
-            let (result, layoutSets, setsQuarantined) = try SpaceRekey.rekey(saved, live: live)
+            let (result, layoutSets, setsQuarantined, views) = try SpaceRekey.rekey(saved, live: live)
             logger.info(
                 "\(LayoutStore.fileName, privacy: .public) migrated: \(result.rekeyed, privacy: .public) desks re-keyed by Space UUID, \(result.unmatched.count, privacy: .public) unmatched kept dormant")
             let quarantined = result.quarantined + setsQuarantined
@@ -1046,13 +1046,13 @@ import os
             // WR-04: the launch write drops quarantined desks, so the file is copied first; with no copy nothing is dropped.
             if !quarantined.isEmpty, store?.backUp("pre-rekey") != true {
                 logger.error("no backup of \(LayoutStore.fileName, privacy: .public): keeping saved Space IDs rather than drop \(quarantined.count, privacy: .public) desks")
-                return (saved.world, saved.layoutSets)
+                return (saved.world, saved.layoutSets, saved.views)
             }
-            return (result.world, layoutSets)
+            return (result.world, layoutSets, views)
         } catch {
             // Unreachable for a decoded World (same windows and IDs); restoring it unchanged keeps the layout.
             logger.error("could not re-key \(LayoutStore.fileName, privacy: .public) desks: \(String(describing: error), privacy: .public); keeping saved Space IDs")
-            return (saved.world, saved.layoutSets)
+            return (saved.world, saved.layoutSets, saved.views)
         }
     }
 
@@ -1067,7 +1067,7 @@ import os
         let file = LayoutFile(
             world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session,
             arrangement: snapshot.arrangement, layoutSets: snapshot.layoutSets,
-            spaces: SpaceRekey.table(for: snapshot.world, layoutSets: snapshot.layoutSets, uuids: uuids), views: snapshot.views)
+            spaces: SpaceRekey.table(for: snapshot.world, layoutSets: snapshot.layoutSets, views: snapshot.views, uuids: uuids), views: snapshot.views)
         do {
             try store.save(file)
         } catch {

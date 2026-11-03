@@ -314,6 +314,108 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         #expect(move.to == .node(node))
     }
 
+    /// D-02, RESEARCH Pitfall 3: a rekey rewrites the identity in every view, so going there still frames the window.
+    @Test func aWindowRekeyRewritesTheIdentityInEveryView() async throws {
+        var harness = try await threeDocked()
+        let node = try await savedCAndD(&harness)
+        let four = ViewSlot(4)!
+        try await zoom(&harness, to: .node(node))
+        await camera(.saveView(four), &harness)
+        try await zoom(&harness, to: .home)
+        let renamed = ref(30)
+        var info = try #require(harness.arranger.windows[c.identity])
+        info.window = renamed
+        await harness.send(.event(.windowRekeyed(from: c, to: info)))
+
+        #expect(harness.arranger.camera.savedViews[three]?.windows == [d.identity, renamed.identity])
+        #expect(harness.arranger.camera.savedViews[four]?.windows == [d.identity, renamed.identity])
+        #expect(moves(await camera(.view(three), &harness)).first?.to == .node(try lca([renamed, d], harness)))
+    }
+
+    /// The remap keeps slots sorted and each window list sorted and unique: an unsorted list would make layout.json invalid.
+    @Test func aRemapKeepsTheViewsSortedAndUnique() async throws {
+        var harness = try await threeDocked()
+        _ = try await savedCAndD(&harness)
+        let five = ViewSlot(5)!
+        await camera(.saveView(five), &harness)
+        harness.arranger.camera.savedViews.save(SavedView(slot: ViewSlot(1)!, desk: key, home: false, windows: [a.identity, c.identity]))
+
+        harness.arranger.remapViews(from: a.identity, to: ref(9).identity)
+        harness.arranger.remapViews(from: c.identity, to: ref(8).identity)
+        harness.arranger.remapViews(from: d.identity, to: ref(8).identity)
+
+        let views = harness.arranger.camera.savedViews.sorted
+        #expect(views.map(\.slot.number) == [1, 3, 5])
+        #expect(views[0].windows == [ref(8).identity, ref(9).identity], "re-sorted by identity")
+        #expect(views[1].windows == [ref(8).identity], "two identities that became one are kept once")
+        #expect(views[2].home && views[2].windows.isEmpty)
+    }
+
+    /// RESEARCH Pitfall 3: a relaunch match rewrites the loaded view; the view lands on the windows that came back.
+    @Test func aRelaunchMatchRewritesTheLoadedViews() async throws {
+        var source = try await threeDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan"), (3, "Chart"), (4, "Mail")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        _ = try await savedCAndD(&source)
+        let saved = source.arranger.snapshot
+
+        let newPID: Int32 = 901
+        func relaunched(_ id: UInt32) -> WindowRef { WindowRef(identity: WindowIdentity(windowID: id, pid: newPID, bundleID: bundleID)) }
+        var harness = Harness()
+        await harness.fake.setDisplays(await source.fake.inventory().displays)
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        for (id, title) in [(UInt32(11), "Mail"), (12, "Chart"), (13, "Plan"), (14, "Notes")] {
+            await harness.fake.open(.standard(id: id, pid: newPID, frame: Rect(x: 100, y: 100, width: 300, height: 200), title: title))
+        }
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved.world, homeFrames: [:], views: saved.views))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        await harness.send(.zoomEnabled(true))
+
+        #expect(harness.arranger.camera.savedViews[three]?.windows == [relaunched(11).identity, relaunched(12).identity])
+        let node = try lca([relaunched(11), relaunched(12)], harness)
+        #expect(moves(await camera(.view(three), &harness)).first?.to == .node(node))
+    }
+
+    /// After a reboot a returning window can carry another saved window's ID: the view must not chain the two rewrites.
+    @Test func matchesOnReusedIdentitiesAreRemappedTogether() async throws {
+        var source = try await threeDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan"), (3, "Chart"), (4, "Mail")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        _ = try await savedCAndD(&source)  // c and d: "Chart" and "Mail"
+        let saved = source.arranger.snapshot
+
+        var harness = Harness()
+        await harness.fake.setDisplays(await source.fake.inventory().displays)
+        await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        // Window 4 (d's old ID) is "Chart" now, and "Mail" came back as window 5.
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan"), (4, "Chart"), (5, "Mail")] {
+            await harness.fake.open(.standard(id: id, pid: pid, frame: Rect(x: 100, y: 100, width: 300, height: 200), title: title))
+        }
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved.world, homeFrames: [:], views: saved.views, bootChanged: true))
+        await harness.send(.inventory(await harness.fake.inventory()))
+
+        #expect(harness.arranger.camera.savedViews[three]?.windows == [ref(4).identity, ref(5).identity])
+    }
+
+    /// D-05: an identity no desk holds is pruned at the snapshot; a view left with none keeps its slot and desk and goes home.
+    @Test func theSnapshotPrunesIdentitiesNoDeskHolds() async throws {
+        var harness = try await threeDocked()
+        _ = try await savedCAndD(&harness)
+        await harness.fake.close(3)
+        _ = await harness.refresh()
+        #expect(harness.arranger.snapshot.views.first?.windows == [d.identity])
+
+        await harness.fake.close(4)
+        _ = await harness.refresh()
+        let view = try #require(harness.arranger.snapshot.views.first)
+        #expect(view.slot == three && view.desk == key && !view.home && view.windows.isEmpty)
+        #expect(harness.arranger.viewDestination(view).target == .home && harness.arranger.viewDestination(view).allGone)
+    }
+
     /// T-08-03: a stored slot outside 1–9 fails to decode, so a hostile file can't address a tenth slot.
     @Test func aSlotOutsideOneToNineFailsToDecode() throws {
         let decoder = JSONDecoder()

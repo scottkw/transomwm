@@ -37,6 +37,10 @@ public struct SavedViews: Equatable, Sendable {
         slots.updateValue(view, forKey: view.slot) != nil
     }
 
+    /// A window's identity changed: every view holding `from` holds `to` instead, once.
+    mutating func remap(from: WindowIdentity, to: WindowIdentity) {
+    }
+
     /// By slot.
     public var sorted: [SavedView] { slots.values.sorted { $0.slot < $1.slot } }
 }

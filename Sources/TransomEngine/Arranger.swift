@@ -453,10 +453,11 @@ public struct Arranger: Sendable {
             return set
         }
         if let unattached {
-            return (unattached.world.refreshingTitles(titles), unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, sets, camera.savedViews.sorted)
+            let views = heldViews(in: [unattached.world] + sets.map(\.world))
+            return (unattached.world.refreshingTitles(titles), unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, sets, views)
         }
         let saved = pendingRestore ?? (settling ? preChangeWorld ?? world : world, homeFrames, wantedFrames)
-        return (saved.world.refreshingTitles(titles), saved.homeFrames, saved.wantedFrames, arrangement, sets, camera.savedViews.sorted)
+        return (saved.world.refreshingTitles(titles), saved.homeFrames, saved.wantedFrames, arrangement, sets, heldViews(in: [saved.world] + sets.map(\.world)))
     }
 
     /// Takes the displays, session state and windows of `inventory`. A Space lookup that answers 0 or switches off
@@ -684,6 +685,10 @@ public struct Arranger: Sendable {
         var seeded: [WindowIdentity: Rect] = [:]
         var faults: [ArrangerEffect] = skipIdentity ? [.info("boot session changed: matching every saved window by hints")] : []
         faults += Self.matchLog(reattached, saved: restore.world)
+        // Through a throwaway identity first, as LayoutRestore does: a returning window can carry another saved one's ID.
+        let parked = reattached.matches.indices.map { WindowIdentity(windowID: UInt32($0), pid: -1, bundleID: "") }
+        for (match, temp) in zip(reattached.matches, parked) { remapViews(from: match.saved.identity, to: temp) }
+        for (match, temp) in zip(reattached.matches, parked) { remapViews(from: temp, to: match.window.identity) }
         // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
         var wanted = restore.wantedFrames.filter { id, frame in
             candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
@@ -899,6 +904,7 @@ public struct Arranger: Sendable {
                 if tabs.pendingReveal?.previous == from { tabs.pendingReveal?.previous = to.window }
                 if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
+                remapViews(from: from.identity, to: to.window.identity)
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
                 windows[window.identity]?.frame = frame

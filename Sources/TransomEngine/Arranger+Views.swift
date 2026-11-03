@@ -27,6 +27,17 @@ extension Arranger {
         ]
     }
 
+    /// A window's identity changed (a rekey, a relaunch match): the saved views follow it (D-02, RESEARCH Pitfall 3).
+    mutating func remapViews(from: WindowIdentity, to: WindowIdentity) {
+        camera.savedViews.remap(from: from, to: to)
+    }
+
+    /// The saved views for layout.json, without identities no desk of `worlds` holds. A view left with none keeps its slot
+    /// and desk, and goes home there (D-05).
+    func heldViews(in worlds: [World]) -> [SavedView] {
+        camera.savedViews.sorted
+    }
+
     /// Where `view` takes the camera (RESEARCH Pattern 1): the desk holding most of its surviving windows (ties to the
     /// saved desk) and the smallest node holding them there; the saved desk's home for a home view or when none survive.
     func viewDestination(_ view: SavedView) -> (key: DeskKey, target: ViewTarget, allGone: Bool) {
