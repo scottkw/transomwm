@@ -1,3 +1,4 @@
+import Foundation
 @testable import TransomEngine
 import TransomModel
 import TransomTestSupport
@@ -294,5 +295,15 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         try await zoom(&harness, to: .home)
         try #require(moves(await camera(.view(three), &harness, focused: c)).count == 1)
         #expect(harness.arranger.camera.pending["main"]?.focus == nil, "focus inside the view stays")
+    }
+
+    /// T-08-03: a stored slot outside 1–9 fails to decode, so a hostile file can't address a tenth slot.
+    @Test func aSlotOutsideOneToNineFailsToDecode() throws {
+        let decoder = JSONDecoder()
+        #expect(try decoder.decode(ViewSlot.self, from: Data("3".utf8)) == three)
+        #expect(throws: DecodingError.self) { try decoder.decode(ViewSlot.self, from: Data("0".utf8)) }
+        #expect(throws: DecodingError.self) { try decoder.decode(ViewSlot.self, from: Data("10".utf8)) }
+        #expect(try JSONEncoder().encode(three) == Data("3".utf8))
+        #expect(ViewSlot(0) == nil && ViewSlot(10) == nil && ViewSlot.all.map(\.number) == Array(1...9))
     }
 }
