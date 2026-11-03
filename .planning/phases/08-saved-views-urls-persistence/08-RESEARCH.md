@@ -673,19 +673,21 @@ mutating func expirePlaceholders(now: ContinuousClock.Instant) -> [ArrangerEffec
 | A7 | Reading of D-12 for apps already running at restore: a sliding 10 s from the last window created (not a flat 10 s from restore) | Pattern 6 deadlines | Placeholders for slow-restoring apps expire too early or too late; confirm with the user |
 | A8 | Synchronous "accepted" replies (exit 0 before a Space switch finishes) are acceptable under the UI-SPEC's exit-0 wording | Pattern 7 | If the user wants switch failures reported, CFMessagePort is insufficient and the socket alternative is needed |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **⌘Q event ordering (A1).**
    - What we know: the shell yields `.appTerminated` before tracker decisions; CloseRule closes terminated apps' windows once they leave the CG list.
    - What's unclear: whether some apps' windows are destroyed while the process is still "alive" for NSWorkspace.
    - Recommendation: a Wave-0 VM probe (log event order for 4 apps); include the Pitfall 1 rollback only if needed.
+   - RESOLVED: VM probe in 08-04; the rollback is conditional on its result.
 2. **CLI reachability from SSH (A2).**
    - What we know: GUI-session clients (Terminal, Raycast, Alfred, Shortcuts) share the Aqua bootstrap.
    - What's unclear: SSH behaviour on macOS 14/15/27.
    - Recommendation: the VM CLI test uses `launchctl asuser`. If SSH turns out to matter to the user, revisit the socket alternative.
-3. **D-12 deadline for apps running at restore (A7).** The recommendation (sliding 10 s) needs user confirmation; it's a one-line constant either way.
-4. **First relaunch after upgrade has no titles.** Existing schema-2 files have empty titles, so the first post-upgrade re-match relies on frame, order and sole-pair. Accept this and put a line in the release notes.
-5. **Boot-session guard (Pitfall 5).** It adds a `SessionRecord` field (`bootSession: String?`). It's cheap, but the planner should confirm it fits the schema-3 bump.
+   - RESOLVED: VM CLI checks use `launchctl asuser`; 08-07 records plain-SSH behaviour (A2) for information only.
+3. **D-12 deadline for apps running at restore (A7).** The recommendation (sliding 10 s) needs user confirmation; it's a one-line constant either way. RESOLVED (orchestrator, 2026-11-03): sliding 10 s, restarted by each new window of that app.
+4. **First relaunch after upgrade has no titles.** Existing schema-2 files have empty titles, so the first post-upgrade re-match relies on frame, order and sole-pair. Accept this and put a line in the release notes. RESOLVED: accepted; README note in 08-07.
+5. **Boot-session guard (Pitfall 5).** It adds a `SessionRecord` field (`bootSession: String?`). It's cheap, but the planner should confirm it fits the schema-3 bump. RESOLVED: included in the schema-3 bump (08-02/08-03).
 
 ## Environment Availability
 
