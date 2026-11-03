@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 8
 current_phase_name: Saved Views, URLs & Persistence
 status: executing
-stopped_at: Phase 7 complete, ready to plan Phase 8
-last_updated: "2026-11-03T20:32:09.403Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-11-03T20:47:32.921Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: 52197f1ae131f8ecba146cc824662c8415bc4b8e
+state_head: 76c4ff78ca1eb05a0f1b052a90ebdba140e5145e
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 98
-  completed_plans: 91
+  completed_plans: 92
   percent: 78
 ---
 
@@ -27,10 +27,11 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 ## Current Position
 
-Phase: 8 (Saved Views, URLs & Persistence) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-11-03 — Phase 7 complete, transitioned to Phase 8
+Phase: 8 (Saved Views, URLs & Persistence) — EXECUTING
+Current Plan: 2
+Total Plans in Phase: 7
+Status: Executing Phase 8
+Last activity: 2026-11-03 — Completed 08-01 (saved views tracer)
 
 Progress: [████████░░] 78%
 
@@ -146,6 +147,7 @@ Progress: [████████░░] 78%
 | Phase 07 P10 | 25min | 3 tasks | 9 files |
 | Phase 07 P11 | 15min | 3 tasks | 15 files |
 | Phase 07 P12 | 5min | 2 tasks | 2 files |
+| Phase 08 P01 | 11min | 3 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -410,6 +412,9 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-11: strip panels hide with the collapsed-block panels whenever a stage is up and fade back at reveal, overview close or zoom off
 - [Phase 07]: 07-12: No keyboard or VoiceOver way to form a group in Phase 7 is an accepted gap, carried to Phase 8's URL/CLI work as a "group with" candidate
 - [Phase 07]: 07-12: Items earlier plans left to the VM UAT are folded into 07-UAT.md VM checks V11-V13; the host checklist stays at the UI-SPEC's 5 items
+- [Phase 08]: View commands reuse cameraStep refusal path so paused/full-screen refusals keep Phase 4 announcements
+- [Phase 08]: Saved view desk tie between two non-saved desks goes to the smaller DeskKey (deterministic)
+- [Phase 08]: Dropped brief notice is announced from ArrangeController.post (brief + .unchanged means dropped)
 
 ### Quick Tasks Completed
 
@@ -450,8 +455,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T03:36:21.041Z
-Stopped at: Phase 7 complete, ready to plan Phase 8
+Last session: 2026-11-03T20:47:32.288Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
 
 ## Deferred Verification
