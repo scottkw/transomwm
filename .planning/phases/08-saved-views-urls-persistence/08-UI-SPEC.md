@@ -1,7 +1,8 @@
 ---
 phase: "8"
 slug: "saved-views-urls-persistence"
-status: draft
+status: approved
+reviewed_at: 2026-11-03
 shadcn_initialized: false
 preset: none
 created: "2026-11-03"
@@ -243,7 +244,7 @@ One `NSPanel` per placeholder, from a recycled pool (the `CollapsedPanels` patte
 |---|---|---|
 | Placeholder created | Fades in over **120 ms** | none (it is background state; Debug line counts it) |
 | A window is matched to it | The window is moved into the tile (Phase 3 write); the placeholder fades out over 120 ms once the frame write is sent. Not an undo step | none (the window arriving is the feedback) |
-| **Expiry** (D-12): 10 s after its app launched without a match, or 5 min after Transom launched (launch path) / after the app quit (app-quit path) with no launch | Fades out over 120 ms, then the tile closes through the normal close path and its neighbours reflow (Phase 3). Not an undo step | none; log line |
+| **Expiry** (D-12): 10 s after its app launched without a match, or 5 min after Transom launched with no launch (launch path), or 30 s after the app quit with no relaunch (app-quit path, user decision 2026-11-03) | Fades out over 120 ms, then the tile closes through the normal close path and its neighbours reflow (Phase 3). Not an undo step | none; log line |
 | While paused | Stays visible; expiry still runs (it is not a window command). A match is recorded and the window goes to its tile at Resume (Phase 3 Resume rule) | |
 | Restore All Windows, Arrange All, Undo | Unaffected: a placeholder holds its tile like a window. Arrange All docks other windows around it | |
 | Quit Transom | Panels disappear. Waiting windows stay in layout.json for the next launch | |
@@ -409,7 +410,7 @@ Exit status: 0 done, 1 refused, 2 Transom is not running,
 | views | Went | "go view {n} via {hotkey | url | cli}: desk {key}, {k} of {m} windows, target {home | node}{, space switch}" · "go view {n}: windows gone, home + notice" |
 | views | Refused | "refused view {n}: {reason}" · "refused save-view {n}: {reason}" (reasons match the announcements) |
 | match | Launch / relaunch | "match {bundle}: window {id} -> tile {node}, score {s}" · "match {bundle}: tie at {s} between windows {a} and {b}; tile {node} waits, windows float" · "match {bundle}: {k} unmatched, below threshold" |
-| match | Placeholder | "placeholder {node} for {bundle}: shown ({launch | app quit | tie})" · "placeholder {node} filled by window {id}" · "placeholder {node} expired ({10 s after launch | 5 min, no launch})" |
+| match | Placeholder | "placeholder {node} for {bundle}: shown ({launch | app quit | tie})" · "placeholder {node} filled by window {id}" · "placeholder {node} expired ({10 s after launch | 5 min, no launch | 30 s after quit})" |
 | cli | Listener | "cli listener started on {name}" · "cli listener failed: {reason}" |
 | cli | Request | "cli {command}: {ok | refused: reason | rate limited | rejected}" |
 | url | Rejected (existing) | "rejected a URL" (contents never logged, Phase 3) |
@@ -464,7 +465,7 @@ All new strings go in AppKit-free copy types, unit-tested like `MenuCopy`, `Zoom
 | Saving | empty slot (N13), used slot (N14), pending move (target saved), overview open (closes, saves), home view, node view, Desktop framed with floaters, Desktop framed empty (N19), zoom off (chord to app, URL ignored, CLI refused), paused, not ready, full-screen Space, via hotkey / URL / CLI |
 | Going | same Space, other Space (switch then zoom), other display, switch failed (1 s), already there (no move), some windows gone (smaller node), all gone (home + N17), display gone (N18), Space gone (current Space home + N17), empty slot (N16 + beep), zoom off, paused, not ready, overview open, retarget mid-move, focus moved after settle, Reduce Motion |
 | Toasts | brief replaces brief, brief replaces normal, brief behind a crash notice (dropped, still announced), normal N17, on target / pointer / menu-bar display, over the stage (Phase 4 re-order front) |
-| Placeholder | launch, reboot, app quit while running, tie, matched (fades, window in tile), expiry 10 s after launch, expiry 5 min, paused, Space hidden / shown / stranded, inside / outside the zoomed view, on the stage, in the overview, app installed / not running / not installed, tiny tile (icon and capsule hidden), light / dark / Increase Contrast, drop beside it, tab group all waiting |
+| Placeholder | launch, reboot, app quit while running, tie, matched (fades, window in tile), expiry 10 s after launch, expiry 5 min, expiry 30 s after quit, paused, Space hidden / shown / stranded, inside / outside the zoomed view, on the stage, in the overview, app installed / not running / not installed, tiny tile (icon and capsule hidden), light / dark / Increase Contrast, drop beside it, tab group all waiting |
 | Hotkeys | default, 15.0–15.1 fallback, user rebinding wins, Restore Defaults, zoom off (unregistered), Shortcuts section rows and footer, duplicate check |
 | URLs | valid 1–9, every rejected form, rate limit per slot, refused (silent), success toast |
 | CLI | help (four forms), success (silent, exit 0), unknown (64), bad slot (64), extra argument (64), not running (2), rate limit (1), refused with reason (1), no reply in 2 s (1), symlinked install, Debug build talks to Debug app |
@@ -479,7 +480,7 @@ Applicable state considerations resolved: 21 covered, 9 backstop, 0 unresolved. 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
 | loading | Going to a view on another Space | ✅ covered | macOS's own Space transition first, then the Phase 4 camera move; a switch not done in 1 s refuses with "Couldn't switch to Desktop {n}" and leaves the camera unchanged |
-| loading | Placeholder waiting for its app | ✅ covered | The placeholder is the waiting state itself: dim tile + "Waiting for {App}…" until a match or expiry (10 s after launch / 5 min), never a spinner |
+| loading | Placeholder waiting for its app | ✅ covered | The placeholder is the waiting state itself: dim tile + "Waiting for {App}…" until a match or expiry (10 s after launch / 5 min after Transom launch / 30 s after app quit), never a spinner |
 | loading | CLI waiting for a reply | ✅ covered | At most 2 s, then `transom: Transom didn't answer`, exit 1 |
 | error | Empty slot | ✅ covered | N16 "No view in slot {n}" + beep (hotkey); URL silent; CLI `refused: No view in slot {n}`, exit 1 |
 | error | All saved windows closed / display gone / empty view | ✅ covered | N17 (home, slot kept), N18, N19 per the Copywriting error row |
@@ -531,7 +532,7 @@ Wording is fixed so the agent can paste it into `08-UAT.md`. Answer **"pass"** o
 ## Notes for the planner
 
 1. **Bundle path.** Put the CLI at `Contents/Helpers/transom`, not `Contents/MacOS/transom`: APFS volumes are case-insensitive by default, so `transom` and the app binary `Transom` would be the same file. The CLI must resolve its own symlink (`/usr/local/bin/transom` → bundle) to find the bundle it belongs to and name the channel from that bundle's ID.
-2. **App quit while Transom runs (D-11/D-12 reading).** For "re-match when an app relaunches while Transom keeps running" to have anything to match, an app's docked windows must become placeholders when the app **quits** (today they close through CloseRule's 5 s recheck). This spec reads D-12's "5 min after Transom launches if the app never opens" as "5 min after the app quit" on that path. Consequence the user will see: after ⌘Q of an app, its tiles show "Waiting for {App}…" for up to 5 minutes before closing. A window closed with ⌘W while its app keeps running still closes at once. If the user prefers a shorter quit-path timer, it is one constant.
+2. **App quit while Transom runs (D-11/D-12 reading).** For "re-match when an app relaunches while Transom keeps running" to have anything to match, an app's docked windows must become placeholders when the app **quits** (today they close through CloseRule's 5 s recheck). **User decision 2026-11-03:** on this path a placeholder expires 30 s after the app quit if it has not relaunched (D-12a). After ⌘Q of an app, its tiles show "Waiting for {App}…" for up to 30 s, then close. A window closed with ⌘W while its app keeps running still closes at once. D-13 deviation: the placeholder is a sibling view sharing AppColor and the fallback-tile layout, not CollapsedBlockView itself (its hover ring and double-click would break click-through).
 3. **⌥ fallback detection.** KeyboardShortcuts 3.1.0 does not expose Carbon registration failure (`onRegistrationFailed` is internal), so the fallback is an OS-version rule (Surface 3). If research finds a public signal, the version rule can stay as the default and the signal added on top.
 4. **Pitfall 16.** D-01 keeps ⌥1–9 as the default even though ⌥5–9 type brackets on German and similar layouts. This spec mitigates with the Shortcuts footer and README note only; no automatic switch to another default (not decided in CONTEXT).
 5. **Toasts and the queue.** The brief class needs a per-item duration in `NoticeQueue` (today one static 6 s) and the "drop behind a crash notice" rule; N13–N16, N18, N19 are brief, N17 is normal.
@@ -558,12 +559,12 @@ Wording is fixed so the agent can paste it into `08-UAT.md`. Answer **"pass"** o
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
 **Approval:** pending
