@@ -35,7 +35,8 @@ extension Arranger {
     /// The saved views for layout.json, without identities no desk of `worlds` holds. A view left with none keeps its slot
     /// and desk, and goes home there (D-05).
     func heldViews(in worlds: [World]) -> [SavedView] {
-        camera.savedViews.sorted
+        let held = Set(worlds.flatMap { $0.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) } }.map(\.identity))
+        return camera.savedViews.sorted.map { SavedView(slot: $0.slot, desk: $0.desk, home: $0.home, windows: $0.windows.filter(held.contains)) }
     }
 
     /// Where `view` takes the camera (RESEARCH Pattern 1): the desk holding most of its surviving windows (ties to the

@@ -39,6 +39,9 @@ public struct SavedViews: Equatable, Sendable {
 
     /// A window's identity changed: every view holding `from` holds `to` instead, once.
     mutating func remap(from: WindowIdentity, to: WindowIdentity) {
+        for (slot, view) in slots where view.windows.contains(from) {
+            slots[slot]?.windows = Set(view.windows.map { $0 == from ? to : $0 }).sorted()
+        }
     }
 
     /// By slot.
