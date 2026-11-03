@@ -1,3 +1,4 @@
+import Foundation
 import TransomModel
 
 /// Re-matches saved windows to returning windows of the same app when their IDs changed (an app or Transom relaunch,
@@ -6,6 +7,20 @@ import TransomModel
 public enum HintMatcher {
     /// Both titles non-empty and equal.
     public static let exactTitle = 50
+    /// Both titles non-empty and equal only after `normalised` (instead of `exactTitle`).
+    public static let normalisedTitle = 30
+    /// Both AX identifiers known and equal.
+    public static let sameAXIdentifier = 15
+    /// Both AX identifiers known and different.
+    public static let differentAXIdentifier = -30
+    /// The saved frame and the window's frame overlap with IoU ≥ `closeIoU`.
+    public static let closeFrame = 25
+    /// IoU ≥ `overlapIoU` and below `closeIoU`.
+    public static let overlappingFrame = 10
+    public static let closeIoU = 0.9
+    public static let overlapIoU = 0.5
+    /// The same rank of `creationOrder` within the bundle (`WindowTracker`'s order is session-global).
+    public static let sameRank = 10
     /// Exactly one unmatched saved window and one unclaimed candidate of the bundle.
     public static let solePair = 40
     /// The lowest score that matches.
@@ -58,11 +73,45 @@ public enum HintMatcher {
         }
     }
 
-    public static func score(_ saved: Saved, _ candidate: Candidate, solePair sole: Bool) -> Int {
+    public static func score(_ saved: Saved, _ candidate: Candidate, solePair sole: Bool, sameRank same: Bool) -> Int {
         var score = 0
-        if !saved.ref.titleHint.isEmpty, saved.ref.titleHint == candidate.ref.titleHint { score += exactTitle }
+        let a = saved.ref, b = candidate.ref
+        if !a.titleHint.isEmpty, !b.titleHint.isEmpty {
+            if a.titleHint == b.titleHint {
+                score += exactTitle
+            } else if normalised(a.titleHint) == normalised(b.titleHint) {
+                score += normalisedTitle
+            }
+        }
+        if let x = a.axIdentifier, let y = b.axIdentifier { score += x == y ? sameAXIdentifier : differentAXIdentifier }
+        if let frame = saved.frame {
+            let overlap = iou(frame, candidate.frame)
+            score += overlap >= closeIoU ? closeFrame : overlap >= overlapIoU ? overlappingFrame : 0
+        }
+        if same { score += sameRank }
         if sole { score += solePair }
         return score
+    }
+
+    /// Trimmed, case-folded, without a trailing " — Edited" or " - Edited" (the document-modified marker).
+    static func normalised(_ title: String) -> String {
+        var folded = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        for marker in [" — edited", " - edited"] where folded.hasSuffix(marker) { folded.removeLast(marker.count) }
+        return folded.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Intersection over union; 0 when either rect has no area.
+    private static func iou(_ a: Rect, _ b: Rect) -> Double {
+        let width = max(0, min(a.maxX, b.maxX) - max(a.minX, b.minX)), height = max(0, min(a.maxY, b.maxY) - max(a.minY, b.minY))
+        let intersection = width * height
+        let union = a.width * a.height + b.width * b.height - intersection
+        return union > 0 ? intersection / union : 0
+    }
+
+    /// Each window's rank among `refs` by `creationOrder`: the number with a smaller one, so equal orders share a rank
+    /// and the result does not depend on input order.
+    private static func ranks(_ refs: [WindowRef]) -> [WindowIdentity: Int] {
+        Dictionary(uniqueKeysWithValues: refs.map { ref in (ref.identity, refs.count { $0.creationOrder < ref.creationOrder }) })
     }
 
     /// Per bundle: every pair at or above `threshold`, then repeatedly the best remaining pair, unless another remaining
@@ -76,10 +125,11 @@ public enum HintMatcher {
             let s = saved.filter { $0.ref.bundleID == bundle }.sorted { $0.ref.identity < $1.ref.identity }
             let c = candidates.filter { $0.ref.bundleID == bundle }.sorted { $0.ref.identity < $1.ref.identity }
             let sole = s.count == 1 && c.count == 1
+            let savedRanks = ranks(s.map(\.ref)), candidateRanks = ranks(c.map(\.ref))
             var pairs: [Match] = []
             for one in s {
                 for other in c {
-                    let points = score(one, other, solePair: sole)
+                    let points = score(one, other, solePair: sole, sameRank: savedRanks[one.ref.identity] == candidateRanks[other.ref.identity])
                     if points >= threshold { pairs.append(Match(saved: one.ref, window: other.ref, score: points)) }
                 }
             }

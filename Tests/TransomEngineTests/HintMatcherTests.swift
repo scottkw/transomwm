@@ -119,6 +119,29 @@ private func pairs(_ matches: [HintMatcher.Match]) -> [UInt32: UInt32] {
         }
     }
 
+    /// The locked weights, one signal at a time (frame bands by IoU: 0.9 and up, 0.5 up to 0.9, below 0.5).
+    @Test func eachSignalScoresItsWeight() {
+        func points(_ s: HintMatcher.Saved, _ c: HintMatcher.Candidate, sole: Bool = false, rank: Bool = false) -> Int {
+            HintMatcher.score(s, c, solePair: sole, sameRank: rank)
+        }
+        let half = Rect(x: 360, y: 25, width: 720, height: 875)  // IoU with `left` is 1/3
+        let most = Rect(x: 0, y: 25, width: 720, height: 600)  // IoU with `left` is about 0.69
+        let close = Rect(x: 10, y: 25, width: 720, height: 875)  // IoU with `left` is about 0.97
+        #expect(points(saved(1, "Doc"), candidate(10, "Doc")) == HintMatcher.exactTitle)
+        #expect(points(saved(1, "Doc — Edited"), candidate(10, " doc ")) == HintMatcher.normalisedTitle)
+        #expect(points(saved(1, ""), candidate(10, "")) == 0)
+        #expect(points(saved(1, ax: "a"), candidate(10, ax: "a")) == HintMatcher.sameAXIdentifier)
+        #expect(points(saved(1, ax: "a"), candidate(10, ax: "b")) == HintMatcher.differentAXIdentifier)
+        #expect(points(saved(1, ax: "a"), candidate(10)) == 0)
+        #expect(points(saved(1, frame: left), candidate(10, frame: close)) == HintMatcher.closeFrame)
+        #expect(points(saved(1, frame: left), candidate(10, frame: most)) == HintMatcher.overlappingFrame)
+        #expect(points(saved(1, frame: left), candidate(10, frame: half)) == 0)
+        #expect(points(saved(1), candidate(10, frame: left)) == 0, "an unknown saved frame scores nothing")
+        #expect(points(saved(1), candidate(10), rank: true) == HintMatcher.sameRank)
+        #expect(points(saved(1), candidate(10), sole: true) == HintMatcher.solePair)
+        #expect(HintMatcher.threshold == 40)
+    }
+
     @Test func distinctTitlesMatchEachWindowToItsOwnTitle() {
         let result = HintMatcher.assign(saved: [saved(1, "Notes"), saved(2, "Plan")], candidates: [candidate(20, "Plan"), candidate(10, "Notes")])
         #expect(pairs(result.matches) == [1: 10, 2: 20])
