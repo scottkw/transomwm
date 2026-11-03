@@ -416,6 +416,70 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         #expect(harness.arranger.viewDestination(view).target == .home && harness.arranger.viewDestination(view).allGone)
     }
 
+    /// The shell's view of a slot (D-03): where it goes, before any Space is switched.
+    @Test func theDestinationNamesTheDeskTargetAndWhetherAllAreGone() async throws {
+        var harness = try await threeDocked()
+        #expect(harness.arranger.viewDestination(slot: three) == nil, "an empty slot has none")
+        let node = try await savedCAndD(&harness)
+        var destination = try #require(harness.arranger.viewDestination(slot: three))
+        #expect(destination.key == key && destination.target == .node(node) && !destination.allGone)
+        #expect(destination.alive == 2 && destination.total == 2)
+
+        await harness.fake.close(3)
+        await harness.fake.close(4)
+        _ = await harness.refresh()
+        destination = try #require(harness.arranger.viewDestination(slot: three))
+        #expect(destination.key == key && destination.target == .home && destination.allGone)
+        #expect(destination.alive == 0 && destination.total == 2)
+        #expect(harness.arranger.savedViewSlots == [3])
+    }
+
+    /// D-03: addressed to the display showing the desk, the camera moves there wherever the pointer is. Addressed to
+    /// another display it only refuses: that display does not show the desk.
+    @Test func goingZoomsTheDestinationDisplayNotThePointers() async throws {
+        let onMain = Rect(x: 40, y: 80, width: 320, height: 232)
+        var harness = Harness()
+        await harness.fake.setDisplays([
+            DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: nil),
+            DisplayInfo(uuid: "side", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 1440, y: 25, width: 1920, height: 1055), currentSpaceID: nil),
+        ])
+        await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await harness.fake.open(.standard(id: 1, pid: pid, frame: onMain))
+        await harness.fake.open(.standard(id: 2, pid: pid, frame: Rect(x: 1480, y: 80, width: 320, height: 232)))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        await harness.send(.command(.dock, focused: b))
+        await harness.send(.zoomEnabled(true))
+        let leaf = try #require(harness.arranger.leafNode(of: b))
+        let toLeaf = try #require(moves(await harness.send(.zoomTo(.node(leaf), displayUUID: "side"))).first)
+        await harness.send(.cameraSettle(displayUUID: "side", moveID: toLeaf.id))
+        await harness.send(.camera(.saveView(three), displayUUID: "side", focused: nil, pointer: nil))
+        let toHome = try #require(moves(await harness.send(.zoomTo(.home, displayUUID: "side"))).first)
+        await harness.send(.cameraSettle(displayUUID: "side", moveID: toHome.id))
+
+        let elsewhere = await harness.send(.camera(.view(three), displayUUID: "main", focused: a, pointer: Point(x: 100, y: 100)))
+        #expect(moves(elsewhere).isEmpty && has(.beep, elsewhere))
+
+        let there = await harness.send(.camera(.view(three), displayUUID: "side", focused: a, pointer: Point(x: 100, y: 100)))
+        #expect(moves(there).map(\.displayUUID) == ["side"] && moves(there).first?.to == .node(leaf))
+        #expect(notices(there) == [.viewShown(three, displayUUID: "side")])
+        #expect(harness.arranger.camera.pending["side"]?.focus == b, "focus outside the view moves inside it")
+    }
+
+    /// UI-SPEC: every window gone and the saved Space no longer there: the shell addresses the saved display, which goes
+    /// home on the Space it shows, with N17.
+    @Test func allGoneOnAMissingSpaceGoesHomeOnTheDisplaysCurrentSpace() async throws {
+        var harness = try await threeDocked()
+        harness.arranger.camera.savedViews.save(SavedView(slot: three, desk: DeskKey(displayUUID: "main", spaceID: 99), home: false, windows: [ref(77).identity]))
+        try await zoom(&harness, to: .node(try #require(harness.arranger.leafNode(of: a))))
+
+        let shown = await camera(.view(three), &harness)
+
+        #expect(moves(shown).first?.to == .home)
+        #expect(notices(shown) == [.viewWindowsClosed(three, displayUUID: "main")])
+    }
+
     /// T-08-03: a stored slot outside 1–9 fails to decode, so a hostile file can't address a tenth slot.
     @Test func aSlotOutsideOneToNineFailsToDecode() throws {
         let decoder = JSONDecoder()

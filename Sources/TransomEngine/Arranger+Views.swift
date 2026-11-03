@@ -52,6 +52,13 @@ extension Arranger {
         return (best, Navigator.lowestCommonAncestor(leaves, in: tree).map { Navigator.target($0, in: tree) } ?? .home, false)
     }
 
+    /// The destination of the view in `slot`, for the shell's Space and display switch (D-03); nil for an empty slot.
+    /// `alive` are the saved windows on that desk, `total` all that were saved.
+    public func viewDestination(slot: ViewSlot) -> (key: DeskKey, target: ViewTarget, allGone: Bool, alive: Int, total: Int)? { nil }
+
+    /// The filled slots, in order (the Debug line).
+    public var savedViewSlots: [Int] { [] }
+
     /// Zooms that display's camera to the view in `slot`: one camera move, so it joins Back/Forward history (`.navigate`)
     /// and is never an undo step.
     mutating func goView(_ slot: ViewSlot, displayUUID uuid: String, focused: WindowRef?) -> [ArrangerEffect] {
