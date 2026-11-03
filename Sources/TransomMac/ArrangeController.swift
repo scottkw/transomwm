@@ -170,7 +170,10 @@ import os
     /// Queues a toast from outside the Arranger (ConflictController's N7 and N8).
     public func post(_ notice: Notice) {
         logger.info("notice \(String(describing: notice), privacy: .public)")  // toasts don't show over VNC
-        present(notices.post(notice, at: .now))
+        let change = notices.post(notice, at: .now)
+        // A brief notice dropped behind a crash notice is still announced (08 UI-SPEC View toasts).
+        if change == .unchanged, notice.isBrief { postAnnouncement(NoticeCopy.text(for: notice, appName: Self.appName)) }
+        present(change)
     }
 
     /// Sets or clears one pause reason (Stage Manager, from ConflictController).

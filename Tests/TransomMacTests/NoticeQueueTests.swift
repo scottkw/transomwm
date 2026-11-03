@@ -89,4 +89,46 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(queue.visible == .crashRecovered(unplaced: 0))
         #expect(queue.expire(at: t0 + .seconds(10)) == .show(.lostRoom([ref(1)])))
     }
+
+    // 08 UI-SPEC View toasts: the brief class.
+    private static let three = ViewSlot(3)!
+    private static let saved = Notice.viewSaved(three, replaced: false, displayUUID: "main")
+    private static let shown = Notice.viewShown(three, displayUUID: "main")
+
+    @Test func briefNoticesShowForOneAndAHalfSecondsNormalSixCrashTen() {
+        var queue = NoticeQueue<Notice>()
+        _ = queue.post(Self.shown, at: t0)
+        #expect(queue.expiresAt == t0 + .milliseconds(1500))
+        #expect(NoticeQueue<Notice>.briefDuration == .milliseconds(1500))
+        _ = queue.post(.viewWindowsClosed(Self.three, displayUUID: "main"), at: t0)
+        #expect(queue.expiresAt == t0 + .seconds(6), "N17 is a normal toast")
+        _ = queue.post(.crashLoop, at: t0)
+        #expect(queue.expiresAt == t0 + .seconds(10))
+    }
+
+    @Test func aBriefNoticeReplacesAnyNonCrashNoticeAndRestartsItsTime() {
+        var queue = NoticeQueue<Notice>()
+        _ = queue.post(.lostRoom([ref(1)]), at: t0)
+        #expect(queue.post(Self.saved, at: t0 + .seconds(1)) == .show(Self.saved))
+        #expect(queue.post(Self.shown, at: t0 + .seconds(2)) == .show(Self.shown))
+        #expect(queue.post(Self.shown, at: t0 + .seconds(3)) == .show(Self.shown), "brief notices never merge; the newer wins")
+        #expect(queue.expiresAt == t0 + .seconds(3) + .milliseconds(1500))
+        #expect(queue.expire(at: t0 + .seconds(5)) == .hide, "the replaced notices do not come back")
+    }
+
+    @Test func aBriefNoticeBehindACrashNoticeIsDroppedNotQueued() {
+        var queue = NoticeQueue<Notice>()
+        _ = queue.post(.crashLoop, at: t0)
+        #expect(queue.post(Self.shown, at: t0 + .seconds(1)) == .unchanged)
+        #expect(queue.visible == .crashLoop)
+        #expect(queue.expire(at: t0 + .seconds(10)) == .hide, "nothing was queued")
+    }
+
+    @Test func n17BehindACrashNoticeIsQueuedLikeANormalNotice() {
+        var queue = NoticeQueue<Notice>()
+        let closed = Notice.viewWindowsClosed(Self.three, displayUUID: "main")
+        _ = queue.post(.crashLoop, at: t0)
+        #expect(queue.post(closed, at: t0 + .seconds(1)) == .unchanged)
+        #expect(queue.expire(at: t0 + .seconds(10)) == .show(closed))
+    }
 }

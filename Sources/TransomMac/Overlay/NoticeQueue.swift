@@ -5,8 +5,14 @@ import TransomModel
 nonisolated public protocol QueueableNotice: Equatable, Sendable {
     /// Never replaced by a newer toast; shown for `NoticeQueue.crashDuration`.
     var isCrashNotice: Bool { get }
+    /// Shown for `NoticeQueue.briefDuration` and dropped, never queued, behind a crash notice (08 UI-SPEC View toasts).
+    var isBrief: Bool { get }
     /// `self` and the newer `other` as one notice when they are the same kind, else nil.
     func merged(with other: Self) -> Self?
+}
+
+nonisolated extension QueueableNotice {
+    public var isBrief: Bool { false }
 }
 
 /// The toast queue rules (UI-SPEC Surface 4). Pure value type; the shell shows what `post` and `expire` return.
@@ -19,6 +25,7 @@ nonisolated public struct NoticeQueue<Item: QueueableNotice>: Sendable {
 
     public static var duration: Duration { .seconds(6) }
     public static var crashDuration: Duration { .seconds(10) }
+    public static var briefDuration: Duration { .milliseconds(1500) }
     public static var maxQueued: Int { 3 }
 
     public private(set) var visible: Item?
@@ -29,10 +36,12 @@ nonisolated public struct NoticeQueue<Item: QueueableNotice>: Sendable {
     public init() {}
 
     /// A notice merges into the visible one of its kind, or replaces it, unless that one is a crash notice: then it
-    /// waits, merged into a queued one of its kind or appended, with the oldest dropped past `maxQueued`.
+    /// waits, merged into a queued one of its kind or appended, with the oldest dropped past `maxQueued`. A brief notice
+    /// behind a crash notice is dropped instead (it would be stale), so `.unchanged` for a brief notice means dropped.
     public mutating func post(_ notice: Item, at now: ContinuousClock.Instant) -> Change {
         guard let current = visible else { return show(notice, at: now) }
         guard current.isCrashNotice else { return show(current.merged(with: notice) ?? notice, at: now) }
+        guard !notice.isBrief else { return .unchanged }
         if let i = queued.firstIndex(where: { $0.merged(with: notice) != nil }), let merged = queued[i].merged(with: notice) {
             queued[i] = merged
         } else {
@@ -53,7 +62,7 @@ nonisolated public struct NoticeQueue<Item: QueueableNotice>: Sendable {
 
     private mutating func show(_ notice: Item, at now: ContinuousClock.Instant) -> Change {
         visible = notice
-        expiresAt = now + (notice.isCrashNotice ? Self.crashDuration : Self.duration)
+        expiresAt = now + (notice.isCrashNotice ? Self.crashDuration : notice.isBrief ? Self.briefDuration : Self.duration)
         return .show(notice)
     }
 }

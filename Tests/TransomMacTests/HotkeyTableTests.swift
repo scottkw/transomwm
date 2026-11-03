@@ -123,6 +123,21 @@ import Testing
         #expect(ViewChords.digits == [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine])
     }
 
+    /// D-01 fallback: macOS 15.0 and 15.1 refuse Option-only and Option+Shift-only hotkeys, so they get ⌃⌥ / ⇧⌃⌥.
+    @Test(arguments: [(15, 0), (15, 1)])
+    func viewChordsAddControlOn15Point0And15Point1(major: Int, minor: Int) {
+        let os = OperatingSystemVersion(majorVersion: major, minorVersion: minor, patchVersion: 0)
+        #expect(ViewChords.modifiers(save: false, os: os) == [.control, .option])
+        #expect(ViewChords.modifiers(save: true, os: os) == [.shift, .control, .option])
+    }
+
+    @Test(arguments: [(14, 6), (15, 2), (26, 0), (27, 0)])
+    func viewChordsAreOptionElsewhere(major: Int, minor: Int) {
+        let os = OperatingSystemVersion(majorVersion: major, minorVersion: minor, patchVersion: 0)
+        #expect(ViewChords.modifiers(save: false, os: os) == [.option])
+        #expect(ViewChords.modifiers(save: true, os: os) == [.shift, .option])
+    }
+
     @Test func namesAreUnique() {
         let names = Hotkeys.entries.map(\.name.rawValue)
         #expect(!names.isEmpty)

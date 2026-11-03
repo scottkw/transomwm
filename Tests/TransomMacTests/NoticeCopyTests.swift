@@ -129,4 +129,25 @@ private func ref(_ id: UInt32) -> WindowRef {
         #expect(NoticeCopy.isWarning(.takeoverApplyFailed))
         #expect(!Notice.takeoverApplyFailed.isCrashNotice)
     }
+
+    /// 08 UI-SPEC View toasts N13–N19, for slot 3 and slot 9.
+    @Test(arguments: [3, 9])
+    func theViewNoticesMatchTheContract(number: Int) throws {
+        let slot = try #require(ViewSlot(number))
+        let n = number
+        let rows: [(Notice, String, String)] = [
+            (.viewSaved(slot, replaced: false, displayUUID: nil), "Saved view \(n)", "bookmark"),
+            (.viewSaved(slot, replaced: true, displayUUID: nil), "Replaced view \(n)", "bookmark"),
+            (.viewShown(slot, displayUUID: nil), "View \(n)", "viewfinder"),
+            (.viewEmpty(slot, displayUUID: nil), "No view in slot \(n)", "viewfinder"),
+            (.viewWindowsClosed(slot, displayUUID: nil), "The windows in view \(n) have closed. Showing all windows.", "info.circle"),
+            (.viewDisplayGone(slot, displayUUID: nil), "View \(n) is on a display that isn't connected.", "display"),
+            (.viewNothingToSave(displayUUID: nil), "There are no windows in this view to save.", "info.circle"),
+        ]
+        for (notice, text, glyph) in rows {
+            #expect(NoticeCopy.text(for: notice, appName: { _ in "" }) == text)
+            #expect(NoticeCopy.glyph(for: notice) == glyph)
+            #expect(!NoticeCopy.isWarning(notice))
+        }
+    }
 }
