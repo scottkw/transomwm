@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 7
-current_phase_name: Tab Groups
+current_phase: 8
+current_phase_name: Saved Views, URLs & Persistence
 status: planning
-stopped_at: Phase 6 complete, ready to plan Phase 7
-last_updated: "2026-11-01T23:28:42.038Z"
-last_activity: 2026-11-01
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: a8b5a9be8aa4e2118ad33f1414960ed9ca778995
+stopped_at: Phase 7 complete, ready to plan Phase 8
+last_updated: "2026-11-03T14:46:34.405Z"
+last_activity: 2026-11-03
+last_activity_desc: Phase 7 complete, transitioned to Phase 8
+state_head: 66c3a7343bcda79f3703e586a9a6552c168ada9f
 progress:
   total_phases: 9
-  completed_phases: 6
-  total_plans: 79
-  completed_plans: 79
-  percent: 67
+  completed_phases: 7
+  total_plans: 91
+  completed_plans: 91
+  percent: 78
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 6 — Overview, Spaces & Displays
+**Current focus:** Phase 7 — Tab Groups
 
 ## Current Position
 
-Phase: 7 — Tab Groups
+Phase: 8 — Saved Views, URLs & Persistence
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-11-01 — Phase 6 complete, transitioned to Phase 7
+Last activity: 2026-11-03 — Phase 7 complete, transitioned to Phase 8
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 78%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 79
+- Total plans completed: 91
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -51,6 +51,7 @@ Progress: [███████░░░] 67%
 | 4 | 8 | - | - |
 | 5 | 8 | - | - |
 | 6 | 12 | - | - |
+| 7 | 12 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -133,6 +134,18 @@ Progress: [███████░░░] 67%
 | Phase 06 P10 | 12min | 3 tasks | 9 files |
 | Phase 06 P11 | 11min | 3 tasks | 15 files |
 | Phase 06 P12 | 13min | 2 tasks | 3 files |
+| Phase 07 P01 | 18min | 3 tasks | 25 files |
+| Phase 07 P02 | 10min | 3 tasks | 8 files |
+| Phase 7 P03 | 10min | 3 tasks | 11 files |
+| Phase 7 P04 | 13 min | 3 tasks | 9 files |
+| Phase 07 P05 | 9min | 3 tasks | 14 files |
+| Phase 07 P06 | 16min | 3 tasks | 12 files |
+| Phase 7 P07 | 17 min | 3 tasks | 11 files |
+| Phase 07 P08 | 5min | 2 tasks | 6 files |
+| Phase 07 P09 | 6min | 3 tasks | 17 files |
+| Phase 07 P10 | 25min | 3 tasks | 9 files |
+| Phase 07 P11 | 15min | 3 tasks | 15 files |
+| Phase 07 P12 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -363,6 +376,40 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-11: Restore macOS Window Settings lifts the takeover through ConflictController.takeover (canRestore true while on; N8 after)
 - [Phase 06]: 06-11: N10 posted in ArrangeController.start after N2/N3; launch-time N11 posted when ArrangeController.takeover is wired
 - [Phase 06]: 06-12: the intermittent VM Esc failure in OverviewIntegrationTests is recorded (deferred-items.md, WINDOWS.md), not patched, until a cause is found
+- [Phase 07]: 07-01: only a tab group's selected member is an unfit candidate; a group whose selected member is absent takes no part
+- [Phase 07]: 07-01: hidden tabs are sized parks (WindowCommand.park size, FramePlan.parkSizes); re-park when content size changes >0.5 pt
+- [Phase 07]: 07-01: commitGroup reuses commitDock at .tile(id,.center); Arranger decide/dropping/commitDock/missed are now internal
+- [Phase 07]: 07-02: a tab reveal waits for a read-back only when something covers the content rect; the previous member parks after a 2 pt match with the last requested content rect, else reverts at 1 s
+- [Phase 07]: 07-02: D-08 activation runs before the camera widen; 1 s per-group focus suppression after a selection change or a member going absent/closed (Arranger.focusSuppression)
+- [Phase 07]: 07-02: strip presses feed a pointer .down with no press window (stale drags abandoned, no window drag behind); TabCopy owns app-name truncation
+- [Phase 7]: Strip backstop follows a drift only when two 500 ms ticks agree; a return to the plan snaps back at once
+- [Phase 7]: leftOnAnotherSpace is asked only of visible strip panels; ordered-out ones are reused (VM: same panel back)
+- [Phase 7]: TabStripPanels remembers the Space each display's strips were shown for, so a return while paused fades them back in
+- [Phase 7]: 07-04: floating groups are add-alongside: FloatingTabGroup sidecar over FloatingWindow records (members stay floaters at the content rect); promote only if groups need z-order/nesting or member frames drift
+- [Phase 7]: 07-04: World.undo keeps snapshot frames for windows whose floating group the undone edit changed
+- [Phase 7]: 07-04: a floating group's wanted frame follows its selected member; a window leaving a group loses its wanted frame and the input replans once more
+- [Phase 07]: 07-05: closeConfirmation stays 1 s (VM close confirmation 110-120 ms)
+- [Phase 07]: 07-05: focusSuppression stays 1 s (VM: hidden same-app window became key after Minimize Group; group stayed minimised)
+- [Phase 07]: 07-05: a stopped Close Group clears its queue; a second click rebuilds it selected-first, which resumes with the stopping member
+- [Phase 07]: 07-05: Tab group ended is not spoken while Close Group runs through the group
+- [Phase 07]: 07-06: removeGroup/addGroup carry member states so Float/Dock Group keep an absent member's state
+- [Phase 07]: 07-06: Dock Group is Dock Window on the selected member (dock() branches on a floating group at the group frame's centre)
+- [Phase 07]: 07-06: a window leaving a floating group by docking keeps its wanted (pre-dock) frame; only windows still floating lose it
+- [Phase 07]: 07-06: keyboard Swap lets the focused window be a group member; the other must be a plain panel (same as the command-drag rule)
+- [Phase 7]: 07-07: a tear-off is a DragSession with origin .tearOff (kind .move, no frame poll); tabs.tearing keeps movingGroup from taking the whole group
+- [Phase 7]: 07-07: tear-off release before the dwell floats at the landing frame; a refused Dock leaves the tab in its group with Not enough room
+- [Phase 7]: 07-07: Planner clamps a floating group's whole frame (strip band included) when it crosses a tile
+- [Phase 07]: 07-08: Move Out of Group reuses the tear-off float commit with a computed landing frame (8 pt right, else left, else 24/24 cascade, then clamp)
+- [Phase 07]: 07-08: Close Tab is a one-member CloseQueue flagged oneTab so its dissolve is announced; a ctrl-click on a strip never starts a tear press
+- [Phase 07]: 07-09: tab commands reach the engine as TabAction.command with the shell's ready flag and source, so not-ready refusals announce; URL refusals drop beep and announcement
+- [Phase 07]: 07-09: Next/Previous Tab step from the group's selected index, wrapping; hotkeys nextTab ⌃⌥⌘T, previousTab ⇧⌃⌥⌘T, moveOutOfGroup ⌃⌥⌘L are not zoom names
+- [Phase 07]: 07-10: quit plan treats every tab group member as docked with groupContentRects (every desk, at home or not) merged over homeTiles; a minimised-selected docked group falls to the stranded rule
+- [Phase 07]: 07-10: Restore All dissolves groups first (one undo step per desk, cascade 24 pt), spares them from the rescue, counts them in N6; per-desk failures log a fault and never block the rescue
+- [Phase 07]: 07-11: StripMove carries strip rects (group frame's top band x view scale), not group frames
+- [Phase 07]: 07-11: group strips are stage tiles (ID = selected tile ID with top bit flipped), so every stage path animates them
+- [Phase 07]: 07-11: strip panels hide with the collapsed-block panels whenever a stage is up and fade back at reveal, overview close or zoom off
+- [Phase 07]: 07-12: No keyboard or VoiceOver way to form a group in Phase 7 is an accepted gap, carried to Phase 8's URL/CLI work as a "group with" candidate
+- [Phase 07]: 07-12: Items earlier plans left to the VM UAT are folded into 07-UAT.md VM checks V11-V13; the host checklist stays at the UI-SPEC's 5 items
 
 ### Quick Tasks Completed
 
@@ -403,8 +450,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-31T21:42:41.707Z
-Stopped at: Phase 6 complete, ready to plan Phase 7
+Last session: 2026-11-02T03:36:21.041Z
+Stopped at: Phase 7 complete, ready to plan Phase 8
 Resume file: None
 
 ## Deferred Verification

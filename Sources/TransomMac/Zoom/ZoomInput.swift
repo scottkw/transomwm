@@ -35,8 +35,9 @@ import os
     /// The temporary Esc hotkeys while a band is active (ZOOM-12). Each stream registers its Carbon hotkey when it
     /// starts and unregisters when its task is cancelled.
     private var bandEscapes: [Task<Void, Never>] = []
-    /// Esc with no modifier, ⇧, ⌘ and ⌘⇧ (the user may still hold ⌘⇧). Never with ⌥: ⌥⌘Esc is Force Quit.
-    private static let escapeModifiers: [NSEvent.ModifierFlags] = [[], [.shift], [.command], [.command, .shift]]
+    /// Esc with no modifier, ⇧, ⌘ and ⌘⇧ (the user may still hold ⌘⇧); the tear-off shares them. Never with ⌥: ⌥⌘Esc
+    /// is Force Quit.
+    static let escapeModifiers: [NSEvent.ModifierFlags] = [[], [.shift], [.command], [.command, .shift]]
 
     /// Pick mode on one display (Surface 5): its window tiles by CG window, the passive hover monitor, the Esc hotkey.
     private struct Pick {

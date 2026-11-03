@@ -32,6 +32,7 @@ extension LayoutTree {
 public struct ViewPlan: Equatable, Sendable {
     public var frames: [WindowRef: Rect]
     public var parks: [WindowRef]
+    public var parkSizes: [WindowRef: Size] = [:]
     public var unfit: Set<WindowRef>
     public var collapsed: [WindowRef: Rect]
     public var desktopRect: Rect?
@@ -40,7 +41,7 @@ public struct ViewPlan: Equatable, Sendable {
 }
 
 /// Pure camera layout (RESEARCH Pattern 1): `.home` is exactly `Planner.plan`; `.node(X)` resolves X's subtree in the
-/// whole `area` and parks every present window outside it at its own size.
+/// whole `area` and parks every present window outside it at its own size (a hidden tab at its home content size).
 public enum ViewPlanner {
     public static func plan(
         desk: Desk, view: ViewTarget, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:],
@@ -59,6 +60,8 @@ public enum ViewPlanner {
         let outside = desk.tree.windows.filter { tree.states[$0.identity] == nil && desk.tree.state(of: $0) == .present }
             + (showsDesktop ? [] : desk.desktop.windows.filter { $0.state == .present }.map(\.window))
         plan.parks = (plan.parks + outside).sorted { $0.identity < $1.identity }
+        // A hidden tab outside the view keeps its home content size, so it is never parked twice (Pitfall 12).
+        plan.parkSizes.merge(home.parkSizes.filter { outside.contains($0.key) }) { view, _ in view }
         plan.homeResolution = home.resolution
         return plan
     }
@@ -80,7 +83,7 @@ public enum ViewPlanner {
             plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: tiny, wanted: wanted)
         }
         var result = ViewPlan(
-            frames: plan.frames, parks: plan.parks, unfit: plan.unfit, collapsed: [:], desktopRect: plan.desktopRect,
+            frames: plan.frames, parks: plan.parks, parkSizes: plan.parkSizes, unfit: plan.unfit, collapsed: [:], desktopRect: plan.desktopRect,
             resolution: plan.resolution, homeResolution: plan.resolution)
         guard !shrunk.isEmpty else { return result }
         for window in shrunk {

@@ -30,7 +30,7 @@ private func writes(_ effects: [ArrangerEffect], _ window: WindowRef) -> Bool {
         guard case .perform(let commands) = effect else { return false }
         return commands.contains { command in
             switch command {
-            case .setFrame(let w, _), .park(let w, _), .focus(let w), .raise(let w), .setHidden(let w, _): w == window
+            case .setFrame(let w, _), .park(let w, _, _), .focus(let w), .raise(let w), .setHidden(let w, _), .close(let w), .minimize(let w): w == window
             }
         }
     }

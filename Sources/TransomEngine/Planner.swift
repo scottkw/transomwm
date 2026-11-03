@@ -3,10 +3,15 @@ import TransomModel
 /// Where every window of one desk should be. `frames` holds docked windows' tile rects and the floating windows that
 /// must move: each to its wanted frame, clamped into the Desktop only when that frame overlaps a docked tile. A
 /// floating window already there and clear of every tile is left where it is (D-24).
-/// While the Desktop tile is hidden, its present floating windows are in `parks` instead, with no frame.
+/// While the Desktop tile is hidden, its present floating windows are in `parks` instead, with no frame. A tab group's
+/// hidden members are always in `parks`, never in `frames`, with their content size in `parkSizes` (D-07); a floating
+/// group's too, once each, while its selected member is present. A floating group's selected member is planned like
+/// any floater, its stored frame being the group's content rect.
 public struct FramePlan: Equatable, Sendable {
     public var frames: [WindowRef: Rect]
     public var parks: [WindowRef]
+    /// The size each park is written at; a park with none keeps the window's own size.
+    public var parkSizes: [WindowRef: Size] = [:]
     public var unfit: Set<WindowRef>
     public var desktopRect: Rect?
     public var resolution: Resolution
@@ -26,11 +31,17 @@ public enum Planner {
         desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:],
         floors: [WindowIdentity: Size] = [:]
     ) throws(LayoutError) -> FramePlan {
-        let floating = desk.desktop.windows.filter { $0.state == .present }
+        let present = desk.desktop.windows.filter { $0.state == .present }
+        let groups = desk.desktop.groups
+        let selectedMembers = Set(groups.map { $0.members[$0.selected] })
+        let hiddenMembers = Set(groups.flatMap { group in group.members.indices.filter { $0 != group.selected }.map { group.members[$0] } })
+        // Hidden members take no part in the Desktop (parked below); the selected one needs room for its band too.
+        let floating = present.filter { !hiddenMembers.contains($0.window) }
         var sizing = floating.compactMap { window -> (window: WindowRef, min: Size)? in
             let min = mins[window.window], floor = floors[window.window.identity]
             guard min != nil || floor != nil else { return nil }
-            return (window.window, Size(width: max(min?.width ?? 0, floor?.width ?? 0), height: max(min?.height ?? 0, floor?.height ?? 0)))
+            let band = selectedMembers.contains(window.window) ? TabBand.height : 0
+            return (window.window, Size(width: max(min?.width ?? 0, floor?.width ?? 0), height: max(min?.height ?? 0, floor?.height ?? 0) + band))
         }
             .sorted { lhs, rhs in
                 let l = lhs.min.width * lhs.min.height, r = rhs.min.width * rhs.min.height
@@ -59,16 +70,36 @@ public enum Planner {
             }
         }
         var frames = resolution.windowRects
-        let parks = desk.tree.isDesktopHidden == true ? floating.map(\.window) : []
+        var parks = desk.tree.isDesktopHidden == true ? present.map(\.window) : []
+        var parkSizes: [WindowRef: Size] = [:]
+        for (window, content) in resolution.hiddenTabs.sorted(by: { $0.key.identity < $1.key.identity }) {
+            parks.append(window)
+            parkSizes[window] = Size(width: content.width, height: content.height)
+        }
         if let desktop = resolution.desktopRect {
             let tiles = Array(resolution.windowRects.values)
             for window in floating {
                 let want = wanted[window.window.identity] ?? window.frame
-                let target = tiles.contains(where: want.overlaps) ? clamp(want, into: desktop) : want
-                if tiles.contains(where: window.frame.overlaps) || !near(target, window.frame, within: 0.5) { frames[window.window] = target }
+                // A group's selected member stands for its whole group frame: the strip band is clamped with it.
+                let grouped = selectedMembers.contains(window.window)
+                let outer = grouped ? TabBand.frame(ofContent: want) : want
+                let clamped = clamp(outer, into: desktop)
+                let target = tiles.contains(where: outer.overlaps) ? (grouped ? TabBand.content(of: clamped) : clamped) : want
+                let now = grouped ? TabBand.frame(ofContent: window.frame) : window.frame
+                if tiles.contains(where: now.overlaps) || !near(target, window.frame, within: 0.5) { frames[window.window] = target }
             }
         }
-        return FramePlan(frames: frames, parks: parks, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
+        let presentSet = Set(present.map(\.window)), parkedByDesktop = Set(parks)
+        for group in groups where presentSet.contains(group.members[group.selected]) {  // else no part, as docked
+            let selected = group.members[group.selected]
+            let content = frames[selected] ?? TabBand.content(of: group.frame)
+            for hidden in group.members where hidden != selected && presentSet.contains(hidden) {
+                if !parkedByDesktop.contains(hidden) { parks.append(hidden) }
+                parkSizes[hidden] = Size(width: content.width, height: content.height)
+            }
+        }
+        return FramePlan(
+            frames: frames, parks: parks, parkSizes: parkSizes, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
     }
 
     static func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {

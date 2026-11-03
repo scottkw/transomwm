@@ -72,6 +72,74 @@ import Testing
         #expect(focus.resolve(pid: 1, mainID: nil, windows: [info(20)]) == info(20).window)
     }
 
+    /// 07 UAT Bug 1: ⌘Tab, the Dock or `open -a` activate an app with no focus change when its focused window stays the
+    /// same (a hidden tab); the activation resolves through AXMain like a no-ID hint.
+    @Test func anActivationResolvesThroughAXMain() {
+        var focus = PendingFocus()
+        focus.activated(pid: 1)
+        #expect(focus.resolve(pid: 1, mainID: nil, windows: [info(8)]) == nil)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)]) == info(8).window)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)]) == nil)
+    }
+
+    @Test func aPendingAXHintNamesTheWindowOverAnActivation() {
+        var focus = PendingFocus()
+        focus.hint(pid: 1, windowID: 9)
+        focus.activated(pid: 1)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8), info(9)]) == info(9).window)
+        focus.activated(pid: 1)
+        focus.hint(pid: 1, windowID: 9)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8), info(9)], now: .now + .seconds(1)) == info(9).window)
+    }
+
+    /// The activation and the AX notice of one focus change make one `windowFocused`, whichever resolves first.
+    @Test func anActivationAndAnAXHintOfTheSameWindowResolveOnce() {
+        let t0 = ContinuousClock.now
+        var focus = PendingFocus()
+        focus.hint(pid: 1, windowID: 8)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)], now: t0) == info(8).window)
+        focus.activated(pid: 1)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)], now: t0 + .milliseconds(100)) == nil)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)], now: t0 + .milliseconds(150)) == nil, "the duplicate was not consumed")
+
+        var reverse = PendingFocus()
+        reverse.activated(pid: 1)
+        #expect(reverse.resolve(pid: 1, mainID: 8, windows: [info(8)], now: t0) == info(8).window)
+        reverse.hint(pid: 1, windowID: 8)
+        #expect(reverse.resolve(pid: 1, mainID: 8, windows: [info(8)], now: t0 + .milliseconds(100)) == nil)
+    }
+
+    /// Only a duplicate is dropped: the same window again after the window, or after another window was focused, resolves;
+    /// two AX hints of one window resolve twice, as before.
+    @Test func onlyAnImmediateRepeatAcrossActivationAndAXIsADuplicate() {
+        let t0 = ContinuousClock.now
+        var focus = PendingFocus()
+        focus.hint(pid: 1, windowID: 8)
+        _ = focus.resolve(pid: 1, mainID: nil, windows: [info(8)], now: t0)
+        focus.activated(pid: 1)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)], now: t0 + PendingFocus.duplicateWindow) == info(8).window)
+
+        focus.hint(pid: 2, windowID: 5)
+        #expect(focus.resolve(pid: 2, mainID: nil, windows: [info(5, pid: 2)], now: t0 + .seconds(1)) == info(5, pid: 2).window)
+        focus.activated(pid: 1)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)], now: t0 + .seconds(1) + .milliseconds(50)) == info(8).window)
+
+        focus.hint(pid: 1, windowID: 8)
+        #expect(focus.resolve(pid: 1, mainID: nil, windows: [info(8)], now: t0 + .seconds(3)) == info(8).window)
+        focus.hint(pid: 1, windowID: 8)
+        #expect(focus.resolve(pid: 1, mainID: nil, windows: [info(8)], now: t0 + .seconds(3) + .milliseconds(50)) == info(8).window)
+    }
+
+    /// An activation that never resolved (no tracked AXMain) goes when another app activates: it can no longer be right.
+    @Test func anotherAppsActivationDropsAnUnresolvedOne() {
+        var focus = PendingFocus()
+        focus.activated(pid: 1)
+        #expect(focus.resolve(pid: 1, mainID: nil, windows: [info(8)]) == nil)
+        focus.activated(pid: 2)
+        #expect(focus.resolve(pid: 1, mainID: 8, windows: [info(8)]) == nil)
+        #expect(focus.resolve(pid: 2, mainID: 5, windows: [info(5, pid: 2)]) == info(5, pid: 2).window)
+    }
+
     @Test func forgetDropsThePidsHint() {
         var focus = PendingFocus()
         focus.hint(pid: 1, windowID: 8)

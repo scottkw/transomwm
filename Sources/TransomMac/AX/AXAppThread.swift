@@ -238,6 +238,36 @@ nonisolated final class AXAppThread: @unchecked Sendable {
         } ?? false
     }
 
+    /// Presses the cached window's own close button (D-06), so its app may ask to save first. False when the window has
+    /// no close button or the press failed.
+    func closeWindow(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            var button: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXCloseButtonAttribute as CFString, &button) == .success, let button,
+                CFGetTypeID(button) == AXUIElementGetTypeID()
+            else { return false }
+            return AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success  // type checked above
+        } ?? false
+    }
+
+    /// Whether the cached window has an AXSheet child, such as the save prompt a close press raised (D-06). Read only;
+    /// false when the window is not cached or unreadable.
+    func showsSheet(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            return (try? AXSnapshotReader.snapshot(of: element).get())?.sheetAttached == true
+        } ?? false
+    }
+
+    /// Minimises the cached window through AX (kAXMinimizedAttribute).
+    func minimizeWindow(windowID: UInt32) async -> Bool {
+        await perform { [self] _ -> Bool in
+            guard let element = windows[windowID]?.element else { return false }
+            return AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanTrue) == .success
+        } ?? false
+    }
+
     /// Sets the app element's AXFrontmost: the activation fallback when `NSRunningApplication.activate` was declined.
     func setFrontmost() async -> Bool {
         await perform { app -> Bool in
@@ -322,22 +352,39 @@ nonisolated final class AXAppThread: @unchecked Sendable {
     /// caller until it finishes or `deadline` passes. True only for a finished write with a read-back; a hung app is
     /// abandoned at the deadline (its write may still land later).
     func writeForTermination(windowID: UInt32, rect: Rect, deadline: DispatchTime) -> Bool {
+        performForTermination(deadline: deadline) { [self] in
+            guard let app, let element = windows[windowID]?.element else { return false }
+            let (actual, failure) = FrameWriter.write(
+                rect, window: element, app: app,
+                reenableEnhancedUI: Self.reenableEnhancedUIOverrides[bundleID] ?? true, isCancelled: { self.isStopped })
+            return actual != nil && failure == nil
+        }
+    }
+
+    /// The quit restore's raise (D-07): AXRaise on this thread, blocking like `writeForTermination`, so a group's
+    /// selected window ends above the hidden members just written into its content rect.
+    func raiseForTermination(windowID: UInt32, deadline: DispatchTime) -> Bool {
+        performForTermination(deadline: deadline) { [self] in
+            guard let element = windows[windowID]?.element else { return false }
+            return AXUIElementPerformAction(element, kAXRaiseAction as CFString) == .success
+        }
+    }
+
+    /// Runs `job` on this thread and blocks until it returns or `deadline` passes; false when abandoned or stopped.
+    private func performForTermination(deadline: DispatchTime, _ job: @escaping @Sendable () -> Bool) -> Bool {
         let done = DispatchSemaphore(value: 0)
-        let written = OSAllocatedUnfairLock(initialState: false)
+        let succeeded = OSAllocatedUnfairLock(initialState: false)
         let enqueued = stopped.withLock { isStopped -> Bool in
             guard !isStopped, let runLoop else { return false }
-            CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { [self] in
+            CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) {
                 defer { done.signal() }
-                guard let app, let element = windows[windowID]?.element else { return }
-                let (actual, failure) = FrameWriter.write(
-                    rect, window: element, app: app,
-                    reenableEnhancedUI: Self.reenableEnhancedUIOverrides[bundleID] ?? true, isCancelled: { self.isStopped })
-                written.withLock { $0 = actual != nil && failure == nil }
+                let result = job()
+                succeeded.withLock { $0 = result }
             }
             CFRunLoopWakeUp(runLoop)
             return true
         }
-        return enqueued && done.wait(timeout: deadline) == .success && written.withLock { $0 }
+        return enqueued && done.wait(timeout: deadline) == .success && succeeded.withLock { $0 }
     }
 
     /// The job token: true once `stop()` was called.

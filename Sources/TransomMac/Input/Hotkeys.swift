@@ -52,6 +52,10 @@ extension KeyboardShortcuts.Name {
     static let frameDesktop = Self("frameDesktop", initial: .init(.g, modifiers: [.control, .option, .command]))
     // Overview (06 UI-SPEC Surface 4).
     static let showOverview = Self("showOverview", initial: .init(.a, modifiers: [.control, .option, .command]))
+    // Tabs (07 UI-SPEC Surface 7): not zoom names, so they stay enabled with zoom off.
+    static let nextTab = Self("nextTab", initial: .init(.t, modifiers: [.control, .option, .command]))
+    static let previousTab = Self("previousTab", initial: .init(.t, modifiers: [.control, .option, .command, .shift]))
+    static let moveOutOfGroup = Self("moveOutOfGroup", initial: .init(.l, modifiers: [.control, .option, .command]))
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -102,6 +106,9 @@ enum Hotkeys {
         (.frameWindow, .camera(.frameWindow)),
         (.frameDesktop, .camera(.frameDesktop)),
         (.showOverview, .camera(.overview)),
+        (.nextTab, .tabs(.next)),
+        (.previousTab, .tabs(.previous)),
+        (.moveOutOfGroup, .tabs(.moveOut)),
     ]
 
     /// The camera hotkeys: disabled while zoom is off, so their chords reach apps as in Phase 3 (D-D).

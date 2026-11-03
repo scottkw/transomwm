@@ -130,6 +130,7 @@ import os
         menu.addItem(commands.moveMenu)
         menu.addItem(commands.splitMenu)
         menu.addItem(commands.snapMenu)
+        menu.addItem(commands.tabsMenu)
         menu.addItem(.separator())
         menu.addItem(commands.item(for: .arrangeAll))
         menu.addItem(commands.item(for: .floatAll))
@@ -380,6 +381,8 @@ import os
         submenu.addItem(Self.info(OverviewCopy.dormantDesksLine(desks: arranger.dormantDeskCount, awayDisplays: arranger.awayDisplayCount)))
         if let takeover = arrange.takeover { submenu.addItem(Self.info(OverviewCopy.takeoverLine(takeover.debugLine))) }
         submenu.addItem(Self.info(OverviewCopy.lastOverviewLine(arrange.lastOverview)))
+        let tabCounts = arranger.tabGroupCounts()
+        submenu.addItem(Self.info(TabCopy.debugLine(groups: tabCounts.groups, tabs: tabCounts.tabs)))
         if multitouch == .offAfterCrash {
             let retry = NSMenuItem(title: GestureCopy.multitouchBackOnItem, action: #selector(turnMultitouchBackOn), keyEquivalent: "")
             retry.target = self

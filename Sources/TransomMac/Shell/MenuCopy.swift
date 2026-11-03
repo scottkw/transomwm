@@ -47,6 +47,9 @@ nonisolated public enum MenuCopy {
         case .toggleExcludeFrontmost: dontArrangeFallback
         case .restoreAll: "Restore All Windows"
         case .camera(let command): cameraTitle(command)
+        case .tabs(.next): TabCopy.nextTab
+        case .tabs(.previous): TabCopy.previousTab
+        case .tabs(.moveOut): TabCopy.moveOut
         }
     }
 

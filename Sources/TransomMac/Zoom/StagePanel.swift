@@ -21,6 +21,11 @@ public struct StageTile {
         let content: TileLayer.Content = image.map { .snapshot($0) } ?? .fallback(color: NSColor(cgColor: fill) ?? .systemGray, icon: nil, title: "")
         self.init(id: id, start: start, end: end, content: content)
     }
+
+    /// A group's strip tile's ID (07 UI-SPEC Surface 6), from its selected member's tile ID. A click on it matches no
+    /// window, so it does nothing.
+    /// shortcut: flips the top bit, so a CG window ID ≥ 0x7000_0000 could meet a synthetic tile's strip; CG IDs stay small.
+    static func stripID(_ tileID: UInt32) -> UInt32 { tileID ^ 0x8000_0000 }
 }
 
 /// The overview's strip and empty-message capsule (06 UI-SPEC Surfaces 1-2), drawn above the tiles. AppKit global rects.

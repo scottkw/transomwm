@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import TransomEngine
 import TransomModel
 import TransomPrivate
@@ -64,6 +65,12 @@ import os
     private let gapPanels = GapHandlePanels()
     /// The collapsed blocks at rest (ZOOM-13). A panel is made only when a block first shows.
     private let collapsedPanels = CollapsedPanels()
+    /// The tab strips (TABS-02). A panel is made only when a group's strip first shows.
+    let tabStripPanels = TabStripPanels()
+    private let closeGroupConfirmation = CloseGroupConfirmation()
+    private let ghostPanel = TearOffGhostPanel()
+    /// The temporary Esc hotkeys while a tear-off ghost shows (UI-SPEC Surface 4), as for the zoom band.
+    private var tearOffEscapes: [Task<Void, Never>] = []
     /// Whether Accessibility access is ready, so the watchdog may bring the tap back.
     private var tapAllowed = true
     private var watchdog: Task<Void, Never>?
@@ -128,6 +135,7 @@ import os
         self.exclusions = exclusions
         self.zoomEnabled = zoomEnabled
         arranger = Arranger(gap: gap)
+        system.releaseFramesBeforeExcluding = { [weak self] bundleIDs in self?.arranger.releaseFrames(forExcluding: bundleIDs) ?? [:] }
         gapPanels.onDrag = { [weak self] handle, delta, ended in
             Task { [weak self] in
                 guard let self else { return }
@@ -136,6 +144,21 @@ import os
         }
         collapsedPanels.onDoubleClick = { [weak self] window, uuid in
             Task { await self?.openBlock(window, displayUUID: uuid) }
+        }
+        tabStripPanels.onAction = { [weak self] action in
+            guard let self else { return }
+            // Close Group asks first (UI-SPEC Surface 4); the strip's × is its only trigger.
+            if case .closeGroup(let group) = action, let count = tabStripPanels.memberCount(of: group),
+                !closeGroupConfirmation.confirm(count: count)
+            {
+                logger.info("group \(group.node, privacy: .public): close canceled")
+                return
+            }
+            Task { await self.tabAction(action) }
+        }
+        tabStripPanels.bounds = { [weak self] window in
+            let id = self?.arranger.windows[window.identity]?.visibleMemberID ?? window.windowID
+            return id < WindowIdentity.syntheticIDBase ? DragFramePoller.bounds(of: id) : nil
         }
     }
 
@@ -205,6 +228,8 @@ import os
         Task { [weak self, system] in
             for await event in system.events {
                 guard let self else { return }
+                // Before the replan, which sends the new desk's strips.
+                if case .spaceChanged(let uuid, let space) = event { self.tabStripPanels.spaceChanged(displayUUID: uuid, to: space) }
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
                 if case .spaceChanged(let uuid, let space) = event {
@@ -386,7 +411,12 @@ import os
             await zoomInput.tapEvent(kind, event)
             return
         }
-        if event.type == .leftMouseDown { zoomInput.pointerDown(event) }
+        // A press on a tab strip is the strip's own AppKit click: never a window drag on the window behind (Pitfall 4).
+        let location = Point(x: event.location.x, y: event.location.y)
+        let strip = event.type == .leftMouseDown
+            ? tabStripPanels.panelNumber(underPointer: Int(event.windowUnderPointer), at: location) : nil
+        let onStrip = strip != nil
+        if event.type == .leftMouseDown, !onStrip { zoomInput.pointerDown(event) }
         if case .greenButton(let id) = event.kind {
             guard let window = trackedWindow(cgID: id) else { return }
             await run(arranger.handle(.greenButton(window), now: .now))
@@ -400,9 +430,11 @@ import os
         case .flagsChanged: kind = .flagsChanged
         default: return
         }
-        let location = Point(x: event.location.x, y: event.location.y)
-        let press = kind == .down ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
-        let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press)
+        let press = kind == .down && !onStrip ? pressWindow(underPointer: event.windowUnderPointer, at: location) : nil
+        // A press on a tab may tear it off (Pattern 7); on a button or the background it is only the strip's click.
+        // A ⌃-click opens the tab context menu, so it never tears the tab off (the menu's tracking drags must not).
+        let tab = strip.flatMap { event.flags.contains(.maskControl) ? nil : tabStripPanels.member(atWindowNumber: $0, point: location) }
+        let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press, pressTab: tab)
         let session = arranger.drag  // mouse-up ends it
         if kind == .dragged { dragTrace.dragged += 1 }
         await run(arranger.handle(.pointer(pointer), now: .now))
@@ -483,6 +515,8 @@ import os
                 self.dragTrace.polls += 1
                 if self.dragTrace.firstCG == nil { self.dragTrace.firstCG = frame }
                 self.dragTrace.lastCG = frame
+                // The dragged window is a group's selected member: its strip moves with it every poll (D-04).
+                if let group = self.tabStripPanels.group(selecting: window) { self.tabStripPanels.follow(group, contentBounds: frame) }
                 await self.run(self.arranger.handle(.dragFrame(window.identity, frame), now: .now))
             }
         }
@@ -492,10 +526,19 @@ import os
     public var isReady: () -> Bool = { true }
 
     /// The frontmost app's focused tracked window and the access state: what availability depends on.
-    public func commandContext() -> CommandContext {
-        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+    public func commandContext(from source: CommandSource = .hotkey) -> CommandContext {
+        let pid = Self.commandPID(
+            frontmost: NSWorkspace.shared.frontmostApplication?.processIdentifier, beforeTransom: system.lastOtherFrontmostPID, from: source)
         return CommandContext(
             focused: pid.flatMap { system.focusedWindow(of: $0) }?.window, ready: isReady(), displayUUID: pointerDisplay().uuid)
+    }
+
+    /// The app whose focused window a command acts on: the frontmost one, except that a URL arriving with Transom
+    /// frontmost acts on the app frontmost before it, since `open` activates Transom to deliver the URL (07 UAT Bug 2).
+    static func commandPID(
+        frontmost: Int32?, beforeTransom: Int32?, from source: CommandSource, own: Int32 = ProcessInfo.processInfo.processIdentifier
+    ) -> Int32? {
+        source == .url && frontmost == own ? beforeTransom : frontmost
     }
 
     /// The pointer in top-left global points and the display under it: where every camera command acts (UI-SPEC: hotkeys,
@@ -528,7 +571,14 @@ import os
             await dispatchCamera(camera, from: source)
             return
         }
-        let context = commandContext()
+        let context = commandContext(from: source)
+        if case .tabs(let tab) = command {
+            // The engine refuses with an announcement (Surface 7); a URL refusal only logs.
+            let via: TabLeaveSource = switch source { case .hotkey: .hotkey; case .menu: .menu; case .url: .url }
+            let effects = arranger.handle(.tab(.command(tab, focused: context.focused, via: via), ready: context.ready), now: .now)
+            guard source == .url else { return await run(effects) }
+            return await run(effects.filter { if case .beep = $0 { false } else if case .tabAnnouncement(.refused) = $0 { false } else { true } })
+        }
         guard arranger.availability(command, context: context) else {
             refuse()
             return
@@ -545,7 +595,7 @@ import os
             if source == .url { zoomInputLog.info("url \(String(describing: camera), privacy: .public) ignored: zoom off") }
             return
         }
-        let context = commandContext()
+        let context = commandContext(from: source)
         if case .overview = camera {  // the shell's: it needs no pointer display and is allowed while paused
             guard context.ready else {
                 let text = OverviewCopy.refusedNotReady
@@ -577,6 +627,23 @@ import os
 
     public func dispatch(_ command: Command, focused: TransomModel.WindowRef?) async {
         await run(arranger.handle(.command(command, focused: focused), now: .now))
+    }
+
+    /// Registers Esc, ⇧Esc, ⌘Esc and ⌘⇧Esc (never ⌥⌘Esc, Force Quit) for the tear-off's duration; any cancels it.
+    private func listenForTearOffEscape() {
+        for task in tearOffEscapes { task.cancel() }
+        tearOffEscapes = ZoomInput.escapeModifiers.map { modifiers in
+            Task { [weak self] in
+                for await key in KeyboardShortcuts.events(for: KeyboardShortcuts.Shortcut(.escape, modifiers: modifiers)) where key == .keyDown {
+                    await self?.tabAction(.cancelTearOff)
+                }
+            }
+        }
+    }
+
+    /// A tab action from a strip (and later the menu, hotkeys and URLs); the engine refuses it while paused or not ready.
+    func tabAction(_ action: TabAction) async {
+        await run(arranger.handle(.tab(action, ready: isReady()), now: .now))
     }
 
     /// The bundle ID Don't Arrange would toggle for `app`: a regular app other than Transom, with a valid bundle ID.
@@ -634,6 +701,33 @@ import os
                 gapPanels.show(handles, on: displayUUID)
             case .collapsedBlocks(let blocks, let displayUUID):
                 collapsedPanels.show(blocks, on: displayUUID)
+            case .tabStrips(let strips, let displayUUID):
+                tabStripPanels.show(strips, on: displayUUID, space: arranger.displays.first { $0.uuid == displayUUID }?.currentSpaceID)
+            case .tabRevealed(let window):
+                if zoomEnabled { zoom().captureRevealed(window) }
+            case .checkClosePrompt(let window):
+                // Its own task: the AX read waits on the app, which must never hold up the effects behind it.
+                Task {
+                    let showing = await system.showsSheet(window)
+                    await run(arranger.handle(.closePrompt(window, showing: showing), now: .now))
+                }
+            case .raiseStrip(let group):
+                tabStripPanels.raise(group)
+            case .tearOffGhost(let ghost?):
+                if ghostPanel.isShown {
+                    ghostPanel.move(to: ghost.pointer)
+                } else {
+                    ghostPanel.show(ghost)
+                    listenForTearOffEscape()
+                }
+            case .tearOffGhost(nil):
+                ghostPanel.hide()
+                for task in tearOffEscapes { task.cancel() }  // each stream unregisters its hotkey (T-07-17)
+                tearOffEscapes = []
+            case .tabAnnouncement(let announcement):
+                let text = TabCopy.announcement(announcement, appName: Self.appName)
+                logger.info("\(text, privacy: .public)")
+                postAnnouncement(text)
             case .cameraMove(let move):
                 guard zoomEnabled else {
                     // Never expected: zoom off never enables the engine's camera. Settle at once so windows stay right.
@@ -641,13 +735,25 @@ import os
                     await settle(displayUUID: move.displayUUID, moveID: move.id)
                     continue
                 }
-                collapsedPanels.hide(on: move.displayUUID)  // the stage draws the blocks until the reveal
+                hidePanels(on: move.displayUUID)  // the stage draws the blocks and strips until the reveal
                 zoom().run(move) { [weak self] id in
                     Task { await self?.settle(displayUUID: move.displayUUID, moveID: id) }
                 }
                 zoomInput.publish()  // no zoom presses taken until it reveals
             }
         }
+    }
+
+    /// A stage orders in on that display: the collapsed-block and tab strip panels go out, since the stage draws both.
+    private func hidePanels(on displayUUID: String) {
+        collapsedPanels.hide(on: displayUUID)
+        tabStripPanels.hide(on: displayUUID)
+    }
+
+    /// That display's stage is gone: both kinds of panel fade back in over 120 ms.
+    private func showPanels(on displayUUID: String) {
+        collapsedPanels.fadeIn(on: displayUUID)
+        tabStripPanels.fadeIn(on: displayUUID)
     }
 
     private func zoom() -> ZoomController {
@@ -658,7 +764,7 @@ import os
         zoom.appName = { Self.appName($0) }
         zoom.isPointerBusy = { [weak self] in self?.arranger.isDragging ?? false }
         zoom.onRevealed = { [weak self] uuid, move in
-            self?.collapsedPanels.fadeIn(on: uuid)
+            self?.showPanels(on: uuid)
             self?.revealed(uuid, moveID: move.id)
             self?.zoomInput.revealed(displayUUID: uuid, move: move)
         }
@@ -666,7 +772,7 @@ import os
             Task { await self?.zoomInput.stageClick(cgID: id, displayUUID: uuid) }
         }
         zoom.onFollowEnded = { [weak self] uuid in
-            self?.collapsedPanels.fadeIn(on: uuid)
+            self?.showPanels(on: uuid)
             self?.zoomInput.publish()
         }
         zoom.bringNoticesFront = { [weak self] in
@@ -684,7 +790,7 @@ import os
             switcher: SpaceSwitcher(spaces: { [unowned self] in self.system.spacesSnapshot }))
         overview.onClosed = { [weak self] in
             guard let self else { return }
-            for display in self.arranger.displays { self.collapsedPanels.fadeIn(on: display.uuid) }
+            for display in self.arranger.displays { self.showPanels(on: display.uuid) }
             self.gestures.publish()  // armed again
         }
         overview.onOpened = { [weak self] stats in self?.lastOverview = stats }
@@ -723,13 +829,13 @@ import os
         let overview = overview()
         if !overview.isOpen {
             zoomInput.reset(reason: "overview")
-            for display in arranger.displays { collapsedPanels.hide(on: display.uuid) }
+            for display in arranger.displays { hidePanels(on: display.uuid) }
         }
         guard !overview.toggle(trigger: trigger) else {
             gestures.publish()
             return true
         }
-        for display in arranger.displays { collapsedPanels.fadeIn(on: display.uuid) }
+        for display in arranger.displays { showPanels(on: display.uuid) }
         return false
     }
 
@@ -759,9 +865,9 @@ import os
 
     /// A gesture's stage orders in: as for `.cameraMove`, collapsed panels hide and zoom presses wait for the end.
     @discardableResult func beginFollow(_ move: CameraMove, gesture: String) -> Bool {
-        collapsedPanels.hide(on: move.displayUUID)
+        hidePanels(on: move.displayUUID)
         guard zoom().beginFollow(move, gesture: gesture) else {
-            collapsedPanels.fadeIn(on: move.displayUUID)
+            showPanels(on: move.displayUUID)
             return false
         }
         zoomInput.publish()
@@ -837,6 +943,7 @@ import os
         overviewController = nil
         zoomController?.purge()
         zoomController = nil
+        for display in arranger.displays { showPanels(on: display.uuid) }  // a stage purged before its reveal leaves none out
         Hotkeys.setZoomHotkeys(enabled: false)
         postAnnouncement(ZoomCopy.zoomOffAnnouncement)
         cameraLog.info("zoom off (\(floated, privacy: .public) collapsed windows floated)")
@@ -888,17 +995,19 @@ import os
 
     /// Before Transom exits (SAFE-01, D-15): every parked or off-screen window Transom may move goes back on screen, within
     /// `limit` in total; a docked window parked or zoomed by the camera goes back to its home-view tile (D-D). Synchronous,
-    /// so it never waits on MainActor work (Pitfall 14). Returns how many writes finished.
+    /// so it never waits on MainActor work (Pitfall 14). Every member of every tab group goes to its group's content rect
+    /// and each group's selected window is raised last (D-07). Returns how many writes finished.
     @discardableResult
     public func restoreForTermination(limit: Duration = .seconds(2)) -> Int {
         gestures.stop(reason: "quit")
-        let docked = Set(arranger.world.desks.values.flatMap { $0.tree.windows.map(\.identity) })
-        let plan = Recovery.terminationPlan(
-            windows: Array(arranger.windows.values), homeFrames: arranger.homeFrames, displays: arranger.displays, docked: docked,
-            homeTiles: arranger.homeTiles())
+        let plan = arranger.restorePlan()
         guard !plan.isEmpty else { return 0 }
+        let groupRects = arranger.groupContentRects()
         let (seconds, attoseconds) = limit.components
-        let restored = system.restoreForTermination(plan, deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)
+        let restored = system.restoreForTermination(
+            plan, raising: arranger.selectedGroupMembers(), deadline: .now() + Double(seconds) + Double(attoseconds) / 1e18)
+        let members = plan.keys.filter { groupRects[$0.identity] != nil }.count
+        if members > 0 { logger.info("quit: \(members, privacy: .public) group members placed at their content rects") }
         logger.info("quit restore: \(restored, privacy: .public) of \(plan.count, privacy: .public) windows")
         return restored
     }

@@ -13,7 +13,8 @@ public struct Modifiers: OptionSet, Hashable, Sendable {
 }
 
 /// One left-button or modifier event from the event tap, in global top-left points. `pressWindow` is resolved by the
-/// shell on `down` only (RESEARCH Pattern 4).
+/// shell on `down` only (RESEARCH Pattern 4); a press on a strip tab carries `pressTab` instead, never `pressWindow`
+/// (Pattern 7, Pitfall 4).
 public struct PointerEvent: Equatable, Sendable {
     public enum Kind: Equatable, Sendable { case down, dragged, up, flagsChanged }
 
@@ -21,12 +22,14 @@ public struct PointerEvent: Equatable, Sendable {
     public var location: Point
     public var modifiers: Modifiers
     public var pressWindow: WindowRef?
+    public var pressTab: WindowRef?
 
-    public init(kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil) {
+    public init(kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil, pressTab: WindowRef? = nil) {
         self.kind = kind
         self.location = location
         self.modifiers = modifiers
         self.pressWindow = pressWindow
+        self.pressTab = pressTab
     }
 }
 
@@ -45,6 +48,15 @@ public enum PreviewState: Equatable, Sendable {
     /// Zoom on: the drop is accepted and windows collapse (ZOOM-13). The frame the window would get if minimum sizes
     /// were ignored, labelled with who collapses (`CollapseCopy`).
     case collapsed(Rect, label: String)
+    /// A centre held for the group dwell: the group frame, its strip band, and the label (`GroupCopy`), hidden by the
+    /// clearance rule in a small content rect.
+    case group(frame: Rect, strip: Rect, label: String?)
+}
+
+/// UI-SPEC Surface 1: the Group preview's labels.
+public enum GroupCopy {
+    public static let newGroup = "Group as tabs"
+    public static let addTab = "Add as a tab"
 }
 
 /// UI-SPEC Surface 7: the Collapsed preview's labels and the announcements of an accepted drop or keyboard dock.
@@ -61,14 +73,26 @@ public enum CollapseCopy {
     }
 }
 
+/// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain
+/// floating window (the middle 50% of its frame) or a floating group (the middle 50% of its content rect).
+enum GroupTarget: Equatable, Sendable {
+    case tile(DeskKey, NodeID)
+    case floating(DeskKey, WindowRef)
+    case floatingGroup(DeskKey, NodeID)
+}
+
 /// What a release does once a hover has been held for the dwell.
 enum DropAction: Equatable, Sendable {
     case dock(DeskKey, DropTarget)
+    /// The window joins the target as its selected tab (D-03).
+    case group(DeskKey, GroupTarget)
     case swap(WindowRef)
     /// ⇧ on a docked window: it floats at its release frame, clamped inside the Desktop tile if it crosses a tile.
     case undock
     /// The miss rules: a docked window snaps back, a floating one stays where released (clamped if it crosses a tile).
     case miss
+    /// A torn-off tab with no dock or group target: it floats at its landing frame on this desk (D-10).
+    case tearOffFloat(DeskKey)
     /// Announce `text`, then the miss rules.
     case refuse(String)
 }
@@ -82,6 +106,10 @@ struct Hover: Equatable, Sendable {
     var modifiers: Modifiers = []
     /// A floating (or ⇧-undocking) window's frame crosses a docked tile.
     var crossesTiles = false
+    /// The centre under the pointer that groups after `DragSession.groupDwell`; `target` is nil meanwhile.
+    var groupTarget: GroupTarget?
+    /// A tear-off's pointer is back over its source strip: no preview, and a release cancels (D-10).
+    var overStrip = false
 }
 
 /// The dry run's verdict for one hover (UI-SPEC Surface 2 state matrix).
@@ -103,6 +131,17 @@ public struct DragSession: Equatable, Sendable {
     public static let echoTolerance = 2.0
     /// How long a hover must hold before its preview shows (CONTEXT A).
     public static let dwell: Duration = .milliseconds(150)
+    /// How long the pointer must rest in a centre before it groups (D-01); the Phase 3 dwell runs inside it.
+    public static let groupDwell: Duration = .milliseconds(400)
+    /// How far the pointer may wander from where the group dwell started before it restarts there (D-01).
+    public static let groupRest = 16.0
+
+    /// What the press grabbed: a window's title bar, or a tab torn out of its strip (D-10), whose window does not move
+    /// until release and lands at `landingSize` under the pointer.
+    public enum Origin: Equatable, Sendable {
+        case window
+        case tearOff(GroupKey, stripRect: Rect, landingSize: Size)
+    }
 
     public enum Kind: Equatable, Sendable {
         /// The origin moved with the size unchanged: a title-bar drag.
@@ -114,6 +153,7 @@ public struct DragSession: Equatable, Sendable {
     public let window: WindowRef
     public let start: Point
     public let startFrame: Rect
+    public internal(set) var origin: Origin = .window
     public internal(set) var pointer: Point
     public internal(set) var modifiers: Modifiers
     /// nil until the press is classified; the first verdict sticks.
@@ -128,6 +168,13 @@ public struct DragSession: Equatable, Sendable {
     var hover: Hover?
     var hoverSince: ContinuousClock.Instant?
     var decision: Decision?
+    /// Where and when the group dwell started, and its verdict once it completed.
+    var groupAnchor: Point?
+    var groupSince: ContinuousClock.Instant?
+    var groupDecision: Decision?
+
+    /// The decision a release applies: the group dwell's once it completed, else the Phase 3 one.
+    var current: Decision? { groupDecision ?? decision }
 
     public init(window: WindowRef, start: Point, startFrame: Rect, modifiers: Modifiers) {
         self.window = window
@@ -137,8 +184,20 @@ public struct DragSession: Equatable, Sendable {
         self.modifiers = modifiers
     }
 
+    /// The group a tear-off leaves; nil for a window drag.
+    public var tearOffGroup: GroupKey? {
+        if case .tearOff(let group, _, _) = origin { group } else { nil }
+    }
+
+    /// Where a torn-off tab would land with the pointer at `pointer` (UI-SPEC Surface 4): its landing size centred on
+    /// the pointer, top edge 12 pt above it so the title bar is under it. A window drag's start frame.
+    public func landingFrame(at pointer: Point) -> Rect {
+        guard case .tearOff(_, _, let size) = origin else { return startFrame }
+        return Rect(x: pointer.x - size.width / 2, y: pointer.y - 12, width: size.width, height: size.height)
+    }
+
     /// The drop the held hover decided, for the shell's drag log (WR-03); "none" until a dwell has passed.
-    public var decisionSummary: String { decision.map { "\($0.action)" } ?? "none" }
+    public var decisionSummary: String { current.map { "\($0.action)" } ?? "none" }
 
     /// The pointer has travelled at least `minimumTravel` from the press.
     public var travelled: Bool {
@@ -158,9 +217,22 @@ public struct DragSession: Equatable, Sendable {
         }
     }
 
-    /// Feeds the current hover; true when it changed, which restarts the dwell and drops the decision.
+    /// Feeds the current hover; true when it changed, which restarts the dwell and drops the decision. The group dwell
+    /// restarts only when the centre or the modifiers change; moving inside the same centre never restarts the Phase 3 one.
     mutating func update(hover: Hover, at now: ContinuousClock.Instant) -> Bool {
+        // Wandering more than `groupRest` before the Group preview shows restarts the group dwell from here (D-01).
+        if groupDecision == nil, let anchor = groupAnchor, hover.groupTarget == self.hover?.groupTarget,
+            ((pointer.x - anchor.x) * (pointer.x - anchor.x) + (pointer.y - anchor.y) * (pointer.y - anchor.y)).squareRoot() > Self.groupRest
+        {
+            groupAnchor = pointer
+            groupSince = now
+        }
         guard hover != self.hover else { return false }
+        if hover.groupTarget != self.hover?.groupTarget || hover.modifiers != self.hover?.modifiers {
+            groupAnchor = hover.groupTarget == nil ? nil : pointer
+            groupSince = hover.groupTarget == nil ? nil : now
+            groupDecision = nil
+        }
         self.hover = hover
         hoverSince = now
         decision = nil
@@ -170,6 +242,20 @@ public struct DragSession: Equatable, Sendable {
     /// When the held hover's dry run is due; nil once decided or with no hover.
     var dwellEnds: ContinuousClock.Instant? {
         decision == nil ? hoverSince.map { $0 + Self.dwell } : nil
+    }
+
+    /// When the held centre's group dry run is due; nil once decided or with no centre.
+    var groupDwellEnds: ContinuousClock.Instant? {
+        groupDecision == nil ? groupSince.map { $0 + Self.groupDwell } : nil
+    }
+
+    /// Runs `dryRun` once for the held centre after the group dwell; returns the new decision, or nil if none was due.
+    mutating func settleGroup(at now: ContinuousClock.Instant, dryRun: (Hover) -> Decision) -> Decision? {
+        guard let hover, let due = groupDwellEnds, now >= due else { return nil }
+        let decided = dryRun(hover)
+        groupDecision = decided
+        dryRuns += 1
+        return decided
     }
 
     /// Runs `dryRun` once for the held hover after the dwell; returns the new decision, or nil if none was due.

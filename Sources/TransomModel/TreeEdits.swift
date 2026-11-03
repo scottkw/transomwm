@@ -4,16 +4,22 @@ import Foundation
 // so a throwing edit leaves no trace.
 extension LayoutTree {
     public mutating func insertRoot(_ window: WindowRef, ids: inout IDSource) throws(LayoutError) {
+        try insertRootLeaf(.panel(window), states: [window.identity: .present], ids: &ids)
+    }
+
+    /// `insertRoot` for a whole leaf (a panel or a tab group) with its members' states.
+    public mutating func insertRootLeaf(_ node: Node, states: [WindowIdentity: WindowState], ids: inout IDSource) throws(LayoutError) {
         guard root == nil else { throw .treeNotEmpty }
+        try checkNewLeaf(node)
         var next = self
         var nextIDs = ids
         let leaf = try nextIDs.make()
         next.root = leaf
-        next.nodes[leaf] = .panel(window)
-        next.states[window.identity] = .present
+        next.nodes[leaf] = node
+        next.states.merge(states) { $1 }
+        try next.validate()  // the caller's states must match the leaf's members
         self = next
         ids = nextIDs
-        assertValid()
     }
 
     /// Docks `window` on `edge` of `target`. Rules, first match wins:
@@ -23,7 +29,15 @@ extension LayoutTree {
     /// Rules 1 and 2 give the new child 1/(n+1) and scale the others by n/(n+1) (D-04).
     /// None of the rules creates a split whose child splits on the same axis.
     public mutating func insert(_ window: WindowRef, at edge: Edge, of target: NodeID, ids: inout IDSource) throws(LayoutError) {
-        guard states[window.identity] == nil else { throw .duplicateWindow(window) }
+        try insertLeaf(.panel(window), states: [window.identity: .present], at: edge, of: target, ids: &ids)
+    }
+
+    /// `insert` for a whole leaf, a panel or a tab group, with its members' states (Pattern 9: a group moves as one).
+    /// Every member must be new to the tree.
+    public mutating func insertLeaf(
+        _ node: Node, states: [WindowIdentity: WindowState], at edge: Edge, of target: NodeID, ids: inout IDSource
+    ) throws(LayoutError) {
+        try checkNewLeaf(node)
         guard let targetNode = nodes[target] else { throw .nodeNotFound(target) }
         let axis = edge.axis
         var next = self
@@ -31,8 +45,8 @@ extension LayoutTree {
         // IDSource is public and not tied to the tree, so a lagging one must not overwrite a node.
         let leaf = try nextIDs.make()
         guard nodes[leaf] == nil else { throw .invariantViolated("ID source issued \(leaf), which is already in the tree") }
-        next.nodes[leaf] = .panel(window)
-        next.states[window.identity] = .present
+        next.nodes[leaf] = node
+        next.states.merge(states) { $1 }
 
         let parent = parent(of: target)
         let parentSplit = parent.flatMap { id -> (axis: Axis, children: [NodeID], weights: [Double])? in
@@ -72,32 +86,52 @@ extension LayoutTree {
     /// to the Desktop alone, and a hidden Desktop is shown again (D-24).
     public mutating func remove(_ window: WindowRef) throws(LayoutError) {
         guard let leaf = leaf(containing: window) else { throw .windowNotFound(window) }
+        guard case .tabs(let windows, let selected)? = nodes[leaf] else {
+            _ = try removeLeaf(leaf)  // a panel: never throws
+            return
+        }
         var next = self
         next.states[window.identity] = nil
-        if case let .tabs(windows, selected)? = nodes[leaf] {
-            var rest = windows
-            let index = rest.firstIndex(of: window)!
-            rest.remove(at: index)
-            // Removing the selected tab selects the one that took its index, clamped to the last.
-            next.nodes[leaf] = rest.count == 1
-                ? .panel(rest[0])
-                : .tabs(windows: rest, selected: index < selected ? selected - 1 : min(selected, rest.count - 1))
+        var rest = windows
+        let index = rest.firstIndex(of: window)!
+        rest.remove(at: index)
+        // Removing the selected tab selects the one that took its index, clamped to the last.
+        next.nodes[leaf] = rest.count == 1
+            ? .panel(rest[0])
+            : .tabs(windows: rest, selected: index < selected ? selected - 1 : min(selected, rest.count - 1))
+        self = next
+        assertValid()
+    }
+
+    /// Takes the whole leaf `id` (a panel or a tab group) out of the tree, as `remove` does a panel's: its share goes back
+    /// to its siblings and a hidden Desktop is shown again when no docked window is left. Returns the leaf and its
+    /// members' states, for `insertLeaf` or a floating group.
+    public mutating func removeLeaf(_ id: NodeID) throws(LayoutError) -> (node: Node, states: [WindowIdentity: WindowState]) {
+        guard let node = nodes[id] else { throw .nodeNotFound(id) }
+        let members: [WindowRef]
+        switch node {
+        case let .panel(window): members = [window]
+        case let .tabs(windows, _): members = windows
+        case .split: throw .notALeaf(id)
+        case .desktop: throw .desktopTile(id)
+        }
+        var next = self
+        var states: [WindowIdentity: WindowState] = [:]
+        for member in members { states[member.identity] = next.states.removeValue(forKey: member.identity) }
+        next.nodes[id] = nil
+        if let parent = parent(of: id), case .split(let axis, var children, var weights)? = nodes[parent] {
+            let index = children.firstIndex(of: id)!
+            children.remove(at: index)
+            weights.remove(at: index)
+            next.nodes[parent] = .split(axis: axis, children: children, weights: weights)
         } else {
-            next.nodes[leaf] = nil
-            if let parent = parent(of: leaf), case .split(let axis, var children, var weights)? = nodes[parent] {
-                let index = children.firstIndex(of: leaf)!
-                children.remove(at: index)
-                weights.remove(at: index)
-                // normalize() divides the rest by their sum: the proportional redistribution.
-                next.nodes[parent] = .split(axis: axis, children: children, weights: weights)
-            } else {
-                next.root = nil
-            }
+            next.root = nil
         }
         next.normalize()
         if next.windows.isEmpty, next.isDesktopHidden == true { next.nodes[.desktop] = .desktop(hidden: false) }
         self = next
         assertValid()
+        return (node, states)
     }
 
     /// Adds `window` as the last, selected tab of the leaf `target` (MODEL-06). A panel becomes a
@@ -152,17 +186,18 @@ extension LayoutTree {
         assertValid()
     }
 
-    /// Exchanges the windows of two docked panels (TILE-11). NodeIDs and weights stay put, so each window
-    /// takes the other's rect; states are keyed by identity and travel with their windows.
+    /// Exchanges the leaves of two docked windows (TILE-11): two panels, or one panel and one tab group, which moves as
+    /// a whole (UI-SPEC Surface 5). NodeIDs and weights stay put, so each leaf takes the other's rect; states are keyed
+    /// by identity and travel with their windows. Two tab groups never swap.
     public mutating func swap(_ a: WindowRef, _ b: WindowRef) throws(LayoutError) {
         guard let leafA = leaf(containing: a) else { throw .windowNotFound(a) }
         guard let leafB = leaf(containing: b) else { throw .windowNotFound(b) }
         guard leafA != leafB else { throw .invariantViolated("cannot swap \(leafA) with itself") }
-        guard case .panel? = nodes[leafA] else { throw .notALeaf(leafA) }
-        guard case .panel? = nodes[leafB] else { throw .notALeaf(leafB) }
+        guard let nodeA = nodes[leafA], let nodeB = nodes[leafB] else { throw .nodeNotFound(leafA) }
+        if case .tabs = nodeA, case .tabs = nodeB { throw .notALeaf(leafB) }
         var next = self
-        next.nodes[leafA] = .panel(b)
-        next.nodes[leafB] = .panel(a)
+        next.nodes[leafA] = nodeB
+        next.nodes[leafB] = nodeA
         try next.validate()
         self = next
     }
@@ -198,6 +233,17 @@ extension LayoutTree {
         next.normalize()
         try next.validate()
         self = next
+    }
+
+    /// A leaf to add: a panel or a tab group whose windows are all new to the tree.
+    private func checkNewLeaf(_ node: Node) throws(LayoutError) {
+        let members: [WindowRef]
+        switch node {
+        case let .panel(window): members = [window]
+        case let .tabs(windows, _): members = windows
+        case .split, .desktop: throw .invariantViolated("only a panel or a tab group is inserted as a leaf")
+        }
+        if let duplicate = members.first(where: { states[$0.identity] != nil }) { throw .duplicateWindow(duplicate) }
     }
 
     private func splitParts(_ id: NodeID) throws(LayoutError) -> (Axis, [NodeID], [Double]) {

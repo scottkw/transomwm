@@ -40,6 +40,11 @@ import os
     public private(set) var displayNames: [String: String] = [:]
     /// `NSWorkspace.activeSpaceDidChangeNotification`: marks every app's next full update `spaceChanged` (02-17).
     private var spaceObserver: (any NSObjectProtocol)?
+    /// `NSWorkspace.didActivateApplicationNotification`: the activated app's AXMain window is reported focused (D-08).
+    private var activationObserver: (any NSObjectProtocol)?
+    /// The last app other than Transom to become frontmost (at start, the frontmost one): `open` activates Transom to
+    /// deliver a URL, so the URL's command acts on this app's focused window (07 UAT Bug 2).
+    public private(set) var lastOtherFrontmostPID: Int32?
     private var spaceSwitches = SpaceSwitchMarks()
     private let spacesLogger = Logger(subsystem: "com.eightabyte.transom", category: "spaces")
     /// The latest Spaces list, nil while the lookup is off: refreshed at start and on Space and display changes.
@@ -95,6 +100,7 @@ import os
         coVisibilityTask?.cancel()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
+        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
         hintContinuation.finish()
     }
 
@@ -145,6 +151,15 @@ import os
                 self.spaceDidChange()
             }
         }
+        if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier, pid != ProcessInfo.processInfo.processIdentifier {
+            lastOtherFrontmostPID = pid
+        }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let pid = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier else { return }
+            MainActor.assumeIsolated { self?.appActivated(pid) }
+        }
         let gate = SessionGate(
             workspaceCenter: NSWorkspace.shared.notificationCenter, distributedCenter: DistributedNotificationCenter.default(),
             sessionDictionary: { CGSessionCopyCurrentDictionary() as? [String: Any] },
@@ -181,12 +196,27 @@ import os
         )
     }
 
-    /// The user's exclusion list (D-12): those apps' windows stay tracked, marked `isExcluded`, and never touched.
+    /// Asked by `setExcludedBundleIDs` for the windows of the new list that must come back on screen first (CR-01):
+    /// `Arranger.releaseFrames(forExcluding:)`.
+    public var releaseFramesBeforeExcluding: ((Set<String>) -> [TransomModel.WindowRef: Rect])?
+
+    /// The user's exclusion list (D-12): those apps' windows stay tracked, marked `isExcluded`, and never touched. A
+    /// parked one (a hidden tab, a camera park) is written back on screen once first, or nothing would ever unpark it (CR-01).
     public func setExcludedBundleIDs(_ bundleIDs: Set<String>) {
+        let releasing = releaseFramesBeforeExcluding?(bundleIDs) ?? [:]
         excluded = bundleIDs
         loggedExcluded = loggedExcluded.filter { ExclusionFilter.isExcluded($0, in: bundleIDs) }
         // Frames already queued, or held while an app was degraded, must not be written either (WR-04).
         for thread in threads.values { thread.excluded = ExclusionFilter.isExcluded(thread.bundleID, in: bundleIDs) }
+        // Queued on each app's thread after the flip dropped its waiting frames, so no older park can land after it.
+        for (ref, rect) in releasing {
+            guard rect.isValidGeometry, let info = tracker.info(for: ref.identity), let thread = threads[ref.pid] else { continue }
+            let windowID = info.visibleMemberID ?? ref.windowID
+            logger.info("exclusion releases \(ref.description, privacy: .public) back on screen")
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = thread.writeForTermination(windowID: windowID, rect: rect, deadline: .now() + 1)
+            }
+        }
         emit(tracker.setExcluded(bundleIDs))
     }
 
@@ -203,8 +233,8 @@ import os
     /// Routes each `.setFrame` to its app's thread, addressed to the window's visible tab (D-16): the thread keeps
     /// only the latest frame per window and writes it with read-back. Rects that are not finite or are beyond
     /// `Geometry.maxCoordinate`, and windows Transom does not track, are dropped and logged (T-02-32). `.park` is a
-    /// frame write through the same slot, to its display's `parkedFrame` at the window's tracked size (Pattern 15).
-    /// `.focus` and `.raise` run as jobs on the app's thread and never hold up the caller (`focus(_:of:on:)`).
+    /// frame write through the same slot, to its display's `parkedFrame` at the given size (a hidden tab's content size), else the window's tracked size (Pattern 15).
+    /// `.focus`, `.raise`, `.close` and `.minimize` run as jobs on the app's thread and never hold up the caller (`focus(_:of:on:)`).
     /// `setHidden` is logged and dropped: no phase needs it yet, and it stays in the protocol for later ones.
     /// Commands for an excluded app are dropped before anything else, logged once per bundle ID (D-12).
     public func perform(_ commands: [WindowCommand]) async {
@@ -226,12 +256,12 @@ import os
                     continue
                 }
                 thread.enqueueFrame(windowID: windowID, rect: rect, ref: info.window)
-            case .park(_, let uuid):
+            case .park(_, let uuid, let size):
                 guard let display = displays.first(where: { $0.uuid == uuid }) else {
                     logger.error("dropping park for \(ref.description, privacy: .public): display \(uuid, privacy: .public) unknown")
                     continue
                 }
-                thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: info.frame.size, among: displays), ref: info.window)
+                thread.enqueueFrame(windowID: windowID, rect: display.parkedFrame(size: size ?? info.frame.size, among: displays), ref: info.window)
             case .focus:
                 Task { await focus(windowID, of: info.window, on: thread) }
             case .raise:
@@ -239,6 +269,14 @@ import os
                     if !(await thread.raiseWindow(windowID: windowID)) {
                         logger.info("raise of \(ref.description, privacy: .public) failed")
                     }
+                }
+            case .close:
+                Task {
+                    if !(await thread.closeWindow(windowID: windowID)) { logger.info("close of \(ref.description, privacy: .public) failed") }
+                }
+            case .minimize:
+                Task {
+                    if !(await thread.minimizeWindow(windowID: windowID)) { logger.info("minimize of \(ref.description, privacy: .public) failed") }
                 }
             case .setHidden:
                 logger.info("dropping setHidden for \(ref.description, privacy: .public): not implemented yet")
@@ -249,9 +287,12 @@ import os
     /// The quit restore (SAFE-01, Pattern 11, Pitfall 14): writes each frame synchronously on its app's thread, one
     /// app per worker, and blocks the caller until every write finished or `deadline` passed. Nothing here needs the main
     /// queue, which AppKit runs in modal-panel mode during `terminateLater`. Excluded apps, untracked windows and invalid
-    /// rects are skipped, as in `perform`. Returns how many writes finished.
-    public func restoreForTermination(_ frames: [TransomModel.WindowRef: Rect], deadline: DispatchTime) -> Int {
-        var jobs: [Int32: (thread: AXAppThread, writes: [(UInt32, Rect)])] = [:]
+    /// rects are skipped, as in `perform`. Each app's `raising` windows are raised after its writes, within the same
+    /// deadline (D-07: a group's selected window over its hidden members). Returns how many writes finished.
+    public func restoreForTermination(
+        _ frames: [TransomModel.WindowRef: Rect], raising: [TransomModel.WindowRef] = [], deadline: DispatchTime
+    ) -> Int {
+        var jobs: [Int32: (thread: AXAppThread, writes: [(UInt32, Rect)], raises: [UInt32])] = [:]
         for (ref, rect) in frames {
             guard rect.isValidGeometry, !ExclusionFilter.isExcluded(ref.bundleID, in: excluded), let info = tracker.info(for: ref.identity),
                 let thread = threads[ref.pid]
@@ -259,15 +300,21 @@ import os
                 logger.info("quit restore skips \(ref.description, privacy: .public)")
                 continue
             }
-            jobs[ref.pid, default: (thread, [])].writes.append((info.visibleMemberID ?? ref.windowID, rect))
+            jobs[ref.pid, default: (thread, [], [])].writes.append((info.visibleMemberID ?? ref.windowID, rect))
+        }
+        for ref in raising {
+            guard !ExclusionFilter.isExcluded(ref.bundleID, in: excluded), let info = tracker.info(for: ref.identity), let thread = threads[ref.pid]
+            else { continue }
+            jobs[ref.pid, default: (thread, [], [])].raises.append(info.visibleMemberID ?? ref.windowID)
         }
         let finished = OSAllocatedUnfairLock(initialState: 0)
         let group = DispatchGroup()
-        for (thread, writes) in jobs.values {
+        for (thread, writes, raises) in jobs.values {
             DispatchQueue.global(qos: .userInitiated).async(group: group) {
                 for (windowID, rect) in writes where thread.writeForTermination(windowID: windowID, rect: rect, deadline: deadline) {
                     finished.withLock { $0 += 1 }
                 }
+                for windowID in raises where DispatchTime.now() < deadline { _ = thread.raiseForTermination(windowID: windowID, deadline: deadline) }
             }
         }
         if group.wait(timeout: deadline) == .timedOut { logger.notice("quit restore: an app did not answer in time; abandoned") }
@@ -300,6 +347,12 @@ import os
     public func pressNewWindowItem(pid: Int32) async -> Bool {
         guard let thread = threads[pid] else { return false }
         return await thread.perform { MenuPress.pressCommandN(in: $0) } ?? false
+    }
+
+    /// Whether the window shows a sheet now (Close Group's save-prompt check, D-06). False when it is not tracked.
+    public func showsSheet(_ window: TransomModel.WindowRef) async -> Bool {
+        guard let info = tracker.info(for: window.identity), let thread = threads[window.pid] else { return false }
+        return await thread.showsSheet(windowID: info.visibleMemberID ?? window.windowID)
     }
 
     public func windowInfo(_ window: TransomModel.WindowRef) async -> WindowInfo? {
@@ -375,7 +428,7 @@ import os
         // A hint for a window still settling stays until a later refresh tracks it (G-03-5). A no-ID hint resolves
         // through AXMain from this observation only if its AXWindows read succeeded (T-03-54).
         let mainID = observation.listFailure == nil ? mainWindowIDs[pid] : nil
-        if let ref = pendingFocus.resolve(pid: pid, mainID: mainID, windows: tracker.sortedWindows()) {
+        if let ref = pendingFocus.resolve(pid: pid, mainID: mainID, windows: tracker.sortedWindows(), now: .now) {
             emit([.windowFocused(ref)])
         }
         if followUp.remove(pid) != nil { scheduler?.schedule(pid: pid, after: .zero) }
@@ -540,6 +593,16 @@ import os
         // A nil ID (an element the thread has not cached yet, such as a new window) resolves through AXMain.
         if focus { pendingFocus.hint(pid: hint.pid, windowID: hint.windowID) }
         scheduler?.schedule(pid: hint.pid)
+    }
+
+    /// ⌘Tab, the Dock or `open -a` made `pid` frontmost. macOS sends no focus change when its focused window stays the
+    /// same (a hidden tab, 07 UAT Bug 1), so its refresh reads AXMain on the app's thread and reports it focused, once
+    /// even when an AX focus hint for the same change comes too (`PendingFocus.activated`).
+    private func appActivated(_ pid: Int32) {
+        if pid != ProcessInfo.processInfo.processIdentifier { lastOtherFrontmostPID = pid }
+        guard threads[pid] != nil else { return }
+        pendingFocus.activated(pid: pid)
+        scheduler?.schedule(pid: pid)
     }
 
     private func appStarted(_ app: NSRunningApplication) {

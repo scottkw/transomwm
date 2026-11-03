@@ -227,6 +227,38 @@ extension LayoutStoreTests {
     }
 }
 
+/// D-13: docked and floating tab groups, and their selected tabs, round-trip through layout.json unchanged.
+extension LayoutStoreTests {
+    @Test func dockedAndFloatingTabGroupsRoundTripWithTheirSelections() throws {
+        var world = World()
+        try world.addDesk(key)
+        var history = UndoHistory()
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            try desk.tree.insert(ref(1), at: .left, of: .desktop, ids: &ids)
+            guard let leaf = desk.tree.leaf(containing: ref(1)) else { throw .windowNotFound(ref(1)) }
+            try desk.tree.group(ref(2), into: leaf)
+            try desk.tree.group(ref(3), into: leaf)
+            try desk.tree.selectTab(ref(2))
+            try desk.desktop.add(ref(4), frame: Rect(x: 900, y: 300, width: 400, height: 300))
+            try desk.desktop.add(ref(5), frame: Rect(x: 950, y: 350, width: 300, height: 200))
+            try desk.desktop.group(id: try ids.make(), target: ref(4), adding: ref(5))
+            try desk.desktop.selectTab(ref(4))
+        }
+        let file = LayoutFile(world: world, homeFrames: [:], session: SessionRecord(cleanExit: true, launchedAt: Date(timeIntervalSinceReferenceDate: 800_000_000)))
+        let dir = Directory()
+        try LayoutStore(directory: dir.url).save(file)
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == file)
+        let desk = try #require(fresh.contents?.world[key])
+        let leaf = try #require(desk.tree.leaf(containing: ref(1)))
+        #expect(desk.tree.node(leaf) == .tabs(windows: [ref(1), ref(2), ref(3)], selected: 1))
+        #expect(desk.desktop.groups.first.map { ($0.members, $0.selected) } ?? ([], -1) == ([ref(4), ref(5)], 0))
+    }
+}
+
 /// RESEARCH Pitfall 1, T-06-08: a schema-1 layout.json (every user's file at upgrade) loads and migrates, never set aside.
 extension LayoutStoreTests {
     @Test func aSchema1FileLoadsMigratedAndIsNotSetAside() throws {

@@ -153,10 +153,14 @@ public enum WindowEvent: Equatable, Sendable {
 /// Something the engine asks the window system to do.
 public enum WindowCommand: Equatable, Sendable {
     case setFrame(WindowRef, Rect)
-    case park(WindowRef, displayUUID: String)
+    /// Moves the window to its display's `parkedFrame`, at `size` when given (a hidden tab's content size), else its own.
+    case park(WindowRef, displayUUID: String, size: Size? = nil)
     case focus(WindowRef)
     case raise(WindowRef)
     case setHidden(WindowRef, Bool)
+    /// Presses the window's own close button, so its app may ask to save first (D-06); never a force close.
+    case close(WindowRef)
+    case minimize(WindowRef)
 }
 
 /// Boundary between the engine and the OS window system.

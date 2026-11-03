@@ -14,3 +14,13 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Recurrence guard:** the "drag" debug log above. Read it before changing the drag classifier; first confirm the tap is running (permission -> ready in the log) and that the press logged a "start" line
 ---
 
+
+## tab-focus-and-url — app activation gave no focus event (hidden tab stayed parked); tab URLs refused when `open` activates Transom
+- **Date:** 2026-11-02
+- **Error patterns:** ⌘Tab, Dock click, open -a, app activation, no focused-window change, hidden tab stays parked, invisible key window, strip not raised, cross-app click, refused next tab: not in a tab group, open without -g, URL activates Transom, frontmostApplication is Transom
+- **Root cause(s):** AXWindowSystem made focus hints only from kAXFocusedWindowChanged / kAXMainWindowChanged, which macOS doesn't send when an activation keeps the app's focused window; commandContext() read the focused window of NSWorkspace.frontmostApplication, which is Transom itself once LaunchServices activates it to deliver a URL
+- **Fix:** NSWorkspace.didActivateApplication → PendingFocus.activated(pid:) resolved through AXMain on the app's refresh (deduped against the AX notice); URL dispatches use AXWindowSystem.lastOtherFrontmostPID when Transom is frontmost (ArrangeController.commandPID)
+- **Files changed:** Sources/TransomEngine/PendingFocus.swift, Sources/TransomMac/AXWindowSystem.swift, Sources/TransomMac/ArrangeController.swift, Tests/TransomEngineTests/PendingFocusTests.swift, Tests/TransomMacTests/AppDelegateTests.swift, Tests/TransomMacIntegrationTests/TabGroupIntegrationTests.swift
+- **Why not caught:** no gate existed for this class: live tests focused windows through Transom's own AX focus path (which does send AX notices) and dispatched URLs in-process, never via a real activation or `open`
+- **Recurrence guard:** VM TabGroupIntegrationTests.activatingTheAppOfAHiddenMemberSelectsIt (AXFrontmost activation, red without the hook); PendingFocusTests activation/dedup cases; AppDelegateTests.aURLActsOnTheAppFrontmostBeforeTransom. Any new "focused window" consumer must ask whether activation and Transom-frontmost cases reach it
+---

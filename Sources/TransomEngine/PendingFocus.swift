@@ -9,9 +9,21 @@ public struct PendingFocus: Equatable, Sendable {
     private enum Target: Equatable, Sendable {
         case window(UInt32)
         case main
+        /// The app was activated: its AXMain window, which macOS sends no focus change for when it stays the same.
+        case activation
     }
 
+    private struct Resolved: Equatable, Sendable {
+        let identity: WindowIdentity
+        let activation: Bool
+        let at: ContinuousClock.Instant
+    }
+
+    /// An activation and an AX hint naming the same window this close together are one focus change.
+    public static let duplicateWindow: Duration = .milliseconds(500)
+
     private var hints: [Int32: Target] = [:]
+    private var last: Resolved?
 
     public init() {}
 
@@ -20,19 +32,33 @@ public struct PendingFocus: Equatable, Sendable {
         hints[pid] = windowID.map(Target.window) ?? .main
     }
 
+    /// The app became frontmost (⌘Tab, the Dock, `open -a`): its AXMain window is focused, though macOS reports no focus
+    /// change when that window already was its focused one, such as a hidden tab (07 UAT Bug 1, D-08). A pending AX hint
+    /// names the window more exactly and stays; another app's unresolved activation can no longer be right and goes.
+    public mutating func activated(pid: Int32) {
+        hints = hints.filter { $0.value != .activation }
+        if hints[pid] == nil { hints[pid] = .activation }
+    }
+
     /// The tracked window of `pid` the hint names (through a tab group's shown member), consuming the hint; nil keeps
-    /// it. `mainID`: the app's AXMain window ID from a successful observation, else nil.
-    public mutating func resolve(pid: Int32, mainID: UInt32?, windows: [WindowInfo]) -> WindowRef? {
+    /// it. `mainID`: the app's AXMain window ID from a successful observation, else nil. A resolution that repeats the
+    /// previous one within `duplicateWindow`, with an activation on either side, is consumed and returns nil.
+    public mutating func resolve(pid: Int32, mainID: UInt32?, windows: [WindowInfo], now: ContinuousClock.Instant = .now) -> WindowRef? {
         let target: UInt32?
+        let activation = hints[pid] == .activation
         switch hints[pid] {
         case nil: return nil
         case .window(let id): target = id
-        case .main: target = mainID
+        case .main, .activation: target = mainID
         }
         guard let target,
               let info = windows.first(where: { $0.window.pid == pid && ($0.visibleMemberID ?? $0.window.windowID) == target })
         else { return nil }
         hints[pid] = nil
+        if let last, last.identity == info.window.identity, activation || last.activation, now - last.at < Self.duplicateWindow {
+            return nil
+        }
+        last = Resolved(identity: info.window.identity, activation: activation, at: now)
         return info.window
     }
 

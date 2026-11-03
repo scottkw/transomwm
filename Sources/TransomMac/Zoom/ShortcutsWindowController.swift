@@ -24,6 +24,7 @@ enum ShortcutsModel {
             .snapLeftThird, .snapCenterThird, .snapRightThird, .snapTopLeft, .snapTopRight, .snapBottomLeft, .snapBottomRight,
             .snapMaximize, .snapCenter,
         ]),
+        (TabCopy.tabsMenu, [.nextTab, .previousTab, .moveOutOfGroup]),
         (MenuCopy.safetySection, [.togglePause, .restoreAll]),
         (MenuCopy.exclusionsSection, [.toggleExcludeFrontmost]),
     ].map { section in (section.0, section.1.map { (ZoomCopy.shortcutTitle(command(of: $0)), $0) }) }

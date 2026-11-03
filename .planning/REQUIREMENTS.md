@@ -96,12 +96,12 @@
 
 ### Tab Groups
 
-- [ ] **TABS-01**: Dropping a window on the middle of another and pausing groups them under one tab strip
-- [ ] **TABS-02**: Clicking a tab switches the visible window; other tabs stay hidden
-- [ ] **TABS-03**: A group's close, minimise and dock/float buttons act on the whole group
-- [ ] **TABS-04**: A tab can be dragged out to become its own window
-- [ ] **TABS-05**: Tab groups work for windows from different apps, docked or floating
-- [ ] **TABS-06**: Right-clicking a tab offers closing it and moving it out of the group
+- [x] **TABS-01**: Dropping a window on the middle of another and pausing groups them under one tab strip
+- [x] **TABS-02**: Clicking a tab switches the visible window; other tabs stay hidden
+- [x] **TABS-03**: A group's close, minimise and dock/float buttons act on the whole group
+- [x] **TABS-04**: A tab can be dragged out to become its own window
+- [x] **TABS-05**: Tab groups work for windows from different apps, docked or floating
+- [x] **TABS-06**: Right-clicking a tab offers closing it and moving it out of the group
 
 ### Saved Views & Commands
 
@@ -221,12 +221,12 @@ Populated by the roadmapper on 2026-10-23.
 | OVER-04 | Phase 6 | Complete |
 | OVER-05 | Phase 6 | Complete |
 | OVER-06 | Phase 6 | Complete |
-| TABS-01 | Phase 7 | Pending |
-| TABS-02 | Phase 7 | Pending |
-| TABS-03 | Phase 7 | Pending |
-| TABS-04 | Phase 7 | Pending |
-| TABS-05 | Phase 7 | Pending |
-| TABS-06 | Phase 7 | Pending |
+| TABS-01 | Phase 7 | Complete |
+| TABS-02 | Phase 7 | Complete |
+| TABS-03 | Phase 7 | Complete |
+| TABS-04 | Phase 7 | Complete |
+| TABS-05 | Phase 7 | Complete |
+| TABS-06 | Phase 7 | Complete |
 | VIEW-01 | Phase 8 | Pending |
 | VIEW-02 | Phase 8 | Pending |
 | VIEW-03 | Phase 8 | Pending |

@@ -13,7 +13,7 @@ Transom was renamed from Pane on 2026-10-27.
 
 Transom is pre-release. There is no public download yet. A notarised 0.3.0 build (the version set in `scripts/release.sh`) has been made locally, but its public release is held.
 
-Phases 1-6 of the roadmap are complete, so tiling, zoom, trackpad gestures and the overview work today. Phase 7 (Tab Groups) is next.
+Phases 1-7 of the roadmap are complete, so tiling, zoom, trackpad gestures, the overview and tab groups work today. Phase 8 (Saved Views, URLs & Persistence) is next.
 
 | Phase | Name | Status |
 |---|---|---|
@@ -51,6 +51,7 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Display arrangements | Layouts are remembered per set of connected displays and switched automatically when you dock or undock. When a display is unplugged, its windows float on a remaining display and go back to their tiles when it returns. Transom waits about 1.5 s for the displays to settle, and never acts while the Mac is asleep or locked. Works with "Displays have separate Spaces" on or off. |
 | Overview | ⌃⌥⌘A (or menu ▸ Show Overview, or `transom://overview`) shows every window on every display and Space, with a strip of that display's Spaces along the top. Windows on other Spaces show the last snapshot taken this session, or their app-colour tile. Click a window to go to it (switching Space if needed), or click a Space to switch to it. The arrow keys move the selection, Tab moves to the next display, Return opens the selected window and Esc closes the overview. VoiceOver uses ⌃⌥ for its own commands, so with VoiceOver on, open the overview from the menu or rebind it. |
 | Replace Mission Control | Off by default. Turn it on from the menu and F3, ⌃↑ and ⇧F3 open Transom's overview instead of Mission Control; when the overview can't open, Mission Control opens as usual. The four-finger swipe stays with macOS. Transom stores the original shortcut settings first and restores them when you turn it off, on quit and on the next launch after a crash; a crash while it is on turns it off until you turn it back on. Switching Spaces from the overview uses macOS's Move left/right a space shortcuts, so it needs them on. |
+| Tab groups | Drag a window onto the middle of another window (docked, or floating on the Desktop) and hold until the outline reads "Group as tabs" (about half a second), then release: both share the tile under one tab strip, from any apps. Click a tab to switch; hidden tabs are moved off screen, never minimised, and come back on quit. A window activated another way (⌘Tab, the Dock) becomes the selected tab. Drag a tab out of the strip to dock or float it again; right-click a tab for Close Tab and Move Out of Group. The strip's buttons close, minimise and float/dock the whole group; Close Group asks first (with "Do not show this again") and waits for any save prompt, continuing after Save or Delete and stopping on Cancel. A Safari window with several tabs joins as one tab. ⌃⌥⌘T / ⇧⌃⌥⌘T switch to the next / previous tab, ⌃⌥⌘L moves the focused tab out, also under menu ▸ Arrange ▸ Tabs. Groups are saved and come back on relaunch. VoiceOver reads the strip as a tab group. |
 | macOS conflicts | Transom detects Stage Manager (and pauses arranging while it is on), macOS edge tiling, and click-wallpaper-to-reveal-desktop. It explains each conflict and offers to turn the feature off. Restore macOS Window Settings in the menu puts back the values Transom changed. |
 | Accessibility setup | A Set Up Transom window guides you through the Accessibility grant. If the grant goes stale (for example after a rebuild with a different signature), Transom detects it and explains the fix instead of looping on prompts. |
 | Zoom camera | Zoom out to see every window on a display, step in or out one level of the layout, go back and forward through up to 50 previous views per display, and pan to a neighbouring area. ⌘⇧-drag a rectangle to zoom to the windows it frames (Esc cancels). After zooming out, click a window to zoom in to it and focus it. Double-click a title bar to frame that window, or the bare wallpaper to frame the Desktop; do it again to toggle back. Only an overlay animates (about 250 ms, or a crossfade with Reduce Motion); real windows get one move each when the camera settles. Windows outside the view are moved off screen at their own size, never shrunk, and come back on quit, after a crash and with Restore All Windows. |
@@ -81,6 +82,7 @@ open transom://pan-left         # also pan-right, pan-up, pan-down
 open transom://frame-window     # frame the focused window, or toggle back
 open transom://frame-desktop    # frame the Desktop, or toggle back
 open transom://overview         # open or close the overview
+open transom://next-tab         # also previous-tab, move-out-of-group (focused tab group)
 ```
 
 Zoom URLs act on the display under the pointer.
@@ -127,6 +129,8 @@ These are the default global hotkeys. Rebind any of them in the Shortcuts window
 | `⌃⌥⌘E` | Don't Arrange the frontmost app (toggle) |
 | `⌃⌥⌘0` | Restore All Windows |
 | `⌃⌥⌘A` | Show Overview (or close it) |
+| `⌃⌥⌘T` / `⇧⌃⌥⌘T` | Next / previous tab in the focused tab group |
+| `⌃⌥⌘L` | Move the focused window out of its tab group |
 | `⌃⌥⌘O` | Zoom Out to All Windows |
 | `⌃⌥⌘,` | Zoom Out One Level |
 | `⌃⌥⌘.` | Zoom In One Level |
@@ -142,7 +146,6 @@ None of the following is in the code yet. Each line summarises the goal in `.pla
 
 | Phase | Feature | Status |
 |---|---|---|
-| 7 | Tab Groups: drop a window on the middle of another to group them under one tab strip, with windows from any apps, docked or floating. | Planned |
 | 8 | Saved Views, URLs & Persistence: save views to slots 1-9, run more commands through `transom://` URLs and a bundled `transom` command-line tool, and restore layouts across app relaunches and reboots. | Planned |
 | 9 | Polish & Ship: a Settings window (gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement), first-run onboarding, launch at login, an update check against GitHub Releases, a Homebrew cask, and a `transom://settings` URL that opens a given Settings section. | Planned |
 
@@ -236,7 +239,7 @@ Files in `~/Library/Application Support/Transom`:
 
 | File | Contents |
 |---|---|
-| `layout.json` | Schema 2: one set of layouts per display arrangement (up to 16), keyed by display UUID and macOS Space UUID. A schema 1 file is migrated on first load. If Spaces are renumbered after a restart, the file is backed up first as `layout.json.pre-rekey-<time>`. The layouts (desks, tile trees, Desktop tiles), each moved window's pre-park and wanted frames, and a session record used to detect a crash on the next launch. Window titles are never written, and the file is owner-only. |
+| `layout.json` | Schema 2: one set of layouts per display arrangement (up to 16), keyed by display UUID and macOS Space UUID. A schema 1 file is migrated on first load. If Spaces are renumbered after a restart, the file is backed up first as `layout.json.pre-rekey-<time>`. The layouts (desks, tile trees including tab groups, Desktop tiles, and floating tab groups under `groups`), each moved window's pre-park and wanted frames, and a session record used to detect a crash on the next launch. Window titles are never written, and the file is owner-only. |
 | `min-size-hints.json` | Minimum window sizes Transom has learned, per app bundle ID. Only bundle IDs and sizes, nothing per window. |
 
 Both files are validated on load. A file that fails validation is moved aside with a `.corrupt` suffix and Transom starts empty. A `layout.json` from a newer schema is left untouched and nothing is saved that session.
@@ -252,6 +255,7 @@ Preferences in Transom's user defaults:
 | `zoomEnabled` | Whether zoom is on (default on) |
 | `zoomPreviewExplainerShown` | Whether the one-time Screen Recording explainer has been shown |
 | `zoomTitleBarDoubleClick` | Whether title-bar double-click frames the window (on) or keeps macOS's own action |
+| `tabs.confirmCloseGroup` | Whether Close Group asks first (false after "Do not show this again") |
 | `takeover.enabled`, `takeover.explained`, `takeover.originals` | Whether Replace Mission Control is on, whether its explanation was shown, and the original Mission Control shortcut settings to restore |
 | `privateCanary.Multitouch`, `privateCanary.MissionControl` | Crash markers: set while multitouch or the takeover runs, so a crash turns that feature off on the next launch |
 | `freezeTestPID` | Debug builds only: the app paused by the Debug menu's freeze test, so it is resumed after a crash |

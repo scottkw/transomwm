@@ -111,3 +111,46 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 1e-9 }
         #expect(CollapsedBlockView.help == "Double-click to zoom in")
     }
 }
+
+/// UI-SPEC Surface 1 and Color: the Group preview is the group frame in the Dock colours, the strip band, and the label
+/// centred in the content rect.
+@Suite struct GroupPreviewStyleTests {
+    private let frame = Rect(x: 100, y: 100, width: 400, height: 300)
+    private var strip: Rect { TabBand.strip(of: frame) }
+
+    @Test func theGroupPreviewDrawsTheFrameTheStripBandAndTheLabel() throws {
+        let layers = PreviewStyle.layers(for: .group(frame: frame, strip: strip, label: "Group as tabs"), increaseContrast: false)
+        #expect(layers.count == 3)
+        let outline = try #require(layers.first)
+        #expect(outline.rect == frame && outline.fill == .accent && near(outline.fillAlpha, 0.20))
+        #expect(outline.border == .accent && near(outline.borderAlpha, 0.85) && outline.borderWidth == 2 && outline.cornerRadius == 12)
+        #expect(outline.dash == nil && outline.label == nil)
+        let band = layers[1]
+        #expect(band.rect == Rect(x: 102, y: 102, width: 396, height: 26), "the band is not inset 2 pt inside the border")
+        #expect(band.fill == .accent && near(band.fillAlpha, 0.50) && band.borderWidth == 0 && band.cornerRadius == 8 && band.label == nil)
+        let label = try #require(layers.last)
+        #expect(label.rect == TabBand.content(of: frame), "the label is not centred in the content rect")
+        #expect(near(label.fillAlpha, 0) && label.borderWidth == 0)
+        #expect(label.label == PreviewStyle.Label(text: "Group as tabs", glyph: "rectangle.topthird.inset.filled", glyphRole: .label))
+    }
+
+    @Test func increaseContrastRaisesTheGroupFillsAndMakesTheBorderOpaque() throws {
+        let layers = PreviewStyle.layers(for: .group(frame: frame, strip: strip, label: "Add as a tab"), increaseContrast: true)
+        #expect(near(layers[0].fillAlpha, 0.30) && near(layers[0].borderAlpha, 1))
+        #expect(near(layers[1].fillAlpha, 0.75))
+        #expect(near(layers[2].fillAlpha, 0), "the label's carrier layer became visible")
+    }
+
+    @Test func theGroupLabelFollowsTheClearanceRuleInTheContentRect() {
+        let label = Size(width: 150, height: 24)
+        let small = TabBand.content(of: Rect(x: 0, y: 0, width: 181, height: 88))
+        #expect(!PreviewStyle.showsLabel(in: Size(width: small.width, height: small.height), labelSize: label))
+        let roomy = TabBand.content(of: Rect(x: 0, y: 0, width: 182, height: 88))
+        #expect(PreviewStyle.showsLabel(in: Size(width: roomy.width, height: roomy.height), labelSize: label))
+    }
+
+    @Test func aGroupPreviewWithNoLabelDrawsNoLabelLayer() {
+        let layers = PreviewStyle.layers(for: .group(frame: frame, strip: strip, label: nil), increaseContrast: false)
+        #expect(layers.count == 2 && layers.allSatisfy { $0.label == nil })
+    }
+}

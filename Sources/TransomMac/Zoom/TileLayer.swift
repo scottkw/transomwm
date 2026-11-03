@@ -11,6 +11,8 @@ nonisolated final class TileLayer: CALayer {
         case fallback(color: NSColor, icon: NSImage?, title: String)
         /// A collapsed window (UI-SPEC Surface 3, drawn on the stage): no title.
         case collapsed(color: NSColor, icon: NSImage?)
+        /// A group's icon-only strip (07 UI-SPEC Surface 6): drawn once at the end size, stretched while it moves.
+        case strip(icons: [NSImage?], selected: Int)
     }
 
     static let cornerRadius: CGFloat = 12
@@ -57,6 +59,8 @@ nonisolated final class TileLayer: CALayer {
                 iconLayer.contentsGravity = .resizeAspect
                 addSublayer(iconLayer)
             }
+        case .strip:
+            contentsGravity = .resize
         }
         resolveColors(appearance)
     }
@@ -124,6 +128,12 @@ nonisolated final class TileLayer: CALayer {
     /// The border and capsule colours in `appearance` (light/dark, accent and contrast changes).
     func resolveColors(_ appearance: NSAppearance) {
         if case .snapshot? = content { return }
+        if case .strip(let icons, let selected)? = content {
+            appearance.performAsCurrentDrawingAppearance {
+                contents = StripLayerStyle.image(size: bounds.size, icons: icons, selected: selected).layerContents(forContentsScale: contentsScale)
+            }
+            return
+        }
         appearance.performAsCurrentDrawingAppearance {
             borderColor = NSColor.separatorColor.cgColor
             capsule.backgroundColor = NSColor.windowBackgroundColor.cgColor
@@ -207,5 +217,48 @@ nonisolated final class TileLayer: CALayer {
         animation.duration = duration
         animation.timingFunction = timing
         layer.add(animation, forKey: key)
+    }
+}
+
+/// A group's strip on the stage and in the overview (07 UI-SPEC Surface 6): the strip recipe at `scale` (the strip's
+/// height / 28), one icon-only chip per tab, the selected chip filled. No titles, buttons or overflow.
+nonisolated enum StripLayerStyle {
+    static let height: CGFloat = 28
+
+    /// Radius 8 × scale (at least 2); chips share the width with 4 × scale gaps inside 4 × scale padding, 20 × scale
+    /// tall; icons (16 × scale) hidden below 8 pt; below 4 pt tall only the fill is drawn. Rects in `frame`'s space.
+    static func layout(frame: CGRect, scale: CGFloat, count: Int) -> (radius: CGFloat, chips: [CGRect], showsIcons: Bool, fillOnly: Bool) {
+        let inset = 4 * scale
+        let width = count > 0 ? max(0, (frame.width - 2 * inset - CGFloat(count - 1) * inset) / CGFloat(count)) : 0
+        let chips = (0..<count).map { CGRect(x: frame.minX + inset + CGFloat($0) * (width + inset), y: frame.minY + inset, width: width, height: 20 * scale) }
+        return (max(2, 8 * scale), chips, 16 * scale >= 8, frame.height < 4)
+    }
+
+    /// The strip at `size`. Colours are resolved now, in the caller's drawing appearance (the image draws lazily, UAT 04).
+    static func image(size: CGSize, icons: [NSImage?], selected: Int) -> NSImage {
+        let scale = size.height / height
+        let style = layout(frame: CGRect(origin: .zero, size: size), scale: scale, count: icons.count)
+        let fill = NSColor(cgColor: NSColor.windowBackgroundColor.cgColor) ?? .windowBackgroundColor
+        let border = NSColor(cgColor: NSColor.separatorColor.cgColor) ?? .separatorColor
+        let chosen = NSColor(cgColor: NSColor.labelColor.withAlphaComponent(0.16).cgColor) ?? .labelColor
+        return NSImage(size: size, flipped: true) { rect in
+            let outline = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: style.radius, yRadius: style.radius)
+            fill.setFill()
+            outline.fill()
+            guard !style.fillOnly else { return true }
+            border.setStroke()
+            outline.lineWidth = 1
+            outline.stroke()
+            for (i, chip) in style.chips.enumerated() {
+                if i == selected {
+                    chosen.setFill()
+                    NSBezierPath(roundedRect: chip, xRadius: chip.height / 2, yRadius: chip.height / 2).fill()
+                }
+                guard style.showsIcons, let icon = icons[i] else { continue }
+                let side = min(16 * scale, chip.width)
+                icon.draw(in: CGRect(x: chip.midX - side / 2, y: chip.midY - side / 2, width: side, height: side))
+            }
+            return true
+        }
     }
 }
