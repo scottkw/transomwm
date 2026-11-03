@@ -5,8 +5,15 @@ nonisolated public enum ViewCopy {
     public static let shortcutsFooter = "Saved views work while zoom is on. If \u{2325} with a number types a character you need, choose another shortcut here."
 
     /// The Debug submenu's line.
-    public static func savedViewsLine(slots: [Int]) -> String { "" }
+    public static func savedViewsLine(slots: [Int]) -> String {
+        let list = slots.map(String.init).joined(separator: ", ")
+        return switch slots.count {
+        case 0: "Saved views: none"
+        case 1: "Saved views: 1 slot (\(list))"
+        default: "Saved views: \(slots.count) slots (\(list))"
+        }
+    }
 
     /// One line for VoiceOver when going to a view moves the camera: the view, then the Phase 4 reveal.
-    public static func joinedAnnouncement(slot: Int, reveal: String) -> String { reveal }
+    public static func joinedAnnouncement(slot: Int, reveal: String) -> String { "View \(slot). \(reveal)" }
 }

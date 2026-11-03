@@ -54,10 +54,15 @@ extension Arranger {
 
     /// The destination of the view in `slot`, for the shell's Space and display switch (D-03); nil for an empty slot.
     /// `alive` are the saved windows on that desk, `total` all that were saved.
-    public func viewDestination(slot: ViewSlot) -> (key: DeskKey, target: ViewTarget, allGone: Bool, alive: Int, total: Int)? { nil }
+    public func viewDestination(slot: ViewSlot) -> (key: DeskKey, target: ViewTarget, allGone: Bool, alive: Int, total: Int)? {
+        guard let view = camera.savedViews[slot] else { return nil }
+        let destination = viewDestination(view)
+        let alive = view.windows.filter { deskKey(of: WindowRef(identity: $0)) == destination.key }.count
+        return (destination.key, destination.target, destination.allGone, alive, view.windows.count)
+    }
 
     /// The filled slots, in order (the Debug line).
-    public var savedViewSlots: [Int] { [] }
+    public var savedViewSlots: [Int] { camera.savedViews.sorted.map(\.slot.number) }
 
     /// Zooms that display's camera to the view in `slot`: one camera move, so it joins Back/Forward history (`.navigate`)
     /// and is never an undo step.
@@ -66,19 +71,24 @@ extension Arranger {
             return [.beep, .notice(.viewEmpty(slot, displayUUID: uuid)), .info("refused view \(slot): empty slot")]
         }
         let destination = viewDestination(saved)
-        if destination.allGone, !displays.contains(where: { $0.uuid == destination.key.displayUUID }) {
+        guard displays.contains(where: { $0.uuid == destination.key.displayUUID }) else {
             return [.beep, .notice(.viewDisplayGone(slot, displayUUID: uuid)), .info("refused view \(slot): display not connected")]
         }
-        guard let display = displays.first(where: { $0.uuid == uuid }), Self.key(display) == destination.key, let tree = world[destination.key]?.tree
-        else { return [.info("go view \(slot): desk \(destination.key) is not shown on display \(uuid)")] }
+        guard let display = displays.first(where: { $0.uuid == uuid }) else { return [.beep, .info("refused view \(slot): no display \(uuid)")] }
+        // The shell switches to the desk's Space first, so all gone and still not shown means that Space is gone: the
+        // saved display's current Space, home.
+        let key = destination.allGone && uuid == destination.key.displayUUID ? Self.key(display) : destination.key
+        guard Self.key(display) == key, let tree = world[key]?.tree else {
+            return [.beep, .info("refused view \(slot): desk \(key) is not shown on display \(uuid)")]
+        }
         // D-05: every window gone shows the saved desk's home with N17 instead of N15; the slot stays.
         let shown: [ArrangerEffect] = [.notice(destination.allGone ? .viewWindowsClosed(slot, displayUUID: uuid) : .viewShown(slot, displayUUID: uuid))]
         // Already there: nothing moves, and it is not a refusal.
-        guard destination.target != currentView(uuid, destination.key) else { return shown }
+        guard destination.target != currentView(uuid, key) else { return shown }
         // Focus outside the view moves to the most recently focused window inside it.
         let node = Navigator.node(of: destination.target, in: tree)
         func inside(_ window: WindowRef) -> Bool {
-            guard deskKey(of: window) == destination.key, let leaf = leafNode(of: window), let node else { return false }
+            guard deskKey(of: window) == key, let leaf = leafNode(of: window), let node else { return false }
             return Navigator.ancestors(of: leaf, in: tree).contains(node)
         }
         let focus = focused.map(inside) == true ? nil : focusOrder.compactMap { windows[$0]?.window }.first(where: inside)

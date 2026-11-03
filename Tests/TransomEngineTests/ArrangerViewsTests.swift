@@ -457,6 +457,8 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         await harness.send(.camera(.saveView(three), displayUUID: "side", focused: nil, pointer: nil))
         let toHome = try #require(moves(await harness.send(.zoomTo(.home, displayUUID: "side"))).first)
         await harness.send(.cameraSettle(displayUUID: "side", moveID: toHome.id))
+        await harness.send(.event(.windowFocused(b)))
+        await harness.send(.event(.windowFocused(a)))
 
         let elsewhere = await harness.send(.camera(.view(three), displayUUID: "main", focused: a, pointer: Point(x: 100, y: 100)))
         #expect(moves(elsewhere).isEmpty && has(.beep, elsewhere))

@@ -69,8 +69,8 @@ private struct ToastView: View {
     }
 
     /// Shows `text` centred 16 pt below the top of `displayUUID`'s visible frame (the menu-bar display when nil or
-    /// gone), fading in over 160 ms, and announces it.
-    func show(_ text: String, glyph: String, warning: Bool = false, on displayUUID: String?) {
+    /// gone), fading in over 160 ms, and announces it unless something else will (a view's joined reveal line).
+    func show(_ text: String, glyph: String, warning: Bool = false, on displayUUID: String?, announce: Bool = true) {
         generation += 1
         if panel.leftOnAnotherSpace("toast panel") {
             panel.orderOut(nil)
@@ -97,7 +97,7 @@ private struct ToastView: View {
             context.duration = 0.16
             panel.animator().alphaValue = 1
         }
-        postAnnouncement(text)
+        if announce { postAnnouncement(text) }
     }
 
     /// Re-orders a visible toast above a panel at the same level that just ordered in (the camera stage).

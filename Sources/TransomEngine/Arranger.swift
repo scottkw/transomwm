@@ -165,7 +165,7 @@ public struct Arranger: Sendable {
     /// again, so an app echoing frames cannot cause a write storm (T-03-08).
     var lastRequested: [WindowIdentity: Rect] = [:]
     /// Locked or asleep: nothing is written until the session resumes, then every visible desk is re-planned.
-    var sessionPaused = false
+    public internal(set) var sessionPaused = false
     /// The Spaces-off fallback (A7) is reported once per session.
     private var reportedSpacesOff = false
     /// Each window's last read-back (`frameApplied`): a move or resize within 2 pt of it is Transom's own write coming

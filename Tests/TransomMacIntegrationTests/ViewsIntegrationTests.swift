@@ -3,6 +3,7 @@ import Foundation
 @testable import TransomEngine
 @testable import TransomMac
 import TransomModel
+import TransomPrivate
 import Testing
 
 /// The fixture's windows as the system tracks them, once all of `fixture.windows` are present.
@@ -116,5 +117,73 @@ import Testing
         await fresh.dispatch(.camera(.view(ViewSlot(3)!)))
         let framed = await settled(fresh, key, on: expected)
         #expect(framed, "the camera is at \(String(describing: fresh.arranger.camera.views[key])), not \(expected)")
+    }
+
+    /// The main display, its first desktop and the next one; the guest needs at least two desktops.
+    private func desktops() throws -> (display: String, first: UInt64, second: UInt64) {
+        let main = try #require(Displays.current().first?.uuid)
+        let list = try #require(SpacesProvider.snapshot()?.displays.first { $0.displayUUID == main }, "Spaces lookup unavailable")
+        let ids = list.spaces.filter { $0.kind == .desktop }.map(\.id)
+        try #require(ids.count >= 2, "the guest needs two desktops, has \(ids)")
+        return (main, ids[0], ids[1])
+    }
+
+    /// Switches the main display to `space`, waiting until it shows.
+    private func show(_ space: UInt64, on display: String) async throws {
+        _ = await SpaceSwitcher(spaces: { SpacesProvider.snapshot() }).switchTo(space: space, on: display)
+        try #require(await waitUntil(timeout: .seconds(3)) { SkyLightSpaces.currentSpace(displayUUID: display) == space }, "the main display never showed Space \(space)")
+    }
+
+    /// D-03 and the joined announcement: a view saved on Desktop 2 is reached from Desktop 1 by switching first, then zooming.
+    /// VM only: it posts Mission Control chords. It starts and ends on the first desktop.
+    @Test(
+        .timeLimit(.minutes(1)), .enabled(if: IntegrationEnv.inVM, "VM only: posts Mission Control chords and switches Spaces"))
+    func aViewOnAnotherSpaceSwitchesFirst() async throws {
+        let (display, first, second) = try desktops()
+        try await show(first, on: display)
+        do {
+            try await show(second, on: display)
+            let fixture = try await FixtureProcess.launch(["standard"])
+            defer { fixture.terminate() }
+            let fixturePID = fixture.pid
+            let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+            await system.start()
+            let window = try #require(try await tracked(system, fixture).first)
+            let arrange = ArrangeController(system: system, zoomEnabled: true)
+            defer { withExtendedLifetime(arrange) {} }
+            await arrange.start()
+            await drainEvents(arrange)
+            let slot = ViewSlot(4)!
+            await arrange.dispatch(.dock, focused: window)
+            let key = try #require(arrange.arranger.deskKey(of: window))
+            try #require(key.spaceID == second, "the fixture window is on \(key), not Space \(second)")
+            let leaf = try #require(arrange.arranger.leafNode(of: window))
+
+            await arrange.zoom(to: .node(leaf), displayUUID: display)
+            try #require(await settled(arrange, key, on: .node(leaf)), "the camera never settled on the window")
+            await arrange.dispatch(.camera(.saveView(slot)))
+            try #require(arrange.arranger.camera.savedViews[slot]?.desk == key, "the view was not saved on Desktop 2")
+            await arrange.zoom(to: .home, displayUUID: display)
+            try #require(await settled(arrange, key, on: .home), "the camera never came home")
+
+            try await show(first, on: display)
+            try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.displays.first { $0.uuid == display }?.currentSpaceID == first }, "the Arranger never saw Desktop 1")
+            var said: [String] = []
+            arrange.zoomController?.announce = { said.append($0) }
+
+            await arrange.dispatch(.camera(.view(slot)))
+
+            #expect(SkyLightSpaces.currentSpace(displayUUID: display) == second, "the Space did not switch first")
+            let framed = await settled(arrange, key, on: .node(leaf))
+            #expect(framed, "the camera on Desktop 2 is at \(String(describing: arrange.arranger.camera.views[key])), not the saved window")
+            #expect(await waitUntil(timeout: .seconds(2)) { !said.isEmpty }, "the reveal said nothing")
+            #expect(said.count == 1 && said.first?.hasPrefix("View 4. Showing") == true, "VoiceOver heard \(said)")
+            await arrange.zoom(to: .home, displayUUID: display)
+            _ = await settled(arrange, key, on: .home)
+        } catch {
+            try? await show(first, on: display)
+            throw error
+        }
+        try await show(first, on: display)
     }
 }

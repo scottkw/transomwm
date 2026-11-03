@@ -12,6 +12,11 @@ import os
     private let system: AXWindowSystem
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "arrange")
     private let displaysLog = Logger(subsystem: "com.eightabyte.transom", category: "displays")
+    private let viewsLog = Logger(subsystem: "com.eightabyte.transom", category: "views")
+    /// The Phase 6 Space-switch path, shared by the overview and going to a saved view.
+    private lazy var spaceSwitcher = SpaceSwitcher(spaces: { [unowned self] in self.system.spacesSnapshot })
+    /// The N15 whose text the reveal announcement carries: its toast says nothing (08 UI-SPEC Announcements).
+    private var joinedNotice: Notice?
     /// The saved arrangement differs from the live displays: one settle runs once the saved layout is re-attached.
     private var launchSettlePending = false
     /// One debug line per press and per release (WR-03); see them with `log stream --level debug`.
@@ -172,7 +177,7 @@ import os
         logger.info("notice \(String(describing: notice), privacy: .public)")  // toasts don't show over VNC
         let change = notices.post(notice, at: .now)
         // A brief notice dropped behind a crash notice is still announced (08 UI-SPEC View toasts).
-        if change == .unchanged, notice.isBrief { postAnnouncement(NoticeCopy.text(for: notice, appName: Self.appName)) }
+        if change == .unchanged, notice.isBrief, notice != joinedNotice { postAnnouncement(NoticeCopy.text(for: notice, appName: Self.appName)) }
         present(change)
     }
 
@@ -608,8 +613,13 @@ import os
             return await toggleOverview(from: source)
         }
         let pointer = pointerDisplay()
+        var target = pointer.uuid
+        if case .view(let slot) = camera, context.ready {
+            guard let display = await displayForView(slot, pointer: pointer.uuid, from: source) else { return }
+            target = display
+        }
         var effects: [ArrangerEffect]
-        if let uuid = pointer.uuid, context.ready {
+        if let uuid = target, context.ready {
             effects = arranger.handle(.camera(camera, displayUUID: uuid, focused: context.focused, pointer: pointer.point), now: .now)
         } else if !context.ready {  // the engine never sees "not ready"; the shell refuses for it
             let refusal = Navigator.Refusal.notReady
@@ -621,7 +631,43 @@ import os
         if camera == .zoomOutAll || camera == .stepOut {
             for case .cameraMove(let move) in effects { zoomInput.expectPick(moveID: move.id) }  // its reveal starts pick mode
         }
+        // A view that moves the camera says one line, at the reveal: the toast stays quiet (Announcements).
+        if case .view(let slot) = camera {
+            for case .cameraMove(let move) in effects where effects.contains(.notice(.viewShown(slot, displayUUID: move.displayUUID))) {
+                zoom().joinedView = (move.id, slot.number)
+                joinedNotice = .viewShown(slot, displayUUID: move.displayUUID)
+            }
+        }
         await run(effects)
+        joinedNotice = nil
+    }
+
+    /// D-03: the display going to view `slot` acts on (the pointer's when the engine will refuse: empty slot, paused, display
+    /// gone), showing the view's Space first when that is another one. Nil: the switch failed and was refused here, with the
+    /// camera unchanged. Saved windows all gone on a Space no longer listed: no switch, the engine goes home there.
+    /// shortcut: a second view pressed during a switch posts its own chords; serialize them if that shows up in use.
+    private func displayForView(_ slot: ViewSlot, pointer: String?, from source: CommandSource) async -> String?? {
+        guard arranger.pauseReasons.isEmpty, !arranger.sessionPaused, let destination = arranger.viewDestination(slot: slot),
+            let display = arranger.displays.first(where: { $0.uuid == destination.key.displayUUID })
+        else { return .some(pointer) }
+        let space = destination.key.spaceID.flatMap { id in
+            id == display.currentSpaceID ? nil : system.spacesSnapshot?.displays.first { $0.displayUUID == display.uuid }?.spaces.first { $0.id == id }
+        }
+        viewsLog.info(
+            "go view \(slot.number, privacy: .public) via \(String(describing: source), privacy: .public): desk \(String(describing: destination.key), privacy: .public), \(destination.alive, privacy: .public) of \(destination.total, privacy: .public) windows, target \(String(describing: destination.target), privacy: .public)\(space == nil ? "" : ", space switch", privacy: .public)")
+        guard let space else { return display.uuid }
+        let switched = await spaceSwitcher.switchTo(space: space.id, on: display.uuid)
+        // RESEARCH Pitfall 7: the Arranger hears of the new Space from a later `.spaceChanged`, and plans its desk from that.
+        let deadline = ContinuousClock.now + .milliseconds(500)
+        while switched, arranger.displays.first(where: { $0.uuid == display.uuid })?.currentSpaceID != space.id, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard switched, arranger.displays.first(where: { $0.uuid == display.uuid })?.currentSpaceID == space.id else {
+            viewsLog.info("refused view \(slot.number, privacy: .public): couldn't switch to space \(space.id, privacy: .public)")
+            await run(source == .url ? [] : [.beep, .announce(OverviewCopy.couldNotSwitch(desktop: space.index))])
+            return nil
+        }
+        return arranger.viewDestination(slot: slot)?.key.displayUUID ?? display.uuid
     }
 
     /// A camera command from pointer input, on a given display with a given window (title-bar and Desktop double-clicks).
@@ -791,7 +837,7 @@ import os
         if let overviewController { return overviewController }
         let overview = OverviewController(
             arranger: { [unowned self] in self.arranger }, spaces: { [unowned self] in self.system.spacesSnapshot }, zoom: { [unowned self] in self.zoom() },
-            switcher: SpaceSwitcher(spaces: { [unowned self] in self.system.spacesSnapshot }))
+            switcher: spaceSwitcher)
         overview.onClosed = { [weak self] in
             guard let self else { return }
             for display in self.arranger.displays { self.showPanels(on: display.uuid) }
@@ -1133,7 +1179,7 @@ import os
         case .show(let notice):
             toast.show(
                 NoticeCopy.text(for: notice, appName: Self.appName), glyph: NoticeCopy.glyph(for: notice),
-                warning: NoticeCopy.isWarning(notice), on: displayUUID(of: notice))
+                warning: NoticeCopy.isWarning(notice), on: displayUUID(of: notice), announce: notice != joinedNotice)
             if let at = notices.expiresAt {
                 noticeExpiry.set(at) { [weak self] in
                     guard let self else { return }
