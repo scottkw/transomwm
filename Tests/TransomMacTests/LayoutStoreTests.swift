@@ -118,6 +118,14 @@ private func sampleFile() throws -> LayoutFile {
         { try mutated { json in json.merging([key: value(json)]) { $1 } } }
     }
 
+    /// One saved view as layout.json holds it.
+    static func view(_ slot: Int, windows: [UInt32] = []) -> [String: Any] {
+        [
+            "slot": slot, "desk": ["displayUUID": "main"], "home": windows.isEmpty,
+            "windows": windows.map { ["windowID": $0, "pid": 300, "bundleID": "com.example.editor"] as [String: Any] },
+        ]
+    }
+
     nonisolated static let badFiles: [(String, @MainActor @Sendable () throws -> String)] = [
         ("too large", { try edited("\"schemaVersion\" : 3", "\"schemaVersion\" : 3" + String(repeating: " ", count: World.maxEncodedBytes)) }),
         ("malformed", { #"{"schemaVersion":1,"world":"# }),
@@ -142,6 +150,12 @@ private func sampleFile() throws -> LayoutFile {
         }),
         ("duplicate space ID", { try setting("spaces") { _ in [["id": 3, "uuid": "U3"], ["id": 3, "uuid": "U4"]] }() }),
         ("empty space uuid", { try setting("spaces") { _ in [["id": 3, "uuid": ""]] }() }),
+        ("duplicate view slot", { try setting("views") { _ in [view(3), view(3)] }() }),
+        ("unsorted view slots", { try setting("views") { _ in [view(4), view(3)] }() }),
+        ("ten views", { try setting("views") { _ in (1...9).map { view($0) } + [view(9)] }() }),
+        ("view slot out of range", { try setting("views") { _ in [view(10)] }() }),
+        ("unsorted view windows", { try setting("views") { _ in [view(3, windows: [2, 1])] }() }),
+        ("duplicate view window", { try setting("views") { _ in [view(3, windows: [1, 1])] }() }),
         ("duplicate wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}},{\"frame\":{\"x\":5,\"y\":5,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
     ]
 
@@ -340,6 +354,26 @@ extension LayoutStoreTests {
         #expect(desk.desktop.windows.map(\.window.titleHint) == ["Bank statement"])
     }
 
+    /// D-14: views come back sorted by slot, as written.
+    @Test func savedViewsRoundTripSortedBySlot() throws {
+        let dir = Directory()
+        var file = try sampleFile()
+        file = LayoutFile(
+            world: file.world, homeFrames: file.homeFrameMap, session: file.session,
+            views: [
+                SavedView(slot: ViewSlot(5)!, desk: key, home: true, windows: []),
+                SavedView(slot: ViewSlot(3)!, desk: key, home: false, windows: [ref(2).identity, ref(1).identity]),
+            ])
+        try LayoutStore(directory: dir.url).save(file)
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == file)
+        #expect(fresh.contents?.views.map(\.slot.number) == [3, 5])
+        #expect(fresh.contents?.views.first?.windows == [ref(1).identity, ref(2).identity])
+    }
+
     @Test func aSchema2FileLoadsWithEmptyTitlesAndSavesAsSchema3() throws {
         let dir = Directory()
         // Schema 2 as its Transom wrote it: titles redacted (T-03-17) and no boot session.
@@ -349,6 +383,7 @@ extension LayoutStoreTests {
             var session = json["session"] as? [String: Any] ?? [:]
             session["bootSession"] = nil
             json["session"] = session
+            json["views"] = nil
             return json
         }
         .replacingOccurrences(of: "Secret plan.txt", with: "").replacingOccurrences(of: "Bank statement", with: "")
@@ -361,6 +396,7 @@ extension LayoutStoreTests {
         #expect(!store.savingDisabled)
         let contents = try #require(store.contents)
         #expect(contents.session.bootSession == nil)
+        #expect(contents.views.isEmpty, "a schema-2 file has no saved views")
         #expect(contents.world == (try sampleFile()).world)
         #expect(contents.world.desks.values.allSatisfy { desk in
             (desk.tree.windows + desk.desktop.windows.map(\.window)).allSatisfy { $0.titleHint.isEmpty }

@@ -42,7 +42,8 @@ public struct LayoutFileError: Error, Equatable, Sendable {
 /// "Schema decision") adds the current display `arrangement`, the other arrangements' `layoutSets` (D-09) and the
 /// `spaces` table giving each desk's Space ID its durable UUID (D-13). Schema 3 (D-10, D-14) keeps window titles, so
 /// windows are re-matched after a relaunch; it has the same shape, and the bump stops an older Transom overwriting a
-/// file whose titles it would strip. Every array is sorted, so equal contents give equal bytes.
+/// file whose titles it would strip; it also holds the saved views (D-14). Every array is sorted, so equal contents
+/// give equal bytes.
 public struct LayoutFile: Codable, Equatable, Sendable {
     public static let schemaVersion = 3
     /// Cap on stored arrangements (T-06-07).
@@ -62,10 +63,12 @@ public struct LayoutFile: Codable, Equatable, Sendable {
     public var layoutSets: [LayoutSet]
     /// Sorted by ID.
     public var spaces: [SavedSpace]
+    /// Sorted by slot.
+    public var views: [SavedView]
 
     public init(
         world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:], session: SessionRecord,
-        arrangement: ArrangementID = ArrangementID([]), layoutSets: [LayoutSet] = [], spaces: [SavedSpace] = []
+        arrangement: ArrangementID = ArrangementID([]), layoutSets: [LayoutSet] = [], spaces: [SavedSpace] = [], views: [SavedView] = []
     ) {
         schemaVersion = Self.schemaVersion
         self.world = world
@@ -75,6 +78,21 @@ public struct LayoutFile: Codable, Equatable, Sendable {
         self.arrangement = arrangement
         self.layoutSets = layoutSets.sorted { $0.arrangement < $1.arrangement }
         self.spaces = spaces.sorted { $0.id < $1.id }
+        self.views = views.sorted { $0.slot < $1.slot }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        world = try container.decode(World.self, forKey: .world)
+        homeFrames = try container.decode([HomeFrame].self, forKey: .homeFrames)
+        wantedFrames = try container.decode([HomeFrame].self, forKey: .wantedFrames)
+        session = try container.decode(SessionRecord.self, forKey: .session)
+        arrangement = try container.decode(ArrangementID.self, forKey: .arrangement)
+        layoutSets = try container.decode([LayoutSet].self, forKey: .layoutSets)
+        spaces = try container.decode([SavedSpace].self, forKey: .spaces)
+        // Files written before saved views have no key; that absence is the one sanctioned default.
+        views = try container.decodeIfPresent([SavedView].self, forKey: .views) ?? []
     }
 
     private static func sorted(_ frames: [WindowIdentity: Rect]) -> [HomeFrame] {
@@ -97,7 +115,8 @@ public struct LayoutFile: Codable, Equatable, Sendable {
     }
 
     /// The rules a decoded file must meet beyond its decode (each World validates itself while decoding, T-06-07):
-    /// sorted unique arrangements and Space IDs, non-empty Space UUIDs, at most `maxLayoutSets` sets.
+    /// sorted unique arrangements and Space IDs, non-empty Space UUIDs, at most `maxLayoutSets` sets, and views sorted by
+    /// unique slot, each with a sorted unique window list no longer than a tree's nodes (T-08-08).
     public func validate() throws(LayoutFileError) {
         guard arrangement.isNormalised else { throw LayoutFileError(reason: "arrangement is not sorted and unique") }
         guard layoutSets.count <= Self.maxLayoutSets else {
@@ -114,6 +133,16 @@ public struct LayoutFile: Codable, Equatable, Sendable {
         }
         if let index = spaces.firstIndex(where: { $0.uuid.isEmpty }) {
             throw LayoutFileError(reason: "space \(index): empty uuid")
+        }
+        guard views.count <= ViewSlot.all.count else { throw LayoutFileError(reason: "\(views.count) views, over \(ViewSlot.all.count)") }
+        guard zip(views, views.dropFirst()).allSatisfy({ $0.slot < $1.slot }) else {
+            throw LayoutFileError(reason: "views are not sorted by unique slot")
+        }
+        for view in views {
+            guard view.windows.count <= LayoutTree.maxNodes else { throw LayoutFileError(reason: "view \(view.slot.number): too many windows") }
+            guard zip(view.windows, view.windows.dropFirst()).allSatisfy({ $0 < $1 }) else {
+                throw LayoutFileError(reason: "view \(view.slot.number): windows are not sorted and unique")
+            }
         }
     }
 }

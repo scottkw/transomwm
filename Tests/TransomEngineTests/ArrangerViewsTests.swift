@@ -297,6 +297,23 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         #expect(harness.arranger.camera.pending["main"]?.focus == nil, "focus inside the view stays")
     }
 
+    /// VIEW-02, D-14: a view written to layout.json and loaded by a fresh Arranger lands on the same windows.
+    @Test func aViewSurvivesASnapshotAndARestore() async throws {
+        var harness = try await threeDocked()
+        let node = try await savedCAndD(&harness)
+        let snapshot = harness.arranger.snapshot
+        #expect(snapshot.views.map(\.slot) == [three] && snapshot.views.first?.windows == [c.identity, d.identity])
+
+        var restored = Harness()
+        restored.arranger = Arranger()
+        await restored.send(.restore(snapshot.world, homeFrames: snapshot.homeFrames, views: snapshot.views))
+        #expect(restored.arranger.snapshot.views == snapshot.views, "a write before the re-attach loses no view")
+        await restored.send(.inventory(await harness.fake.inventory()))
+        await restored.send(.zoomEnabled(true))
+        let move = try #require(moves(await camera(.view(three), &restored)).first)
+        #expect(move.to == .node(node))
+    }
+
     /// T-08-03: a stored slot outside 1–9 fails to decode, so a hostile file can't address a tenth slot.
     @Test func aSlotOutsideOneToNineFailsToDecode() throws {
         let decoder = JSONDecoder()

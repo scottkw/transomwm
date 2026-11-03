@@ -11,10 +11,11 @@ public enum ArrangerInput: Sendable {
     case tick
     /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
     /// `arrangement` and `layoutSets` are the saved display arrangement and the other arrangements' layouts (D-09).
-    /// `bootChanged`: the saved boot session differs from this one, so identity re-attach is skipped (RESEARCH Pitfall 5).
+    /// `views` are the saved views (D-14). `bootChanged`: the saved boot session differs from this one, so identity
+    /// re-attach is skipped (RESEARCH Pitfall 5).
     case restore(
         World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:], arrangement: ArrangementID = ArrangementID([]),
-        layoutSets: [LayoutSet] = [], bootChanged: Bool = false)
+        layoutSets: [LayoutSet] = [], views: [SavedView] = [], bootChanged: Bool = false)
     /// Displays began reconfiguring (OVER-05): until `.displaysSettled` no window is re-homed by display and no frame is
     /// written, so macOS moving windows off a vanishing display cannot destroy the tiles a re-plug needs (Pitfall 4).
     case displaysSettling
@@ -378,8 +379,9 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore(let world, let homeFrames, let wantedFrames, let arrangement, let sets, let bootChanged):
+        case .restore(let world, let homeFrames, let wantedFrames, let arrangement, let sets, let views, let bootChanged):
             pendingRestore = (world, homeFrames, wantedFrames)
+            camera.savedViews = SavedViews(views)
             restoreAfterBootChange = bootChanged
             self.arrangement = arrangement
             layoutSets = LayoutSets(sets)
@@ -441,7 +443,8 @@ public struct Arranger: Sendable {
     /// While displays settle, the World from before the change. Every tracked window's ref carries its current title
     /// (re-matching reads it, RESEARCH Pitfall 2); an untracked one keeps the title it was loaded with.
     public var snapshot: (
-        world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID, layoutSets: [LayoutSet]
+        world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID, layoutSets: [LayoutSet],
+        views: [SavedView]
     ) {
         let titles = windows.mapValues(\.window.titleHint)
         let sets = layoutSets.all.map { set in
@@ -450,10 +453,10 @@ public struct Arranger: Sendable {
             return set
         }
         if let unattached {
-            return (unattached.world.refreshingTitles(titles), unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, sets)
+            return (unattached.world.refreshingTitles(titles), unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, sets, camera.savedViews.sorted)
         }
         let saved = pendingRestore ?? (settling ? preChangeWorld ?? world : world, homeFrames, wantedFrames)
-        return (saved.world.refreshingTitles(titles), saved.homeFrames, saved.wantedFrames, arrangement, sets)
+        return (saved.world.refreshingTitles(titles), saved.homeFrames, saved.wantedFrames, arrangement, sets, camera.savedViews.sorted)
     }
 
     /// Takes the displays, session state and windows of `inventory`. A Space lookup that answers 0 or switches off

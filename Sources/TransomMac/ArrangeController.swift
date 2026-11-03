@@ -205,7 +205,8 @@ import os
                 await run(arranger.handle(
                     .restore(
                         world, homeFrames: saved.homeFrameMap, wantedFrames: saved.wantedFrameMap, arrangement: saved.arrangement,
-                        layoutSets: layoutSets),
+                        layoutSets: layoutSets, views: saved.views,
+                        bootChanged: BootSession.changed(saved: saved.session.bootSession, current: BootSession.current())),
                     now: .now))
                 launchSettlePending = !saved.arrangement.isUnknown && saved.arrangement != ArrangementID(inventory.displays.map(\.uuid))
             }
@@ -1059,13 +1060,14 @@ import os
         guard let store else { return }
         let snapshot = arranger.snapshot
         let session = SessionRecord(
-            cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal, survivedMinute: survivedMinute)
+            cleanExit: cleanExit, launchedAt: launchedAt, recoveryLaunch: launchMode != .normal, survivedMinute: survivedMinute,
+            bootSession: BootSession.current())
         // Live Space UUIDs win; a dormant desk's Space (not live now) keeps the UUID it was loaded with (D-13).
         let uuids = (store.contents?.spaceMap ?? [:]).merging(system.spacesSnapshot?.uuidByID ?? [:]) { _, live in live }
         let file = LayoutFile(
             world: snapshot.world, homeFrames: snapshot.homeFrames, wantedFrames: snapshot.wantedFrames, session: session,
             arrangement: snapshot.arrangement, layoutSets: snapshot.layoutSets,
-            spaces: SpaceRekey.table(for: snapshot.world, layoutSets: snapshot.layoutSets, uuids: uuids))
+            spaces: SpaceRekey.table(for: snapshot.world, layoutSets: snapshot.layoutSets, uuids: uuids), views: snapshot.views)
         do {
             try store.save(file)
         } catch {

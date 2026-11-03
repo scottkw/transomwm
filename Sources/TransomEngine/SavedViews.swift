@@ -24,6 +24,11 @@ public struct SavedViews: Equatable, Sendable {
 
     public init() {}
 
+    /// Loaded from layout.json, whose slots are validated unique.
+    public init(_ views: [SavedView]) {
+        for view in views { save(view) }
+    }
+
     public subscript(slot: ViewSlot) -> SavedView? { slots[slot] }
 
     /// Stores `view` in its slot; true when that replaced an earlier view (D-15).

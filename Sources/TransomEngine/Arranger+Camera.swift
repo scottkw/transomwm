@@ -1,7 +1,7 @@
 import TransomModel
 
-/// All camera state, session-only (never saved, so layout.json stays schema 1). The committed view per desk; a move
-/// waiting for its `.cameraSettle` per display.
+/// All camera state. Session-only except `savedViews`, which layout.json keeps (D-14). The committed view per desk; a
+/// move waiting for its `.cameraSettle` per display.
 public struct CameraState: Sendable {
     public var enabled = false
     public var views: [DeskKey: ViewTarget] = [:]
