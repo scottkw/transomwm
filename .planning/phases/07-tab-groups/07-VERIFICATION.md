@@ -1,7 +1,7 @@
 ---
 phase: 07-tab-groups
 verified: 2026-11-02T04:16:03Z
-status: human_needed
+status: passed
 score: 6/6 roadmap success criteria verified in engine logic and code wiring (host suite re-run by the verifier, 1,663 tests green); live screen behaviour pending the 07-UAT pass; 1 review-fix truth present, behaviour-unverified (CR-01 shell ordering)
 covered_files:
   - ".planning/phases/07-tab-groups/07-01-PLAN.md"
@@ -85,7 +85,12 @@ covered_files:
   - "Tests/TransomModelTests/ScenarioTests.swift"
   - "Tests/TransomModelTests/TabGroupModelTests.swift"
   - "Tests/TransomModelTests/TabsTests.swift"
-covered_digest: "v4:sha256:17f30b88eb41d694eb7b02d6c2657110e052fb6cddce2ae9fe97fd40b67b953a"
+  - "Sources/TransomEngine/PendingFocus.swift"
+  - "Sources/TransomMac/CloseGroupConfirmation.swift"
+  - "Tests/TransomEngineTests/PendingFocusTests.swift"
+  - "Tests/TransomMacTests/AppDelegateTests.swift"
+  - "Tests/TransomMacTests/CloseGroupConfirmationTests.swift"
+covered_digest: "v4:sha256:14e143bb6e06ee474919d7af8ae9d22b09a07350875dd2ca19ebf7e89558e52c"
 behavior_unverified: 1
 overrides_applied: 0
 behavior_unverified_items:
@@ -281,3 +286,17 @@ Accepted known gaps, not counted:
 
 _Verified: 2026-11-02T04:16:03Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Human Verification Result (2026-11-03)
+
+Host checks on macOS 27.2 (MacBook Air, one display), Debug build; VM run V1-V16 in 07-UAT.md:
+- Items 1, 2, 4 and backstops B1, B2: pass.
+- Item 3 (tab drag-out): failed first. Hardware events leave the window-under-pointer field 0 at the session tap, so a strip press was never recognised (the VM harness had filled the field). Fixed by c35449d (the strip is hit-tested under the pointer); VM `TabGroupIntegrationTests` 7/7; host re-check pass.
+- Item 5 (Close Group with a save prompt): Close Group stopped at the prompt and left the rest open after the answer. By user decision it now confirms first ("Do not show this again") and continues once the prompt is answered with Save or Delete; Cancel stops (693d989, docs 66c3a73; D-06 clarified). Host re-check pass.
+- B3 VoiceOver: pass (group announced; tabs read app, title, position after VO-Shift-Down; Close Tab and Move Out in the actions).
+- Earlier VM bugs fixed by 5a48451 (app activation selects the hidden tab) and bdd2d22 (URL commands use the app frontmost before Transom).
+
+Accepted gaps are listed in 07-UAT.md "Known gaps". Status: **passed**.
+
+_Verified: 2026-11-03_
+

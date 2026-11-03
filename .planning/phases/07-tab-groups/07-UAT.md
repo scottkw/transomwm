@@ -1,15 +1,15 @@
 ---
-status: testing
+status: complete
 phase: 07-tab-groups
 source: 07-UI-SPEC.md "User host checklist" (items 1-5, verbatim) and backstop rows; RESEARCH Assumption A3; 07-01..07-11-SUMMARY.md items left to UAT
 started: 2026-11-02
-updated: 2026-11-02 (VM run, agent; fixes after VM UAT)
+updated: 2026-11-03 (host items 1-5 and B1-B3 pass after fixes c35449d, 693d989)
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing: VM run done 2026-11-02 (V1-V16, see "VM UAT run"); host items 1-5 and backstops B1-B3 wait for the user]
+[complete: VM run V1-V16 and host items 1-5, B1-B3 all pass after fixes]
 
 ## Build under test
 
@@ -46,19 +46,19 @@ Re-run on the rebuilt HEAD `1267086` (2026-11-01):
 ## 1. Host checklist (UI-SPEC, verbatim)
 
 1. Drag a Finder window by its title bar onto the middle of a docked TextEdit window and hold still for about half a second. *Expected: the preview changes to an outline with a band along the top, labelled "Group as tabs". Release: both windows share the tile under one tab strip, Finder's tab selected.*
-   result: pending
+   result: pass (host, 2026-11-02; Debug build with 5a48451/bdd2d22). The group forms once the outline reads "Group as tabs"; the user first released too early and read the 0.4 s dwell as finicky, then found it reliable once held.
 
 2. Click the TextEdit tab, then the Finder tab. *Expected: the windows swap in place with no flash of the desktop picture.*
-   result: pending
+   result: pass (host, 2026-11-02)
 
 3. Drag the Finder tab out of the strip onto empty Desktop and release. *Expected: Finder floats where the dashed outline showed; TextEdit goes back to being a plain tile with no strip.*
-   result: pending
+   result: issue then pass (host). First run: a tab could not be dragged out, only Move Out of Group worked. Cause: hardware mouse events on macOS 27 leave kCGMouseEventWindowUnderMousePointer 0 at the session tap (the VM harness filled it in, V4 note), so a press never matched a strip panel. Fixed in `c35449d` (the strip is found by hit-testing the visible panels under the pointer; VM `TabGroupIntegrationTests.aTabDraggedOutWithNoWindowUnderPointerLeavesTheGroup`, 7/7). Host re-check: pass.
 
 4. Group a Safari window that has several tabs with another window, then switch Safari tabs. *Expected: one Safari tab in the strip whose title follows the Safari tab you're on.*
-   result: pending
+   result: pass (host, 2026-11-02)
 
 5. Type in TextEdit without saving, then click Close Group. *Expected: TextEdit asks whether to save, in view in the group's place; nothing else closes until you answer.*
-   result: pending
+   result: issue then pass (host). First run on an existing file: no prompt (TextEdit autosaves a saved document; expected). On an untitled document the prompt appeared, then Close Group stopped and left Finder open after the answer; the user expected the whole group to close and asked for a confirmation with "Do not show this again". Fixed in `693d989` (docs `66c3a73`), see the fix note below. Host re-check 2026-11-03: confirmation shown, prompt shown, Delete closed TextEdit and then Finder: pass.
    fix (2026-11-02, for the re-check): the first host run found that Close Group stopped 1 s after TextEdit's prompt appeared, so the rest of the group stayed open even after Save or Delete, and that it started with no confirmation. Now: clicking Close Group first shows "Close all {n} windows in this tab group?" (Close Group / Cancel, "Do not show this again"). After Close Group, TextEdit's prompt appears and Transom waits for it (log "close waits on …'s prompt"). **Save or Delete:** TextEdit closes and the other members close too. **Cancel:** TextEdit stays open and selected, nothing else closes, VoiceOver/log says "“TextEdit” didn't close" about 1.5-2.5 s after Cancel. Checking "Do not show this again" and choosing Close Group stops the alert for later clicks (`defaults delete com.eightabyte.transom.debug tabs.confirmCloseGroup` brings it back). Engine behaviour is covered by `ArrangerCloseGroupTests`; the AX sheet read and the alert were not run on the host or in the VM.
 
 ## 2. VM checks (Tart VM pane-test, fixture windows, one at a time)
@@ -130,13 +130,13 @@ V16. (WR-02) ⌘M the selected tab of a 3-tab group. *Expected: a neighbour is s
 ## 3. Backstops on hardware (MacBook Air)
 
 B1. Drag a grouped window by its title bar quickly. *Expected: the strip stays attached with no visible gap.*
-   result: pending
+   result: pass (host, 2026-11-03)
 
 B2. Switch tabs between two windows of different apps 10 times. *Expected: no flash of the desktop picture in the content rect.*
-   result: pending
+   result: pass (host, 2026-11-03)
 
 B3. Turn on VoiceOver and move to the strip. *Expected: "Tab group, 2 windows"; each tab reads its app, title and position; Close Tab and Move Out of Group are in the actions rotor.*
-   result: pending
+   result: pass (host, 2026-11-03). VoiceOver announces the strip as a group ("You are currently on a group…"); after VO-Shift-Down each tab reads its app, title and position; Close Tab and Move Out of Group are in the actions. An early report that the strip vanished with VoiceOver on did not reproduce (the group had most likely not formed).
 
 ## VM UAT run (2026-11-02, agent)
 
