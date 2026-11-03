@@ -321,3 +321,63 @@ extension LayoutStoreTests {
         }
     }
 }
+
+/// D-10, D-14, RESEARCH Pitfall 5: schema 3 keeps titles and the boot session; schema 2 loads and saves as schema 3.
+extension LayoutStoreTests {
+    @Test func aSchema3FileRoundTripsItsTitlesAndBootSession() throws {
+        let dir = Directory()
+        var file = try sampleFile()
+        file.session.bootSession = "BOOT-A"
+        try LayoutStore(directory: dir.url).save(file)
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == file)
+        #expect(fresh.contents?.session.bootSession == "BOOT-A")
+        let desk = try #require(fresh.contents?.world[key])
+        #expect(desk.tree.windows.map(\.titleHint) == ["Secret plan.txt"])
+        #expect(desk.desktop.windows.map(\.window.titleHint) == ["Bank statement"])
+    }
+
+    @Test func aSchema2FileLoadsWithEmptyTitlesAndSavesAsSchema3() throws {
+        let dir = Directory()
+        // Schema 2 as its Transom wrote it: titles redacted (T-03-17) and no boot session.
+        let schema2 = try Self.mutated { json in
+            var json = json
+            json["schemaVersion"] = 2
+            var session = json["session"] as? [String: Any] ?? [:]
+            session["bootSession"] = nil
+            json["session"] = session
+            return json
+        }
+        .replacingOccurrences(of: "Secret plan.txt", with: "").replacingOccurrences(of: "Bank statement", with: "")
+        try #require(!schema2.contains("bootSession") && schema2.contains(#""schemaVersion":2"#))
+        try dir.write(schema2)
+
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(!store.savingDisabled)
+        let contents = try #require(store.contents)
+        #expect(contents.session.bootSession == nil)
+        #expect(contents.world == (try sampleFile()).world)
+        #expect(contents.world.desks.values.allSatisfy { desk in
+            (desk.tree.windows + desk.desktop.windows.map(\.window)).allSatisfy { $0.titleHint.isEmpty }
+        })
+        #expect(try store.save(contents))
+        #expect(try dir.text().contains("\"schemaVersion\" : 3"))
+    }
+}
+
+/// RESEARCH Pitfall 5: only a known boot session that differs from the current one counts as a reboot.
+@Suite struct BootSessionTests {
+    @Test(arguments: [("A", "B", true), ("A", "A", false), (nil, "A", false), ("A", nil, false), (nil, nil, false)] as [(String?, String?, Bool)])
+    func changedOnlyWhenBothAreKnownAndDiffer(saved: String?, current: String?, changed: Bool) {
+        #expect(BootSession.changed(saved: saved, current: current) == changed)
+    }
+
+    @Test func theCurrentBootSessionIsReadable() {
+        #expect(BootSession.current()?.isEmpty == false)
+    }
+}

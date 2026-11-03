@@ -84,6 +84,34 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(lines.count == 2 && lines.allSatisfy { !$0.contains("Notes") && !$0.contains("Plan") }, "\(lines)")
     }
 
+    /// RESEARCH Pitfall 5: after a reboot window IDs and pids restart, so a new window can carry a saved window's exact
+    /// identity. With the boot session changed, identity keeps nothing: window 1 (a's identity, another document) does
+    /// not claim a's tile, and window 2 gets b's tile only because its title matches.
+    @Test func afterABootChangeAWindowReusingASavedIdentityGetsATileOnlyByItsHints() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        let tileB = try #require(await source.frame(b))
+        await source.fake.update(1) { $0.title = "Mail" }
+        _ = await source.refresh()
+        let inventory = await source.fake.inventory()
+
+        var rebooted = Arranger()
+        _ = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
+        let effects = rebooted.handle(.inventory(inventory), now: .now)
+        let desk = try #require(rebooted.world[key])
+        #expect(desk.tree.windows == [b])
+        #expect(desk.desktop.contains(a), "the window reusing a's identity should float")
+        #expect(setFrames(effects)[b].map { $0.width > tileB.width } == true, "b should take the room a's tile left")
+        #expect(effects.contains(.info("boot session changed: matching every saved window by hints")))
+
+        var sameBoot = Arranger()
+        _ = sameBoot.handle(.restore(saved, homeFrames: [:]), now: .now)
+        _ = sameBoot.handle(.inventory(inventory), now: .now)
+        #expect(sameBoot.world[key]?.tree.windows == [a, b], "an unchanged boot re-attaches by identity")
+    }
+
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
     @Test func reattachKeepsAnUntrackedWindowTheCGListStillHasUnderItsIDAndPid() async throws {
         // Saved: [a | b | Desktop], c floating. Only a is tracked.
