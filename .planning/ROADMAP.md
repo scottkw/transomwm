@@ -404,7 +404,24 @@ Plans:
   3. After quitting and relaunching Transom, or rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires rather than a permanent hole
   4. A bundled `transom` command-line tool runs every `transom://` command and exits non-zero with a message on errors
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+**Wave 1**
+- [ ] 08-01-PLAN.md — Saved views by hotkey: ⇧⌥N saves, ⌥N goes to the smallest node holding the saved windows; brief toasts; 15.0/15.1 chord rule; Shortcuts section
+- [ ] 08-02-PLAN.md — Re-match on Transom relaunch: layout.json schema 3 with titles (0600), HintMatcher scoring table, boot-session guard
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 08-03-PLAN.md — Views persisted under `views`, identity remapping and Space rekey, going to a view on another Space/display, joined VoiceOver line
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 08-04-PLAN.md — Placeholder lifecycle: app quit keeps tiles (30 s), relaunch fills them, sliding 10 s / 5 min expiry through the close path
+- [ ] 08-05-PLAN.md — `transom://view/N` and `save-view/N`, the `transom` CLI over CFMessagePort with exit codes, shared gate and rate limit, Contents/Helpers embedding
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 08-06-PLAN.md — Placeholder drawing: click-through "Waiting for {App}…" tiles, stage and overview, Debug line, tracked-window audit
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 08-07-PLAN.md — VM CLI check of the built bundle (exit codes 0/1/2/64) and README additions
 **Research**: Standard patterns; cheap on top of the Phase 3 command dispatcher and Phase 4 `NodeID` camera targets
 **Scope notes**: Layout-aware default chords for views; `transom://` with an allow-list and rate limit; re-matching uses persisted match hints with a score threshold.
 
