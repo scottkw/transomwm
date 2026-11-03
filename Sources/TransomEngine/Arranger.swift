@@ -11,9 +11,10 @@ public enum ArrangerInput: Sendable {
     case tick
     /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
     /// `arrangement` and `layoutSets` are the saved display arrangement and the other arrangements' layouts (D-09).
+    /// `bootChanged`: the saved boot session differs from this one, so identity re-attach is skipped (RESEARCH Pitfall 5).
     case restore(
         World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:], arrangement: ArrangementID = ArrangementID([]),
-        layoutSets: [LayoutSet] = [])
+        layoutSets: [LayoutSet] = [], bootChanged: Bool = false)
     /// Displays began reconfiguring (OVER-05): until `.displaysSettled` no window is re-homed by display and no frame is
     /// written, so macOS moving windows off a vanishing display cannot destroy the tiles a re-plug needs (Pitfall 4).
     case displaysSettling
@@ -180,6 +181,8 @@ public struct Arranger: Sendable {
     /// A saved layout that could not be re-attached: still what is saved, with the arrangement it was saved under, so
     /// this session cannot overwrite or relabel it (WR-04, CR-01).
     private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID)?
+    /// The pending restore was saved in another boot session: every saved window is matched by hints.
+    private var restoreAfterBootChange = false
     /// Tests only: the next re-attach throws this. Real data cannot build a World whose re-attach throws (closing a
     /// window always leaves a valid one), so this stands in for the failure CR-01 guards against.
     var reattachFault: LayoutError?
@@ -305,7 +308,7 @@ public struct Arranger: Sendable {
             inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
             let restored: (effects: [ArrangerEffect], unplaced: Int)
             do throws(LayoutError) {
-                restored = try reattach(restore, tracked: inventory.windows, live: live)
+                restored = try reattach(restore, tracked: inventory.windows, live: live, skipIdentity: restoreAfterBootChange)
             } catch {
                 unattached = (restore.world, restore.homeFrames, restore.wantedFrames, arrangement)
                 restored = ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
@@ -375,8 +378,9 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore(let world, let homeFrames, let wantedFrames, let arrangement, let sets):
+        case .restore(let world, let homeFrames, let wantedFrames, let arrangement, let sets, let bootChanged):
             pendingRestore = (world, homeFrames, wantedFrames)
+            restoreAfterBootChange = bootChanged
             self.arrangement = arrangement
             layoutSets = LayoutSets(sets)
             return []
@@ -663,17 +667,20 @@ public struct Arranger: Sendable {
     /// or frame cannot be applied keeps its saved one. Throws, changing nothing but the history, if the saved layout cannot
     /// be re-attached at all. `unplaced` counts the tracked windows the saved layout did not hold.
     private mutating func reattach(
-        _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?
+        _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?,
+        skipIdentity: Bool = false
     ) throws(LayoutError) -> (effects: [ArrangerEffect], unplaced: Int) {
         if let fault = reattachFault {
             reattachFault = nil
             throw fault
         }
         history = UndoHistory()
-        let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world))
+        let reattached = try LayoutRestore.reattach(
+            restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world), skipIdentity: skipIdentity)
         var candidate = reattached.world
         var seeded: [WindowIdentity: Rect] = [:]
-        var faults = Self.matchLog(reattached, saved: restore.world)
+        var faults: [ArrangerEffect] = skipIdentity ? [.info("boot session changed: matching every saved window by hints")] : []
+        faults += Self.matchLog(reattached, saved: restore.world)
         // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
         var wanted = restore.wantedFrames.filter { id, frame in
             candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)

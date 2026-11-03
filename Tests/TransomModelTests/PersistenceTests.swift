@@ -357,26 +357,3 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         }
     }
 }
-
-/// T-03-17: layout.json never holds window titles.
-@Suite struct TitleRedactionTests {
-    @Test func withoutTitleHintsEmptiesEveryTitleAndKeepsEverythingElse() throws {
-        let world = try richWorld()
-        let redacted = world.withoutTitleHints()
-        #expect(redacted == world)
-        for desk in redacted.desks.values {
-            for window in desk.tree.windows + desk.desktop.windows.map(\.window) {
-                #expect(window.titleHint.isEmpty, "\(window) kept its title")
-            }
-        }
-        // WindowRef equality is identity-only, so check the bytes too: no title text, other hints kept.
-        let text = String(decoding: try redacted.encoded(), as: UTF8.self)
-        for title in ["Notes.txt", "Ünïcode", #""titleHint":"Float""#, #""titleHint":"a""#] {
-            #expect(!text.contains(title), "\(title) is still in the encoded World")
-        }
-        #expect(text.contains("AXWindow-1") && text.contains("AXFloat"))
-        #expect(try World.decode(from: redacted.encoded()) == world)
-        #expect(redacted[k2]?.desktop.windows.map(\.frame) == world[k2]?.desktop.windows.map(\.frame))
-        #expect(redacted[k1s7]?.tree.node(NodeID(raw: 101)) == world[k1s7]?.tree.node(NodeID(raw: 101)))
-    }
-}

@@ -131,35 +131,25 @@ public struct World: Codable, Equatable, Sendable {
 
     public subscript(key: DeskKey) -> Desk? { desks[key] }
 
-    /// A copy with every docked, tabbed and floating window's `titleHint` emptied, for layout.json: titles are personal
-    /// data and Phase 3 re-attaches by identity only (T-03-17). Equal to `self`, since WindowRef equality is identity-only.
-    public func withoutTitleHints() -> World {
-        mappingWindows { WindowRef(identity: $0.identity, axIdentifier: $0.axIdentifier, creationOrder: $0.creationOrder) }
-    }
-
     /// A copy whose docked, tabbed and floating windows take their title from `titles` where it has their identity, so
     /// layout.json holds current titles for re-matching after a relaunch (D-10, RESEARCH Pitfall 2). Every other window
     /// keeps the title it has. Equal to `self`, since WindowRef equality is identity-only.
     public func refreshingTitles(_ titles: [WindowIdentity: String]) -> World {
-        mappingWindows { window in
+        func titled(_ window: WindowRef) -> WindowRef {
             var window = window
             if let title = titles[window.identity] { window.titleHint = title }
             return window
         }
-    }
-
-    /// A copy with every window ref replaced by `change(ref)`, which must keep its identity.
-    private func mappingWindows(_ change: (WindowRef) -> WindowRef) -> World {
         var copy = self
         for (key, var desk) in desks {
             for (id, node) in desk.tree.nodes {
                 switch node {
-                case .panel(let window): desk.tree.nodes[id] = .panel(change(window))
-                case .tabs(let windows, let selected): desk.tree.nodes[id] = .tabs(windows: windows.map(change), selected: selected)
+                case .panel(let window): desk.tree.nodes[id] = .panel(titled(window))
+                case .tabs(let windows, let selected): desk.tree.nodes[id] = .tabs(windows: windows.map(titled), selected: selected)
                 case .split, .desktop: break
                 }
             }
-            desk.desktop.mapWindows(change)
+            desk.desktop.mapWindows(titled)
             copy.desks[key] = desk
         }
         return copy

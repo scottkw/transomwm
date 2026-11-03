@@ -19,12 +19,16 @@ public struct SessionRecord: Codable, Equatable, Sendable {
     public var launchedAt: Date
     public var recoveryLaunch: Bool
     public var survivedMinute: Bool
+    /// `kern.bootsessionuuid` at launch (schema 3); nil when unknown or from an older file. A different one at the next
+    /// launch means IDs may be reused, so the restore matches every saved window by hints (RESEARCH Pitfall 5).
+    public var bootSession: String?
 
-    public init(cleanExit: Bool, launchedAt: Date, recoveryLaunch: Bool = false, survivedMinute: Bool = false) {
+    public init(cleanExit: Bool, launchedAt: Date, recoveryLaunch: Bool = false, survivedMinute: Bool = false, bootSession: String? = nil) {
         self.cleanExit = cleanExit
         self.launchedAt = launchedAt
         self.recoveryLaunch = recoveryLaunch
         self.survivedMinute = survivedMinute
+        self.bootSession = bootSession
     }
 }
 

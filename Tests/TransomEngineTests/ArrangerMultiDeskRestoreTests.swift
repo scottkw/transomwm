@@ -167,9 +167,9 @@ extension Harness {
             }
         }
 
-        // Saved as LayoutStore saves it (no titles, sorted keys), read back as it loads.
+        // Saved as LayoutStore saves it (sorted keys), read back as it loads.
         let snapshot = harness.arranger.snapshot
-        let file = LayoutFile(world: snapshot.world.withoutTitleHints(), homeFrames: snapshot.homeFrames,
+        let file = LayoutFile(world: snapshot.world, homeFrames: snapshot.homeFrames,
                               session: SessionRecord(cleanExit: true, launchedAt: Date()))
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
