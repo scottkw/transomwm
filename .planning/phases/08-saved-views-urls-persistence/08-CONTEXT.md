@@ -63,6 +63,9 @@ multi-display work beyond what Phase 6 already does.
   relaunched.
 - **D-12:** A placeholder expires 10 s after its app has launched without a match, or 5 min after Transom launches if
   the app never opens. When it expires, the tile is removed through the normal close path, as if the window had closed.
+- **D-12a (user, 2026-11-03):** When an app quits while Transom runs, its docked windows become placeholders (so D-11
+  relaunch matching has something to fill). They expire 30 s after the quit if the app has not relaunched. ⌘W on a
+  window whose app keeps running still closes the tile at once.
 - **D-13:** A placeholder is drawn as a dim tile in the app's colour, with the app icon and "Waiting for <App>…". Clicks
   pass through it. It reuses the Phase 4 app-colour / icon tile (AppColor, CollapsedBlockView).
 
