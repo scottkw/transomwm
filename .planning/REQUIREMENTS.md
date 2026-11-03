@@ -108,7 +108,7 @@
 - [x] **VIEW-01**: User can save the current view to slots 1–9 and return to it with a hotkey
 - [ ] **VIEW-02**: Saved views survive layout changes and app restarts
 - [ ] **VIEW-03**: Transom commands run from `transom://` URLs (for Raycast, Alfred, Shortcuts, scripts)
-- [ ] **VIEW-04**: Layouts persist across reboots and app relaunches (new window IDs), with windows re-matched to their tiles
+- [x] **VIEW-04**: Layouts persist across reboots and app relaunches (new window IDs), with windows re-matched to their tiles
 - [ ] **VIEW-05**: A bundled `transom` command-line tool runs the same commands as `transom://` URLs and reports errors with a non-zero exit code
 
 ### Ship
@@ -230,7 +230,7 @@ Populated by the roadmapper on 2026-10-23.
 | VIEW-01 | Phase 8 | Complete |
 | VIEW-02 | Phase 8 | Pending |
 | VIEW-03 | Phase 8 | Pending |
-| VIEW-04 | Phase 8 | Pending |
+| VIEW-04 | Phase 8 | Complete |
 | VIEW-05 | Phase 8 | Pending |
 | SHIP-01 | Phase 9 | Pending |
 | SHIP-02 | Phase 9 | Pending |

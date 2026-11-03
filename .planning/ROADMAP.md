@@ -404,11 +404,11 @@ Plans:
   3. After quitting and relaunching Transom, or rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires rather than a permanent hole
   4. A bundled `transom` command-line tool runs every `transom://` command and exits non-zero with a message on errors
 
-**Plans**: 1/7 plans executed
+**Plans**: 2/7 plans executed
 
 **Wave 1**
 - [x] 08-01-PLAN.md — Saved views by hotkey: ⇧⌥N saves, ⌥N goes to the smallest node holding the saved windows; brief toasts; 15.0/15.1 chord rule; Shortcuts section
-- [ ] 08-02-PLAN.md — Re-match on Transom relaunch: layout.json schema 3 with titles (0600), HintMatcher scoring table, boot-session guard
+- [x] 08-02-PLAN.md — Re-match on Transom relaunch: layout.json schema 3 with titles (0600), HintMatcher scoring table, boot-session guard
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 08-03-PLAN.md — Views persisted under `views`, identity remapping and Space rekey, going to a view on another Space/display, joined VoiceOver line
@@ -458,5 +458,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
 | 6. Overview, Spaces & Displays | 12/12 | Complete    | 2026-11-01 |
 | 7. Tab Groups | 12/12 | Complete    | 2026-11-03 |
-| 8. Saved Views, URLs & Persistence | 1/7 | In Progress | - |
+| 8. Saved Views, URLs & Persistence | 2/7 | In Progress | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |

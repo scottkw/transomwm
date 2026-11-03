@@ -2,17 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 8
 current_phase_name: Saved Views, URLs & Persistence
+current_plan: 3
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-11-03T20:47:32.921Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-11-03T21:05:50.981Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: 76c4ff78ca1eb05a0f1b052a90ebdba140e5145e
+state_head: 5c378387b0ea5ce5aae3a585c2544f8d2314276a
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 98
-  completed_plans: 92
+  completed_plans: 93
   percent: 78
 ---
 
@@ -28,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 8 (Saved Views, URLs & Persistence) — EXECUTING
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 7
-Status: Executing Phase 8
+Status: Ready to execute
 Last activity: 2026-11-03 — Completed 08-01 (saved views tracer)
 
 Progress: [████████░░] 78%
@@ -148,6 +149,7 @@ Progress: [████████░░] 78%
 | Phase 07 P11 | 15min | 3 tasks | 15 files |
 | Phase 07 P12 | 5min | 2 tasks | 2 files |
 | Phase 08 P01 | 11min | 3 tasks | 21 files |
+| Phase 8 P02 | 14min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -415,6 +417,10 @@ Recent decisions affecting current work:
 - [Phase 08]: View commands reuse cameraStep refusal path so paused/full-screen refusals keep Phase 4 announcements
 - [Phase 08]: Saved view desk tie between two non-saved desks goes to the smaller DeskKey (deterministic)
 - [Phase 08]: Dropped brief notice is announced from ArrangeController.post (brief + .unchanged means dropped)
+- [Phase 8]: Hint match rank counts smaller creationOrders (equal orders share a rank), so identical windows tie
+- [Phase 8]: HintMatcher ties are a Tie struct (score, saved, candidates) for the log
+- [Phase 8]: Hint matching also runs when a known arrangement's layout set is re-applied (same LayoutRestore path)
+- [Phase 8]: Matched saved refs are rekeyed through a throwaway identity so reboot-reused IDs never collide
 
 ### Quick Tasks Completed
 
@@ -455,8 +461,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T20:47:32.288Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-11-03T21:05:50.340Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None
 
 ## Deferred Verification
