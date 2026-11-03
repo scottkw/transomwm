@@ -17,6 +17,8 @@ public struct CameraState: Sendable {
     public var unparkedNew: Set<WindowIdentity> = []
     /// The collapsed blocks last sent per display, so only a change is sent again.
     public var shownBlocks: [String: [CollapsedBlock]] = [:]
+    /// The saved views, slots 1–9 (VIEW-01).
+    public var savedViews = SavedViews()
 
     public init() {}
 }

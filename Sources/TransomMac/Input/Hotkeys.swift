@@ -1,3 +1,4 @@
+import AppKit
 import KeyboardShortcuts
 import TransomEngine
 import os
@@ -56,6 +57,44 @@ extension KeyboardShortcuts.Name {
     static let nextTab = Self("nextTab", initial: .init(.t, modifiers: [.control, .option, .command]))
     static let previousTab = Self("previousTab", initial: .init(.t, modifiers: [.control, .option, .command, .shift]))
     static let moveOutOfGroup = Self("moveOutOfGroup", initial: .init(.l, modifiers: [.control, .option, .command]))
+    // Saved views (08 UI-SPEC Surface 3): zoom names, bound by key position. KeyboardShortcuts writes `initial` into
+    // UserDefaults on first construction, so the OS-version rule is decided once; only Restore Defaults re-evaluates it
+    // (RESEARCH Pitfall 6). Never set these shortcuts programmatically.
+    static let view1 = Self("view1", initial: ViewChords.shortcut(1, save: false))
+    static let view2 = Self("view2", initial: ViewChords.shortcut(2, save: false))
+    static let view3 = Self("view3", initial: ViewChords.shortcut(3, save: false))
+    static let view4 = Self("view4", initial: ViewChords.shortcut(4, save: false))
+    static let view5 = Self("view5", initial: ViewChords.shortcut(5, save: false))
+    static let view6 = Self("view6", initial: ViewChords.shortcut(6, save: false))
+    static let view7 = Self("view7", initial: ViewChords.shortcut(7, save: false))
+    static let view8 = Self("view8", initial: ViewChords.shortcut(8, save: false))
+    static let view9 = Self("view9", initial: ViewChords.shortcut(9, save: false))
+    static let saveView1 = Self("saveView1", initial: ViewChords.shortcut(1, save: true))
+    static let saveView2 = Self("saveView2", initial: ViewChords.shortcut(2, save: true))
+    static let saveView3 = Self("saveView3", initial: ViewChords.shortcut(3, save: true))
+    static let saveView4 = Self("saveView4", initial: ViewChords.shortcut(4, save: true))
+    static let saveView5 = Self("saveView5", initial: ViewChords.shortcut(5, save: true))
+    static let saveView6 = Self("saveView6", initial: ViewChords.shortcut(6, save: true))
+    static let saveView7 = Self("saveView7", initial: ViewChords.shortcut(7, save: true))
+    static let saveView8 = Self("saveView8", initial: ViewChords.shortcut(8, save: true))
+    static let saveView9 = Self("saveView9", initial: ViewChords.shortcut(9, save: true))
+}
+
+/// The saved-view defaults (D-01): ⌥1–9 and ⇧⌥1–9, or ⌃⌥ / ⇧⌃⌥ on macOS 15.0 and 15.1, which refuse Option-only and
+/// Option+Shift-only hotkeys.
+enum ViewChords {
+    static func modifiers(save: Bool, os: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = os.majorVersion == 15 && os.minorVersion <= 1 ? [.control, .option] : [.option]
+        if save { flags.insert(.shift) }
+        return flags
+    }
+
+    /// The digit-row keys 1–9 (ANSI key codes, so the physical keys on any layout).
+    static let digits: [KeyboardShortcuts.Key] = [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine]
+
+    static func shortcut(_ number: Int, save: Bool) -> KeyboardShortcuts.Shortcut {
+        .init(digits[number - 1], modifiers: modifiers(save: save))
+    }
 }
 
 /// The hotkey table (UI-SPEC Surface 6): fixed ⌃⌥⌘ defaults, each running the same dispatch as every other route.
@@ -109,6 +148,24 @@ enum Hotkeys {
         (.nextTab, .tabs(.next)),
         (.previousTab, .tabs(.previous)),
         (.moveOutOfGroup, .tabs(.moveOut)),
+        (.view1, .camera(.view(ViewSlot(1)!))),
+        (.view2, .camera(.view(ViewSlot(2)!))),
+        (.view3, .camera(.view(ViewSlot(3)!))),
+        (.view4, .camera(.view(ViewSlot(4)!))),
+        (.view5, .camera(.view(ViewSlot(5)!))),
+        (.view6, .camera(.view(ViewSlot(6)!))),
+        (.view7, .camera(.view(ViewSlot(7)!))),
+        (.view8, .camera(.view(ViewSlot(8)!))),
+        (.view9, .camera(.view(ViewSlot(9)!))),
+        (.saveView1, .camera(.saveView(ViewSlot(1)!))),
+        (.saveView2, .camera(.saveView(ViewSlot(2)!))),
+        (.saveView3, .camera(.saveView(ViewSlot(3)!))),
+        (.saveView4, .camera(.saveView(ViewSlot(4)!))),
+        (.saveView5, .camera(.saveView(ViewSlot(5)!))),
+        (.saveView6, .camera(.saveView(ViewSlot(6)!))),
+        (.saveView7, .camera(.saveView(ViewSlot(7)!))),
+        (.saveView8, .camera(.saveView(ViewSlot(8)!))),
+        (.saveView9, .camera(.saveView(ViewSlot(9)!))),
     ]
 
     /// The camera hotkeys: disabled while zoom is off, so their chords reach apps as in Phase 3 (D-D).

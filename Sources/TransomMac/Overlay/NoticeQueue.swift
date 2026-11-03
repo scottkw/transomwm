@@ -70,6 +70,8 @@ nonisolated extension Notice: QueueableNotice {
         // A newer Float All or Arrange All result replaces the older one: its count is the current one.
         case (.lostRoom, _), (.finderNoWindow, _), (.floatedAll, _), (.arrangeLeftovers, _), (.crashRecovered, _), (.crashLoop, _), (.restored, _),
             (.turnOffFailed, _), (.settingsRestored, _), (.displaysDisconnected, _), (.takeoverCrashed, _), (.takeoverApplyFailed, _): nil
+        // View notices never merge: the newer one wins (08 UI-SPEC View toasts).
+        case (.viewSaved, _), (.viewShown, _), (.viewEmpty, _), (.viewWindowsClosed, _), (.viewDisplayGone, _), (.viewNothingToSave, _): nil
         }
     }
 }

@@ -185,7 +185,12 @@ extension Arranger {
         guard command != .overview else { return [.fault("overview reached the Arranger; the shell handles it")] }
         do throws(LayoutError) {
             switch try cameraStep(command, displayUUID: uuid, focused: focused, pointer: pointer) {
-            case .success(let step): return zoomTo(step.target, displayUUID: uuid, kind: step.kind)
+            case .success(let step):
+                switch command {
+                case .view(let slot): return goView(slot, displayUUID: uuid, focused: focused)
+                case .saveView(let slot): return try saveView(slot, displayUUID: uuid)
+                default: return zoomTo(step.target, displayUUID: uuid, kind: step.kind)
+                }
             case .failure(let refusal): return [.beep, .announce(refusal.announcement), .info("refused \(command): \(refusal)")]
             }
         } catch {
@@ -295,6 +300,8 @@ extension Arranger {
             return toggle(Navigator.target(.desktop, in: desk.tree))
         case .overview:
             return .failure(.notReady)  // never a camera step: `camera` faults first and the shell decides availability
+        case .view, .saveView:
+            return .success((view, .navigate))  // past the shared refusals; `camera` hands these to goView and saveView
         }
     }
 }

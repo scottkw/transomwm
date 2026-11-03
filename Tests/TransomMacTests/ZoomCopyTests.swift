@@ -80,6 +80,12 @@ import Testing
         #expect(ZoomCopy.snapshotCacheLine(windows: 5, bytes: 40 * 1_048_576 + 400_000) == "Snapshot cache: 5 windows, 40 MB")
     }
 
+    /// 08 UI-SPEC Surface 3: the Saved Views Recorder titles.
+    @Test func theSavedViewShortcutTitles() {
+        #expect(ZoomCopy.shortcutTitle(.camera(.view(ViewSlot(3)!))) == "Go to View 3")
+        #expect(ZoomCopy.shortcutTitle(.camera(.saveView(ViewSlot(3)!))) == "Save View 3")
+    }
+
     @Test func theRubberBandCancelCopyMatchesTheContract() {
         #expect(ZoomCopy.zoomCanceled == "Zoom canceled")
         #expect(ZoomCopy.logRectNoTarget == "rect zoom: no target")

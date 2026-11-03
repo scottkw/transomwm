@@ -18,6 +18,8 @@ import Testing
             "arrangeAll", "floatAll", "restoreAll",
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
             "frameDesktop", "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
+            "view1", "view2", "view3", "view4", "view5", "view6", "view7", "view8", "view9",
+            "saveView1", "saveView2", "saveView3", "saveView4", "saveView5", "saveView6", "saveView7", "saveView8", "saveView9",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
             .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
@@ -28,7 +30,7 @@ import Testing
             .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
             .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
             .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
-        ])
+        ] + ViewSlot.all.map { .camera(.view($0)) } + ViewSlot.all.map { .camera(.saveView($0)) })
     }
 
     @Test func defaultsAreControlOptionCommandPlusALetter() {
@@ -53,7 +55,8 @@ import Testing
             // 07 UI-SPEC Surface 7: Next Tab, Previous Tab, Move Out of Group
             .init(.t, modifiers: base), .init(.t, modifiers: shifted), .init(.l, modifiers: base),
         ]
-        #expect(Hotkeys.entries.map(\.name.defaultShortcut) == expected)
+        // 08 UI-SPEC Surface 3: the saved views follow the OS-version rule (ViewChords), not ⌃⌥⌘.
+        #expect(Array(Hotkeys.entries.map(\.name.defaultShortcut).prefix(48)) == expected)
     }
 
     @Test func togglePauseIsControlOptionCommandP() {
@@ -83,15 +86,16 @@ import Testing
         #expect(spec.isSubset(of: Set(Hotkeys.entries.map(\.name.rawValue))))
     }
 
-    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, plus Show Overview (06 UI-SPEC Surface 4), which
-    /// zoom off disables with them; 33 + 12 + the 3 tab names (07 Surface 7, enabled with zoom off) = 48.
-    @Test func theZoomNamesAreTheUISpecElevenPlusShowOverview() {
+    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, plus Show Overview (06 UI-SPEC Surface 4) and the
+    /// 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 33 + 12 + the 3 tab names (07
+    /// Surface 7, enabled with zoom off) + 18 = 66.
+    @Test func theZoomNamesAreTheUISpecElevenPlusShowOverviewAndTheSavedViews() {
         let zoom = [
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow", "frameDesktop",
             "showOverview",
-        ]
+        ] + (1...9).map { "view\($0)" } + (1...9).map { "saveView\($0)" }
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 48)
+        #expect(Hotkeys.entries.count == 66)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
     }
 
@@ -104,6 +108,19 @@ import Testing
         #expect(KeyboardShortcuts.Name.previousTab.defaultShortcut == .init(.t, modifiers: shifted))
         #expect(KeyboardShortcuts.Name.moveOutOfGroup.defaultShortcut == .init(.l, modifiers: base))
         #expect(![KeyboardShortcuts.Name.nextTab, .previousTab, .moveOutOfGroup].contains { Hotkeys.zoomNames.contains($0) })
+    }
+
+    /// 08 UI-SPEC Surface 3: persistent names (Pitfall 13) mapping to the slot's camera command, digit keys 1–9.
+    @Test func theSavedViewNamesMapToTheirSlots() {
+        for slot in ViewSlot.all {
+            let go = Hotkeys.entries.first { $0.name.rawValue == "view\(slot.number)" }
+            let save = Hotkeys.entries.first { $0.name.rawValue == "saveView\(slot.number)" }
+            #expect(go?.command == .camera(.view(slot)))
+            #expect(save?.command == .camera(.saveView(slot)))
+            #expect(go?.name.defaultShortcut == .init(ViewChords.digits[slot.number - 1], modifiers: ViewChords.modifiers(save: false)))
+            #expect(save?.name.defaultShortcut == .init(ViewChords.digits[slot.number - 1], modifiers: ViewChords.modifiers(save: true)))
+        }
+        #expect(ViewChords.digits == [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine])
     }
 
     @Test func namesAreUnique() {

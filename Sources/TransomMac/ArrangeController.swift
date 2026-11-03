@@ -1142,12 +1142,14 @@ import os
         }
     }
 
-    /// The display the toast belongs on: the first named window's, or N12's main display.
+    /// The display the toast belongs on: the first named window's, N12's main display, or a view notice's own display.
     private func displayUUID(of notice: Notice) -> String? {
         switch notice {
         case .lostRoom(let windows): windows.first.flatMap { arranger.windows[$0.identity]?.displayUUID }
         // N12 belongs on the display that received the windows: the main display (UI-SPEC Surface 6).
         case .displaysDisconnected: arranger.displays.first?.uuid
+        case .viewSaved(_, _, let uuid), .viewShown(_, let uuid), .viewEmpty(_, let uuid), .viewWindowsClosed(_, let uuid), .viewDisplayGone(_, let uuid),
+            .viewNothingToSave(let uuid): uuid
         case .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored, .takeoverCrashed,
             .takeoverApplyFailed: nil
         }

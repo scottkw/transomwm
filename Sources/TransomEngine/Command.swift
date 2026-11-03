@@ -52,6 +52,39 @@ public enum CameraCommand: Hashable, Sendable {
     case frameWindow, frameDesktop
     /// Show or dismiss the overview on every display (OVER-01, D-01). The shell handles it; it never reaches the Arranger.
     case overview
+    /// Go to the saved view in that slot (⌥1–9, D-01): the smallest node holding its windows still there (D-02).
+    case view(ViewSlot)
+    /// Save the pointer display's current view into that slot (⇧⌥1–9, D-01): its desk and window identities, never a
+    /// NodeID or a rect (D-02).
+    case saveView(ViewSlot)
+}
+
+/// A saved-view slot, 1–9 (D-01). Decoding rejects any other number, so a stored file can't address a tenth slot.
+public struct ViewSlot: Hashable, Sendable, Codable, Comparable, CustomStringConvertible {
+    public let number: Int
+
+    public init?(_ number: Int) {
+        guard (1...9).contains(number) else { return nil }
+        self.number = number
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let number = try container.decode(Int.self)
+        guard let slot = Self(number) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "view slot \(number) is not 1–9"))
+        }
+        self = slot
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(number)
+    }
+
+    public static let all: [ViewSlot] = (1...9).compactMap(ViewSlot.init)
+    public static func < (a: Self, b: Self) -> Bool { a.number < b.number }
+    public var description: String { "\(number)" }
 }
 
 /// What a command's availability depends on besides the layout: the frontmost app's focused tracked window, and
