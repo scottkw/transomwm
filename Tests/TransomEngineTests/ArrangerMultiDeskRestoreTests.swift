@@ -248,8 +248,8 @@ extension Harness {
         #expect(harness.arranger.world[deskA2]?.tree.windows == [ref(3)])
     }
 
-    /// The VIEW-04 boundary: a saved window whose app relaunched has a new pid, so it is not the saved window and is
-    /// removed at the restore (re-matching is Phase 8).
+    /// The VIEW-04 boundary: a saved window whose app relaunched has a new pid, so it is not the saved window; on a
+    /// Space not shown it is not tracked either, so nothing re-matches it and it is removed at the restore.
     @Test func aSavedWindowWhoseAppRelaunchedIsRemoved() async throws {
         let first = try await firstSession(space2: [3])
         let relaunchedPID: Int32 = 901
@@ -330,9 +330,10 @@ extension Harness {
     }
 
     /// CR-01: a tab group keeps its oldest member's identity for life, but a fresh window system founds it under its
-    /// shown tab. The saved leader, now a hidden tab on the shown Space, is no hidden-Space window: it is removed, so
-    /// the group is never both docked (an empty reserved tile) and floating. Whether the hidden tab reports the Space
-    /// or none, as the live lookup may answer.
+    /// shown tab. The saved leader, now a hidden tab on the shown Space, is no hidden-Space window, so identity does not
+    /// keep it; the hint matcher gives its tile to the group under its new leader (the sole pair of the app, D-10), so
+    /// the group is docked once and never also floating. Whether the hidden tab reports the Space or none, as the live
+    /// lookup may answer.
     @Test(arguments: [false, true])
     func aTabGroupShownUnderAnotherTabAtRelaunchIsNotKeptTwice(hiddenTabsReportSpace: Bool) async throws {
         func setUp(_ harness: Harness) async {
@@ -371,8 +372,8 @@ extension Harness {
         try #require(harness.arranger.windows[ref(11).identity] != nil, "the fresh tracker founds the group under tab 11")
         #expect(!harness.arranger.hasDormantWindows)
         #expect(harness.arranger.deskKey(of: ref(10)) == nil, "the saved leader is kept as an empty docked tile")
-        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
-        #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(11)) == true)
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1), ref(11)])
+        #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(11)) == false)
     }
 
     /// CR-02, D-17: after a crash, a floating window parked on a hidden Space's desk (its Desktop hidden) comes back on

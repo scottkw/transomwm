@@ -8,7 +8,8 @@ public enum LayoutStoreError: Error, Equatable {
 }
 
 /// layout.json: the World, the home frames and the session record in one file (D-16, RESEARCH Pattern 10), in the
-/// shape of `MinimumHintsStore`. Window titles are never written (T-03-17) and the file is owner-only.
+/// shape of `MinimumHintsStore`. Window titles are written so windows can be re-matched after a relaunch (D-10, which
+/// supersedes T-03-17), so the file is owner-only.
 ///
 /// The file is user-writable and decides where windows go (T-03-15), so `load` rejects it whole on any doubt: over
 /// `World.maxEncodedBytes`, malformed JSON, an invalid World, an invalid or duplicate home frame, an incomplete session
@@ -51,19 +52,16 @@ public enum LayoutStoreError: Error, Equatable {
         }
     }
 
-    /// Writes `contents`, with every window title removed, atomically and owner-only (0600); creates the directory if
-    /// needed. Returns false, writing nothing, when saving is disabled.
+    /// Writes `contents`, window titles included, atomically and owner-only (0600); creates the directory if needed.
+    /// Returns false, writing nothing, when saving is disabled.
     @discardableResult
     public func save(_ contents: LayoutFile) throws(LayoutStoreError) -> Bool {
         guard !savingDisabled else { return false }
-        var redacted = contents
-        redacted.world = contents.world.withoutTitleHints()
-        for index in redacted.layoutSets.indices { redacted.layoutSets[index].world = redacted.layoutSets[index].world.withoutTitleHints() }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try encoder.encode(redacted).write(to: file, options: .atomic)
+            try encoder.encode(contents).write(to: file, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         } catch {
             throw .writeFailed(String(describing: error))
@@ -112,12 +110,15 @@ public enum LayoutStoreError: Error, Equatable {
             throw .corrupt("no schemaVersion: \(error)")
         }
         guard version <= LayoutFile.schemaVersion else { throw .newerVersion(version) }
-        let contents: LayoutFile
+        var contents: LayoutFile
         do {
             switch version {
-            // Every user's file at the upgrade: migrated in memory, saved as schema 2 (RESEARCH Pitfall 1).
+            // Every user's file at the upgrade: migrated in memory, saved as the current schema (RESEARCH Pitfall 1).
             case 1: contents = try decoder.decode(LayoutFileV1.self, from: data).migrated()
-            case LayoutFile.schemaVersion: contents = try decoder.decode(LayoutFile.self, from: data)
+            // Schema 2 has schema 3's shape with empty titles; the next save writes schema 3.
+            case 2, LayoutFile.schemaVersion:
+                contents = try decoder.decode(LayoutFile.self, from: data)
+                contents.schemaVersion = LayoutFile.schemaVersion
             default: throw LayoutStoreError.corrupt("unknown schemaVersion \(version)")
             }
         } catch let error as LayoutStoreError {

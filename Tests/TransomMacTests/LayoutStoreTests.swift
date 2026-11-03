@@ -24,7 +24,7 @@ private func sampleFile() throws -> LayoutFile {
         session: SessionRecord(cleanExit: false, launchedAt: Date(timeIntervalSinceReferenceDate: 800_000_000.25)))
 }
 
-/// D-16, T-03-15..18: layout.json is validated whole on load, written atomically and owner-only, never holds titles,
+/// D-16, T-03-15..18, D-10: layout.json is validated whole on load, written atomically and owner-only with titles,
 /// and a newer Transom's file is never overwritten.
 @MainActor @Suite struct LayoutStoreTests {
     /// A fresh temporary directory per test, removed afterwards. Never the user's real Application Support.
@@ -52,7 +52,7 @@ private func sampleFile() throws -> LayoutFile {
         let file = try sampleFile()
         #expect(try LayoutStore(directory: dir.url).save(file))
         let text = try dir.text()
-        #expect(text.contains("\"schemaVersion\" : 2"))
+        #expect(text.contains("\"schemaVersion\" : 3"))
         let homeFrames = try #require(text.range(of: "\"homeFrames\"")), session = try #require(text.range(of: "\"session\""))
         let world = try #require(text.range(of: "\"world\""))
         #expect(homeFrames.lowerBound < session.lowerBound && session.lowerBound < world.lowerBound)
@@ -81,11 +81,14 @@ private func sampleFile() throws -> LayoutFile {
         }
     }
 
-    @Test func titlesAreNeverWritten() throws {
+    /// D-10 (supersedes T-03-17): titles are written, so windows can be re-matched after a relaunch, and the file
+    /// stays owner-only.
+    @Test func titlesAreWrittenAndTheFileIsOwnerOnly() throws {
         let dir = Directory()
         try LayoutStore(directory: dir.url).save(try sampleFile())
         let text = try dir.text()
-        #expect(!text.contains("Secret plan") && !text.contains("Bank statement"))
+        #expect(text.contains("Secret plan.txt") && text.contains("Bank statement"))
+        #expect(try FileManager.default.attributesOfItem(atPath: dir.file.path)[.posixPermissions] as? Int == 0o600)
     }
 
     @Test func noFileStartsEmptyWithoutAnError() {
@@ -116,7 +119,7 @@ private func sampleFile() throws -> LayoutFile {
     }
 
     nonisolated static let badFiles: [(String, @MainActor @Sendable () throws -> String)] = [
-        ("too large", { try edited("\"schemaVersion\" : 2", "\"schemaVersion\" : 2" + String(repeating: " ", count: World.maxEncodedBytes)) }),
+        ("too large", { try edited("\"schemaVersion\" : 3", "\"schemaVersion\" : 3" + String(repeating: " ", count: World.maxEncodedBytes)) }),
         ("malformed", { #"{"schemaVersion":1,"world":"# }),
         ("duplicate window", { try edited("\"windowID\" : 2", "\"windowID\" : 1") }),
         // JSON has no NaN; an overflowing literal is the nearest a file gets to a non-finite frame.
@@ -175,12 +178,12 @@ private func sampleFile() throws -> LayoutFile {
 
     @Test func aNewerFileIsKeptUntouchedAndNeverOverwritten() throws {
         let dir = Directory()
-        let newer = try Self.edited("\"schemaVersion\" : 2", "\"schemaVersion\" : 3")
+        let newer = try Self.edited("\"schemaVersion\" : 3", "\"schemaVersion\" : 4")
         try dir.write(newer)
         let store = LayoutStore(directory: dir.url)
         store.load()
         #expect(store.contents == nil)
-        #expect(store.loadError == .newerVersion(3))
+        #expect(store.loadError == .newerVersion(4))
         #expect(store.savingDisabled)
         #expect(try dir.text() == newer)
         #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
@@ -270,7 +273,7 @@ extension LayoutStoreTests {
         #expect(!store.savingDisabled)
         #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
         let contents = try #require(store.contents)
-        #expect(contents.schemaVersion == 2)
+        #expect(contents.schemaVersion == 3)
         #expect(contents.arrangement.isUnknown)
         #expect(contents.layoutSets.isEmpty)
         #expect(contents.spaces.isEmpty)
@@ -280,7 +283,7 @@ extension LayoutStoreTests {
         #expect(contents.wantedFrames.map(\.window.windowID) == [1])
     }
 
-    @Test func aMigratedFileSavesAsSchema2WithItsSpaceTableAndRoundTrips() throws {
+    @Test func aMigratedFileSavesAsSchema3WithItsSpaceTableAndRoundTrips() throws {
         let dir = Directory()
         try dir.write(LayoutFileV1Fixture.json)
         let store = LayoutStore(directory: dir.url)
@@ -289,7 +292,7 @@ extension LayoutStoreTests {
         contents.spaces = [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4")]
         #expect(try store.save(contents))
         let text = try dir.text()
-        #expect(text.contains("\"schemaVersion\" : 2"))
+        #expect(text.contains("\"schemaVersion\" : 3"))
         #expect(text.contains("\"spaces\" : ["))
 
         let fresh = LayoutStore(directory: dir.url)

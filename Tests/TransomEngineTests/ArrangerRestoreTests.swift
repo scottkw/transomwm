@@ -54,6 +54,36 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(Set(synthetic.unplaced.map(\.window)) == [a, d])
     }
 
+    /// VIEW-04, D-10, D-11: the app relaunched while Transom was not running (new pid, new window IDs, same titles), so
+    /// identity finds neither saved window; each goes back into its own leaf by its saved title.
+    @Test func aRelaunchedAppsWindowsGoBackToTheirOwnTilesByTitle() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        try #require(saved[key]?.tree.windows.map(\.titleHint) == ["Notes", "Plan"], "the snapshot did not carry the current titles")
+        let tiles = [try #require(await source.frame(a)), try #require(await source.frame(b))]
+
+        let newPID: Int32 = 901
+        func relaunchedRef(_ id: UInt32) -> WindowRef { WindowRef(identity: WindowIdentity(windowID: id, pid: newPID, bundleID: bundleID)) }
+        var harness = Harness()
+        await harness.fake.setDisplays(await source.fake.inventory().displays)
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        // Reopened in the other order, so creation order alone would swap them.
+        await harness.fake.open(.standard(id: 11, pid: newPID, frame: Rect(x: 100, y: 100, width: 400, height: 300), title: "Plan"))
+        await harness.fake.open(.standard(id: 12, pid: newPID, frame: Rect(x: 200, y: 200, width: 400, height: 300), title: "Notes"))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved, homeFrames: [:]))
+        let effects = await harness.send(.inventory(await harness.fake.inventory()))
+
+        #expect(harness.arranger.world[key]?.tree.windows == [relaunchedRef(12), relaunchedRef(11)])
+        #expect(await harness.frame(relaunchedRef(12)) == tiles[0])
+        #expect(await harness.frame(relaunchedRef(11)) == tiles[1])
+        let lines = effects.compactMap { if case .info(let line) = $0, line.hasPrefix("match ") { line } else { nil } }
+        #expect(lines.count == 2 && lines.allSatisfy { !$0.contains("Notes") && !$0.contains("Plan") }, "\(lines)")
+    }
+
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
     @Test func reattachKeepsAnUntrackedWindowTheCGListStillHasUnderItsIDAndPid() async throws {
         // Saved: [a | b | Desktop], c floating. Only a is tracked.

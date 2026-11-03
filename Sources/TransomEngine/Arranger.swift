@@ -434,13 +434,22 @@ public struct Arranger: Sendable {
 
     /// What layout.json should hold now: while a restore waits, or after it failed, the saved layout itself, so a write
     /// then loses nothing.
-    /// While displays settle, the World from before the change.
+    /// While displays settle, the World from before the change. Every tracked window's ref carries its current title
+    /// (re-matching reads it, RESEARCH Pitfall 2); an untracked one keeps the title it was loaded with.
     public var snapshot: (
         world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID, layoutSets: [LayoutSet]
     ) {
-        if let unattached { return (unattached.world, unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, layoutSets.all) }
+        let titles = windows.mapValues(\.window.titleHint)
+        let sets = layoutSets.all.map { set in
+            var set = set
+            set.world = set.world.refreshingTitles(titles)
+            return set
+        }
+        if let unattached {
+            return (unattached.world.refreshingTitles(titles), unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, sets)
+        }
         let saved = pendingRestore ?? (settling ? preChangeWorld ?? world : world, homeFrames, wantedFrames)
-        return (saved.world, saved.homeFrames, saved.wantedFrames, arrangement, layoutSets.all)
+        return (saved.world.refreshingTitles(titles), saved.homeFrames, saved.wantedFrames, arrangement, sets)
     }
 
     /// Takes the displays, session state and windows of `inventory`. A Space lookup that answers 0 or switches off
@@ -661,10 +670,10 @@ public struct Arranger: Sendable {
             throw fault
         }
         history = UndoHistory()
-        let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live)
+        let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world))
         var candidate = reattached.world
         var seeded: [WindowIdentity: Rect] = [:]
-        var faults: [ArrangerEffect] = []
+        var faults = Self.matchLog(reattached, saved: restore.world)
         // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
         var wanted = restore.wantedFrames.filter { id, frame in
             candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
@@ -694,6 +703,42 @@ public struct Arranger: Sendable {
             }
         }
         return (faults, reattached.unplaced.count)
+    }
+
+    /// Each saved window's frame for the matcher: a docked one's home-view tile on its desk's display (the frame a clean
+    /// quit left it at; a parked frame means nothing, RESEARCH Pitfall 9), a floating one's saved frame.
+    private func savedFrames(_ saved: World) -> [WindowIdentity: Rect] {
+        var frames: [WindowIdentity: Rect] = [:]
+        for (key, desk) in saved.desks {
+            // No display or no plan: no frame hint, which only means frame scores nothing.
+            if let area = displays.first(where: { $0.uuid == key.displayUUID })?.visibleFrame,
+                let plan = try? Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
+            {
+                for (window, frame) in plan.frames { frames[window.identity] = frame }
+            }
+            for floating in desk.desktop.windows { frames[floating.window.identity] = floating.frame }
+        }
+        return frames
+    }
+
+    /// One info line per hint match, per tie and per bundle with saved windows left unmatched; identities only, never
+    /// titles (D-10).
+    private static func matchLog(
+        _ result: (world: World, removed: [WindowRef], unplaced: [WindowInfo], matches: [HintMatcher.Match], ties: [HintMatcher.Tie]),
+        saved: World
+    ) -> [ArrangerEffect] {
+        func tile(_ window: WindowRef) -> String {
+            saved.desks.values.lazy.compactMap { $0.tree.leaf(containing: window) }.first.map { "\($0)" } ?? "Desktop"
+        }
+        let tied = Set(result.ties.flatMap(\.saved))
+        let unmatched = Dictionary(grouping: result.removed.filter { !tied.contains($0) }, by: \.bundleID)
+        return result.matches.map { .info("match \($0.window.bundleID): window \($0.window.windowID) -> tile \(tile($0.saved)), score \($0.score)") }
+            + result.ties.map { tie in
+                let windows = tie.candidates.map { "\($0.windowID)" }.joined(separator: " and ")
+                let tiles = tie.saved.map(tile).joined(separator: ", ")
+                return .info("match \(tie.saved[0].bundleID): tie at \(tie.score) between windows \(windows); tile \(tiles) waits, windows float")
+            }
+            + unmatched.sorted { $0.key < $1.key }.map { .info("match \($0.key): \($0.value.count) unmatched, below threshold") }
     }
 
     /// Moves every stranded window Transom may move (tracked, dockable, present, not excluded) back on screen: its home

@@ -36,10 +36,11 @@ public struct LayoutFileError: Error, Equatable, Sendable {
 /// The contents of layout.json: the World (with each desk's Desktop tile, D-24), the home frames, the wanted frames
 /// and the session record, in one file so they can never disagree (D-16, RESEARCH Pattern 10). Schema 2 (06-SPIKE
 /// "Schema decision") adds the current display `arrangement`, the other arrangements' `layoutSets` (D-09) and the
-/// `spaces` table giving each desk's Space ID its durable UUID (D-13). Every array is sorted, so equal contents give
-/// equal bytes.
+/// `spaces` table giving each desk's Space ID its durable UUID (D-13). Schema 3 (D-10, D-14) keeps window titles, so
+/// windows are re-matched after a relaunch; it has the same shape, and the bump stops an older Transom overwriting a
+/// file whose titles it would strip. Every array is sorted, so equal contents give equal bytes.
 public struct LayoutFile: Codable, Equatable, Sendable {
-    public static let schemaVersion = 2
+    public static let schemaVersion = 3
     /// Cap on stored arrangements (T-06-07).
     public static let maxLayoutSets = 16
 
@@ -114,7 +115,7 @@ public struct LayoutFile: Codable, Equatable, Sendable {
 }
 
 /// layout.json as schema 1 wrote it: no arrangement, layout sets or Space table, and `wantedFrames` optional (it
-/// arrived in 03-26). Loaded only to migrate (RESEARCH Pitfall 1): the next save writes schema 2.
+/// arrived in 03-26). Loaded only to migrate (RESEARCH Pitfall 1): the next save writes the current schema.
 public struct LayoutFileV1: Decodable, Sendable {
     public var schemaVersion: Int
     public var world: World
