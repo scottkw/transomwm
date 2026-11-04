@@ -203,7 +203,10 @@ public struct Arranger: Sendable {
     /// A title-bar drag is under way (plan 16 defers alerts while it is).
     public var isDragging: Bool { drag?.kind == .move }
     /// What the tap should do with ⌥ now (D-07a).
-    public var dragOptionStrip: DragOptionStrip { .off }
+    public var dragOptionStrip: DragOptionStrip {
+        guard drag?.kind == .move else { return .off }
+        return dragToDock == .holdOption ? .always : .withControl
+    }
     /// Desk plans a drag hit-tests against, computed once per drag (and again after the World changes).
     private var dragPlans: [DragPlanKey: FramePlan] = [:]
     /// The gap handles last sent per display, so only a change is sent again.

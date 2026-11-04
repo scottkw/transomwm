@@ -31,6 +31,7 @@ import os
     public private(set) var arranger: Arranger {
         didSet {
             publishGreenButtons()
+            publishDragOption()
             zoomInput.publish()
             gestures.publish()
             guard arranger.pauseReasons != reportedPause else { return }
@@ -63,7 +64,7 @@ import os
     private let exclusions: ExclusionStore?
 
     /// The active event tap that sees title-bar drags (TILE-01), and the poll of the dragged window's frame.
-    private let tap = InputTap()
+    let tap = InputTap()
     private var tapReader: Task<Void, Never>?
     private let dragPoller = DragFramePoller()
     /// The drop preview panels, one per display; made when tracking starts.
@@ -421,6 +422,13 @@ import os
         guard rects != publishedGreenButtons else { return }
         publishedGreenButtons = rects
         tap.setGreenButtons(rects)
+    }
+
+    /// Hands the tap the Arranger's ⌥ strip on every Arranger change, with no change-only cache: the tap clears its own copy
+    /// on mouse-down, and a press the Arranger never sees (a zoom or green-button press, or one dropped from the bounded
+    /// stream) would leave a cache at `.always` and the tap at `.off`, so ⌥ would reach macOS (D-07a).
+    private func publishDragOption() {
+        tap.setDragOption(arranger.dragOptionStrip)
     }
 
     /// The tracked window showing CG window `id` (`visibleMemberID ?? windowID`).

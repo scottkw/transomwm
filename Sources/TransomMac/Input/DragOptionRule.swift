@@ -5,6 +5,15 @@ import TransomEngine
 /// Pure, so the callback stays a lookup.
 nonisolated enum DragOptionRule {
     static func strips(type: CGEventType, flags: CGEventFlags, state: DragOptionStrip) -> Bool {
-        false
+        switch type {
+        case .flagsChanged, .leftMouseDragged, .leftMouseUp: break
+        default: return false
+        }
+        guard flags.contains(.maskAlternate) else { return false }
+        switch state {
+        case .off: return false
+        case .always: return true
+        case .withControl: return flags.contains(.maskControl)
+        }
     }
 }

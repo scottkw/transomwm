@@ -1,7 +1,7 @@
 import TransomModel
 
-/// Modifier keys read from each pointer and flagsChanged event (D-05). Only ⇧ (bypass) and ⌘ (swap) change a drop;
-/// ⌥ (Sequoia's tiling modifier) and ⌃ (right-click) are carried and ignored.
+/// Modifier keys read from each pointer and flagsChanged event (D-05). ⇧ (bypass), ⌘ (swap) and, in Hold ⌥ mode, ⌥ (show
+/// the regions) change a drop; otherwise ⌥ (Sequoia's tiling modifier) and ⌃ (right-click) are carried and ignored.
 public struct Modifiers: OptionSet, Hashable, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }

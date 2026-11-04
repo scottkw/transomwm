@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import TransomEngine
 import TransomModel
 import os
 
@@ -30,6 +31,7 @@ nonisolated private final class TapBox: @unchecked Sendable {
     let continuation: AsyncStream<TapEvent>.Continuation
     let greenButtons: OSAllocatedUnfairLock<[UInt32: CGRect]>
     let zoomState: OSAllocatedUnfairLock<ZoomTapState>
+    let dragOption: OSAllocatedUnfairLock<DragOptionStrip>
     /// A green-button press was taken and its click is not over yet. Read and written on the tap thread only.
     var swallowing = false
     /// The zoom press being taken. Tap thread only.
@@ -39,11 +41,12 @@ nonisolated private final class TapBox: @unchecked Sendable {
 
     init(
         _ continuation: AsyncStream<TapEvent>.Continuation, greenButtons: OSAllocatedUnfairLock<[UInt32: CGRect]>,
-        zoomState: OSAllocatedUnfairLock<ZoomTapState>
+        zoomState: OSAllocatedUnfairLock<ZoomTapState>, dragOption: OSAllocatedUnfairLock<DragOptionStrip>
     ) {
         self.continuation = continuation
         self.greenButtons = greenButtons
         self.zoomState = zoomState
+        self.dragOption = dragOption
     }
 }
 
@@ -63,6 +66,8 @@ nonisolated final class InputTap: @unchecked Sendable {
     /// Writers swap the whole dictionary; the callback holds the lock only to copy it (T-03-35).
     private let greenButtons = OSAllocatedUnfairLock(initialState: [UInt32: CGRect]())
     private let zoomState = OSAllocatedUnfairLock(initialState: ZoomTapState())
+    /// Written by the Arranger's every change, and cleared by the callback on every mouse-down.
+    private let dragOption = OSAllocatedUnfairLock(initialState: DragOptionStrip.off)
 
     private static let mask: CGEventMask = (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue)
         | (1 << CGEventType.leftMouseDragged.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
@@ -84,10 +89,15 @@ nonisolated final class InputTap: @unchecked Sendable {
         zoomState.withLock { $0 = state }
     }
 
+    /// What the callback does with ⌥ on the events it passes on (D-07a).
+    func setDragOption(_ state: DragOptionStrip) {
+        dragOption.withLock { $0 = state }
+    }
+
     /// Creates the tap and starts its thread. False when macOS refuses the tap (no Accessibility access).
     func start() -> Bool {
         if isRunning { return true }
-        let box = TapBox(continuation, greenButtons: greenButtons, zoomState: zoomState)
+        let box = TapBox(continuation, greenButtons: greenButtons, zoomState: zoomState, dragOption: dragOption)
         guard let port = Self.makePort(box) else { return false }
         box.port = port
         let ready = DispatchSemaphore(value: 0)
@@ -148,6 +158,8 @@ nonisolated final class InputTap: @unchecked Sendable {
             let userData = event.getIntegerValueField(.eventSourceUserData)
             // Transom's own re-posted ⌘⇧-click goes straight to the app, unseen by every rule and by the Arranger.
             if userData == ZoomTapRules.repostTag { return Unmanaged.passUnretained(event) }
+            // Here, before any rule can consume the press: a lost mouse-up must not leave ⌥ stripped from the next click.
+            if type == .leftMouseDown { box.dragOption.withLock { $0 = .off } }
             let location = event.location
             let clickState = event.getIntegerValueField(.mouseEventClickState)
             var window = event.getIntegerValueField(.mouseEventWindowUnderMousePointer)
@@ -182,6 +194,10 @@ nonisolated final class InputTap: @unchecked Sendable {
                 return nil
             }
             box.continuation.yield(TapEvent(type: type, location: location, flags: event.flags, windowUnderPointer: window, clickState: clickState))
+            // After the copy above: Transom still reads ⌥, macOS's own ⌥ tiling doesn't (D-07a).
+            if DragOptionRule.strips(type: type, flags: event.flags, state: box.dragOption.withLock { $0 }) {
+                event.flags.remove(.maskAlternate)
+            }
             return Unmanaged.passUnretained(event)
         }
         return CGEvent.tapCreate(

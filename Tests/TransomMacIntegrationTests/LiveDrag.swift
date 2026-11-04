@@ -8,14 +8,19 @@ import Testing
 /// VM-only helpers for suites that post real title-bar drags through a running ArrangeController. Copied from
 /// ArrangeIntegrationTests' private `arranging` and `dockedPair`, which keep their own.
 @MainActor enum LiveArrange {
+    private static var last: ArrangeController?
+
     /// A system and an ArrangeController that track only `fixture`, started, with every fixture window on a desk. The tap
     /// is not running yet.
     static func start(_ fixture: FixtureProcess) async throws -> (ArrangeController, [TransomModel.WindowRef]) {
+        // The last test's gap handles are still on screen, in this process, and would take this test's press.
+        await last?.setPaused(.user, true)
         let fixturePID = fixture.pid
         let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
         await system.start()
         let arrange = ArrangeController(system: system)
         await arrange.start()
+        last = arrange
         var refs: [TransomModel.WindowRef] = []
         for window in fixture.windows {
             func find() -> TransomModel.WindowRef? {
