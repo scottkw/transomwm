@@ -73,8 +73,14 @@ import Testing
         try await drag.move(to: CGPoint(x: grab.x + 40, y: grab.y + 20))
         try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.isDragging }, "the press was never a move")
         try await drag.hold(.control)
-        try await drag.move(to: CGPoint(x: visible.minX + visible.width * 7 / 8, y: visible.midY))
+        let uuid = try #require(Displays.current().first).uuid
+        try await drag.move(to: CGPoint(x: visible.minX + visible.width / 8, y: visible.midY))
         try await Task.sleep(for: .milliseconds(300))  // past the dwell
+        let guides = arrange.previews?.fourthGuideRects(on: uuid) ?? []
+        #expect(guides.count == 5, "guides \(guides)")
+        try await drag.move(to: CGPoint(x: visible.minX + visible.width * 7 / 8, y: visible.midY))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(arrange.previews?.fourthGuideRects(on: uuid) == guides, "the guides moved with the pointer")
         guard case .fourth(_, let label)? = arrange.arranger.drag?.shown else {
             Issue.record("no fourth preview after the dwell: \(String(describing: arrange.arranger.drag?.shown))")
             return
@@ -83,6 +89,9 @@ import Testing
 
         drag.release()
         try await drag.letGo(.control)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(arrange.previews?.fourthGuideRects(on: uuid) == [], "the guides outlived the drag")
+        #expect(arrange.previews?.isPanelVisible(on: uuid) == false, "the panel is still ordered in")
 
         let docked = await waitUntil(timeout: .seconds(3)) { !arrange.arranger.isFloating(ref) }
         try #require(docked, "the release did not dock the window")

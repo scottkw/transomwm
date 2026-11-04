@@ -111,7 +111,9 @@ nonisolated enum PreviewStyle {
 
     /// One fourth zone (08.1 UI-SPEC Surface 3): the ghost recipe, inset 4 pt on all sides.
     static func fourthGuide(_ rect: Rect, increaseContrast: Bool) -> LayerStyle {
-        ghost(rect, label: nil)
+        let inset = Rect(x: rect.x + 4, y: rect.y + 4, width: max(rect.width - 8, 0), height: max(rect.height - 8, 0))
+        let style = ghost(inset, label: nil)
+        return increaseContrast ? contrasted(style) : style
     }
 
     /// Increase Contrast: every fill alpha × 1.5, every border opaque.

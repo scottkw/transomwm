@@ -1645,6 +1645,7 @@ public struct Arranger: Sendable {
         tabs.tearing = nil
         return (session.polling ? [.pollDragFrame(nil)] : []) + (session.shown != nil ? [.preview(nil, displayUUID: session.shownOn)] : [])
             + (session.tearOffGroup != nil ? [.tearOffGhost(nil)] : [])
+            + (session.guides.isEmpty ? [] : session.guidesOn.map { [.fourthGuides([], displayUUID: $0)] } ?? [])
     }
 
     /// A move session's pointer or frame changed: a new hover withdraws the preview and restarts the dwell; a held one
@@ -1665,6 +1666,7 @@ public struct Arranger: Sendable {
             session.shown = nil
             session.shownOn = nil
         }
+        effects += followGuides(&session, to: hover)
         drag = session
         return effects + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
@@ -1676,17 +1678,44 @@ public struct Arranger: Sendable {
         let window = session.window
         _ = session.settle(at: now) { decide($0, window: window) }
         _ = session.settleGroup(at: now) { decideGroup($0, window: window) }
+        var guides: [ArrangerEffect] = []
+        // Before the guard: a fourth with no result to show still has its zones.
+        if session.current != nil, session.guides.isEmpty, let hover = session.hover, let bands = fourthBands(for: hover), let uuid = hover.displayUUID {
+            session.guides = bands
+            session.guidesOn = uuid
+            guides = [.fourthGuides(bands, displayUUID: uuid)]
+        }
         let raw = windows[window.identity]?.frame ?? session.startFrame
         let frame = session.tearOffGroup != nil ? session.landingFrame(at: session.pointer) : movingGroup(window) == nil ? raw : TabBand.frame(ofContent: raw)
         let preview = session.current.flatMap { decision in decision.clampInto.map { .clamp(Planner.clamp(frame, into: $0)) } ?? decision.preview }
         guard let decision = session.current, preview != session.shown else {
             drag = session
-            return []
+            return guides
         }
         session.shown = preview
         session.shownOn = decision.display
         drag = session
-        return [.preview(preview, displayUUID: decision.display)]
+        return guides + [.preview(preview, displayUUID: decision.display)]
+    }
+
+    /// The zone guides `hover` wants: the five bands of its display along its axis; nil when it is not a fourth.
+    private func fourthBands(for hover: Hover) -> [Rect]? {
+        guard case .fourth(_, let axis)? = hover.target, let display = displays.first(where: { $0.uuid == hover.displayUUID }) else { return nil }
+        return FourthZones.bands(in: display.visibleFrame, axis: axis)
+    }
+
+    /// A changed hover and the guides on screen: they stay steady across zones, follow the axis at once, and go when the
+    /// hover leaves fourths or their display. First guides wait for the dwell (`settleDrag`).
+    private func followGuides(_ session: inout DragSession, to hover: Hover) -> [ArrangerEffect] {
+        guard !session.guides.isEmpty, let shownOn = session.guidesOn else { return [] }
+        guard hover.displayUUID == shownOn, let bands = fourthBands(for: hover) else {
+            session.guides = []
+            session.guidesOn = nil
+            return [.fourthGuides([], displayUUID: shownOn)]
+        }
+        guard bands != session.guides else { return [] }
+        session.guides = bands
+        return [.fourthGuides(bands, displayUUID: shownOn)]
     }
 
     /// What the pointer is over, reduced to what decides the drop (UI-SPEC Surface 2): the dwell restarts only when this

@@ -209,6 +209,9 @@ public struct DragSession: Equatable, Sendable {
     /// The preview on screen, and its display.
     public internal(set) var shown: PreviewState?
     var shownOn: String?
+    /// The fourth zone guides on screen, and their display.
+    var guides: [Rect] = []
+    var guidesOn: String?
     var hover: Hover?
     var hoverSince: ContinuousClock.Instant?
     var decision: Decision?

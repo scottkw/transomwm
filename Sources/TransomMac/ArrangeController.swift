@@ -335,6 +335,7 @@ import os
         zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
+        previews?.hideAllFourthGuides()
     }
 
     /// Every 2 s and whenever an app activates: the tap's watchdog, and a restart once access is back (Pitfall 4).
@@ -381,6 +382,7 @@ import os
         zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
+        previews?.hideAllFourthGuides()
     }
 
     /// Accessibility access changed (PermissionController's phase entered or left `.ready`).
@@ -833,8 +835,8 @@ import os
                 previews?.flashBlocked(rect, on: displayUUID)
             case .gapHandles(let handles, let displayUUID):
                 gapPanels.show(handles, on: displayUUID)
-            case .fourthGuides:
-                break
+            case .fourthGuides(let rects, let displayUUID):
+                previews?.showFourthGuides(rects, on: displayUUID)
             case .collapsedBlocks(let blocks, let displayUUID):
                 collapsedPanels.show(blocks, on: displayUUID)
             case .tabStrips(let strips, let displayUUID):

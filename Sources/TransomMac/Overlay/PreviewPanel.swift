@@ -65,6 +65,7 @@ private final class PreviewLabelView: NSView {
 /// needs no Screen Recording permission (TILE-10). Preview rects are CAShapeLayers styled by `PreviewStyle`.
 @MainActor final class PreviewPresenter {
     private struct Overlay {
+        let uuid: String
         let panel: PreviewPanelWindow
         let view: PreviewContentView
         let root: CALayer
@@ -86,6 +87,13 @@ private final class PreviewLabelView: NSView {
         var isIdle: Bool { !bandShown && ringRect == nil }
     }
     private var marquees: [String: Marquee] = [:]
+    /// The fourth zone guides per display (08.1 UI-SPEC Surface 3): their own layers below the drop preview's, because the
+    /// preview withdraws on every hover change and these stay steady.
+    private final class FourthGuides {
+        let container = CALayer()
+        var rects: [Rect] = []
+    }
+    private var fourthGuides: [String: FourthGuides] = [:]
     private var shown: (state: PreviewState, display: String)?
     /// Bumped by every show and hide, so a fade that finishes after a newer change does not order a panel out.
     private var generation = 0
@@ -174,6 +182,7 @@ private final class PreviewLabelView: NSView {
         for overlay in overlays.values { overlay.panel.orderOut(nil) }
         overlays = [:]
         marquees = [:]
+        fourthGuides = [:]
         shown = nil
         guard let primaryHeight = NSScreen.screens.first?.frame.height else { return }
         for display in Displays.current() {
@@ -194,6 +203,10 @@ private final class PreviewLabelView: NSView {
             view.wantsLayer = true
             view.setAccessibilityElement(false)
             view.onAppearanceChange = { [weak self] in self?.redraw() }
+            let guides = FourthGuides()
+            guides.container.frame = view.bounds
+            guides.container.opacity = 0
+            view.layer?.addSublayer(guides.container)
             let root = CALayer()
             root.frame = view.bounds
             root.opacity = 0
@@ -205,8 +218,9 @@ private final class PreviewLabelView: NSView {
             }
             panel.contentView = view
             panel.setFrame(frame, display: false)
-            overlays[display.uuid] = Overlay(panel: panel, view: view, root: root, frame: frame)
+            overlays[display.uuid] = Overlay(uuid: display.uuid, panel: panel, view: view, root: root, frame: frame)
             marquees[display.uuid] = marquee
+            fourthGuides[display.uuid] = guides
         }
     }
 
@@ -219,6 +233,9 @@ private final class PreviewLabelView: NSView {
     // MARK: Drawing
 
     private func redraw() {
+        for (uuid, guides) in fourthGuides where !guides.rects.isEmpty {
+            if let overlay = overlays[uuid] { draw(guides, in: overlay) }
+        }
         guard let shown, let overlay = overlays[shown.display] else { return }
         draw(shown.state, in: overlay)
     }
@@ -328,6 +345,53 @@ private final class PreviewLabelView: NSView {
         orderOutWhenIdle(displayUUID, after: 0.12)
     }
 
+    // MARK: Fourth zone guides (08.1 Surface 3)
+
+    /// The five zones on `displayUUID`'s panel; empty hides them. They fade in over 120 ms, change axis by an 80 ms
+    /// crossfade and fade out over 80 ms.
+    func showFourthGuides(_ rects: [Rect], on displayUUID: String) {
+        guard !rects.isEmpty else {
+            guard let guides = fourthGuides[displayUUID], !guides.rects.isEmpty else { return }
+            guides.rects = []
+            fade(guides.container, to: 0, duration: 0.08)
+            orderOutWhenIdle(displayUUID, after: 0.08)
+            return
+        }
+        guard let overlay = overlay(displayUUID), let guides = fourthGuides[displayUUID] else { return }
+        let first = guides.rects.isEmpty
+        guides.rects = rects
+        if !first {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = 0.08
+            guides.container.add(fade, forKey: "crossfade")
+        }
+        draw(guides, in: overlay)
+        guard first else { return }
+        orderFront(overlay)
+        fade(guides.container, from: 0, to: 1, duration: 0.12, timing: .easeOut)
+    }
+
+    func hideAllFourthGuides() {
+        for uuid in fourthGuides.keys { showFourthGuides([], on: uuid) }
+    }
+
+    func fourthGuideRects(on displayUUID: String) -> [Rect] { fourthGuides[displayUUID]?.rects ?? [] }
+
+    func isPanelVisible(on displayUUID: String) -> Bool { overlays[displayUUID]?.panel.isVisible ?? false }
+
+    private func draw(_ guides: FourthGuides, in overlay: Overlay) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        guides.container.sublayers?.forEach { $0.removeFromSuperlayer() }
+        for rect in guides.rects {
+            let shape = CAShapeLayer()
+            apply(PreviewStyle.fourthGuide(rect, increaseContrast: increaseContrast), to: shape, in: overlay)
+            guides.container.addSublayer(shape)
+        }
+        CATransaction.commit()
+    }
+
     /// Orders the panel in; the bump stops a drop preview's pending fade from ordering it out under the marquee.
     private func orderFront(_ overlay: Overlay) {
         generation += 1
@@ -340,18 +404,22 @@ private final class PreviewLabelView: NSView {
         let at = generation
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(Int(duration * 1000)))
-            guard let self, self.generation == at, self.shown?.display != displayUUID, self.marquees[displayUUID]?.isIdle == true else { return }
+            guard let self, self.generation == at, self.shown?.display != displayUUID, self.marquees[displayUUID]?.isIdle == true,
+                self.fourthGuides[displayUUID]?.rects.isEmpty != false
+            else { return }
             self.overlays[displayUUID]?.panel.orderOut(nil)
         }
     }
 
     /// Fades a layer from its current (presentation) opacity unless `from` is given.
-    private func fade(_ layer: CALayer, from: Float? = nil, to: Float, duration: Double) {
+    private func fade(
+        _ layer: CALayer, from: Float? = nil, to: Float, duration: Double, timing: CAMediaTimingFunctionName = .easeInEaseOut
+    ) {
         let animation = CABasicAnimation(keyPath: "opacity")
         animation.fromValue = from ?? layer.presentation()?.opacity ?? layer.opacity
         animation.toValue = to
         animation.duration = duration
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        animation.timingFunction = CAMediaTimingFunction(name: timing)
         layer.add(animation, forKey: "fade")
         layer.opacity = to
     }
@@ -399,7 +467,7 @@ private final class PreviewLabelView: NSView {
         overlay.root.add(animation, forKey: "fade")
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(Int(duration * 1000)))
-            guard let self, self.generation == shown else { return }
+            guard let self, self.generation == shown, self.fourthGuides[overlay.uuid]?.rects.isEmpty != false else { return }
             overlay.panel.orderOut(nil)
         }
     }
