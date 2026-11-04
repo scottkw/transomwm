@@ -33,6 +33,8 @@ staging=build/dmg-staging
 fail() { echo "release: $1" >&2; exit 1; }
 
 # 1. Build and verify. build-debug.sh already checks the designated requirement (identifier + team).
+# An incremental build can keep an old signed copy of the tool in Contents/Helpers (08-05), so start from no bundle.
+rm -rf "xcode/.xcode-build/Build/Products/Release/Transom.app"
 app="$(scripts/build-debug.sh --release | tail -n 1)"
 [ -d "$app" ] || fail "no app at $app"
 
