@@ -10,15 +10,18 @@ public enum LayoutRestore {
     /// has a new pid) goes to `HintMatcher` against the tracked windows no saved window holds, with its frame from
     /// `savedFrames`; a match re-points the saved window to the returning one, keeping its tile. `skipIdentity` (the boot
     /// session changed, so IDs may be reused, RESEARCH Pitfall 5) sends every saved window to the matcher. Each unmatched
-    /// saved window is removed through the close path (`World.apply(.closed, …)` with a throwaway history). `unplaced`
-    /// are the tracked dockable, present, non-excluded windows no desk holds afterwards; the caller floats them on their
-    /// desk's Desktop. Throws only if closing or re-pointing a saved window leaves an invalid World; the caller then
-    /// starts empty.
+    /// saved window stays in the World and is returned in `waiting`, docked or floating, for the caller to hold until its
+    /// deadline (D-12), or to close. `removed` are the unmatched ones a tracked window now carries the identity of (a reused
+    /// or synthetic ID): the identity can't mean both, so they go through the close path (`World.apply(.closed, …)` with a
+    /// throwaway history). shortcut: such a tile closes instead of waiting; re-point it to a free identity if that is ever
+    /// seen outside a reboot's rare collision. `unplaced` are the tracked dockable, present, non-excluded windows no desk
+    /// holds afterwards; the caller floats them on their desk's Desktop. Throws only if closing or re-pointing a saved
+    /// window leaves an invalid World; the caller then starts empty.
     public static func reattach(
         _ saved: World, tracked: [WindowInfo], live: [CGWindowEntry]? = [], savedFrames: [WindowIdentity: Rect] = [:],
         skipIdentity: Bool = false
     ) throws(LayoutError) -> (
-        world: World, removed: [WindowRef], unplaced: [WindowInfo], matches: [HintMatcher.Match], ties: [HintMatcher.Tie]
+        world: World, waiting: [WindowRef], removed: [WindowRef], unplaced: [WindowInfo], matches: [HintMatcher.Match], ties: [HintMatcher.Tie]
     ) {
         let real = skipIdentity ? [] : Set(tracked.filter { $0.idSource != .synthetic }.map(\.window.identity))
         var world = saved
@@ -33,10 +36,11 @@ public enum LayoutRestore {
             saved: unattached.map { HintMatcher.Saved(ref: $0, frame: savedFrames[$0.identity]) },
             candidates: eligible.filter { !held.contains($0.window.identity) }.map { HintMatcher.Candidate(ref: $0.window, frame: $0.frame) })
         let matched = Set(assigned.matches.map(\.saved))
-        var removed: [WindowRef] = []
-        for window in unattached where !matched.contains(window) {
+        let trackedIDs = Set(tracked.map(\.window.identity))
+        let unmatched = unattached.filter { !matched.contains($0) }
+        let removed = unmatched.filter { trackedIDs.contains($0.identity) }
+        for window in removed {
             try world.apply(.closed, for: window, on: DeskKey(displayUUID: "", spaceID: nil), history: &history)
-            removed.append(window)
         }
         // Through a placeholder identity first: with `skipIdentity` a returning window can carry another saved one's ID.
         let parked = assigned.matches.indices.map { WindowRef(identity: WindowIdentity(windowID: UInt32($0), pid: -1, bundleID: "")) }
@@ -44,7 +48,7 @@ public enum LayoutRestore {
         for (match, temp) in zip(assigned.matches, parked) { try world.rekey(from: temp, to: match.window, history: &history) }
         let placed = Set(world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }.map(\.identity))
         let unplaced = eligible.filter { !placed.contains($0.window.identity) }
-        return (world, removed, unplaced, assigned.matches, assigned.ties)
+        return (world, unmatched.filter { !trackedIDs.contains($0.identity) }, removed, unplaced, assigned.matches, assigned.ties)
     }
 
     /// Whether a CG window at layer 0 has this identity's real window ID and pid, on a Space when its Spaces are known:

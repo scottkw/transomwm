@@ -41,15 +41,18 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 
         let kept = try LayoutRestore.reattach(saved, tracked: [tracked(a, frame: frame), tracked(b, frame: frame, idSource: .cgFrameMatch)])
         #expect(kept.world[key].map { Set($0.tree.windows) } == [a, b])
-        #expect(kept.removed == [c])
+        #expect(kept.waiting == [c])
+        #expect(kept.removed.isEmpty)
         #expect(kept.unplaced.isEmpty)
 
         let synthetic = try LayoutRestore.reattach(
             saved, tracked: [tracked(a, frame: frame, idSource: .synthetic), tracked(b, frame: frame), tracked(d, frame: frame)])
         let desk = try #require(synthetic.world[key])
         #expect(desk.tree.windows == [b])
-        #expect(!desk.contains(a) && !desk.contains(c))
-        #expect(Set(synthetic.removed) == [a, c])
+        #expect(!desk.contains(a), "a tracked window carries its identity now")
+        #expect(desk.contains(c))
+        #expect(synthetic.removed == [a])
+        #expect(synthetic.waiting == [c])
         // a is tracked but its synthetic ID is session-only, so it is placed afresh, like d.
         #expect(Set(synthetic.unplaced.map(\.window)) == [a, d])
     }
@@ -180,20 +183,20 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 
         let docked = try LayoutRestore.reattach(saved, tracked: live, live: [entry(2), entry(3, pid: 901)])
         #expect(docked.world[key].map { Set($0.tree.windows) } == [a, b])
-        #expect(docked.removed == [c], "the same ID under another pid is another window")
+        #expect(docked.waiting == [c], "the same ID under another pid is another window")
         #expect(docked.unplaced.isEmpty)
 
         let floating = try LayoutRestore.reattach(saved, tracked: live, live: [entry(3)])
         #expect(floating.world[key]?.desktop.contains(c) == true)
-        #expect(floating.removed == [b])
+        #expect(floating.waiting == [b])
 
         let layered = try LayoutRestore.reattach(saved, tracked: live, live: [entry(2, layer: 20), entry(3, layer: 20)])
-        #expect(Set(layered.removed) == [b, c])
+        #expect(Set(layered.waiting) == [b, c])
 
         let empty = try LayoutRestore.reattach(saved, tracked: live, live: [])
         let today = try LayoutRestore.reattach(saved, tracked: live)
-        #expect(empty.world == today.world && empty.removed == today.removed && empty.unplaced == today.unplaced)
-        #expect(Set(today.removed) == [b, c])
+        #expect(empty.world == today.world && empty.waiting == today.waiting && empty.unplaced == today.unplaced)
+        #expect(Set(today.waiting) == [b, c])
 
         let synthetic = WindowIdentity(windowID: WindowIdentity.syntheticIDBase | 2, pid: pid, bundleID: bundleID)
         #expect(!LayoutRestore.isAlive(synthetic, in: [entry(synthetic.windowID)]), "a synthetic ID is session-only")

@@ -236,6 +236,10 @@ extension Harness {
         var harness = await relaunched(with: carried, displays: [displayA], showing: ["A": 1])
         await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
         await harness.send(.inventory(await harness.fake.inventory()))
+        // Its tile waits like any unattached window's (D-12), so window 3's tile changes when it expires.
+        #expect(harness.arranger.isPlaceholder(ref(4)))
+        harness.now += Arranger.launchWait
+        await harness.send(.tick)
         let desk = try #require(harness.arranger.world[deskA2])
         #expect(desk.tree.windows == [ref(3)], "window 4 is removed and window 3 kept: \(desk.tree.windows)")
 
@@ -249,8 +253,8 @@ extension Harness {
     }
 
     /// The VIEW-04 boundary: a saved window whose app relaunched has a new pid, so it is not the saved window; on a
-    /// Space not shown it is not tracked either, so nothing re-matches it and it is removed at the restore.
-    @Test func aSavedWindowWhoseAppRelaunchedIsRemoved() async throws {
+    /// Space not shown it is not tracked either, so nothing re-matches it: its tile waits out its deadline, then closes.
+    @Test func aSavedWindowWhoseAppRelaunchedOnAHiddenSpaceWaitsThenCloses() async throws {
         let first = try await firstSession(space2: [3])
         let relaunchedPID: Int32 = 901
         var carried = Array(await first.harness.fake.windows.values)
@@ -260,6 +264,9 @@ extension Harness {
             apps: [FakeApp(pid: pid, bundleID: bundleID), FakeApp(pid: relaunchedPID, bundleID: bundleID)])
         await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
         await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(harness.arranger.isPlaceholder(ref(3)))
+        harness.now += Arranger.launchWait
+        await harness.send(.tick)
         let holds3 = harness.arranger.world.desks.values.contains { desk in
             (desk.tree.windows + desk.desktop.windows.map(\.window)).contains { $0.windowID == 3 }
         }

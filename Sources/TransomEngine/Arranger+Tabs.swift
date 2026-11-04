@@ -1032,7 +1032,12 @@ extension Arranger {
             // A docked group with no planned tile (its selected member absent, 07-05) stays; its hidden members are not
             // parked then, and the rescue brings a stranded one back.
             let docked = desk.tree.nodes.compactMap { id, node -> (NodeID, [WindowRef], Int, Rect)? in
-                if case .tabs(let members, let selected) = node, let tile = tiles[id] { (id, members, selected, tile) } else { nil }
+                // A group whose members all wait holds its tile like a window (08 UI-SPEC Surface 2).
+                if case .tabs(let members, let selected) = node, let tile = tiles[id], !members.allSatisfy({ placeholders.table[$0.identity] != nil }) {
+                    (id, members, selected, tile)
+                } else {
+                    nil
+                }
             }.sorted { $0.0 < $1.0 }
             guard !docked.isEmpty || !desk.desktop.groups.isEmpty else { continue }
             var moved: [WindowRef: Rect] = [:]

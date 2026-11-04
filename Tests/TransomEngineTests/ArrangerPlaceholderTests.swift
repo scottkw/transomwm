@@ -330,7 +330,7 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(!harness.arranger.isPlaceholder(ref(1)))
         #expect(harness.arranger.isPlaceholder(ref(2)))
         var inventory = await harness.fake.inventory()
-        inventory.windows.append(tracked(ref(2, title: "Plan")))
+        inventory.windows += [tracked(ref(1, title: "Notes")), tracked(ref(2, title: "Plan"))]
         await harness.send(.inventory(inventory))
         #expect(harness.arranger.placeholderCount == 0)
         #expect(harness.arranger.world[key]?.tree.windows.map(\.windowID) == [1, 2])

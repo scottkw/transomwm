@@ -2204,6 +2204,13 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         return (arranger, effects)
     }
 
+    /// `arranger` once every saved window that did not come back has expired (D-12).
+    private func pastPlaceholderExpiry(_ arranger: Arranger) -> Arranger {
+        var arranger = arranger
+        _ = arranger.handle(.tick, now: .now + Arranger.neverOpenedWait)
+        return arranger
+    }
+
     @Test func aCrashRelaunchRescuesTheParkedMemberThenReformsTheGroupAndParksItAgain() async throws {
         var (harness, plan) = try await docked()
         await groupFWithB(&harness, try #require(plan.frames[b]))  // [b, f], f selected, b parked
@@ -2231,34 +2238,38 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
 
     @Test func aRelaunchWithAHiddenMemberGoneReformsWithTheRestAndLogs() throws {
         let (source, group, _, _) = try bareGroup(at: .now, withA: true)  // [b, f, a], a selected
-        let (arranger, effects) = relaunch(source.world, keeping: [info(1, frame: frameA), info(2, frame: smallF)])  // b gone
-        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [f, a], selected: 1), "the group did not keep a selected")
-        #expect(effects.contains(.info("relaunch: group \(group.node) re-formed with 2 of 3 members")), "\(effects)")
+        let (relaunched, effects) = relaunch(source.world, keeping: [info(1, frame: frameA), info(2, frame: smallF)])  // b gone
+        #expect(relaunched.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f, a], selected: 2), "b waits in its position")
         #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "a relaunch with a member gone is not silent")
+        let arranger = pastPlaceholderExpiry(relaunched)
+        #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [f, a], selected: 1), "the group did not keep a selected")
     }
 
     @Test func aRelaunchWithTheSelectedMemberGoneSelectsItsRightNeighbour() throws {
         let (source, group, _, _) = try bareGroup(at: .now, withA: true)  // [b, f, a]
         var saved = source.world
         try saved.reflow(mainKey) { desk, _ throws(LayoutError) in try desk.tree.selectTab(f) }
-        let (arranger, effects) = relaunch(saved, keeping: [info(1, frame: frameA), info(3, frame: frameB)])  // f gone
+        let (relaunched, _) = relaunch(saved, keeping: [info(1, frame: frameA), info(3, frame: frameB)])  // f gone
+        #expect(relaunched.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f, a], selected: 2), "a, f's right neighbour, is not selected")
+        let arranger = pastPlaceholderExpiry(relaunched)
         #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, a], selected: 1), "a, f's right neighbour, is not selected")
-        #expect(effects.contains(.info("relaunch: group \(group.node) re-formed with 2 of 3 members")))
     }
 
     @Test func aTwoMemberGroupWithOneGoneDissolvesDockedAndFloating() throws {
         let (dockedSource, group, _, _) = try bareGroup(at: .now)  // [b, f], f selected
-        let (docked, _) = relaunch(dockedSource.world, keeping: [info(1, frame: frameA), info(3, frame: frameB)])  // f gone
+        let docked = pastPlaceholderExpiry(relaunch(dockedSource.world, keeping: [info(1, frame: frameA), info(3, frame: frameB)]).0)  // f gone
         #expect(docked.world[mainKey]?.tree.node(group.node) == .panel(b), "the docked group did not dissolve into a plain panel")
         let (floatingSource, _, _) = try bareFloatingGroup(at: .now)  // [t, f]
-        let (floating, _) = relaunch(floatingSource.world, keeping: [info(5, frame: tFrame)])  // f gone
+        let floating = pastPlaceholderExpiry(relaunch(floatingSource.world, keeping: [info(5, frame: tFrame)]).0)  // f gone
         let desktop = try #require(floating.world[mainKey]?.desktop)
         #expect(desktop.groups.isEmpty && desktop.contains(t), "the floating group did not dissolve into a floater")
     }
 
-    @Test func aGroupWithNoMemberLeftIsRemovedLikeAnyAbsentWindow() throws {
+    @Test func aGroupWithNoMemberLeftKeepsItsLeafUntilExpiryLikeAnyAbsentWindow() throws {
         let (source, group, _, _) = try bareGroup(at: .now)  // [b, f]
-        let (arranger, effects) = relaunch(source.world, keeping: [info(1, frame: frameA)])
+        let (relaunched, effects) = relaunch(source.world, keeping: [info(1, frame: frameA)])
+        #expect(relaunched.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, f], selected: 1))
+        let arranger = pastPlaceholderExpiry(relaunched)
         #expect(arranger.world[mainKey]?.tree.node(group.node) == nil)
         #expect(arranger.world[mainKey]?.tree.windows == [a])
         #expect(!effects.contains { if case .fault = $0 { true } else { false } }, "\(effects)")

@@ -7,11 +7,17 @@ public struct Placeholder: Equatable, Sendable {
         case launch, appQuit, tie
     }
 
+    /// Which deadline runs (D-12, D-12a), named as the expiry log says it.
+    public enum Wait: String, Equatable, Sendable {
+        case afterQuit = "30 s after quit", afterLaunch = "10 s after launch", neverOpened = "5 min, no launch"
+    }
+
     public var ref: WindowRef
     public var origin: Origin
+    public var wait: Wait
     public var deadline: ContinuousClock.Instant
     /// The size the window refused to go below, so its tile, and with it the neighbours, stay as they were.
-    public var minimum: Size?
+    public var minimum: Size? = nil
 
     public var bundleID: String { ref.bundleID }
 }
@@ -25,6 +31,16 @@ public struct PlaceholderState: Sendable {
     var fresh: Set<WindowIdentity> = []
 
     func waits(for bundleID: String) -> Bool { table.values.contains { $0.bundleID == bundleID } }
+
+    var earliestDeadline: ContinuousClock.Instant? { table.values.map(\.deadline).min() }
+
+    /// The app launched or opened another window: its placeholders wait `launchWait` from now (D-12).
+    mutating func restartLaunchWait(of bundleID: String, now: ContinuousClock.Instant) {
+        for (id, placeholder) in table where placeholder.bundleID == bundleID {
+            table[id]?.deadline = now + Arranger.launchWait
+            table[id]?.wait = .afterLaunch
+        }
+    }
 
     /// After a World change: what no desk holds any more waits for nothing, and a docked or grouped window is the user's.
     mutating func prune(_ world: World) {
@@ -61,17 +77,64 @@ extension Arranger {
         else { return nil }
         let info = windows[window.identity], ref = info?.window ?? window
         world = world.refreshingTitles([ref.identity: ref.titleHint])
-        placeholders.table[ref.identity] = Placeholder(ref: ref, origin: .appQuit, deadline: quit.at + Self.quitWait, minimum: info?.learnedMinimum)
+        placeholders.table[ref.identity] = Placeholder(
+            ref: ref, origin: .appQuit, wait: .afterQuit, deadline: quit.at + Self.quitWait, minimum: info?.learnedMinimum)
         try selectNeighbour(ofAbsent: ref)
         return [.info("placeholder \(leaf) for \(ref.bundleID): shown (app quit)")] + fillPlaceholders(of: ref.bundleID)
     }
 
-    /// A new window of an app with waiting (or about to wait) placeholders may fill one.
-    mutating func noteCreated(_ info: WindowInfo) {
+    /// A new window of an app with waiting (or about to wait) placeholders may fill one, and restarts their 10 s (D-12).
+    mutating func noteCreated(_ info: WindowInfo, now: ContinuousClock.Instant) {
         let bundle = info.window.bundleID
         guard info.kind == .dockable, placeholders.waits(for: bundle) || placeholders.quitting.values.contains(where: { $0.bundleID == bundle })
         else { return }
         placeholders.fresh.insert(info.window.identity)
+        placeholders.restartLaunchWait(of: bundle, now: now)
+    }
+
+    /// The saved windows the launch could not attach wait (D-10, D-12): 10 s when their app already runs (a tracked window
+    /// of the bundle), else 5 min. A tied window, or one still without a title, may match later (RESEARCH Pitfall 4). A
+    /// live member takes a waiting one's selection, so a group's tile shows what is there.
+    mutating func holdAtLaunch(
+        _ waiting: [WindowRef], tracked: [WindowInfo], unplaced: [WindowInfo], ties: [HintMatcher.Tie], now: ContinuousClock.Instant
+    ) -> [ArrangerEffect] {
+        let tied = Set(ties.flatMap(\.saved))
+        let running = Set(tracked.map(\.window.bundleID))
+        var faults: [ArrangerEffect] = []
+        for window in waiting {
+            let opened = running.contains(window.bundleID)
+            placeholders.table[window.identity] = Placeholder(
+                ref: window, origin: tied.contains(window) ? .tie : .launch, wait: opened ? .afterLaunch : .neverOpened,
+                deadline: now + (opened ? Self.launchWait : Self.neverOpenedWait))
+        }
+        for window in waiting {
+            do throws(LayoutError) { try selectNeighbour(ofAbsent: window) } catch {
+                faults.append(.fault("could not select a live member beside \(window): \(error)"))
+            }
+        }
+        placeholders.fresh.formUnion(ties.flatMap(\.candidates).map(\.identity))
+        placeholders.fresh.formUnion(unplaced.filter { $0.window.titleHint.isEmpty && placeholders.waits(for: $0.window.bundleID) }.map(\.window.identity))
+        return faults
+    }
+
+    /// Closes every placeholder past its deadline through the close path, as if its window had closed (D-12): no undo
+    /// step, and the neighbours reflow, whose writes wait out a pause (RESEARCH Pitfall 14).
+    mutating func expirePlaceholders(now: ContinuousClock.Instant) -> [ArrangerEffect] {
+        let due = placeholders.table.values.filter { now >= $0.deadline }.sorted { $0.ref.identity < $1.ref.identity }
+        var effects: [ArrangerEffect] = []
+        for placeholder in due {
+            let tile = tileName(of: placeholder.ref)
+            placeholders.table[placeholder.ref.identity] = nil
+            forget(placeholder.ref)
+            do throws(LayoutError) {
+                _ = try LifecycleSync.handle(.windowDestroyed(placeholder.ref), world: &world, history: &history)
+                effects.append(.info("placeholder \(tile) expired (\(placeholder.wait.rawValue))"))
+            } catch {
+                effects.append(.fault("could not close the expired placeholder \(placeholder.ref): \(error)"))
+            }
+        }
+        placeholders.quitting = placeholders.quitting.filter { now < $0.value.at + Self.quitWait || placeholders.waits(for: $0.value.bundleID) }
+        return due.isEmpty ? [] : effects + replan()
     }
 
     /// Matches the app's waiting placeholders against its fresh windows, as the launch path does (D-11, HintMatcher), and
