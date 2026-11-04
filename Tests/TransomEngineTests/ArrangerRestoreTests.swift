@@ -251,6 +251,26 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(rebooted.world[key]?.desktop.contains(a) == true)
     }
 
+    /// WR-11: the stage and the overview key a placeholder's tile by its window ID, so after a reboot it must not be a live
+    /// window's, and retired IDs stay clear of synthetic ones and of strips' IDs.
+    @Test func afterABootChangeAPlaceholdersIDIsNoLiveWindows() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        await source.fake.update(1) { $0.title = "Mail" }
+        _ = await source.refresh()
+        let inventory = await source.fake.inventory()
+
+        var rebooted = Arranger()
+        _ = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
+        _ = rebooted.handle(.inventory(inventory), now: .now)
+        let tile = try #require(rebooted.homePlaceholders(on: "main").first)
+        #expect(tile.window.identity.isRetiredWindowID)
+        #expect(!inventory.windows.contains { $0.window.windowID == tile.window.windowID })
+        #expect(WindowIdentity.retiredIDBase > WindowIdentity.syntheticIDBase)
+    }
+
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
     @Test func reattachKeepsAnUntrackedWindowTheCGListStillHasUnderItsIDAndPid() async throws {
         // Saved: [a | b | Desktop], c floating. Only a is tracked.

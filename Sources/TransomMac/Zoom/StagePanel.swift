@@ -30,7 +30,8 @@ public struct StageTile {
     static func stripID(_ tileID: UInt32) -> UInt32 { tileID ^ 0x8000_0000 }
 
     /// A camera move's placeholders: the panel's recipe, laid out for each tile's end size. Their IDs are their dead
-    /// windows', which match no click (no accessibility element either, Phase 4/6 rule).
+    /// windows', which match no click (no accessibility element either, Phase 4/6 rule): a dead ID isn't reused within a
+    /// boot, and after a reboot they are retired ones (`LayoutRestore.retire`), which no live window can have.
     static func placeholders(of move: CameraMove, appKit: (Rect) -> CGRect) -> [StageTile] {
         move.placeholders.map { tile in
             StageTile(id: tile.window.windowID, start: appKit(tile.start), end: appKit(tile.end), content: PlaceholderLook(bundleID: tile.window.bundleID).content)
