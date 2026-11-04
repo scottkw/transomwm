@@ -10,13 +10,13 @@ import Testing
 
     @Test(arguments: [
         (["view", "3"], "view/3"), (["view/3"], "view/3"), (["save-view", "9"], "save-view/9"), (["save-view/1"], "save-view/1"),
-        (["zoom-out"], "zoom-out"), (["move-out-of-group"], "move-out-of-group"),
+        (["zoom-out"], "zoom-out"), (["move-out-of-group"], "move-out-of-group"), (["dock-column-1"], "dock-column-1"), (["dock-row-middle"], "dock-row-middle"),
     ] as [([String], String)])
     func commandsToSend(arguments: [String], path: String) {
         #expect(CLICommandLine.parse(arguments) == .send(path))
     }
 
-    @Test(arguments: ["foo", "VIEW", "zoom-out/3", "transom://view/3", ""])
+    @Test(arguments: ["foo", "VIEW", "zoom-out/3", "transom://view/3", "", "dock-column-5"])
     func unknownCommands(_ command: String) {
         #expect(CLICommandLine.parse([command]) == .usage("transom: unknown command \"\(command)\". Run \"transom help\" to see every command."))
     }
@@ -38,6 +38,7 @@ import Testing
     @Test func aParameterlessCommandTakesNoArgument() {
         #expect(CLICommandLine.parse(["zoom-out", "3"]) == .usage("transom: zoom-out takes no argument."))
         #expect(CLICommandLine.parse(["help", "3"]) == .usage("transom: help takes no argument."))
+        #expect(CLICommandLine.parse(["dock-column-1", "3"]) == .usage("transom: dock-column-1 takes no argument."))
     }
 
     @Test(arguments: [["view", "3", "4"], ["view/3", "4"], ["zoom-out", "3", "4"]] as [[String]])

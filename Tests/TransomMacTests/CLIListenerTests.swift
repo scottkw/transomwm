@@ -1,6 +1,7 @@
 import CoreFoundation
 import Foundation
 import TransomEngine
+import TransomModel
 @testable import TransomMac
 import Testing
 
@@ -171,6 +172,17 @@ import Testing
         }
         #expect(ArrangeController.silenced([.beep, .announce("No room"), .info("refused")], of: .restoreAll) == [.info("refused")])
         #expect(ArrangeController.silenced([.beep, .tabAnnouncement(.refused(.paused))], of: .tabs(.next)).isEmpty)
+    }
+
+    /// 08.1 UI-SPEC Surface 4: a refused fourth shows nothing on a silent route, not even the Blocked flash; the CLI still hears why.
+    @Test func aRefusedFourthShowsNothingAndRepliesWhy() {
+        let refusal: [ArrangerEffect] = [.beep, .announce("Not enough room to dock here"), .flashBlocked(Rect(x: 0, y: 0, width: 10, height: 10), displayUUID: "main")]
+        #expect(ArrangeController.silenced(refusal, of: .dockFourth(.first, .horizontal)).isEmpty)
+        #expect(ArrangeController.cliReply(for: refusal) == "refused\tNot enough room to dock here")
+    }
+
+    @Test func aSuccessfulFourthStillAnnounces() {
+        #expect(ArrangeController.silenced([.announce("Docked to 1st column")], of: .dockFourth(.first, .horizontal)) == [.announce("Docked to 1st column")])
     }
 
     /// A non-refusal announcement of a command other than the camera's keeps speaking, as it did.

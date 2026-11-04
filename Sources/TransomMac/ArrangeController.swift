@@ -637,13 +637,13 @@ import os
         return arranger.handle(.command(command, focused: context.focused), now: .now)
     }
 
-    /// What a URL or CLI route keeps of `effects`: no beep, and a refusal shows nothing on screen (Phase 3 rule, UI-SPEC
-    /// N16). A camera command says nothing either way; its toasts still show.
+    /// What a URL or CLI route keeps of `effects`: no beep, and a refusal shows nothing on screen, Blocked flash included
+    /// (Phase 3 rule, UI-SPEC N16, 08.1 Surface 4). A camera command says nothing either way; its toasts still show.
     static func silenced(_ effects: [ArrangerEffect], of command: Command) -> [ArrangerEffect] {
         let quiet = if case .camera = command { true } else { effects.contains(.beep) }
         return effects.filter {
             switch $0 {
-            case .beep, .tabAnnouncement(.refused), .notice(.viewEmpty), .notice(.viewDisplayGone), .notice(.viewNothingToSave): false
+            case .beep, .flashBlocked, .tabAnnouncement(.refused), .notice(.viewEmpty), .notice(.viewDisplayGone), .notice(.viewNothingToSave): false
             case .announce: !quiet
             default: true
             }

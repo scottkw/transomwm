@@ -1,5 +1,6 @@
 import Foundation
 import TransomEngine
+import TransomModel
 import Testing
 
 private func parse(_ string: String, scheme: String = "transom") -> Command? {
@@ -44,6 +45,34 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         "transom://move-out", "transom://previous-tab:80"])
     func malformedTabURLsAreRejected(_ string: String) {
         #expect(parse(string) == nil)
+    }
+
+    /// 08.1 UI-SPEC Surface 5: the ten fourths.
+    @Test(arguments: [
+        ("dock-column-1", FourthSlot.first, Axis.horizontal), ("dock-column-2", .second, .horizontal), ("dock-column-3", .third, .horizontal),
+        ("dock-column-4", .fourth, .horizontal), ("dock-column-middle", .middle, .horizontal), ("dock-row-1", .first, .vertical),
+        ("dock-row-2", .second, .vertical), ("dock-row-3", .third, .vertical), ("dock-row-4", .fourth, .vertical),
+        ("dock-row-middle", .middle, .vertical),
+    ])
+    func theFourthCommandsParse(host: String, slot: FourthSlot, axis: Axis) {
+        #expect(parse("transom://\(host)") == .dockFourth(slot, axis))
+        #expect(parse("transom://\(host)/") == .dockFourth(slot, axis))
+    }
+
+    @Test(arguments: ["transom://dock-column-5", "transom://DOCK-COLUMN-1", "transom://dock-column/1", "transom://dock-column-1/1", "transom://dock-column-1?x=1",
+        "transom://dock-column-1#f", "transom://dock-row-0", "transom://dock-fourth"])
+    func malformedFourthURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
+    /// T-08.1-12: each fourth has its own one-per-second limit.
+    @Test func eachFourthIsLimitedSeparately() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockFourth(.first, .horizontal), .zero), (.dockFourth(.second, .horizontal), .milliseconds(10)), (.dockFourth(.first, .horizontal), .milliseconds(20)),
+        ]
+        #expect(attempts.map { limiter.admit($0.0, at: start + $0.1) } == [true, true, false])
     }
 
     /// 08 UI-SPEC Surface 4: the same commands as ⌥{n} and ⇧⌥{n}.

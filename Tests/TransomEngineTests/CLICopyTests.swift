@@ -34,6 +34,18 @@ import Testing
               split-finder         Split with a new Finder window
               restore              Restore all windows
 
+            Fourths
+              dock-column-1        Dock the focused window as the 1st of 4 columns
+              dock-column-2        Dock the focused window as the 2nd of 4 columns
+              dock-column-3        Dock the focused window as the 3rd of 4 columns
+              dock-column-4        Dock the focused window as the 4th of 4 columns
+              dock-column-middle   Dock the focused window as the middle half column
+              dock-row-1           Dock the focused window as the 1st of 4 rows
+              dock-row-2           Dock the focused window as the 2nd of 4 rows
+              dock-row-3           Dock the focused window as the 3rd of 4 rows
+              dock-row-4           Dock the focused window as the 4th of 4 rows
+              dock-row-middle      Dock the focused window as the middle half row
+
             Tabs
               next-tab             Select the next tab in the focused tab group
               previous-tab         Select the previous tab
