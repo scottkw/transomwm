@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 import TransomEngine
 @testable import TransomMac
@@ -7,6 +8,7 @@ import Testing
 /// name, with a stub decision; no window, event, URL open or real Transom port is involved.
 @Suite @MainActor struct CLIListenerTests {
     struct ToolNotFound: Error {}
+    private let three = ViewSlot(3)!
 
     /// swiftpm-testing-helper gets `--test-bundle-path <dir>/X.xctest/Contents/MacOS/X`; the tool sits beside the bundle.
     private func tool() throws -> URL {
@@ -82,11 +84,53 @@ import Testing
         #expect(gate.admit(url, at: now + .milliseconds(10)) == .rateLimited)
         #expect(gate.admit(try #require(URL(string: "transom://view/3?x=1")), at: now) == .rejected)
     }
-}
 
-/// D-07: the reply carries what VoiceOver would hear; on screen a CLI or URL refusal stays silent.
-@Suite @MainActor struct CLIReplyTests {
-    private let three = ViewSlot(3)!
+    /// D-07: the refusal's reason crosses the port and the tool prints it.
+    @Test func aRefusalReachesStderrWithExitOne() async throws {
+        let port = uniquePort()
+        let listening = listener(port: port) { _ in CLIProtocol.refused("No view in slot 3") }
+        let result = try await run(["view", "3"], port: port)
+        #expect(result.code == 1)
+        #expect(result.stderr == "transom: refused: No view in slot 3\n")
+        #expect(listening.isListening)
+    }
+
+    /// A bad command line never reaches a port.
+    @Test func aBadCommandLineExits64() async throws {
+        let result = try await run(["foo"], port: uniquePort())
+        #expect(result.code == 64)
+        #expect(result.stderr == "transom: unknown command \"foo\". Run \"transom help\" to see every command.\n")
+    }
+
+    /// T-08-15: any local process can send here, so a wrong message ID, an oversized request or a URL off the allow-list
+    /// is rejected without reaching the decision.
+    @Test func badRequestsAreRejected() async throws {
+        let port = uniquePort()
+        var decided = 0
+        let listening = listener(port: port) { _ in
+            decided += 1
+            return CLIProtocol.ok
+        }
+        let cases: [(Int32, String)] = [
+            (CLIProtocol.version + 1, "transom://view/3"), (CLIProtocol.version, "transom://view/3?" + String(repeating: "x", count: 256)),
+            (CLIProtocol.version, "transom://view/0"), (CLIProtocol.version, "not a url"),
+        ]
+        for (msgid, text) in cases {
+            // On its own thread: the send waits in a run loop while the main queue serves the port.
+            let reply = await Task.detached {
+                let remote = CFMessagePortCreateRemote(nil, port as CFString)
+                var data: Unmanaged<CFData>?
+                _ = CFMessagePortSendRequest(remote, msgid, Data(text.utf8) as CFData, 2, 2, CFRunLoopMode.defaultMode.rawValue, &data)
+                return data.map { String(decoding: $0.takeRetainedValue() as Data, as: UTF8.self) }
+            }.value
+            #expect(reply == CLIProtocol.rejected, "\(text)")
+        }
+        #expect(decided == 0)
+        #expect(listening.isListening)
+    }
+
+    // D-07: the reply carries what VoiceOver would hear; on screen a CLI or URL refusal stays silent.
+
 
     @Test func aRefusalRepliesItsAnnouncement() {
         #expect(ArrangeController.cliReply(for: [.beep, .announce("Arranging is paused"), .info("refused")]) == "refused\tArranging is paused")

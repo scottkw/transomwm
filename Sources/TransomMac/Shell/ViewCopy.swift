@@ -14,6 +14,9 @@ nonisolated public enum ViewCopy {
         }
     }
 
+    /// The Debug submenu's line for the command-line tool's channel.
+    public static func cliLine(listening: Bool) -> String { listening ? "Command-line tool: listening" : "Command-line tool: off (couldn't listen)" }
+
     /// One line for VoiceOver when going to a view moves the camera: the view, then the Phase 4 reveal.
     public static func joinedAnnouncement(slot: Int, reveal: String) -> String { "View \(slot). \(reveal)" }
 }

@@ -18,6 +18,31 @@ public enum TransomURL {
         "next-tab": .tabs(.next), "previous-tab": .tabs(.previous), "move-out-of-group": .tabs(.moveOut),
     ]
 
+    /// One line of `transom help` per command, in help order; `help` itself has no URL.
+    static let helpLines: [(section: String, command: String, argument: String, description: String)] = [
+        ("Views", "view", "<1-9>", "Go to a saved view"),
+        ("Views", "save-view", "<1-9>", "Save the current view to a slot"),
+        ("Zoom", "zoom-out", "", "Zoom out to all windows"),
+        ("Zoom", "step-out", "", "Zoom out one level"),
+        ("Zoom", "step-in", "", "Zoom in one level"),
+        ("Zoom", "back", "", "Go to the previous view"),
+        ("Zoom", "forward", "", "Go to the next view"),
+        ("Zoom", "pan-left", "", "Move the view left"),
+        ("Zoom", "pan-right", "", "Move the view right"),
+        ("Zoom", "pan-up", "", "Move the view up"),
+        ("Zoom", "pan-down", "", "Move the view down"),
+        ("Zoom", "frame-window", "", "Frame the focused window, or go back"),
+        ("Zoom", "frame-desktop", "", "Frame the Desktop tile, or go back"),
+        ("Zoom", "overview", "", "Open or close the overview"),
+        ("Arrange", "toggle-desktop", "", "Hide or show the Desktop tile"),
+        ("Arrange", "split-finder", "", "Split with a new Finder window"),
+        ("Arrange", "restore", "", "Restore all windows"),
+        ("Tabs", "next-tab", "", "Select the next tab in the focused tab group"),
+        ("Tabs", "previous-tab", "", "Select the previous tab"),
+        ("Tabs", "move-out-of-group", "", "Move the focused tab out of its group"),
+        ("Other", "help", "", "Show this list"),
+    ]
+
     /// The command for `url`: exactly `scheme`, a lowercase command host, no user, password, port, query or fragment, and
     /// a path that is empty or "/", or for `view` and `save-view` only, "/" and one digit 1-9. Nil for anything else.
     public static func parse(_ url: URL, scheme: String) -> Command? {

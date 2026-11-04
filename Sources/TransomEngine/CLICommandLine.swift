@@ -10,8 +10,18 @@ public enum CLICommandLine {
 
     public static func parse(_ arguments: [String]) -> Parsed {
         guard let first = arguments.first else { return .help }
-        if arguments.count == 2, first == "view" || first == "save-view" { return .send("\(first)/\(arguments[1])") }
-        if arguments.count == 1, first.hasPrefix("view/") || first.hasPrefix("save-view/") || TransomURL.commands[first] != nil { return .send(first) }
-        return .usage(CLICopy.unknownCommand(first))
+        for name in ["view", "save-view"] where first == name || first.hasPrefix(name + "/") {
+            let slots = (first == name ? [] : [String(first.dropFirst(name.count + 1))]) + arguments.dropFirst()
+            guard slots.count <= 1 else { return .usage(CLICopy.tooManyArguments) }
+            guard let slot = slots.first, TransomURL.slot(digit: slot) != nil else { return .usage(CLICopy.needsSlot(name)) }
+            return .send("\(name)/\(slot)")
+        }
+        let isHelp = ["help", "-h", "--help"].contains(first)
+        guard isHelp || TransomURL.commands[first] != nil else { return .usage(CLICopy.unknownCommand(first)) }
+        switch arguments.count {
+        case 1: return isHelp ? .help : .send(first)
+        case 2: return .usage(CLICopy.takesNoArgument(first))
+        default: return .usage(CLICopy.tooManyArguments)
+        }
     }
 }

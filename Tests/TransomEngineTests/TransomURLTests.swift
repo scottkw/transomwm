@@ -75,10 +75,11 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         let start = ContinuousClock.now
         let three = try #require(ViewSlot(3))
         let four = try #require(ViewSlot(4))
-        #expect(limiter.admit(.camera(.view(three)), at: start))
-        #expect(limiter.admit(.camera(.view(four)), at: start + .milliseconds(10)))
-        #expect(limiter.admit(.camera(.saveView(three)), at: start + .milliseconds(20)))
-        #expect(!limiter.admit(.camera(.view(three)), at: start + .milliseconds(30)))
+        let attempts: [(Command, Duration)] = [
+            (.camera(.view(three)), .zero), (.camera(.view(four)), .milliseconds(10)), (.camera(.saveView(three)), .milliseconds(20)),
+            (.camera(.view(three)), .milliseconds(30)),
+        ]
+        #expect(attempts.map { limiter.admit($0.0, at: start + $0.1) } == [true, true, true, false])
     }
 
     @Test(arguments: [

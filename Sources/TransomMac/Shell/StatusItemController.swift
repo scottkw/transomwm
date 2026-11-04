@@ -384,6 +384,7 @@ import os
         let tabCounts = arranger.tabGroupCounts()
         submenu.addItem(Self.info(TabCopy.debugLine(groups: tabCounts.groups, tabs: tabCounts.tabs)))
         submenu.addItem(Self.info(ViewCopy.savedViewsLine(slots: arranger.savedViewSlots)))
+        submenu.addItem(Self.info(ViewCopy.cliLine(listening: arrange.cliListener?.isListening == true)))
         if multitouch == .offAfterCrash {
             let retry = NSMenuItem(title: GestureCopy.multitouchBackOnItem, action: #selector(turnMultitouchBackOn), keyEquivalent: "")
             retry.target = self

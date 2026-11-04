@@ -23,8 +23,10 @@ public enum CLIProtocol {
     public static func exitCode(reply: String, command: String) -> (code: Int32, message: String?) {
         if reply == ok { return (0, nil) }
         if reply == rate { return (1, CLICopy.rateLimited) }
-        if reply.hasPrefix(refused("")) { return (1, CLICopy.refused(String(reply.dropFirst(refused("").count)))) }
-        return (1, CLICopy.didNotAnswer)
+        if reply == rejected { return (64, CLICopy.unknownCommand(command)) }
+        guard reply.hasPrefix(refused("")) else { return (1, CLICopy.didNotAnswer) }
+        let reason = String(reply.dropFirst(refused("").count))
+        return (1, reason.isEmpty ? CLICopy.refusedWithoutReason(command) : CLICopy.refused(reason))
     }
 
     /// The exit code and the stderr line for a `CFMessagePortSendRequest` failure.
