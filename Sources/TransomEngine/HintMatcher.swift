@@ -24,6 +24,7 @@ public enum HintMatcher {
     /// Exactly one unmatched saved window and one unclaimed candidate of the bundle, with no title against it: the saved
     /// window has none, or the candidate's agrees, or else the frames overlap (a one-window app whose title changed, but
     /// not its Welcome or sign-in window, or a window whose title has yet to come; WR-03).
+    /// shortcut: a window that never gets a title and opens elsewhere loses the tile; add a grace period if that shows up.
     public static let solePair = 40
     /// The lowest score that matches.
     public static let threshold = 40

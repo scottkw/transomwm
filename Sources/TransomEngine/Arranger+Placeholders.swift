@@ -4,6 +4,8 @@ import TransomModel
 /// reserved and gets no write, with a deadline on the Arranger's wake clock, so it can never become a permanent hole. A
 /// tile on a desk not showing (another Space, a display not connected) has no hole to show and can't be filled, as AX lists
 /// only what shows: its deadline waits until the desk shows (UI-SPEC Surface 2, CR-02).
+/// shortcut: one on a Space that no longer exists waits in layout.json for good, unseen, like the dormant desk it is on;
+/// prune it if the Spaces snapshot ever reaches the engine.
 public struct Placeholder: Equatable, Sendable {
     public enum Origin: Equatable, Sendable {
         case launch, appQuit, tie
