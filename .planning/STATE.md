@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: "08.1"
 current_phase_name: Window Behaviour Options
-current_plan: Not started
-status: planning
-stopped_at: Phase 8 complete, ready to plan Phase 08.1
-last_updated: "2026-11-04T17:19:29.089Z"
+current_plan: 2
+status: executing
+stopped_at: Completed 08.1-01-PLAN.md
+last_updated: "2026-11-04T21:15:11.722Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
-state_head: c9b27e8fabf0b8fdc2e62f5d732ae712c5c20679
+state_head: b949e8dc28bc9ec971937c767e6f9e3358870808
 progress:
   total_phases: 10
   completed_phases: 8
-  total_plans: 98
-  completed_plans: 98
+  total_plans: 105
+  completed_plans: 99
   percent: 80
 ---
 
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1 — Window Behaviour Options
-Current Plan: Not started
+Current Plan: 2
 Total Plans in Phase: 7
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
 
 Progress: [████████░░] 80%
@@ -156,6 +156,7 @@ Progress: [████████░░] 80%
 | Phase 08 P05 | 22 min | 3 tasks | 22 files |
 | Phase 08 P06 | 23 min | 2 tasks | 19 files |
 | Phase 08 P07 | 7 min | 2 tasks | 3 files |
+| Phase 08.1 P01 | 28 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -441,6 +442,8 @@ Recent decisions affecting current work:
 - [Phase 8]: An expired tile leaves at once during a pause; a filled one stays until Resume
 - [Phase 8]: 08-07: A2 measured on guest macOS 15.7.7: plain SSH reaches the app (exit 0), so the README has no SSH note
 - [Phase 8]: 08-07: VM checks run the tool with sudo launchctl asuser; as a normal user asuser fails with 'Could not switch to audit session'
+- [Phase 08.1]: A Hold Option pull-out's travel is the pointer's distance from the press at the last drag sample, so coming back inside 16 pt snaps back
+- [Phase 08.1]: publishDragOption has no change-only cache: a mutant with one failed the live lost mouse-up test on macOS 27.2
 
 ### Quick Tasks Completed
 
@@ -485,8 +488,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T01:48:59.593Z
-Stopped at: Phase 8 complete, ready to plan Phase 08.1
+Last session: 2026-11-04T21:14:58.472Z
+Stopped at: Completed 08.1-01-PLAN.md
 Resume file: None
 
 ## Deferred Verification
