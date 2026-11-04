@@ -209,6 +209,8 @@ public struct Arranger: Sendable {
     var camera = CameraState()
     /// Tab strips shown and the selection waiting for its read-back (Arranger+Tabs.swift).
     var tabs = TabGroupState()
+    /// Windows waiting to come back and their deadlines (Arranger+Placeholders.swift).
+    var placeholders = PlaceholderState()
     /// Displays are reconfiguring (`.displaysSettling`): no display-based re-homing, no frames.
     public private(set) var settling = false
     /// The World when settling began: stored as the old arrangement's layout set at the settle.
@@ -254,7 +256,9 @@ public struct Arranger: Sendable {
                 for floating in desk.desktop.windows { homeFrames[floating.window.identity] = nil }
             }
         }
+        if let dragged = drag, dragged.kind != nil { placeholders.fresh.remove(dragged.window.identity) }  // the user's now
         guard world != before else { return effects }
+        placeholders.prune(world)
         dragPlans = [:]  // the plans a drag caches are of the World before
         // A window that left its floating group (a dissolve, an undo, a drag out) wanted the group's content rect: from
         // now on it wants its stored frame, the whole group frame for a survivor (the band returns to it).
@@ -722,7 +726,7 @@ public struct Arranger: Sendable {
 
     /// Each saved window's frame for the matcher: a docked one's home-view tile on its desk's display (the frame a clean
     /// quit left it at; a parked frame means nothing, RESEARCH Pitfall 9), a floating one's saved frame.
-    private func savedFrames(_ saved: World) -> [WindowIdentity: Rect] {
+    func savedFrames(_ saved: World) -> [WindowIdentity: Rect] {
         var frames: [WindowIdentity: Rect] = [:]
         for (key, desk) in saved.desks {
             // No display or no plan: no frame hint, which only means frame scores nothing.
@@ -878,16 +882,24 @@ public struct Arranger: Sendable {
         var faults: [ArrangerEffect] = []
         var selected: [ArrangerEffect] = []
         var dissolved: [ArrangerEffect] = []
+        var filled = false
         do throws(LayoutError) {
             switch event {
             case .windowCreated(let info), .windowChanged(let info):
                 if case .windowCreated = event, windows[info.window.identity] == nil, deskKey(of: info.window) != nil {
+                    placeholders.table[info.window.identity] = nil  // the very window came back
                     do throws(LayoutError) { try wakeDormant(info) } catch {
                         faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))
                     }
                 }
                 windows[info.window.identity] = info
                 subject = info.window.identity
+                if case .windowCreated = event { noteCreated(info) }
+                // Before `admit`, so a returning window never shows a hidden Desktop on its way to its tile (D-31).
+                if placeholders.fresh.contains(info.window.identity) {
+                    faults += fillPlaceholders(of: info.window.bundleID)
+                    filled = !placeholders.fresh.contains(info.window.identity)
+                }
             case .windowRekeyed(let from, let to):
                 windows[from.identity] = nil
                 windows[to.window.identity] = to
@@ -931,6 +943,10 @@ public struct Arranger: Sendable {
                 subject = window.identity
             case .windowDestroyed(let window):
                 suppressFocus(ofGroupHolding: window, now: now)
+                if let held = try holdForQuit(window) {
+                    forget(window)
+                    return faults + held + replan()
+                }
                 forget(window)
             case .sessionPaused(let paused):
                 sessionPaused = paused
@@ -949,7 +965,8 @@ public struct Arranger: Sendable {
                 selected = activated(window, now: now)
                 if selected.isEmpty { selected = raisedStrip(of: window) }
             case .appTerminated(let pid):
-                // Its tracked windows are still in `windows` here and close on their own windowDestroyed.
+                // Its tracked windows are still in `windows` here; on their own windowDestroyed the docked ones wait (D-12a).
+                if let bundle = windows.values.first(where: { $0.window.pid == pid })?.window.bundleID { placeholders.quitting[pid] = (bundle, now) }
                 faults += closeDormant { $0.pid == pid }
             case .liveWindowsChanged:
                 return []  // the inventory the shell feeds next prunes
@@ -974,7 +991,7 @@ public struct Arranger: Sendable {
         }
         // CONTEXT E: focus outside the view widens the camera.
         let widened = if case .windowFocused(let window) = event { widen(toShow: window, new: false) } else { [ArrangerEffect]() }
-        guard case .windowCreated(let info) = event else {
+        guard case .windowCreated(let info) = event, !filled else {
             return faults + hidden + selected + dissolved + widened + replan() + closeProgress(now: now)
         }
         do throws(LayoutError) {
@@ -1017,7 +1034,7 @@ public struct Arranger: Sendable {
 
     private var dormantWindows: [WindowRef] {
         world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }
-            .filter { windows[$0.identity] == nil }.sorted { $0.identity < $1.identity }
+            .filter { windows[$0.identity] == nil && placeholders.table[$0.identity] == nil }.sorted { $0.identity < $1.identity }
     }
 
     /// Closes the dormant windows `predicate` picks, in identity order, through the OS-fact close path any closed window
@@ -1035,7 +1052,7 @@ public struct Arranger: Sendable {
         return faults
     }
 
-    private mutating func forget(_ window: WindowRef) {
+    mutating func forget(_ window: WindowRef) {
         windows[window.identity] = nil
         lastRequested[window.identity] = nil
         lastApplied[window.identity] = nil
@@ -2252,7 +2269,9 @@ public struct Arranger: Sendable {
     /// so it can tell which collapsible windows are collapsed.
     var learnedMinimums: [WindowRef: Size] {
         Dictionary(
-            windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }, uniquingKeysWith: { $1 })
+            windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }
+                + placeholders.table.values.compactMap { held in held.minimum.map { (held.ref, $0) } },
+            uniquingKeysWith: { $1 })
     }
 
     func display(for key: DeskKey) -> DisplayInfo? {

@@ -26,6 +26,8 @@ import os
     private var started = false
     /// Each re-read inventory: the menu header and the Tracked Windows feed.
     public var onInventory: ((WindowInventory) -> Void)?
+    /// Each window-system event, just before the Arranger gets it: the order integration tests read (08-04 Assumption A1).
+    var onEvent: ((WindowEvent) -> Void)?
     public private(set) var arranger: Arranger {
         didSet {
             publishGreenButtons()
@@ -239,6 +241,7 @@ import os
                 guard let self else { return }
                 // Before the replan, which sends the new desk's strips.
                 if case .spaceChanged(let uuid, let space) = event { self.tabStripPanels.spaceChanged(displayUUID: uuid, to: space) }
+                self.onEvent?(event)
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
                 if case .spaceChanged(let uuid, let space) = event {

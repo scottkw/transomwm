@@ -231,6 +231,29 @@ public struct World: Codable, Equatable, Sendable {
         history.rekey(from: from, to: to)
     }
 
+    /// An OS fact (D-11): `window` is the window `placeholder` was waiting for. It leaves any Desktop layer and takes the
+    /// placeholder's place (a panel or a tab position, with the selection; a floating one keeps its frame and group), with
+    /// its own state, or present when no desk holds it yet. Every undo snapshot follows: `window`'s entries go, and
+    /// `placeholder` is re-pointed to it. Pushes no undo step. Throws `windowNotFound` when no desk holds the placeholder and
+    /// `duplicateWindow` when `window` is docked: the user put it there. Any throw leaves `self` and `history` unchanged.
+    public mutating func adopt(_ placeholder: WindowRef, by window: WindowRef, history: inout UndoHistory) throws(LayoutError) {
+        guard placeholder != window else { throw .duplicateWindow(window) }
+        guard let holder = desks.first(where: { $0.value.contains(placeholder) })?.key else { throw .windowNotFound(placeholder) }
+        var candidate = self
+        var state = WindowState.present
+        if let from = desks.first(where: { $0.value.contains(window) })?.key, let desk = desks[from] {
+            guard desk.desktop.contains(window) else { throw .duplicateWindow(window) }
+            state = desk.state(of: window) ?? .present
+            try candidate.desks[from]?.close(window)
+        }
+        try candidate.desks[holder]?.rekey(from: placeholder, to: window)
+        try candidate.desks[holder]?.setState(state, for: window)
+        try candidate.validate()
+        self = candidate
+        history.forget(window)
+        history.rekey(from: placeholder, to: window)
+    }
+
     /// Restores the newest snapshot of `key`'s desk, keeping the current lifecycle state of every
     /// window still on the desk, and the current frame of every window floating both now and in the snapshot
     /// (those are OS facts, not something the user edited; Pitfall 10). `ids` is never

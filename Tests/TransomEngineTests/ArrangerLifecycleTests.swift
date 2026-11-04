@@ -123,6 +123,17 @@ func info(_ id: UInt32, frame: Rect, kind: WindowKind = .dockable, excluded: Boo
 
 /// TILE-03, TILE-07, D-12, D-24, D-26 through the pure Arranger (Pattern 1), driven like the live shell.
 @Suite struct ArrangerLifecycleTests {
+    /// D-12a: ⌘W with the app still running closes the tile at once; no `.appTerminated` came first.
+    @Test func closingADockedWindowWhoseAppKeepsRunningClosesItsTileAtOnce() async throws {
+        var harness = await Harness.started()
+        await harness.send(.command(.dock, focused: w1))
+        await harness.send(.command(.dock, focused: w2))
+        let effects = await harness.send(.event(.windowDestroyed(w1)))
+        #expect(harness.arranger.world[key]?.tree.windows == [w2])
+        #expect(!harness.arranger.isPlaceholder(w1))
+        #expect(setFrames(effects)[w2] != nil, "the neighbour takes the room")
+    }
+
     @Test func newWindowsFloatOnTheDesktopAndAreNotMoved() async throws {
         let harness = await Harness.started()
         let desk = try #require(harness.arranger.world[key])

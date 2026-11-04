@@ -80,4 +80,70 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         let docked = arrange.arranger.world[key]?.tree.windows ?? []
         #expect(docked.map(\.pid) == [secondPID, secondPID], "the relaunched windows are not docked: \(docked)")
     }
+
+    /// D-11, D-12a live: an app quits while Transom runs, so its two docked tiles stay reserved and the third tile keeps
+    /// its size; it relaunches, and each window goes back into its own tile. Prints the order the events arrived in
+    /// (RESEARCH Assumption A1). Fixture windows only; the store is a temporary directory.
+    @Test(.timeLimit(.minutes(1)))
+    func quitAndRelaunchRefillsBothTiles() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "transom-quit-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let first = try await FixtureProcess.launch(["standard", "standard"])
+        defer { first.terminate() }
+        let keeper = try await FixtureProcess.launch(["standard"])
+        defer { keeper.terminate() }
+        let firstPID = first.pid
+        // By bundle, not by pid: the relaunched fixture must reach the tracker as a launch.
+        let system = AXWindowSystem(appFilter: { _, bundle in bundle == "unbundled:TransomFixtureApp" })
+        await system.start()
+        let windows = try await trackedWithTitles(system, first).map(\.window)
+        let third = try await trackedWithTitles(system, keeper)[0].window
+        let arrange = ArrangeController(system: system, store: LayoutStore(directory: directory))
+        defer { withExtendedLifetime(arrange) {} }
+        await arrange.start()
+        var order: [String] = []
+        arrange.onEvent = { event in
+            switch event {
+            case .appTerminated(let pid) where pid == firstPID: order.append("appTerminated")
+            case .windowDestroyed(let window) where window.pid == firstPID: order.append("windowDestroyed \(window.windowID)")
+            default: break
+            }
+        }
+        for window in windows + [third] {
+            await arrange.dispatch(.dock, focused: window)
+            try #require(arrange.arranger.deskKey(of: window).flatMap { arrange.arranger.world[$0]?.tree.state(of: window) } == .present, "\(window) did not dock")
+        }
+        func current(_ fixture: FixtureProcess, _ index: Int) async -> Rect? {
+            _ = try? await fixture.send("list")
+            return fixture.windows.first { $0.index == index }?.frame
+        }
+        let key = try #require(arrange.arranger.deskKey(of: windows[0]))
+        let visible = try #require(Displays.current().first { $0.uuid == key.displayUUID }).visibleFrame
+        let tiles = try Planner.plan(desk: try #require(arrange.arranger.world[key]), area: visible, gap: arrange.arranger.gap, mins: [:]).frames
+        let wanted = [try #require(tiles[windows[0]]), try #require(tiles[windows[1]])]
+        let thirdTile = try #require(tiles[third])
+        let settled = await waitUntil(timeout: .seconds(3)) {
+            let frames = [await current(first, 0), await current(first, 1), await current(keeper, 0)]
+            return zip(frames, wanted + [thirdTile]).allSatisfy { frame, tile in frame.map { near($0, tile) } ?? false }
+        }
+        try #require(settled, "the three windows never reached their tiles")
+
+        _ = try await first.send("quit")
+        let held = await waitUntil(timeout: .seconds(2)) { windows.allSatisfy(arrange.arranger.isPlaceholder) }
+        print("A1 event order on quit: \(order)")
+        #expect(held, "the tiles are not reserved after the quit; events: \(order)")
+        #expect(await current(keeper, 0).map { near($0, thirdTile) } == true, "the third tile changed")
+
+        let second = try await FixtureProcess.launch(["standard", "standard"])
+        defer { second.terminate() }
+        var frames: [Rect?] = []
+        let back = await waitUntil(timeout: .seconds(5)) {
+            frames = [await current(second, 0), await current(second, 1)]
+            return zip(frames, wanted).allSatisfy { frame, tile in frame.map { near($0, tile) } ?? false }
+        }
+        #expect(back, "Fixture 0 / Fixture 1 are at \(frames), not their tiles \(wanted)")
+        #expect(arrange.arranger.placeholderCount == 0)
+        #expect(await current(keeper, 0).map { near($0, thirdTile) } == true, "the third tile changed")
+    }
 }
