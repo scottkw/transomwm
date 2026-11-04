@@ -7,7 +7,7 @@ updated: 2026-11-04
 ---
 
 ## Current Test
-Host item 6 (VoiceOver), the only check left for the user. Items 3, 4, 5, 7 ran in the VM on macOS 15.7.7 and are to be repeated on a macOS 27 VM.
+All user checks done. Items 3, 4, 5, 7 ran in the VM on macOS 15.7.7 and are to be repeated on a macOS 27 VM.
 
 ## Build under test
 - Code: `1466f8b` and later docs commits.
@@ -22,7 +22,7 @@ Host item 6 (VoiceOver), the only check left for the user. Items 3, 4, 5, 7 ran 
 | 3 | Save a view on Desktop 2, go to it from Desktop 1. The Space switches and the camera stays on the saved view | D-03, focus-widen risk | pass in VM, 15.7.7 (2026-11-04) |
 | 4 | ⌘Q a real app with docked windows: dim "Waiting for {App}…" tile, clicks pass through. Reopen within 30 s: tiles refill. ⌘Q again and do not reopen: tile closes after 30 s. Switch Spaces with one showing | D-12a, D-13, WR-06, A1 | pass in VM, 15.7.7 (2026-11-04); look of the tile not seen |
 | 5 | Terminal: symlink per the README, `transom view 3; echo $?` (0), `transom nope; echo $?` (64), `open transom://view/3` (`transom-debug://` on a Debug build), quit Transom, `transom view 3; echo $?` (2) | VIEW-03, VIEW-05, URL via LaunchServices | pass in VM, 15.7.7 (2026-11-04) |
-| 6 | VoiceOver: ⌥3 reads one joined "View 3…" line | D-04 | pending |
+| 6 | VoiceOver: ⌥3 reads one joined "View 3…" line | D-04 | pass (2026-11-04) |
 | 7 | Real reboot with a docked tile on Desktop 2. Layout returns, each window in its own tile. Visit Desktop 2: that tile refills | VIEW-04, CR-02, CR-03, D-12b | pass in VM, 15.7.7 (2026-11-04) |
 
 Not run (no way to check here, recorded as accepted unless the user can run them): a second physical display; a failed Space switch; a non-US keyboard layout (optional in item 1); a stored display arrangement applied after a reboot (needs a second display).
