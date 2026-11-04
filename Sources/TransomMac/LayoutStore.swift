@@ -13,8 +13,8 @@ public enum LayoutStoreError: Error, Equatable {
 ///
 /// The file is user-writable and decides where windows go (T-03-15), so `load` rejects it whole on any doubt: over
 /// `World.maxEncodedBytes`, malformed JSON, an invalid World, an invalid or duplicate home frame, an incomplete session
-/// record. It logs why, moves the file aside as `.corrupt` and starts empty. A file from a newer schema is the
-/// exception (T-03-18): it is left in place and nothing is saved this session, so a downgrade never destroys it.
+/// record. It logs why, moves the file aside as `.corrupt-<unix seconds>` and starts empty. A file from a newer schema is
+/// the exception (T-03-18): it is left in place and nothing is saved this session, so a downgrade never destroys it.
 @MainActor public final class LayoutStore {
     nonisolated public static let fileName = "layout.json"
 
@@ -22,7 +22,7 @@ public enum LayoutStoreError: Error, Equatable {
     public private(set) var contents: LayoutFile?
     /// Why the last `load` rejected the file; nil when it loaded or there was none.
     public private(set) var loadError: LayoutStoreError?
-    /// Set by a newer-schema file: every `save` this session is a no-op.
+    /// Set by a newer-schema file, or a rejected one that could not be moved aside: every `save` this session is a no-op.
     public private(set) var savingDisabled = false
     private let directory: URL
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "persist")
@@ -144,14 +144,15 @@ public enum LayoutStoreError: Error, Equatable {
         return contents
     }
 
-    /// Moves the rejected file to `<name>.corrupt`, replacing an older one, so the next save cannot destroy it.
+    /// Moves the rejected file to `<name>.corrupt-<unix seconds>`, as `backUp` names its copies, so no earlier one is
+    /// replaced and the next save cannot destroy it. If it won't move, no save this session can either.
     private func setAside() {
-        let corrupt = directory.appending(path: Self.fileName + ".corrupt")
+        let corrupt = directory.appending(path: "\(Self.fileName).corrupt-\(Int(Date.now.timeIntervalSince1970))")
         do {
-            if FileManager.default.fileExists(atPath: corrupt.path) { try FileManager.default.removeItem(at: corrupt) }
             try FileManager.default.moveItem(at: file, to: corrupt)
         } catch {
-            Self.logger.error("could not move the rejected \(Self.fileName, privacy: .public) aside: \(error.localizedDescription, privacy: .public)")
+            savingDisabled = true
+            Self.logger.error("could not move the rejected \(Self.fileName, privacy: .public) aside, so not saving layouts this session: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

@@ -31,7 +31,10 @@ private func sampleFile() throws -> LayoutFile {
     final class Directory {
         let url = FileManager.default.temporaryDirectory.appending(path: "transom-layout-\(UUID().uuidString)", directoryHint: .isDirectory)
         var file: URL { url.appending(path: LayoutStore.fileName) }
-        var corrupt: URL { url.appending(path: LayoutStore.fileName + ".corrupt") }
+        /// The rejected files set aside.
+        var corrupted: [URL] {
+            ((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []).filter { $0.hasPrefix(LayoutStore.fileName + ".corrupt-") }.sorted().map { url.appending(path: $0) }
+        }
         init() { try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
         deinit { try? FileManager.default.removeItem(at: url) }
         func write(_ text: String) throws { try Data(text.utf8).write(to: file) }
@@ -98,7 +101,7 @@ private func sampleFile() throws -> LayoutFile {
         #expect(store.contents == nil)
         #expect(store.loadError == nil)
         #expect(!store.savingDisabled)
-        #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
+        #expect(dir.corrupted.isEmpty)
     }
 
     /// `sampleFile()`'s JSON with top-level keys changed, for schema 2's keys, which `edited` cannot reach cleanly.
@@ -163,8 +166,8 @@ private func sampleFile() throws -> LayoutFile {
     func aBadFileIsRejectedWholeAndMovedAside(name: String, text: @MainActor @Sendable () throws -> String) throws {
         let text = try text()
         let dir = Directory()
-        try dir.write("older")
-        try FileManager.default.moveItem(at: dir.file, to: dir.corrupt)  // an older .corrupt is replaced
+        let older = dir.url.appending(path: LayoutStore.fileName + ".corrupt-100")
+        try Data("older".utf8).write(to: older)
         try dir.write(text)
         let store = LayoutStore(directory: dir.url)
         store.load()
@@ -172,7 +175,23 @@ private func sampleFile() throws -> LayoutFile {
         #expect(store.loadError != nil, "\(name) was accepted")
         #expect(!store.savingDisabled, "\(name) disabled saving")
         #expect(!FileManager.default.fileExists(atPath: dir.file.path), "\(name) left in place")
-        #expect(try String(contentsOf: dir.corrupt, encoding: .utf8) == text, "\(name) not moved aside")
+        #expect(try String(contentsOf: older, encoding: .utf8) == "older", "\(name) replaced an earlier copy")
+        let moved = try #require(dir.corrupted.first { $0.lastPathComponent != older.lastPathComponent })
+        #expect(try String(contentsOf: moved, encoding: .utf8) == text, "\(name) not moved aside")
+    }
+
+    /// WR-08: a rejected file that can't be moved aside is still the only copy, so nothing is saved over it.
+    @Test func aRejectedFileThatCannotMoveTurnsSavingOff() throws {
+        let dir = Directory()
+        try dir.write("not json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.url.path) }
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.contents == nil)
+        #expect(store.savingDisabled)
+        #expect(try store.save(try sampleFile()) == false)
+        #expect(try dir.text() == "not json")
     }
 
     @Test func rejectionsNameTheirReason() throws {
@@ -200,7 +219,7 @@ private func sampleFile() throws -> LayoutFile {
         #expect(store.loadError == .newerVersion(4))
         #expect(store.savingDisabled)
         #expect(try dir.text() == newer)
-        #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
+        #expect(dir.corrupted.isEmpty)
         #expect(try store.save(try sampleFile()) == false)
         #expect(try dir.text() == newer, "a save overwrote a newer Transom's layout")
     }
@@ -285,7 +304,7 @@ extension LayoutStoreTests {
         store.load()
         #expect(store.loadError == nil)
         #expect(!store.savingDisabled)
-        #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
+        #expect(dir.corrupted.isEmpty)
         let contents = try #require(store.contents)
         #expect(contents.schemaVersion == 3)
         #expect(contents.arrangement.isUnknown)
