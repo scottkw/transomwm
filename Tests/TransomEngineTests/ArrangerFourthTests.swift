@@ -395,3 +395,116 @@ extension ArrangerFourthTests {
         #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
     }
 }
+
+// MARK: Guides (UI-SPEC Surface 3)
+
+private func guides(_ effects: [ArrangerEffect]) -> [([Rect], String)] {
+    effects.compactMap { if case .fourthGuides(let rects, let uuid) = $0 { (rects, uuid) } else { nil } }
+}
+
+private let columns = FourthZones.bands(in: area, axis: .horizontal)
+private let rows = FourthZones.bands(in: area, axis: .vertical)
+
+/// w dragged with ⌃ into the 1st band and held past the dwell: the guides and a result are up.
+private func guidesUp() async -> Harness {
+    var harness = await Harness.started(frames: [1: frameW])
+    _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 10, y: 310))
+    _ = await tick(&harness)
+    return harness
+}
+
+extension ArrangerFourthTests {
+    @Test func theGuidesAppearOnceWithTheFirstResult() async throws {
+        var harness = await Harness.started(frames: [1: frameW])
+        let during = await controlDrag(&harness, w, from: frameW, to: Point(x: 10, y: 310))
+        #expect(guides(during).isEmpty, "guides before the dwell")
+
+        let first = await tick(&harness)
+
+        #expect(first.contains(.fourthGuides(columns, displayUUID: "main")), "tick gave \(first)")
+        #expect(guides(first).count == 1)
+        #expect(guides(await tick(&harness)).isEmpty, "sent again")
+    }
+
+    @Test func aZoneChangeLeavesTheGuidesAlone() async throws {
+        var harness = await guidesUp()
+
+        let moved = await harness.send(pointer(.dragged, 1300, 310, .control))
+
+        #expect(moved.contains(.preview(nil, displayUUID: "main")))
+        #expect(guides(moved).isEmpty)
+        let shown = await tick(&harness)
+        #expect(!previews(shown).isEmpty, "no new result")
+        #expect(guides(shown).isEmpty)
+    }
+
+    @Test func commandSwitchesTheGuidesAtOnce() async throws {
+        var harness = await guidesUp()
+
+        let pressed = await harness.send(pointer(.flagsChanged, 10, 310, [.control, .command]))
+        #expect(pressed.contains(.fourthGuides(rows, displayUUID: "main")), "got \(pressed)")
+
+        let released = await harness.send(pointer(.flagsChanged, 10, 310, .control))
+        #expect(released.contains(.fourthGuides(columns, displayUUID: "main")), "got \(released)")
+    }
+
+    @Test(arguments: [
+        (Modifiers(), 10.0, "⌃ released"), (Modifiers([.control, .shift]), 10.0, "⇧ pressed"), (Modifiers.control, -5000.0, "off every display"),
+    ] as [(Modifiers, Double, String)])
+    func leavingAFourthHidesTheGuides(modifiers: Modifiers, x: Double, _ why: String) async throws {
+        var harness = await guidesUp()
+
+        let left = await harness.send(pointer(.dragged, x, 310, modifiers))
+
+        #expect(left.contains(.fourthGuides([], displayUUID: "main")), "\(why): \(left)")
+    }
+
+    @Test func aNewDisplaysGuidesWaitForItsDwell() {
+        let start = ContinuousClock.now
+        let side = DisplayInfo(
+            uuid: "side", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080), visibleFrame: Rect(x: 1440, y: 0, width: 1920, height: 1080),
+            currentSpaceID: nil)
+        var arranger = Arranger()
+        _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay, side], windows: [info(w)], initialRefreshComplete: true)), now: start)
+        let grab = Point(x: frameW.midX, y: frameW.minY + 10)
+        _ = arranger.handle(pointer(.down, grab.x, grab.y, press: w), now: start)
+        _ = arranger.handle(pointer(.dragged, grab.x + 10, grab.y), now: start)
+        _ = arranger.handle(.dragFrame(w.identity, shifted(frameW, 10)), now: start)
+        _ = arranger.handle(pointer(.dragged, 10, 310, .control), now: start)
+        _ = arranger.handle(.tick, now: start + .milliseconds(150))
+
+        let crossed = arranger.handle(pointer(.dragged, 1500, 310, .control), now: start + .milliseconds(160))
+
+        #expect(guides(crossed).map(\.1) == ["main"] && guides(crossed).first?.0 == [], "got \(crossed)")
+        let settled = arranger.handle(.tick, now: start + .milliseconds(310))
+        #expect(settled.contains(.fourthGuides(FourthZones.bands(in: side.visibleFrame, axis: .horizontal), displayUUID: "side")), "got \(settled)")
+    }
+
+    @Test func aMouseUpHidesTheGuides() async throws {
+        var harness = await guidesUp()
+        let up = await harness.send(pointer(.up, 10, 310, .control))
+        #expect(up.contains(.fourthGuides([], displayUUID: "main")), "got \(up)")
+    }
+
+    @Test func aPauseEndingTheDragHidesTheGuides() async throws {
+        var harness = await guidesUp()
+        var effects = await harness.send(.setPaused(.user, true))
+        effects += await harness.send(pointer(.dragged, 1300, 310, .control))
+        #expect(effects.contains(.fourthGuides([], displayUUID: "main")), "got \(effects)")
+        #expect(effects.contains(.preview(nil, displayUUID: "main")))
+        #expect(harness.arranger.drag == nil)
+    }
+
+    @Test func anAbandonedDragHidesTheGuides() async throws {
+        var harness = await guidesUp()
+        let again = await harness.send(pointer(.down, 800, 310, press: w))
+        #expect(again.contains(.fourthGuides([], displayUUID: "main")), "got \(again)")
+    }
+
+    @Test func aDragThatShowedNoGuidesSendsNoGuideEffect() async throws {
+        var harness = await Harness.started(frames: [1: frameW])
+        var effects = await controlDrag(&harness, w, from: frameW, to: Point(x: 10, y: 310))
+        effects += await harness.send(pointer(.up, 10, 310, .control))
+        #expect(guides(effects).isEmpty, "got \(effects)")
+    }
+}

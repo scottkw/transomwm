@@ -106,6 +106,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case flashBlocked(Rect, displayUUID: String)
     /// The gap handles to show on that display; empty hides them (UI-SPEC Surface 3).
     case gapHandles([GapHandle], displayUUID: String)
+    /// The fourth zone guides to show on that display; empty hides them (08.1 UI-SPEC Surface 3).
+    case fourthGuides([Rect], displayUUID: String)
     /// Animate this camera move, then feed `.cameraSettle` with its ID (RESEARCH Pattern 4).
     case cameraMove(CameraMove)
     /// The collapsed blocks to show on that display; empty hides them (UI-SPEC Surface 3, ZOOM-13).

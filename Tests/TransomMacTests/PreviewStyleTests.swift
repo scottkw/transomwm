@@ -165,4 +165,14 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 1e-9 }
         let contrasted = try #require(PreviewStyle.layers(for: .fourth(r, label: "1st column"), increaseContrast: true).first)
         #expect(near(contrasted.fillAlpha, 0.30) && near(contrasted.borderAlpha, 1))
     }
+
+    @Test func aFourthGuideIsTheGhostRecipeInset4Points() {
+        let guide = PreviewStyle.fourthGuide(r, increaseContrast: false)
+        #expect(guide.rect == Rect(x: 104, y: 104, width: 392, height: 292))
+        #expect(guide.fill == .label && near(guide.fillAlpha, 0.08) && guide.border == .label && near(guide.borderAlpha, 0.50))
+        #expect(guide.dash == [8, 4] && guide.label == nil)
+
+        let contrasted = PreviewStyle.fourthGuide(r, increaseContrast: true)
+        #expect(near(contrasted.fillAlpha, 0.12) && near(contrasted.borderAlpha, 1))
+    }
 }

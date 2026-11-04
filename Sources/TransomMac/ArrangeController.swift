@@ -833,6 +833,8 @@ import os
                 previews?.flashBlocked(rect, on: displayUUID)
             case .gapHandles(let handles, let displayUUID):
                 gapPanels.show(handles, on: displayUUID)
+            case .fourthGuides:
+                break
             case .collapsedBlocks(let blocks, let displayUUID):
                 collapsedPanels.show(blocks, on: displayUUID)
             case .tabStrips(let strips, let displayUUID):
