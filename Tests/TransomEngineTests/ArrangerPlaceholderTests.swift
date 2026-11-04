@@ -1,3 +1,4 @@
+import Foundation
 import TransomEngine
 import TransomModel
 import TransomTestSupport
@@ -117,6 +118,34 @@ private func launchedOnSpaceOne(_ layout: World, bootChanged: Bool = true) async
     var harness = await onSpaceOne([otherOnSpaceOne])
     await harness.send(.restore(layout, homeFrames: [:], bootChanged: bootChanged))
     await harness.send(.inventory(await harness.fake.inventory()))
+    return harness
+}
+
+/// [Notes (1) | Plan (2) | Desktop] on Desktop 2, and on Desktop 1 a tile whose app never opens.
+private func storedOnBothSpaces() throws -> World {
+    var world = try savedTwo(on: spaceTwo)
+    try world.addDesk(spaceOne)
+    try world.reflow(spaceOne) { desk, ids throws(LayoutError) in
+        try desk.tree.insert(ref(7, title: "Gone", bundle: "com.example.neveropens"), at: .left, of: .desktop, ids: &ids)
+    }
+    return world
+}
+
+/// Transom launches on Desktop 1 on `layout`, saved under other displays, and `settleAfter` later applies the set stored
+/// for this display: the launch settle, or an undock after it (D-12b).
+private func appliedStoredSet(
+    _ stored: World, over layout: World = World(), bootChanged: Bool = true, settleAfter: Duration = .zero
+) async -> Harness {
+    var harness = await onSpaceOne([otherOnSpaceOne])
+    let here = ArrangementID(["main"])
+    await harness.send(.restore(
+        layout, homeFrames: [:], arrangement: ArrangementID(["away", "main"]),
+        layoutSets: [LayoutSet(arrangement: here, world: stored, lastUsed: Date(timeIntervalSince1970: 0))], bootChanged: bootChanged))
+    let inventory = await harness.fake.inventory()
+    await harness.send(.inventory(inventory))
+    harness.now += settleAfter
+    await harness.send(.displaysSettling)
+    await harness.send(.displaysSettled(here, names: [:], inventory: inventory))
     return harness
 }
 
@@ -428,6 +457,44 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         var harness = await launchedOnSpaceOne(try savedTwo(on: spaceTwo))
         let start = harness.now
         harness.now = start + .seconds(60)
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        _ = await ticked(&harness, at: start + .seconds(299))
+        #expect(harness.arranger.placeholderCount == 2)
+        let due = await ticked(&harness, at: start + .seconds(300))
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(logged(due, "expired (5 min, no launch)"))
+    }
+
+    /// D-12b: a stored set's tile on a Space not shown waits like any other, however long, and a window of that Space fills
+    /// it once the Space shows. One that did not come back on a shown desk still closes: a stored set is not a launch (08-04).
+    @Test(arguments: [true, false])
+    func aStoredSetsHiddenTileWaitsAndFillsWhenItsSpaceShows(bootChanged: Bool) async throws {
+        var harness = await appliedStoredSet(try storedOnBothSpaces(), bootChanged: bootChanged)
+        let start = harness.now
+        #expect(harness.arranger.arrangement == ArrangementID(["main"]))
+        #expect(harness.arranger.placeholderCount == 2)
+        #expect(harness.arranger.world[spaceOne]?.tree.windows.isEmpty == true)
+
+        let late = await ticked(&harness, at: start + .seconds(3600))
+        #expect(harness.arranger.placeholderCount == 2)
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.count == 2)
+        #expect(wakes(late).isEmpty)
+
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        await harness.send(.event(.windowCreated(returning(11, title: "Notes", spaces: [2]))))
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.contains(ref(11, pid: newPID)) == true)
+        #expect(harness.arranger.placeholderCount == 1)
+
+        let due = await ticked(&harness, at: start + .seconds(3610))
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows == [ref(11, pid: newPID)])
+        #expect(logged(due, "expired (10 s after launch)"))
+    }
+
+    /// Applying a stored set restarts no deadline a tile is already waiting on.
+    @Test func aTileAlreadyWaitingKeepsItsDeadlineThroughAStoredSet() async throws {
+        var harness = await appliedStoredSet(try savedTwo(on: spaceTwo), over: try savedTwo(on: spaceTwo), settleAfter: .seconds(200))
+        let start = harness.now - .seconds(200)
         await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
         _ = await ticked(&harness, at: start + .seconds(299))
         #expect(harness.arranger.placeholderCount == 2)

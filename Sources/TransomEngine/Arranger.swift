@@ -538,7 +538,7 @@ public struct Arranger: Sendable {
             let live = inventory.liveWindows?.filter { $0.spaces?.isDisjoint(with: shown) ?? true }
             do throws(LayoutError) {
                 let merged = try Self.merged(set.world, current: world, keeping: userPlacedSinceSwitch)
-                effects += try reattach((merged, homeFrames, wantedFrames), tracked: inventory.windows, live: live).effects
+                effects += try reattach((merged, homeFrames, wantedFrames), tracked: inventory.windows, live: live, holdingFrom: now, closingShown: true).effects
             } catch {
                 layoutSets.store(set.world, for: id, at: set.lastUsed)
                 effects.append(.fault("could not apply the layout set for arrangement \(id.shortHash); keeping the current layout: \(error)"))
@@ -685,11 +685,12 @@ public struct Arranger: Sendable {
     /// a present floating window, its real frame. Each docked window's current frame counts as already requested, so
     /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). A window whose real state
     /// or frame cannot be applied keeps its saved one. Throws, changing nothing but the history, if the saved layout cannot
-    /// be re-attached at all. `unplaced` counts the tracked windows the saved layout did not hold. With `now` (a launch),
-    /// unmatched saved windows wait as placeholders (D-12); without it (a stored arrangement), they had closed, and close.
+    /// be re-attached at all. `unplaced` counts the tracked windows the saved layout did not hold. Unmatched saved windows
+    /// wait as placeholders from `now` (D-12). With `closingShown` (a stored arrangement, not a launch), only those on a desk
+    /// not showing do, as AX can't list them there (D-12b); the rest close unless they already wait.
     private mutating func reattach(
         _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?,
-        holdingFrom now: ContinuousClock.Instant? = nil
+        holdingFrom now: ContinuousClock.Instant, closingShown: Bool = false
     ) throws(LayoutError) -> (effects: [ArrangerEffect], unplaced: Int) {
         if let fault = reattachFault {
             reattachFault = nil
@@ -705,8 +706,11 @@ public struct Arranger: Sendable {
                 placeholders.arriving.insert(match.window.identity)
             }
         }
-        if now == nil {
-            for window in reattached.waiting where placeholders.table[window.identity] == nil {
+        var holding = reattached.waiting
+        if closingShown {
+            let new = reattached.waiting.filter { placeholders.table[$0.identity] == nil }
+            holding = new.filter { window in candidate.desks.contains { !shownDesks.contains($0.key) && $0.value.contains(window) } }
+            for window in new where !holding.contains(window) {
                 try candidate.apply(.closed, for: window, on: DeskKey(displayUUID: "", spaceID: nil), history: &history)
             }
         }
@@ -752,7 +756,7 @@ public struct Arranger: Sendable {
                 wantedFrames[floating.window.identity] = floating.frame
             }
         }
-        if let now { faults += holdAtLaunch(reattached.waiting, tracked: tracked, unplaced: reattached.unplaced, ties: reattached.ties, now: now) }
+        if !holding.isEmpty { faults += holdAtLaunch(holding, tracked: tracked, unplaced: reattached.unplaced, ties: reattached.ties, now: now) }
         return (faults, reattached.unplaced.count)
     }
 

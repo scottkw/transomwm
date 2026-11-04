@@ -195,7 +195,8 @@ extension Arranger {
 
     /// The saved windows the launch could not attach wait (D-10, D-12): 10 s when their app already runs (a tracked window
     /// of the bundle), else 5 min. A tied window, or any other its app left unplaced, may match later as its title settles
-    /// (RESEARCH Pitfall 4). A live member takes a waiting one's selection, so a group's tile shows what is there.
+    /// (RESEARCH Pitfall 4). A live member takes a waiting one's selection, so a group's tile shows what is there. A stored
+    /// arrangement's tiles on desks not showing wait the same way (D-12b).
     mutating func holdAtLaunch(
         _ waiting: [WindowRef], tracked: [WindowInfo], unplaced: [WindowInfo], ties: [HintMatcher.Tie], now: ContinuousClock.Instant
     ) -> [ArrangerEffect] {
