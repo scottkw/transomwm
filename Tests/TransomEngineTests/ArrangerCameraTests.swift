@@ -107,6 +107,20 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         #expect(await harness.frame(c)?.size == home[c]?.size, "a parked window was resized")
     }
 
+    /// RESEARCH Pitfall 8: a fourth lands at the desk's root, so one outside a zoomed view would be parked out of sight.
+    @Test func aFourthLandingOutsideTheViewWidensTheCamera() async throws {
+        var harness = try await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        let into = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: into.id))
+
+        let effects = await harness.send(.command(.dockFourth(.fourth, .horizontal), focused: b))
+
+        let move = try #require(moves(effects).first, "no camera move: \(effects)")
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+        #expect(harness.arranger.view(on: "main") == .home)
+    }
+
     @Test func zoomingHomeUnparksEveryWindow() async throws {
         var harness = try await threeDocked()
         let home = await frames(harness)

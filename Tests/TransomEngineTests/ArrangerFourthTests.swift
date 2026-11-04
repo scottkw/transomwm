@@ -12,6 +12,8 @@ private func window(_ id: UInt32) -> WindowRef {
 
 private let w = window(1), a = window(2), b = window(3)
 private let frameW = Rect(x: 600, y: 300, width: 400, height: 300)
+/// Wider than the whole display: never fits a tile.
+private let huge = Size(width: 1500, height: 100)
 
 private func info(_ ref: WindowRef, _ frame: Rect = frameW, kind: WindowKind = .dockable, excluded: Bool = false, minimum: Size? = nil) -> WindowInfo {
     WindowInfo(window: ref, frame: frame, state: .present, displayUUID: "main", kind: kind, isExcluded: excluded, learnedMinimum: minimum)
@@ -135,5 +137,151 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         }
         _ = arranger.handle(.command(.togglePause, focused: nil), now: .now)
         #expect(!available(w), "paused")
+    }
+
+    /// The first-column frame of `w` on a desk `change` left, planned with no minimums.
+    private func wouldBeFrame(_ arranger: Arranger, _ edit: (inout Desk, inout IDSource) throws -> Void) throws -> Rect {
+        var desk = try #require(arranger.world[mainKey])
+        var ids = IDSource(next: 9000)
+        try edit(&desk, &ids)
+        let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: [:])
+        return try #require(desk.tree.leaf(containing: w).flatMap { plan.resolution.nodeRects[$0] })
+    }
+
+    @Test func aDockedGroupMovesWholeForAnyFocusedMember() throws {
+        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
+        try dockFlat([a], in: &arranger)
+        let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in
+            try desk.desktop.remove(w)
+            try desk.tree.group(w, into: leaf)
+        }
+        _ = arranger.handle(.gap(8), now: .now)
+        let tree = try #require(arranger.world[mainKey]?.tree)
+        guard case .tabs(let members, let selected)? = tree.node(leaf) else {
+            Issue.record("no group")
+            return
+        }
+        let notSelected = members[(selected + 1) % members.count]
+        let depth = arranger.history.depth(for: mainKey)
+
+        _ = command(&arranger, .fourth, .horizontal, focused: notSelected)
+
+        let after = try #require(arranger.world[mainKey]?.tree)
+        expectWeights(try rootWeights(arranger), [3.0 / 4, 1.0 / 4])
+        guard case .split(_, let children, _)? = after.node(try #require(after.root)), case .tabs(let moved, _)? = after.node(children[1]) else {
+            Issue.record("the group is not the last child: \(after)")
+            return
+        }
+        #expect(Set(moved) == Set(members))
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test func aFloatingGroupDocksWhole() throws {
+        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
+            try desk.desktop.group(id: try ids.make(), target: a, adding: w)
+        }
+        _ = arranger.handle(.gap(8), now: .now)
+        let depth = arranger.history.depth(for: mainKey)
+
+        _ = command(&arranger, .first, .horizontal, focused: w)
+
+        let desk = try #require(arranger.world[mainKey])
+        expectWeights(try rootWeights(arranger), [1.0 / 4, 3.0 / 4])
+        #expect(desk.desktop.group(containing: w) == nil)
+        #expect(desk.tree.leaf(containing: w) == desk.tree.leaf(containing: a), "the group came apart")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test func withZoomOffAWindowThatDoesNotFitIsRefusedWithTheBlockedFlash() throws {
+        var arranger = arranger([info(w, minimum: huge)])
+        let world = arranger.world, depth = arranger.history.depth(for: mainKey)
+        let frame = try wouldBeFrame(arranger) { desk, ids in
+            try desk.desktop.remove(w)
+            try desk.tree.insertFourth(.panel(w), states: [w.identity: .present], slot: .first, axis: .horizontal, ids: &ids)
+        }
+
+        let effects = command(&arranger, .first, .horizontal, focused: w)
+
+        #expect(effects == [.beep, .announce("Not enough room to dock here"), .flashBlocked(frame, displayUUID: "main")])
+        #expect(arranger.world == world)
+        #expect(arranger.history.depth(for: mainKey) == depth)
+    }
+
+    @Test func aRefusedGroupFlashesAtItsLeafRect() throws {
+        var arranger = arranger([info(w, minimum: huge), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
+            try desk.desktop.group(id: try ids.make(), target: a, adding: w)
+        }
+        _ = arranger.handle(.gap(8), now: .now)
+        let world = arranger.world
+        let frame = try wouldBeFrame(arranger) { desk, ids in
+            let group = try desk.desktop.removeGroup(try #require(desk.desktop.group(containing: w)).id)
+            try desk.tree.insertFourth(
+                .tabs(windows: group.group.members, selected: group.group.selected), states: group.states, slot: .middle, axis: .horizontal, ids: &ids)
+        }
+
+        let effects = command(&arranger, .middle, .horizontal, focused: w)
+
+        #expect(effects == [.beep, .announce("Not enough room to dock here"), .flashBlocked(frame, displayUUID: "main")])
+        #expect(arranger.world == world)
+    }
+
+    @Test func withZoomOnAWindowThatDoesNotFitCollapsesAndSaysSo() throws {
+        var arranger = arranger([info(w, minimum: huge)], zoom: true)
+        let depth = arranger.history.depth(for: mainKey)
+
+        let effects = command(&arranger, .first, .horizontal, focused: w)
+
+        #expect(announcements(effects) == [CollapseCopy.dockedAnnouncement(dragged: true, others: 0)])
+        #expect(arranger.camera.collapsible == [w.identity])
+        #expect(arranger.world[mainKey]?.tree.state(of: w) == .present)
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test func theSameFourthAgainOnlyBeepsAndAddsNoUndoStep() throws {
+        var arranger = arranger([info(w)])
+        _ = command(&arranger, .first, .horizontal, focused: w)
+        let world = arranger.world, depth = arranger.history.depth(for: mainKey)
+
+        #expect(command(&arranger, .first, .horizontal, focused: w) == [.beep])
+
+        #expect(arranger.world == world, "the window got a new leaf")
+        #expect(arranger.history.depth(for: mainKey) == depth)
+    }
+
+    /// Nothing moves on screen, but a floating window becoming docked is a change.
+    @Test func aFloatingWindowAlreadyAtTheFrameStillDocks() throws {
+        var trial = arranger([info(w)])
+        _ = command(&trial, .first, .horizontal, focused: w)
+        let desk = try #require(trial.world[mainKey])
+        let tile = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[w])
+        var atTheFrame = arranger([info(w, tile)])
+
+        _ = command(&atTheFrame, .first, .horizontal, focused: w)
+
+        #expect(atTheFrame.world[mainKey]?.tree.state(of: w) == .present)
+    }
+
+    /// A row with the root running the other way wraps it, in one step; the weights then edit like any other split.
+    @Test func aRowWrapsTheRootInOneUndoStepAndNothingRemembersTheFourth() throws {
+        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
+        try dockFlat([a], in: &arranger)
+        let depth = arranger.history.depth(for: mainKey)
+
+        _ = command(&arranger, .first, .vertical, focused: w)
+
+        let tree = try #require(arranger.world[mainKey]?.tree)
+        guard case .split(let axis, _, _)? = tree.node(try #require(tree.root)) else {
+            Issue.record("no root split")
+            return
+        }
+        #expect(axis == .vertical)
+        expectWeights(try rootWeights(arranger), [1.0 / 4, 3.0 / 4])
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+
+        _ = arranger.handle(.command(.growTile, focused: w), now: .now)
+        expectWeights(try rootWeights(arranger), [0.35, 0.65])
     }
 }

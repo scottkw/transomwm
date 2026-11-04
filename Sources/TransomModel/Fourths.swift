@@ -16,6 +16,11 @@ public enum FourthSlot: String, CaseIterable, Hashable, Sendable {
     }
 }
 
+public enum FourthZones {
+    public static func slot(at point: Point, in visible: Rect, axis: Axis) -> FourthSlot { .first }
+    public static func bands(in visible: Rect, axis: Axis) -> [Rect] { [] }
+}
+
 extension LayoutTree {
     /// D-14: `node` takes `slot`'s share of the whole desk at the root, and a root split the other way becomes one child
     /// of a new root. The caller has already taken the window off the desk. All-or-nothing, like every tree edit.
