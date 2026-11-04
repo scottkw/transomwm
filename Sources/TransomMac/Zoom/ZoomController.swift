@@ -523,7 +523,7 @@ import os
                 content: tile.kind == .collapsed ? collapsedBlock(tile.window) : image.map { .snapshot($0) } ?? fallback(tile.window))
         }
         // After the windows, so each strip draws above its group's tile (07 UI-SPEC Surface 6).
-        return windows + move.strips.map { strip in
+        return StageTile.placeholders(of: move, appKit: appKit) + windows + move.strips.map { strip in
             let shown = strip.members[strip.selected]
             return StageTile(
                 id: StageTile.stripID(cgWindow(shown) ?? shown.windowID), start: appKit(strip.start), end: appKit(strip.end),

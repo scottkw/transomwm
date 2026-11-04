@@ -413,7 +413,14 @@ extension Arranger {
 
     /// The members of the group holding `window` and its selected index, docked or floating (the overview's group tiles).
     public func tabGroupMembers(holding window: WindowRef) -> (members: [WindowRef], selected: Int)? {
-        tabGroup(holding: window).map { ($0.members, $0.selected) }
+        tabGroup(holding: window).map { liveTabs($0.members, selected: $0.selected) }
+    }
+
+    /// `members` without the ones waiting to come back, and where the selected one is among them: no tab is drawn for a
+    /// window that is not there (08 UI-SPEC Surface 2).
+    func liveTabs(_ members: [WindowRef], selected: Int) -> (members: [WindowRef], selected: Int) {
+        let live = members.filter { placeholders.table[$0.identity] == nil }
+        return (live, live.firstIndex(of: members[selected]) ?? 0)
     }
 
     /// Whether `window` is a non-selected member of a docked or floating group: it never shows in focus moves or the overview.
@@ -462,11 +469,12 @@ extension Arranger {
         guard pauseReasons.isEmpty, !sessionPaused else { return refused(.paused, "arranging is paused") }
         guard ready else { return refused(.notReady, "not ready") }
         guard let focused, let ref = tabGroup(holding: focused) else { return refused(.notInGroup, "not in a tab group") }
-        let count = ref.members.count
+        let live = liveTabs(ref.members, selected: ref.selected), count = live.members.count
+        guard count > 0 else { return refused(.notInGroup, "every member is waiting") }
         let via: TabSelectSource = switch source { case .menu: .menu; case .hotkey: .hotkey; case .url: .url; case .voiceOver: .click }
         switch command {
-        case .next: return select(ref.members[(ref.selected + 1) % count], via: via, ready: ready, now: now)
-        case .previous: return select(ref.members[(ref.selected + count - 1) % count], via: via, ready: ready, now: now)
+        case .next: return select(live.members[(live.selected + 1) % count], via: via, ready: ready, now: now)
+        case .previous: return select(live.members[(live.selected + count - 1) % count], via: via, ready: ready, now: now)
         case .moveOut: return moveOut(focused, via: source, ready: ready)
         }
     }
@@ -616,20 +624,25 @@ extension Arranger {
     func tabStrips(_ key: DeskKey, desk: Desk, plan: FramePlan) -> [TabStrip] {
         func titles(_ members: [WindowRef]) -> [String] { members.map { windows[$0.identity]?.window.titleHint ?? "" } }
         let docked = desk.tree.nodes.compactMap { id, node -> TabStrip? in
-            guard case .tabs(let members, let selected) = node, plan.frames[members[selected]] != nil, let rect = plan.resolution.nodeRects[id]
+            guard case .tabs(let members, let selected) = node, plan.frames[members[selected]] != nil, let rect = plan.resolution.nodeRects[id],
+                placeholders.table[members[selected].identity] == nil
             else { return nil }
+            let live = liveTabs(members, selected: selected)
             return TabStrip(
-                group: GroupKey(desk: key, node: id), frame: TabBand.strip(of: rect), members: members, titles: titles(members),
-                selected: selected, floating: false)
+                group: GroupKey(desk: key, node: id), frame: TabBand.strip(of: rect), members: live.members, titles: titles(live.members),
+                selected: live.selected, floating: false)
         }
         let parked = Set(plan.parks)
         let floating = desk.desktop.groups.compactMap { group -> TabStrip? in
             let shown = group.members[group.selected]
-            guard desk.desktop.windows.contains(where: { $0.window == shown && $0.state == .present }), !parked.contains(shown) else { return nil }
+            guard desk.desktop.windows.contains(where: { $0.window == shown && $0.state == .present }), !parked.contains(shown),
+                placeholders.table[shown.identity] == nil
+            else { return nil }
             let content = plan.frames[shown] ?? TabBand.content(of: group.frame)
+            let live = liveTabs(group.members, selected: group.selected)
             return TabStrip(
-                group: GroupKey(desk: key, node: group.id), frame: TabBand.strip(of: TabBand.frame(ofContent: content)), members: group.members,
-                titles: titles(group.members), selected: group.selected, floating: true)
+                group: GroupKey(desk: key, node: group.id), frame: TabBand.strip(of: TabBand.frame(ofContent: content)), members: live.members,
+                titles: titles(live.members), selected: live.selected, floating: true)
         }
         return (docked + floating).sorted { $0.group.node < $1.group.node }
     }
@@ -663,7 +676,7 @@ extension Arranger {
         guard let ref = tabGroup(group) else { return refuse(.notInGroup, "close group \(group.node)", "no such group") }
         guard tabs.closeQueue?.group != group else { return [] }  // already closing
         let selected = ref.members[ref.selected]
-        tabs.closeQueue = CloseQueue(group: group, remaining: [selected] + ref.members.filter { $0 != selected })
+        tabs.closeQueue = CloseQueue(group: group, remaining: [selected] + ref.members.filter { $0 != selected && placeholders.table[$0.identity] == nil })
         return closeProgress(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 

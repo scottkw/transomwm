@@ -95,6 +95,29 @@ extension Arranger {
             .sorted { $0.window.identity < $1.window.identity }
     }
 
+    /// That display's placeholder tiles at home (the overview draws them), whatever the view.
+    /// shortcut: a waiting window whose learned minimum no longer fits gets no tile here or in a zoomed plan until it
+    /// expires (zoom off, planFloatingLostRoom relaxes it); relax it in ViewPlanner if that hole is ever noticed.
+    public func homePlaceholders(on displayUUID: String) -> [PlaceholderTile] {
+        guard !placeholders.table.isEmpty, let display = displays.first(where: { $0.uuid == displayUUID }), let desk = world[Self.key(display)],
+            let plan = try? ViewPlanner.plan(
+                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames, collapsible: camera.collapsible)
+        else { return [] }
+        return placeholderTiles(frames: plan.frames, collapsed: plan.collapsed, resolution: plan.resolution)
+    }
+
+    /// `resolution` without the nodes holding only waiting windows, for what looks for a place to go: there is no window
+    /// there to focus or zoom to (RESEARCH Pitfall 8). `keeping` stays, for the view the camera is already on.
+    func withoutWaiting(_ resolution: Resolution, tree: LayoutTree, keeping: NodeID? = nil) -> Resolution {
+        guard !placeholders.table.isEmpty else { return resolution }
+        var kept = resolution
+        kept.nodeRects = resolution.nodeRects.filter { id, _ in
+            guard id != keeping, let sub = try? tree.subtree(at: id), sub.nodes[.desktop] == nil, !sub.windows.isEmpty else { return true }
+            return !sub.windows.allSatisfy(isPlaceholder)
+        }
+        return kept
+    }
+
     /// Sends each display's placeholder tiles that changed; a display with none (or gone) gets an empty list.
     mutating func showPlaceholders(_ tiles: [String: [PlaceholderTile]]) -> [ArrangerEffect] {
         let uuids = Set(tiles.keys).union(placeholders.shown.keys).sorted()
@@ -194,6 +217,7 @@ extension Arranger {
                 try world.adopt(match.saved, by: match.window, history: &history)
                 placeholders.table[match.saved.identity] = nil
                 placeholders.fresh.remove(match.window.identity)
+                if camera.collapsible.contains(match.saved.identity) { camera.collapsible.insert(match.window.identity) }
                 forget(match.saved)
                 remapViews(from: match.saved.identity, to: match.window.identity)
                 lastRequested[match.window.identity] = nil

@@ -44,6 +44,8 @@ public struct CameraMove: Equatable, Sendable {
     public var tiles: [TileMove]
     /// One per group whose selected member has a (non-collapsed) tile, in that tile's order (UI-SPEC Surface 6).
     public var strips: [StripMove] = []
+    /// The tiles held for absent windows, sorted by window identity: no snapshot and no click (08 UI-SPEC Surface 2).
+    public var placeholders: [TileMove] = []
 }
 
 /// A group's strip on the stage, moving with its selected member's tile. `start` and `end` are the strip rects (the
@@ -246,7 +248,7 @@ extension Arranger {
         _ = effectiveView(for: key, notes: &notes)
         let current = currentView(uuid, key)
         guard target != current else { return notes + refused("already showing") }
-        let tiles: (tiles: [TileMove], strips: [StripMove])
+        let tiles: (tiles: [TileMove], strips: [StripMove], placeholders: [TileMove])
         do throws(LayoutError) {
             tiles = try planTiles(from: current, to: target, display: display, desk: desk)
         } catch {
@@ -254,7 +256,7 @@ extension Arranger {
         }
         camera.nextMoveID += 1
         camera.pending[uuid] = PendingMove(id: camera.nextMoveID, key: key, target: target, kind: kind, focus: focus)
-        let move = CameraMove(id: camera.nextMoveID, displayUUID: uuid, from: current, to: target, tiles: tiles.tiles, strips: tiles.strips)
+        let move = CameraMove(id: camera.nextMoveID, displayUUID: uuid, from: current, to: target, tiles: tiles.tiles, strips: tiles.strips, placeholders: tiles.placeholders)
         return notes + [.cameraMove(move)]
     }
 
@@ -264,7 +266,7 @@ extension Arranger {
         guard case let (display, desk, current)? = previewBase(uuid), target != current, Self.exists(target, in: desk.tree),
             let tiles = try? planTiles(from: current, to: target, display: display, desk: desk)
         else { return nil }
-        return CameraMove(id: 0, displayUUID: uuid, from: current, to: target, tiles: tiles.tiles, strips: tiles.strips)
+        return CameraMove(id: 0, displayUUID: uuid, from: current, to: target, tiles: tiles.tiles, strips: tiles.strips, placeholders: tiles.placeholders)
     }
 
     /// The current view to itself: each tile starts at its window's tracked frame and ends at its tile. The tile set a
@@ -273,7 +275,7 @@ extension Arranger {
         guard case let (display, desk, current)? = previewBase(uuid),
             let tiles = try? planTiles(from: current, to: current, display: display, desk: desk)
         else { return nil }
-        return CameraMove(id: 0, displayUUID: uuid, from: current, to: current, tiles: tiles.tiles, strips: tiles.strips)
+        return CameraMove(id: 0, displayUUID: uuid, from: current, to: current, tiles: tiles.tiles, strips: tiles.strips, placeholders: tiles.placeholders)
     }
 
     /// Where a gesture in `direction` takes the camera, by Phase 4's rules (D-02, D-03), with no focused leaf so the pinch
@@ -302,7 +304,7 @@ extension Arranger {
     /// a tile, so it is never drawn or captured (T-07-24).
     private func planTiles(
         from current: ViewTarget, to target: ViewTarget, display: DisplayInfo, desk: Desk
-    ) throws(LayoutError) -> (tiles: [TileMove], strips: [StripMove]) {
+    ) throws(LayoutError) -> (tiles: [TileMove], strips: [StripMove], placeholders: [TileMove]) {
         let area = display.visibleFrame, mins = learnedMinimums
         let start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
         let end = try ViewPlanner.plan(desk: desk, view: target, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
@@ -312,9 +314,9 @@ extension Arranger {
         func home(_ window: WindowRef, else rect: Rect) -> Rect {
             start.homeResolution.windowRects[window] ?? desk.desktop.frame(of: window) ?? rect
         }
-        var tiles: [TileMove] = []
+        var tiles: [TileMove] = [], waiting: [TileMove] = []
         let all = Set(before.keys).union(after.keys).union(start.collapsed.keys).union(end.collapsed.keys)
-        for window in all where windows[window.identity]?.isExcluded == false && !isHiddenTab(window) {
+        for window in all where (isPlaceholder(window) || windows[window.identity]?.isExcluded == false) && !isHiddenTab(window) {
             let tracked = windows[window.identity]?.frame
             // A collapsed window is where its block is, never at its parked frame.
             let from = start.collapsed[window] ?? before[window].map { tracked ?? $0 }
@@ -327,9 +329,16 @@ extension Arranger {
             case (nil, nil): continue
             }
             if end.collapsed[window] != nil { tile.kind = .collapsed }
-            tiles.append(tile)
+            guard isPlaceholder(window) else {
+                tiles.append(tile)
+                continue
+            }
+            // A group that all waits has no strip: its tile is the whole group frame, as on screen.
+            if tabGroup(holding: window) != nil { (tile.start, tile.end) = (TabBand.frame(ofContent: tile.start), TabBand.frame(ofContent: tile.end)) }
+            waiting.append(tile)
         }
         tiles.sort { $0.window.identity < $1.window.identity }
+        waiting.sort { $0.window.identity < $1.window.identity }
         // A docked group's frame is its leaf's rect in that view; a floating group's is its content rect plus the band.
         // A leaving or entering strip is the home strip mapped like its tile. A collapsed group is one block, no strip.
         let strips = tiles.compactMap { tile -> StripMove? in
@@ -338,12 +347,13 @@ extension Arranger {
                 TabBand.strip(of: group.floating ? TabBand.frame(ofContent: content) : rects[group.key.node] ?? TabBand.frame(ofContent: content))
             }
             let homeStrip = strip(start.homeResolution.nodeRects, home(tile.window, else: tile.start))
+            let live = liveTabs(group.members, selected: group.selected)
             return StripMove(
                 group: group.key, start: tile.kind == .entering ? fromMap(homeStrip) : strip(start.resolution.nodeRects, tile.start),
-                end: tile.kind == .leaving ? toMap(homeStrip) : strip(end.resolution.nodeRects, tile.end), members: group.members,
-                selected: group.selected, kind: tile.kind)
+                end: tile.kind == .leaving ? toMap(homeStrip) : strip(end.resolution.nodeRects, tile.end), members: live.members,
+                selected: live.selected, kind: tile.kind)
         }
-        return (tiles, strips)
+        return (tiles, strips, waiting)
     }
 
     /// Commits the pending move's view and writes it; an older, repeated or unknown move does nothing.

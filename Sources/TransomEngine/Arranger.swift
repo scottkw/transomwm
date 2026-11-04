@@ -955,7 +955,9 @@ public struct Arranger: Sendable {
             case .windowDestroyed(let window):
                 suppressFocus(ofGroupHolding: window, now: now)
                 if let held = try holdForQuit(window) {
+                    let collapsible = camera.collapsible.contains(window.identity)
                     forget(window)
+                    if collapsible { camera.collapsible.insert(window.identity) }  // its block keeps its share, as its minimum does
                     return faults + held + replan()
                 }
                 forget(window)
@@ -1403,9 +1405,9 @@ public struct Arranger: Sendable {
         let leaf = desk.tree.leaf(containing: window)
         guard let rect = leaf.flatMap({ resolution.nodeRects[$0] }) ?? desk.desktop.frame(of: window) else { return [.beep] }
         // A hidden tab never takes focus this way (UI-SPEC Surface 3); its group's selected member stands for it.
-        let floating = desk.desktop.windows.filter { $0.state == .present && !isHiddenTab($0.window) }.map(\.window)
+        let floating = desk.desktop.windows.filter { $0.state == .present && !isHiddenTab($0.window) && placeholders.table[$0.window.identity] == nil }.map(\.window)
         guard let id = Neighbours.neighbour(
-            of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: resolution, gap: gap, recency: recency(on: desk))
+            of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: withoutWaiting(resolution, tree: desk.tree), gap: gap, recency: recency(on: desk))
         else { return [.beep] }
         let target: WindowRef?
         switch desk.tree.node(id) {
@@ -2102,7 +2104,7 @@ public struct Arranger: Sendable {
                     (plan.frames, plan.parks, plan.parkSizes, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.parkSizes, viewPlan.resolution)
                     collapsed = viewPlan.collapsed
                     blocks[display.uuid] = viewPlan.collapsed.filter { !isPlaceholder($0.key) }.map {
-                        CollapsedBlock(window: $0.key, rect: $0.value, groupSize: tabGroup(holding: $0.key)?.members.count ?? 1)
+                        CollapsedBlock(window: $0.key, rect: $0.value, groupSize: tabGroup(holding: $0.key).map { liveTabs($0.members, selected: $0.selected).members.count } ?? 1)
                     }
                         .sorted { $0.window.identity < $1.window.identity }
                     let home = view == .home ? viewPlan : try ViewPlanner.plan(
@@ -2250,11 +2252,20 @@ public struct Arranger: Sendable {
     private mutating func planFloatingLostRoom(
         _ key: DeskKey, area: Rect, mins: [WindowRef: Size]
     ) throws(LayoutError) -> (FramePlan, [WindowRef]) {
+        var mins = mins
         guard let desk = world[key] else { throw .deskNotFound(key) }
         var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wantedFrames)
         var lost: [WindowRef] = []
         // Each pass takes at least one window out of the tree, so this ends.
         while !plan.unfit.isEmpty {
+            // A window that is not there has no frame to float at, and its minimum can wait until it comes back.
+            let waiting = plan.unfit.filter { isPlaceholder($0) && mins[$0] != nil }
+            guard waiting.isEmpty else {
+                for window in waiting { mins[window] = nil }
+                guard let desk = world[key] else { throw .deskNotFound(key) }
+                plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wantedFrames)
+                continue
+            }
             var unfit: [(WindowRef, Rect)] = []
             for window in plan.unfit.sorted(by: { $0.identity < $1.identity }) {
                 guard let frame = windows[window.identity]?.frame else { throw .windowNotFound(window) }

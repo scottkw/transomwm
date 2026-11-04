@@ -73,7 +73,7 @@ import os
     var openPanels: [String] { isOpen ? Array(shown.keys) : [] }
     /// The window tiles on that display's open panel, group strips not counted (tests).
     func tileCount(display uuid: String) -> Int {
-        isOpen ? shown[uuid]?.filter { if case .strip = $0.content { false } else { true } }.count ?? 0 : 0
+        isOpen ? shown[uuid]?.filter { switch $0.content { case .strip, .placeholder: false; default: true } }.count ?? 0 : 0
     }
 
     /// Show Overview while open dismisses it. False when it could not open (every display is in full screen).
@@ -145,8 +145,9 @@ import os
             let strips = display.tiles.compactMap { tile in
                 collapsed[tile.window] == nil ? strip(tile, scale: display.scale, arranger: arranger, appKit: appKit) : nil
             }
+            let waiting = display.placeholders.map { placeholder($0, input: input, appKit: appKit) }
             if panel.isVisible { panel.freezeAtPresentation() }  // a close still fading: cancel its order-out
-            panel.show(tiles: tiles + strips)
+            panel.show(tiles: waiting + tiles + strips)
             let strip = overlay(display, input: input, image: image, appKit: appKit)
             overlays[display.uuid] = strip
             panel.showOverview(strip)
@@ -157,7 +158,7 @@ import os
                 guard first, let self, self.generation == opened else { return }
                 self.opened(trigger: trigger, started: started, displays: layout.displays.count, snapshots: snapshots, fallbacks: fallbacks)
             }
-            shown[display.uuid] = tiles + strips
+            shown[display.uuid] = waiting + tiles + strips
         }
         swappedLabel = nil
         selection = OverviewSelection.initial(layout: layout, focused: focused(), pointer: pointer())  // drawn by didSet, not announced
@@ -324,22 +325,27 @@ import os
             }
             let kept = display.tiles.filter { tile in fresh.tiles.contains { $0.window == tile.window } }
             let added = fresh.tiles.filter { tile in !display.tiles.contains { $0.window == tile.window } }
-            guard kept.count != display.tiles.count || !added.isEmpty else {
+            let keptWaiting = display.placeholders.filter { tile in fresh.placeholders.contains { $0.window == tile.window } }
+            let newWaiting = fresh.placeholders.filter { tile in !display.placeholders.contains { $0.window == tile.window } }
+            guard kept.count != display.tiles.count || !added.isEmpty || keptWaiting.count != display.placeholders.count || !newWaiting.isEmpty else {
                 displays.append(display)
                 continue
             }
             let id = { (window: TransomModel.WindowRef) in zoom.cgWindow(window) ?? window.windowID }
             let gone = display.tiles.filter { tile in !kept.contains { $0.window == tile.window } }.map { id($0.window) }
-            let removed = gone + gone.map(StageTile.stripID)  // a gone tile's strip goes with it
+            let goneWaiting = display.placeholders.filter { tile in !keptWaiting.contains { $0.window == tile.window } }.map(\.window.windowID)
+            let removed = gone + gone.map(StageTile.stripID) + goneWaiting  // a gone tile's strip goes with it
             let addedTiles = added.map { tile in
                 let content = zoom.cgWindow(tile.window).flatMap { zoom.cachedSnapshot($0) }.map { TileLayer.Content.snapshot($0) } ?? zoom.fallback(tile.window)
                 let real = arranger.windows[tile.window.identity]?.frame ?? tile.rect
                 return StageTile(id: id(tile.window), start: appKit(real), end: appKit(tile.rect), content: content)
             } + added.compactMap { strip($0, scale: fresh.scale, arranger: arranger, appKit: appKit) }
+                + newWaiting.map { placeholder($0, input: inputs.first { $0.uuid == display.uuid }, appKit: appKit) }
             panel.fadeTiles(adding: addedTiles, removing: removed)
             shown[display.uuid] = (shown[display.uuid] ?? []).filter { !removed.contains($0.id) } + addedTiles
             var updated = display
             updated.tiles = kept + added
+            updated.placeholders = keptWaiting + newWaiting
             displays.append(updated)
         }
         layout = OverviewLayout(laidOut: displays)
@@ -551,6 +557,12 @@ import os
         return OverviewCopy.couldNotSwitch(app: MenuCopy.truncatedAppName(name))
     }
 
+    /// A placeholder's tile: from its tile on the desk to its main-area rect, drawn as on screen (08 UI-SPEC Surface 2).
+    private func placeholder(_ tile: OverviewTile, input: OverviewDisplayInput?, appKit: (Rect) -> CGRect) -> StageTile {
+        let real = input?.placeholders.first { $0.window == tile.window }?.frame ?? tile.rect
+        return StageTile(id: tile.window.windowID, start: appKit(real), end: appKit(tile.rect), content: PlaceholderLook(bundleID: tile.window.bundleID).content)
+    }
+
     /// A group tile's icon-only strip (07 UI-SPEC Surface 6): from above its window's real frame to above its main-area
     /// rect, 28 pt × the display's scale. Nil for a window in no group. Mini tiles never get one.
     private func strip(_ tile: OverviewTile, scale: Double, arranger: Arranger, appKit: (Rect) -> CGRect) -> StageTile? {
@@ -663,11 +675,13 @@ import os
                     : plannedWindows(arranger, key: DeskKey(displayUUID: display.uuid, spaceID: space.id), area: display.visibleFrame)
             }
             let homeView = arranger.homeView(on: display.uuid)
-            return OverviewDisplayInput(
+            var input = OverviewDisplayInput(
                 uuid: display.uuid, visibleFrame: display.visibleFrame, isMain: index == 0,
                 isFullScreen: list?.spaces.first { $0.id == current }?.kind == .fullScreen, spaces: list?.spaces ?? [], current: current,
                 windows: shown.map { OverviewWindow(window: $0.0.window, frame: $0.0.frame) },
                 home: (homeView?.frames ?? [:]).merging(homeView?.collapsed ?? [:]) { first, _ in first }, hiddenSpaceWindows: hidden)
+            input.placeholders = arranger.homePlaceholders(on: display.uuid).map { OverviewWindow(window: $0.window, frame: $0.frame) }
+            return input
         }
     }
 
@@ -675,7 +689,8 @@ import os
     private static func plannedWindows(_ arranger: Arranger, key: DeskKey, area: Rect) -> [OverviewWindow] {
         guard let desk = arranger.world[key] else { return [] }
         let planned = (try? Planner.plan(desk: desk, area: area, gap: arranger.gap, mins: [:]).frames) ?? [:]
-        let docked = desk.tree.windows.compactMap { window in planned[window].map { OverviewWindow(window: window, frame: $0) } }
+        // A placeholder is not a window: a mini tile would count and select as one (08 UI-SPEC Surface 2).
+        let docked = desk.tree.windows.filter { !arranger.isPlaceholder($0) }.compactMap { window in planned[window].map { OverviewWindow(window: window, frame: $0) } }
         let floating = desk.desktop.windows.filter { $0.state == .present && !arranger.isHiddenTab($0.window) }.compactMap { floater in
             (planned[floater.window] ?? arranger.windows[floater.window.identity]?.frame).map { OverviewWindow(window: floater.window, frame: $0) }
         }

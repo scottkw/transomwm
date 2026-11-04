@@ -24,6 +24,8 @@ public struct OverviewDisplayInput: Equatable, Sendable {
     public var windows: [OverviewWindow]
     public var home: [WindowRef: Rect]
     public var hiddenSpaceWindows: [UInt64: [OverviewWindow]]
+    /// The tiles held for absent windows, at home: drawn, never selected or counted as windows (08 UI-SPEC Surface 2).
+    public var placeholders: [OverviewWindow] = []
 
     public init(
         uuid: String, visibleFrame: Rect, isMain: Bool = true, isFullScreen: Bool = false, spaces: [SpaceInfo] = [], current: UInt64? = nil,
@@ -73,6 +75,8 @@ public struct OverviewDisplayLayout: Equatable, Sendable {
     public var scale: Double
     /// Back to front, as the input's windows.
     public var tiles: [OverviewTile]
+    /// The placeholders' tiles, drawn behind `tiles`. Not items: nothing selects them.
+    public var placeholders: [OverviewTile] = []
     /// The strip's band across the top of the visibleFrame; nil when the strip is hidden on this display.
     public var stripBand: Rect?
     public var thumbnails: [ThumbnailLayout]
@@ -145,6 +149,7 @@ public struct OverviewLayout: Equatable, Sendable {
         let tiles = input.windows.map { window in
             OverviewTile(window: window.window, rect: map(input.home[window.window] ?? window.frame, from: visible, scale: scale, origin: origin))
         }
+        let placeholders = input.placeholders.map { OverviewTile(window: $0.window, rect: map($0.frame, from: visible, scale: scale, origin: origin)) }
 
         var thumbnails: [ThumbnailLayout] = []
         if strip {
@@ -171,7 +176,7 @@ public struct OverviewLayout: Equatable, Sendable {
         let empty = input.windows.isEmpty
             ? Rect(x: area.midX - capsule.width / 2, y: area.midY - capsule.height / 2, width: capsule.width, height: capsule.height) : nil
         return OverviewDisplayLayout(
-            uuid: input.uuid, visibleFrame: visible, mainArea: area, scale: scale, tiles: tiles, stripBand: strip ? Rect(x: visible.x, y: visible.y, width: visible.width, height: band) : nil,
+            uuid: input.uuid, visibleFrame: visible, mainArea: area, scale: scale, tiles: tiles, placeholders: placeholders, stripBand: strip ? Rect(x: visible.x, y: visible.y, width: visible.width, height: band) : nil,
             thumbnails: thumbnails, emptyCapsule: empty)
     }
 }

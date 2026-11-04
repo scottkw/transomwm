@@ -561,8 +561,14 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
 
         await harness.send(.event(.appTerminated(pid: pid)))
         let effects = await harness.send(.event(.windowDestroyed(ref(1))))
+        #expect(!effects.contains { if case .fault = $0 { true } else { false } })
         #expect(effects.contains(.collapsedBlocks([], displayUUID: "main")))
         #expect(sentTiles(effects)?.map(\.window) == [ref(1)])
+
+        // Zoom off nothing is collapsible: its minimum no longer fits, yet it must not stop the desk's plan.
+        let off = await harness.send(.zoomEnabled(false))
+        #expect(!off.contains { if case .fault = $0 { true } else { false } }, "\(off)")
+        #expect(harness.arranger.isPlaceholder(ref(1)))
     }
 
     // MARK: Commands

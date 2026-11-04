@@ -14,6 +14,9 @@ nonisolated public enum ViewCopy {
         }
     }
 
+    /// The Debug submenu's line for the placeholders.
+    public static func waitingLine(count: Int) -> String { count == 0 ? "Waiting for windows: none" : "Waiting for windows: \(count)" }
+
     /// The Debug submenu's line for the command-line tool's channel.
     public static func cliLine(listening: Bool) -> String { listening ? "Command-line tool: listening" : "Command-line tool: off (couldn't listen)" }
 
