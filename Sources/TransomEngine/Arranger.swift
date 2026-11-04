@@ -112,6 +112,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case tabAnnouncement(TabAnnouncement)
     /// The tab strips to show on that display; empty hides them (UI-SPEC Surface 2).
     case tabStrips([TabStrip], displayUUID: String)
+    /// The tiles held for absent windows on that display's shown desk; empty hides them (08 UI-SPEC Surface 2).
+    case placeholders([PlaceholderTile], displayUUID: String)
     /// Order this group's strip front: one of its members was just selected (UI-SPEC Surface 2 ordering).
     case raiseStrip(GroupKey)
     /// Show or move the tear-off ghost at this pointer; nil hides it (UI-SPEC Surface 4).
@@ -2078,12 +2080,14 @@ public struct Arranger: Sendable {
         var handles: [String: [GapHandle]] = [:]
         var blocks: [String: [CollapsedBlock]] = [:]
         var strips: [String: [TabStrip]] = [:]
+        var waiting: [String: [PlaceholderTile]] = [:]
         var fitAtHome: Set<WindowIdentity> = []
         let mins = minimums
         for display in displays {
             let key = Self.key(display)
             guard world[key] != nil else { continue }
             var plan: FramePlan
+            var collapsed: [WindowRef: Rect] = [:]
             // Lost room at home is an OS fact and still floats (CONTEXT E); a zoomed display then plans its view.
             let view = effectiveView(for: key, notes: &faults)
             do throws(LayoutError) {
@@ -2096,7 +2100,8 @@ public struct Arranger: Sendable {
                         desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
                         collapsible: camera.collapsible)
                     (plan.frames, plan.parks, plan.parkSizes, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.parkSizes, viewPlan.resolution)
-                    blocks[display.uuid] = viewPlan.collapsed.map {
+                    collapsed = viewPlan.collapsed
+                    blocks[display.uuid] = viewPlan.collapsed.filter { !isPlaceholder($0.key) }.map {
                         CollapsedBlock(window: $0.key, rect: $0.value, groupSize: tabGroup(holding: $0.key)?.members.count ?? 1)
                     }
                         .sorted { $0.window.identity < $1.window.identity }
@@ -2111,6 +2116,7 @@ public struct Arranger: Sendable {
             }
             guard let desk = world[key] else { continue }
             strips[display.uuid] = tabStrips(key, desk: desk, plan: plan)
+            waiting[display.uuid] = placeholderTiles(frames: plan.frames, collapsed: collapsed, resolution: plan.resolution)
             // A gap drag edits home weights, so a zoomed display shows no handles.
             if drag?.kind != .move {
                 handles[display.uuid] = view == .home ? GapHandles.handles(tree: desk.tree, resolution: plan.resolution, gap: gap) : []
@@ -2181,7 +2187,7 @@ public struct Arranger: Sendable {
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
             + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles) + showBlocks(blocks)
-            + showStrips(strips)
+            + showStrips(strips) + showPlaceholders(waiting)
     }
 
     /// Sends each display's collapsed blocks that changed; a display with none (or gone) gets an empty list.

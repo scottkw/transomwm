@@ -74,6 +74,7 @@ import os
     private let collapsedPanels = CollapsedPanels()
     /// The tab strips (TABS-02). A panel is made only when a group's strip first shows.
     let tabStripPanels = TabStripPanels()
+    let placeholderPanels = PlaceholderPanels()
     private let closeGroupConfirmation = CloseGroupConfirmation()
     private let ghostPanel = TearOffGhostPanel()
     /// The temporary Esc hotkeys while a tear-off ghost shows (UI-SPEC Surface 4), as for the zoom band.
@@ -240,7 +241,10 @@ import os
             for await event in system.events {
                 guard let self else { return }
                 // Before the replan, which sends the new desk's strips.
-                if case .spaceChanged(let uuid, let space) = event { self.tabStripPanels.spaceChanged(displayUUID: uuid, to: space) }
+                if case .spaceChanged(let uuid, let space) = event {
+                    self.tabStripPanels.spaceChanged(displayUUID: uuid, to: space)
+                    self.placeholderPanels.spaceChanged(displayUUID: uuid, to: space)
+                }
                 self.onEvent?(event)
                 await self.run(self.arranger.handle(.event(event), now: .now))
                 if case .frameApplied(let window, _, _) = event { self.zoomController?.frameApplied(window.identity) }
@@ -818,6 +822,8 @@ import os
                 collapsedPanels.show(blocks, on: displayUUID)
             case .tabStrips(let strips, let displayUUID):
                 tabStripPanels.show(strips, on: displayUUID, space: arranger.displays.first { $0.uuid == displayUUID }?.currentSpaceID)
+            case .placeholders(let tiles, let displayUUID):
+                placeholderPanels.show(tiles, on: displayUUID, space: arranger.displays.first { $0.uuid == displayUUID }?.currentSpaceID)
             case .tabRevealed(let window):
                 if zoomEnabled { zoom().captureRevealed(window) }
             case .checkClosePrompt(let window):
@@ -859,16 +865,19 @@ import os
         }
     }
 
-    /// A stage orders in on that display: the collapsed-block and tab strip panels go out, since the stage draws both.
+    /// A stage orders in on that display: the collapsed-block, tab strip and placeholder panels go out, since the stage
+    /// draws all three.
     private func hidePanels(on displayUUID: String) {
         collapsedPanels.hide(on: displayUUID)
         tabStripPanels.hide(on: displayUUID)
+        placeholderPanels.hide(on: displayUUID)
     }
 
-    /// That display's stage is gone: both kinds of panel fade back in over 120 ms.
+    /// That display's stage is gone: every kind of panel fades back in over 120 ms.
     private func showPanels(on displayUUID: String) {
         collapsedPanels.fadeIn(on: displayUUID)
         tabStripPanels.fadeIn(on: displayUUID)
+        placeholderPanels.fadeIn(on: displayUUID)
     }
 
     private func zoom() -> ZoomController {

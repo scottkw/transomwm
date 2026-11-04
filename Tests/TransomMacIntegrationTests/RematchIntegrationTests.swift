@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TransomEngine
 @testable import TransomMac
@@ -145,5 +146,95 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         #expect(back, "Fixture 0 / Fixture 1 are at \(frames), not their tiles \(wanted)")
         #expect(arrange.arranger.placeholderCount == 0)
         #expect(await current(keeper, 0).map { near($0, thirdTile) } == true, "the third tile changed")
+    }
+
+    /// D-13 live (VM only: it posts a click): each tile of a quit app shows a click-through panel behind real windows. A
+    /// fixture window opened over one tile stays above its panel; another sent behind the other panel takes a click made
+    /// through it, leaving this process inactive. (A posted click on the guest's bare desktop does not activate Finder,
+    /// panel or no panel, so a window stands in for it.) By pid, so the second fixture stays untracked and fills nothing.
+    @Test(.timeLimit(.minutes(1)), .enabled(if: IntegrationEnv.inVM, "VM only: posts a click"))
+    func aPlaceholderIsClickThroughAndBehindRealWindows() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appending(path: "transom-panel-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = try await FixtureProcess.launch(["standard", "standard"])
+        defer { first.terminate() }
+        let firstPID = first.pid
+        let system = AXWindowSystem(appFilter: { pid, _ in pid == firstPID })
+        await system.start()
+        let windows = try await trackedWithTitles(system, first).map(\.window)
+        let arrange = ArrangeController(system: system, store: LayoutStore(directory: directory))
+        defer { withExtendedLifetime(arrange) {} }
+        await arrange.start()
+        for window in windows { await arrange.dispatch(.dock, focused: window) }
+        let key = try #require(arrange.arranger.deskKey(of: windows[0]))
+        let visible = try #require(Displays.current().first { $0.uuid == key.displayUUID }).visibleFrame
+        let plan = try Planner.plan(desk: try #require(arrange.arranger.world[key]), area: visible, gap: arrange.arranger.gap, mins: [:]).frames
+        let wanted = [try #require(plan[windows[0]]), try #require(plan[windows[1]])]
+
+        _ = try await first.send("quit")
+        #expect(await waitUntil(timeout: .seconds(2)) { windows.allSatisfy(arrange.arranger.isPlaceholder) }, "the tiles are not reserved after the quit")
+        let primaryHeight = try #require(NSScreen.screens.first?.frame.height)
+        var panels: [NSWindow] = []
+        let drawn = await waitUntil(timeout: .seconds(2)) {
+            let numbers = arrange.placeholderPanels.windowNumbers
+            panels = wanted.compactMap { tile in
+                let rect = Coordinates.appKit(fromTopLeft: tile, primaryHeight: primaryHeight)
+                return NSApp.windows.first { window in
+                    numbers.contains(window.windowNumber) && window.isVisible
+                        && near(Rect(x: window.frame.minX, y: window.frame.minY, width: window.frame.width, height: window.frame.height), rect)
+                }
+            }
+            return panels.count == 2
+        }
+        try #require(drawn, "no panel at each of \(wanted): \(NSApp.windows.map(\.frame))")
+        for panel in panels {
+            #expect(panel.ignoresMouseEvents)
+            #expect(panel.level == .normal)
+            #expect(!panel.canBecomeKey && !panel.canBecomeMain)
+        }
+
+        let over = try await FixtureProcess.launch(["standard", "standard"])
+        defer { over.terminate() }
+        _ = try await over.send("move 0 \(Int(wanted[1].x) + 40) \(Int(wanted[1].y) + 40)")
+        _ = try await over.send("move 1 \(Int(wanted[0].x)) \(Int(wanted[0].y))")
+        _ = try await over.send("resize 1 \(Int(wanted[0].width)) \(Int(wanted[0].height))")
+        _ = try await over.send("order-back 1")
+        _ = try await over.send("list")
+        let above = try #require(over.windows.first { $0.index == 0 }?.id), below = try #require(over.windows.first { $0.index == 1 }?.id)
+        var list: [CGWindowEntry] = []
+        let ordered = await waitUntil(timeout: .seconds(2)) {
+            list = CGWindowList.onScreenFrontToBack() ?? []
+            let order = list.map(\.windowID)
+            guard let top = order.firstIndex(of: above), let second = order.firstIndex(of: UInt32(panels[1].windowNumber)),
+                let first = order.firstIndex(of: UInt32(panels[0].windowNumber)), let bottom = order.firstIndex(of: below)
+            else { return false }
+            return top < second && first < bottom
+        }
+        #expect(ordered, "want \(above) above panel \(panels[1].windowNumber) and \(below) below panel \(panels[0].windowNumber), got \(list.map(\.windowID))")
+
+        // Where only the panel and the window below it are, clear of the guest's own windows and of their resize margins.
+        let waiting = arrange.placeholderPanels.windowNumbers
+        let grid = stride(from: wanted[0].minY + 16, to: wanted[0].maxY - 16, by: 4).lazy.flatMap { y in
+            stride(from: wanted[0].minX + 16, to: wanted[0].maxX - 16, by: 4).lazy.map { x in Point(x: x, y: y) }
+        }
+        let point = try #require(grid.first { point in
+            !list.contains { entry in
+                let near = Rect(x: entry.bounds.x - 16, y: entry.bounds.y - 16, width: entry.bounds.width + 32, height: entry.bounds.height + 32)
+                return near.contains(point) && entry.windowID != below
+                    && (entry.pid == getpid() ? !waiting.contains(Int(entry.windowID)) : entry.layer == 0)  // a gap handle takes clicks
+            }
+        }, "no point of \(wanted[0]) is clear of the guest's windows")
+        for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+            CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGPoint(x: point.x, y: point.y), mouseButton: .left)?.post(tap: .cghidEventTap)
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        var front: [String] = []
+        let reached = await waitUntil(timeout: .seconds(2)) {
+            front = (try? await over.send("frontmost")) ?? []
+            return front.contains("frontmost index=1")
+        }
+        #expect(reached, "the click at \(point) did not reach the window behind the panel: \(front)")
+        #expect(!NSRunningApplication.current.isActive, "the click activated this process")
     }
 }

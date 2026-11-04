@@ -72,6 +72,10 @@ private func savedTwo() throws -> World {
 
 /// Transom launches on `layout` with `open` tracked. Another app's window is always open: an empty CG list decides nothing.
 private func launched(_ layout: World, open: [FakeWindow] = []) async -> Harness {
+    await launchedWithEffects(layout, open: open).0
+}
+
+private func launchedWithEffects(_ layout: World, open: [FakeWindow] = []) async -> (Harness, [ArrangerEffect]) {
     var harness = Harness()
     await harness.fake.setDisplays([DisplayInfo(
         uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: nil)])
@@ -81,8 +85,13 @@ private func launched(_ layout: World, open: [FakeWindow] = []) async -> Harness
     await harness.fake.refreshAll()
     _ = await harness.inbox.take()
     await harness.send(.restore(layout, homeFrames: [:]))
-    await harness.send(.inventory(await harness.fake.inventory()))
-    return harness
+    let effects = await harness.send(.inventory(await harness.fake.inventory()))
+    return (harness, effects)
+}
+
+/// The placeholder tiles sent for the display, the latest list when several.
+private func sentTiles(_ effects: [ArrangerEffect]) -> [PlaceholderTile]? {
+    effects.compactMap { if case .placeholders(let tiles, "main") = $0 { tiles } else { nil } }.last
 }
 
 private func wakes(_ effects: [ArrangerEffect]) -> [ContinuousClock.Instant] {
@@ -404,6 +413,43 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         // A hidden member back first shows: the tile should not wait on a window that has not come back.
         await harness.send(.event(.windowCreated(returning(11, title: "Notes"))))
         #expect(harness.arranger.world[key]?.tree.node(leaf) == .tabs(windows: [ref(11, pid: newPID), ref(2)], selected: 0))
+    }
+
+    // MARK: Drawing (D-13)
+
+    @Test func eachWaitingWindowGetsATileAtItsRectOnceAndNoMore() async throws {
+        var harness = await threeDocked()
+        let rects = await tiles(harness)
+        var effects = await quit(&harness)
+        #expect(sentTiles(effects) == [PlaceholderTile(window: ref(1), frame: rects[0]), PlaceholderTile(window: ref(2), frame: rects[1])])
+        effects = await harness.send(.command(.restoreAll, focused: nil))
+        #expect(sentTiles(effects) == nil, "nothing changed, nothing is sent again")
+    }
+
+    @Test func aFilledPlaceholderLeavesTheNextListAndAnExpiredOneToo() async throws {
+        var harness = await threeDocked()
+        _ = await quit(&harness)
+        let filled = await harness.send(.event(.windowCreated(returning(11, title: "Notes"))))
+        #expect(sentTiles(filled)?.map(\.window) == [ref(2)], "Notes is back, Plan still waits")
+        let expired = await ticked(&harness, at: harness.now + Arranger.launchWait)
+        #expect(sentTiles(expired) == [])
+    }
+
+    @Test func expiryWhilePausedStillTakesTheTileAway() async throws {
+        var harness = await threeDocked()
+        let start = harness.now
+        _ = await quit(&harness)
+        await harness.send(.setPaused(.user, true))
+        #expect(sentTiles(await ticked(&harness, at: start + Arranger.quitWait)) == [])
+    }
+
+    @Test func aGroupWhoseMembersAllWaitShowsOneTileOverItsWholeFrame() async throws {
+        let (harness, effects) = await launchedWithEffects(try savedGroup(selectWaiting: false, live: ref(2, title: "Plan")))
+        let desk = try #require(harness.arranger.world[key])
+        let leaf = try #require(desk.tree.leaf(containing: ref(1)))
+        let area = Rect(x: 0, y: 25, width: 1440, height: 875)
+        let frame = try #require(Planner.plan(desk: desk, area: area, gap: harness.arranger.gap, mins: [:]).resolution.nodeRects[leaf])
+        #expect(sentTiles(effects) == [PlaceholderTile(window: ref(2, title: "Plan"), frame: frame)])
     }
 
     // MARK: Commands

@@ -22,6 +22,20 @@ public struct Placeholder: Equatable, Sendable {
     public var bundleID: String { ref.bundleID }
 }
 
+/// A tile held for a window that has not come back, in global top-left points. A group whose members all wait has one,
+/// for its selected member, over the whole group frame.
+public struct PlaceholderTile: Equatable, Sendable {
+    public var window: WindowRef
+    public var bundleID: String
+    public var frame: Rect
+
+    public init(window: WindowRef, frame: Rect) {
+        self.window = window
+        self.bundleID = window.bundleID
+        self.frame = frame
+    }
+}
+
 /// Every window waiting to come back, the apps that just quit, and the windows that may fill them.
 public struct PlaceholderState: Sendable {
     var table: [WindowIdentity: Placeholder] = [:]
@@ -29,6 +43,8 @@ public struct PlaceholderState: Sendable {
     var quitting: [Int32: (bundleID: String, at: ContinuousClock.Instant)] = [:]
     /// Windows that may fill a placeholder: created after the app's placeholders appeared and not touched by the user.
     var fresh: Set<WindowIdentity> = []
+    /// The tiles last sent per display, so only a change is sent again.
+    var shown: [String: [PlaceholderTile]] = [:]
 
     func waits(for bundleID: String) -> Bool { table.values.contains { $0.bundleID == bundleID } }
 
@@ -68,6 +84,26 @@ extension Arranger {
     /// The tiles held for windows that have not come back.
     public var placeholderCount: Int {
         placeholders.table.values.count { isPlaceholder($0.ref) }
+    }
+
+    /// Each placeholder in these planned rects, collapsed ones included, in ID order.
+    func placeholderTiles(frames: [WindowRef: Rect], collapsed: [WindowRef: Rect], resolution: Resolution) -> [PlaceholderTile] {
+        frames.merging(collapsed) { frame, _ in frame }.filter { isPlaceholder($0.key) }
+            .map { window, rect in
+                PlaceholderTile(window: window, frame: tabGroup(holding: window).flatMap { resolution.nodeRects[$0.key.node] } ?? rect)
+            }
+            .sorted { $0.window.identity < $1.window.identity }
+    }
+
+    /// Sends each display's placeholder tiles that changed; a display with none (or gone) gets an empty list.
+    mutating func showPlaceholders(_ tiles: [String: [PlaceholderTile]]) -> [ArrangerEffect] {
+        let uuids = Set(tiles.keys).union(placeholders.shown.keys).sorted()
+        return uuids.compactMap { uuid in
+            let next = tiles[uuid] ?? []
+            guard next != placeholders.shown[uuid] ?? [] else { return nil }
+            placeholders.shown[uuid] = next.isEmpty ? nil : next
+            return .placeholders(next, displayUUID: uuid)
+        }
     }
 
     /// A docked window of a quitting app keeps its tile (D-12a); nil when `window` closes as usual (⌘W, or a floater).
@@ -134,7 +170,8 @@ extension Arranger {
             }
         }
         placeholders.quitting = placeholders.quitting.filter { now < $0.value.at + Self.quitWait || placeholders.waits(for: $0.value.bundleID) }
-        return due.isEmpty ? [] : effects + replan()
+        // The trim is for a pause, whose replan sends nothing: an expired tile goes at once, a filled one at Resume.
+        return due.isEmpty ? [] : effects + replan() + showPlaceholders(placeholders.shown.mapValues { $0.filter { isPlaceholder($0.window) } })
     }
 
     /// Matches the app's waiting placeholders against its fresh windows, as the launch path does (D-11, HintMatcher), and

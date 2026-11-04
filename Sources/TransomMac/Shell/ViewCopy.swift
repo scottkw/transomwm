@@ -17,6 +17,13 @@ nonisolated public enum ViewCopy {
     /// The Debug submenu's line for the command-line tool's channel.
     public static func cliLine(listening: Bool) -> String { listening ? "Command-line tool: listening" : "Command-line tool: off (couldn't listen)" }
 
+    /// A placeholder's capsule and accessibility label; `appName` is nil when the app is not installed.
+    public static func placeholderLabel(appName: String?) -> String {
+        appName.map { "Waiting for \(MenuCopy.truncatedAppName($0))\u{2026}" } ?? "Waiting for a window\u{2026}"
+    }
+
+    public static let placeholderHelp = "This tile closes if the window doesn't come back."
+
     /// One line for VoiceOver when going to a view moves the camera: the view, then the Phase 4 reveal.
     public static func joinedAnnouncement(slot: Int, reveal: String) -> String { "View \(slot). \(reveal)" }
 }

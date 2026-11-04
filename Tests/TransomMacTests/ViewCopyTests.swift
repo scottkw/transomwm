@@ -19,6 +19,14 @@ import Testing
         #expect(ViewCopy.cliLine(listening: false) == "Command-line tool: off (couldn't listen)")
     }
 
+    @Test func thePlaceholderLabelNamesTheAppOrTheWindow() {
+        #expect(ViewCopy.placeholderLabel(appName: "Safari") == "Waiting for Safari\u{2026}")
+        #expect(ViewCopy.placeholderLabel(appName: nil) == "Waiting for a window\u{2026}")
+        let long = String(repeating: "x", count: 40)
+        #expect(ViewCopy.placeholderLabel(appName: long) == "Waiting for \(String(repeating: "x", count: 32))\u{2026}\u{2026}")
+        #expect(ViewCopy.placeholderHelp == "This tile closes if the window doesn't come back.")
+    }
+
     @Test func theJoinedAnnouncementPrefixesTheReveal() {
         #expect(ViewCopy.joinedAnnouncement(slot: 3, reveal: "Showing 2 windows") == "View 3. Showing 2 windows")
     }

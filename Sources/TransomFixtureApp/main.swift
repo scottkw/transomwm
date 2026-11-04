@@ -214,6 +214,8 @@ final class Fixture: NSObject, NSApplicationDelegate {
                 let s = try numbers(parts, 2)
                 let topLeftY = primaryHeight() - target.frame.maxY
                 target.setFrame(appKitRect(x: target.frame.minX, y: topLeftY, width: s[0], height: s[1]), display: true)
+            case "order-back":
+                try window(parts.dropFirst().first).orderBack(nil)
             case "minimize":
                 try window(parts.dropFirst().first).miniaturize(nil)
             case "deminimize":
