@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Checks the bundled `transom` tool against the real app inside the Tart test VM, never on this Mac (08-07): builds a fresh
 # "Transom Debug.app" here (nothing runs), copies it into the VM, installs its tool through a symlink as the README does,
-# and runs every exit code from UI-SPEC Surface 5 over the real channel. Last line: "vm-cli-check: N checks passed".
+# and runs every exit code from UI-SPEC Surface 5 over the real channel. Last line: "vm-cli-check: N checks passed", and
+# only then is the exit 0: a failed or a skipped check exits 1.
 # Usage: scripts/vm-cli-check.sh
 # Env: TRANSOM_VM (tart VM name, default pane-test), TRANSOM_VM_USER (default admin), TRANSOM_VM_KEY (default ~/.ssh/pane_vm_ed25519).
 # Transom is quit in the VM for the run and relaunched after if it was running. Nothing stays in the guest: the bundle
@@ -34,19 +35,37 @@ support="$HOME/Library/Application Support/Transom"
 domain=com.eightabyte.transom.debug
 uid="$(id -u)" user="$(id -un)"
 tmp="$(mktemp -d)"
-was_running="" support_saved="" zoom_saved="" passed=0 failed=0
+was_running="" support_saved="" zoom_saved="" keep_tmp="" passed=0 failed=0 skipped=0
 
-pgrep -x "Transom Debug" >/dev/null && { echo "vm-cli-check: Transom Debug is already running in the VM" >&2; exit 1; }
+# Before the trap: that Transom Debug isn't this run's to quit, and nothing else has changed yet.
+if pgrep -x "Transom Debug" >/dev/null; then
+    echo "vm-cli-check: Transom Debug is already running in the VM" >&2
+    rm -rf "$HOME/transomcli" "$tmp"
+    exit 1
+fi
 
-stop_app() {
-    pgrep -x "Transom Debug" >/dev/null || return 0
-    osascript -e 'quit app "Transom Debug"' >/dev/null || true
+gone_within_10s() {
     for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do pgrep -x "Transom Debug" >/dev/null || return 0; sleep 0.5; done
     return 1
 }
+stop_app() {
+    pgrep -x "Transom Debug" >/dev/null || return 0
+    osascript -e 'quit app "Transom Debug"' >/dev/null || true
+    gone_within_10s
+}
 cleanup() {
-    stop_app || pkill -x "Transom Debug" || true
-    if [ -n "$support_saved" ]; then rm -rf "$support"; [ ! -d "$tmp/support" ] || ditto "$tmp/support" "$support"; fi
+    # Gone before the folder is restored: the app answers SIGTERM with a clean-exit write, which would overwrite it.
+    if ! stop_app; then
+        pkill -x "Transom Debug" || true
+        gone_within_10s || { pkill -9 -x "Transom Debug" || true; sleep 0.5; }
+    fi
+    if [ -n "$support_saved" ]; then
+        rm -rf "$support"
+        if [ -d "$tmp/support" ] && ! ditto "$tmp/support" "$support"; then
+            echo "vm-cli-check: could not restore $support; the backup stays at $tmp/support" >&2
+            keep_tmp=1
+        fi
+    fi
     case "$zoom_saved" in
         "") ;;
         unset) defaults delete "$domain" zoomEnabled 2>/dev/null || true ;;
@@ -54,7 +73,8 @@ cleanup() {
         *) defaults write "$domain" zoomEnabled -bool false ;;
     esac
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$app" 2>/dev/null || true
-    rm -rf "$HOME/transomcli" "$tmp"
+    rm -rf "$HOME/transomcli"
+    [ -n "$keep_tmp" ] || rm -rf "$tmp"
     if [ -n "$was_running" ]; then open -a /Applications/Transom.app; fi
 }
 trap cleanup EXIT
@@ -63,7 +83,8 @@ trap 'exit 130' HUP INT TERM
 pass() { passed=$((passed + 1)); echo "PASS $1"; }
 fail() { failed=$((failed + 1)); echo "FAIL $1: $2"; }
 finish() {
-    if [ "$failed" -gt 0 ]; then echo "vm-cli-check: $failed checks failed, $passed passed"; exit 1; fi
+    if [ "$failed" -gt 0 ]; then echo "vm-cli-check: $failed checks failed, $skipped skipped, $passed passed"; exit 1; fi
+    if [ "$skipped" -gt 0 ]; then echo "vm-cli-check: $skipped checks skipped, $passed passed"; exit 1; fi
     echo "vm-cli-check: $passed checks passed"
     exit 0
 }
@@ -90,9 +111,13 @@ if pgrep -x Transom >/dev/null; then
     for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Transom >/dev/null || break; sleep 0.5; done
     if pgrep -x Transom >/dev/null; then echo "vm-cli-check: Transom is still running in the VM" >&2; exit 1; fi
 fi
-# Debug and Release share this folder, so the installed app gets its own files back.
-if [ -d "$support" ]; then ditto "$support" "$tmp/support"; fi
+# Debug and Release share this folder, so the installed app gets its own files back. Marked saved only after a good copy:
+# cleanup deletes the folder. It starts empty, so slot 7 is known to be empty.
+if [ -d "$support" ]; then
+    ditto "$support" "$tmp/support" || { echo "vm-cli-check: could not back up $support; leaving it as it is" >&2; exit 1; }
+fi
 support_saved=1
+rm -rf "$support"
 caffeinate -u -t 2
 
 mkdir -p "$(dirname "$cli")"
@@ -136,6 +161,7 @@ if [ "$err" = "transom: refused: No view in slot 7" ]; then
     sleep 1.1
     expect "view 4 exits 0" 0 "" view 4
 else
+    skipped=$((skipped + 1))
     echo "SKIP save-view/view 4: $err"
 fi
 sleep 1.1
