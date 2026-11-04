@@ -191,9 +191,32 @@ The script ran in the VM and restored the guest's files.
 
 ## Open risks
 
-- **Stored arrangements still close unmatched windows.** When a stored display arrangement is applied, its unmatched windows close, per 08-04's decision that this path is not a launch. After a reboot its windows are retired, so a tile on a hidden Space of a stored set closes when that arrangement is applied. Neither CR-02 nor the review covers this path; the fix would be to hold those tiles as placeholders.
+- **Stored arrangements still close unmatched windows on shown desks.** When a stored display arrangement is applied, an unmatched window on a desk a display shows closes at once, per 08-04's decision that this path is not a launch. After a reboot that can include a tile whose app has not opened yet. Tiles on hidden desks now wait; see D-12b.
 - **A placeholder on a Space that no longer exists waits for good.** It is unseen and stays in layout.json, like the dormant desk it is on (`shortcut:` comment in `Arranger+Placeholders.swift`).
 - **A window that never gets a title and opens elsewhere loses a lone tile.** This follows from WR-03 (`shortcut:` comment in `HintMatcher.swift`).
+
+## D-12b
+
+**Status:** fixed: requires human verification
+**Files modified:** `Sources/TransomEngine/Arranger.swift`, `Sources/TransomEngine/Arranger+Placeholders.swift`, `Tests/TransomEngineTests/ArrangerPlaceholderTests.swift`
+**Commit:** d3a00be
+**Applied fix:** when a stored display arrangement is applied, a saved window that did not come back and is on a desk not showing now waits as a placeholder, through `holdAtLaunch`. No new field or wait length. It expires or fills as CR-02's tiles do: never while hidden, then at least 10 s once its desk shows.
+
+- **Tested first:** `aStoredSetsHiddenTileWaitsAndFillsWhenItsSpaceShows` failed before the fix.
+- **Unchanged:** on a shown desk, such a window still closes at once, unless it was already waiting. A tile already waiting keeps its deadline.
+- **Wider than a reboot:** the rule applies whenever a stored arrangement is applied, as D-12b says "every path". In the same boot, a window that really closed while its arrangement was away, on a desk now hidden, used to close when the arrangement came back. It now waits until that desk shows, then expires after 10 s. A test covers this with `bootChanged` false.
+- **Also waits:** a desk of a display not connected counts as hidden, as in CR-02.
+
+**Verification:**
+
+| Gate | Where it ran | Result |
+|---|---|---|
+| `swift test` | The isolated worktree, on the host, with `TRANSOM_LIVE` unset | 226, 432, 100 and 1095 tests across the four test runs, no ✘ |
+| `scripts/check-no-appkit.sh` | The isolated worktree | OK (62 files) |
+| `RematchIntegrationTests` | `pane-test` VM, its own job, built from the worktree | 3 of 3 passed |
+| `RecoveryIntegrationTests` | `pane-test` VM, its own job, built from the worktree | 2 of 2 passed |
+
+Neither VM suite exercises this path: it is covered by engine tests only. **Check:** in the real-reboot UAT, with another display's stored arrangement applied, a tile on Desktop 2 survives and is refilled when you go there.
 
 ---
 
