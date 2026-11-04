@@ -56,6 +56,21 @@ shown="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist"
 scheme="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$plist")"
 [ "$scheme" = transom ] || fail "URL scheme is $scheme, want transom"
 
+# The bundled command-line tool (D-09): notarisation checks every executable, and so does this.
+helper="$app/Contents/Helpers/transom"
+[ -x "$helper" ] || fail "no executable tool at $helper"
+details="$(codesign -dv --verbose=4 "$helper" 2>&1)"
+grep -q '^Timestamp=' <<<"$details" || fail "no secure timestamp on $helper"
+grep -q 'flags=.*runtime' <<<"$details" || fail "no hardened runtime on $helper"
+grep -q "^TeamIdentifier=$team\$" <<<"$details" || fail "$helper is not signed by team $team"
+entitlements="$(codesign -d --entitlements - "$helper" 2>/dev/null)"
+for forbidden in get-task-allow application-identifier; do
+    case "$entitlements" in *"$forbidden"*) fail "forbidden entitlement on $helper: $forbidden" ;; esac
+done
+archs="$(lipo -archs "$helper")"
+case " $archs " in *" x86_64 "*) ;; *) fail "$helper lacks x86_64 (has: $archs)" ;; esac
+case " $archs " in *" arm64 "*) ;; *) fail "$helper lacks arm64 (has: $archs)" ;; esac
+
 if [ "$build_only" = 1 ]; then
     echo "$app"
     exit 0
