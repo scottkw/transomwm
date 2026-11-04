@@ -1721,9 +1721,11 @@ public struct Arranger: Sendable {
         {
             return Hover(displayUUID: ownKey.displayUUID, swapWith: other, modifiers: [.command])
         }
-        // Hold ⌥ with ⌥ up (D-08, D-08a): under 16 pt a docked window is decide's ordinary snap-back miss.
-        if dragToDock == .holdOption, !session.modifiers.contains(.option), torn == nil {
-            if docked, !session.travelledToPullOut { return Hover(displayUUID: ownKey.displayUUID) }
+        // Hold ⌥ with ⌥ up (D-08, D-08a): a torn tab takes ⇧'s tear-off hover, so decide answers tearOffMiss and it floats.
+        // Under 16 pt a docked window is decide's ordinary snap-back miss, and so is ⌘, which never pulls a window out.
+        if dragToDock == .holdOption, !session.modifiers.contains(.option) {
+            if torn != nil { return Hover(displayUUID: display?.uuid, modifiers: [.shift]) }
+            if docked, session.modifiers.contains(.command) || !session.travelledToPullOut { return Hover(displayUUID: ownKey.displayUUID) }
             return floatHover(plain: true)
         }
         var target: DropTarget?
@@ -1851,7 +1853,8 @@ public struct Arranger: Sendable {
         return (candidate, candidateHistory)
     }
 
-    /// Mouse-up: applies exactly the decision whose preview is on screen; with none, the miss rules (WYSIWYG).
+    /// Mouse-up: applies exactly the decision whose preview is on screen; with none, the miss rules (WYSIWYG). A Hold ⌥
+    /// plain drag has nothing to wait for, so it decides here and its result never depends on the dwell.
     private mutating func release(now: ContinuousClock.Instant) -> [ArrangerEffect] {
         guard let session = drag else { return [] }
         // Before endDrag, which clears what undockPlan reads (RESEARCH Pitfall 2).
