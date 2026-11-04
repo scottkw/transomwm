@@ -213,9 +213,10 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         }
         #expect(ordered, "want \(above) above panel \(panels[1].windowNumber) and \(below) below panel \(panels[0].windowNumber), got \(list.map(\.windowID))")
 
-        // Where only the panel and the window below it are, clear of the guest's own windows and of their resize margins.
+        // Where only the panel and the window below it are, clear of the guest's own windows and of their resize margins,
+        // and below the title bar: on an empty guest the first clear point would be that window's close button.
         let waiting = arrange.placeholderPanels.windowNumbers
-        let grid = stride(from: wanted[0].minY + 16, to: wanted[0].maxY - 16, by: 4).lazy.flatMap { y in
+        let grid = stride(from: wanted[0].minY + 40, to: wanted[0].maxY - 16, by: 4).lazy.flatMap { y in
             stride(from: wanted[0].minX + 16, to: wanted[0].maxX - 16, by: 4).lazy.map { x in Point(x: x, y: y) }
         }
         let point = try #require(grid.first { point in
