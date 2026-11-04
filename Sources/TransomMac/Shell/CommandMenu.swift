@@ -110,6 +110,23 @@ import TransomModel
         dispatch(Self.commands[sender.tag])
     }
 
+    /// A preference in the menu (UI-SPEC Surface 1): a titled item with a radio submenu, rebuilt each time the menu
+    /// opens. Each choice's `tag` is its index; no availability rule greys them, as with Gaps ▸.
+    static func optionMenu(title: String, choices: [(title: String, toolTip: String, selected: Bool)], target: AnyObject, action: Selector) -> NSMenuItem {
+        let submenu = NSMenu(title: title)
+        for (index, choice) in choices.enumerated() {
+            let item = NSMenuItem(title: choice.title, action: action, keyEquivalent: "")
+            item.target = target
+            item.tag = index
+            item.state = choice.selected ? .on : .off
+            item.toolTip = choice.toolTip
+            submenu.addItem(item)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
     /// nil adds a separator.
     private func submenu(_ title: String, _ commands: [Command?]) -> NSMenu {
         let menu = NSMenu(title: title)

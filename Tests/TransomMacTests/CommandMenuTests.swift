@@ -129,6 +129,29 @@ import Testing
         #expect(menu.splitMenu.title == "Split")
         #expect(menu.splitMenu.submenu?.items.contains { $0 === menu.item(for: .finderSplit) } == true)
     }
+
+    /// UI-SPEC Surface 1: the shape both options share, enabled with no availability rule.
+    @Test func optionMenuBuildsARadioSubmenu() throws {
+        final class Target: NSObject {
+            var chosen: [Int] = []
+            @objc func choose(_ sender: NSMenuItem) { chosen.append(sender.tag) }
+        }
+        let target = Target()
+        let item = CommandMenu.optionMenu(
+            title: "Option: B",
+            choices: [("A", "First.", false), ("B", "Second.", true)],
+            target: target, action: #selector(Target.choose))
+        #expect(item.title == "Option: B")
+        #expect(item.action == #selector(NSMenu.submenuAction(_:)), "AppKit's own, for any item with a submenu")
+        let choices = try #require(item.submenu).items
+        #expect(choices.map(\.title) == ["A", "B"])
+        #expect(choices.map(\.state) == [.off, .on])
+        #expect(choices.map(\.toolTip) == ["First.", "Second."])
+        #expect(choices.map(\.tag) == [0, 1])
+        #expect(choices.allSatisfy { $0.target === target && $0.keyEquivalent.isEmpty && $0.isEnabled })
+        _ = target.perform(try #require(choices[1].action), with: choices[1])
+        #expect(target.chosen == [1])
+    }
 }
 
 /// 04 UI-SPEC Surface 6: the Zoom section's items, toggle, checkmarks and greying.

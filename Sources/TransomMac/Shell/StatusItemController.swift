@@ -13,6 +13,7 @@ import os
     private let commands: CommandMenu
     private let permission: PermissionController
     private let gaps: GapPreference
+    private let dragToDock: DragToDockPreference
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
     private let conflicts: ConflictController
@@ -41,13 +42,14 @@ import os
     /// `showSetup` opens the "Set Up Transom" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
         system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
-        gaps: GapPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        gaps: GapPreference, dragToDock: DragToDockPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.arrange = arrange
         commands = CommandMenu(dispatch: dispatch)
         self.permission = permission
         self.gaps = gaps
+        self.dragToDock = dragToDock
         self.exclusions = exclusions
         self.freezeTest = freezeTest
         self.conflicts = conflicts
@@ -136,6 +138,7 @@ import os
         menu.addItem(commands.item(for: .floatAll))
         menu.addItem(commands.item(for: .toggleDesktop))
         menu.addItem(gapsMenuItem())
+        menu.addItem(dragToDockMenuItem())
     }
 
     /// The Zoom section (Surface 6), on the pointer's display. Screen Recording is never checked while zoom is off.
@@ -214,6 +217,20 @@ import os
 
     @objc private func chooseGap(_ sender: NSMenuItem) {
         _ = gaps.set(GapPreference.allowed[sender.tag])
+    }
+
+    /// Drag to Dock ▸ (D-07, D-19); enabled while paused or not ready, like Gaps ▸.
+    private func dragToDockMenuItem() -> NSMenuItem {
+        CommandMenu.optionMenu(
+            title: MenuCopy.dragToDockTitle(dragToDock.value),
+            choices: DragToDockMode.allCases.map {
+                (MenuCopy.dragToDockChoice($0), MenuCopy.dragToDockTooltip($0), $0 == dragToDock.value)
+            },
+            target: self, action: #selector(chooseDragToDock))
+    }
+
+    @objc private func chooseDragToDock(_ sender: NSMenuItem) {
+        dragToDock.set(DragToDockMode.allCases[sender.tag])
     }
 
     /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.

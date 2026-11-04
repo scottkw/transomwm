@@ -119,6 +119,30 @@ nonisolated public enum MenuCopy {
     public static let gapsMenu = "Gaps"
     public static func gapTitle(_ gap: Double) -> String { gap == 0 ? "None" : "\(Int(gap)) pt" }
 
+    /// Drag to Dock (UI-SPEC Surface 1): the item's title carries the current value.
+    public static func dragToDockTitle(_ mode: DragToDockMode) -> String { "Drag to Dock: \(dragToDockChoice(mode))" }
+
+    public static func dragToDockChoice(_ mode: DragToDockMode) -> String {
+        switch mode {
+        case .automatic: "Automatically"
+        case .holdOption: "Hold ⌥"
+        }
+    }
+
+    public static func dragToDockTooltip(_ mode: DragToDockMode) -> String {
+        switch mode {
+        case .automatic: "Docking regions show on every drag."
+        case .holdOption: "A drag moves the window and leaves it floating. Hold ⌥ to show docking regions."
+        }
+    }
+
+    public static func dragToDockAnnouncement(_ mode: DragToDockMode) -> String {
+        switch mode {
+        case .automatic: "Docking regions show on every drag"
+        case .holdOption: "Hold Option while dragging to dock"
+        }
+    }
+
     public static func desktopToggle(hidden: Bool) -> String { hidden ? "Show Desktop Tile" : "Hide Desktop Tile" }
 
     /// nil at 0, else "1 app not responding" / "N apps not responding".

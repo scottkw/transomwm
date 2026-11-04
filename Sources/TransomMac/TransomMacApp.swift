@@ -67,7 +67,11 @@ public enum TransomMacApp {
             zoomEnabled: zoomEnabled)
         arrangeController.takeover = takeover
         gaps.onChange = { gap in Task { await arrangeController.setGap(gap) } }
-        dragToDock.onChange = { mode in Task { await arrangeController.setDragToDock(mode) } }
+        // Choosing the current value fires nothing, so it announces nothing.
+        dragToDock.onChange = { mode in
+            postAnnouncement(MenuCopy.dragToDockAnnouncement(mode))
+            Task { await arrangeController.setDragToDock(mode) }
+        }
         arrangeController.isReady = { permissionController.state.phase == .ready }
         // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).
         let dispatch: @MainActor (Command) -> Void = { command in Task { await arrangeController.dispatch(command) } }
@@ -80,7 +84,8 @@ public enum TransomMacApp {
         conflictController.presentAlert = { [unowned conflictController] in conflictController.showModelessAlert($0) }
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
-            exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController, showTrackedWindows: { trackedController.show() },
+            dragToDock: dragToDock, exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController,
+            showTrackedWindows: { trackedController.show() },
             showSetup: { setupController.show() }
         )
         controller.onInventory = { trackedController.feed.inventory = $0 }

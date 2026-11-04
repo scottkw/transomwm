@@ -128,6 +128,17 @@ import Testing
         #expect(MenuCopy.dontArrangeFallback == "Don't Arrange Frontmost App")
         #expect(MenuCopy.noExclusions == "No apps excluded")
     }
+
+    @Test func dragToDockCopyFollowsTheUISpec() {
+        #expect(MenuCopy.dragToDockTitle(.automatic) == "Drag to Dock: Automatically")
+        #expect(MenuCopy.dragToDockTitle(.holdOption) == "Drag to Dock: Hold ⌥")
+        #expect(MenuCopy.dragToDockChoice(.automatic) == "Automatically")
+        #expect(MenuCopy.dragToDockChoice(.holdOption) == "Hold ⌥")
+        #expect(MenuCopy.dragToDockTooltip(.automatic) == "Docking regions show on every drag.")
+        #expect(MenuCopy.dragToDockTooltip(.holdOption) == "A drag moves the window and leaves it floating. Hold ⌥ to show docking regions.")
+        #expect(MenuCopy.dragToDockAnnouncement(.automatic) == "Docking regions show on every drag")
+        #expect(MenuCopy.dragToDockAnnouncement(.holdOption) == "Hold Option while dragging to dock")
+    }
 }
 
 @Suite struct NudgeMenuCopyTests {
