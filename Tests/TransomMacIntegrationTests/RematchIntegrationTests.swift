@@ -149,9 +149,9 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
     }
 
     /// D-13 live (VM only: it posts a click): each tile of a quit app shows a click-through panel behind real windows. A
-    /// fixture window opened over one tile stays above its panel; another sent behind the other panel takes a click made
-    /// through it, leaving this process inactive. (A posted click on the guest's bare desktop does not activate Finder,
-    /// panel or no panel, so a window stands in for it.) By pid, so the second fixture stays untracked and fills nothing.
+    /// fixture window opened over one tile stays above its panel. A click through the other panel reaches the fixture
+    /// window sent behind it, then, with that window closed, Finder's desktop, and leaves this process inactive. By pid,
+    /// so the second fixture stays untracked and fills nothing.
     @Test(.timeLimit(.minutes(1)), .enabled(if: IntegrationEnv.inVM, "VM only: posts a click"))
     func aPlaceholderIsClickThroughAndBehindRealWindows() async throws {
         _ = NSApplication.shared
@@ -225,16 +225,24 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
                     && (entry.pid == getpid() ? !waiting.contains(Int(entry.windowID)) : entry.layer == 0)  // a gap handle takes clicks
             }
         }, "no point of \(wanted[0]) is clear of the guest's windows")
-        for type in [CGEventType.leftMouseDown, .leftMouseUp] {
-            CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGPoint(x: point.x, y: point.y), mouseButton: .left)?.post(tap: .cghidEventTap)
-            try await Task.sleep(for: .milliseconds(50))
+        func click() async throws {
+            for type in [CGEventType.leftMouseDown, .leftMouseUp] {
+                CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGPoint(x: point.x, y: point.y), mouseButton: .left)?.post(tap: .cghidEventTap)
+                try await Task.sleep(for: .milliseconds(50))
+            }
         }
+        try await click()
         var front: [String] = []
         let reached = await waitUntil(timeout: .seconds(2)) {
             front = (try? await over.send("frontmost")) ?? []
             return front.contains("frontmost index=1")
         }
         #expect(reached, "the click at \(point) did not reach the window behind the panel: \(front)")
+
+        _ = try await over.send("close 1")
+        try await click()
+        let finder = await waitUntil(timeout: .seconds(2)) { NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" }
+        #expect(finder, "the click at \(point) did not reach Finder: \(String(describing: NSWorkspace.shared.frontmostApplication?.bundleIdentifier))")
         #expect(!NSRunningApplication.current.isActive, "the click activated this process")
     }
 }
