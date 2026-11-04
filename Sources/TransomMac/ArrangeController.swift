@@ -550,7 +550,7 @@ import os
     static func commandPID(
         frontmost: Int32?, beforeTransom: Int32?, from source: CommandSource, own: Int32 = ProcessInfo.processInfo.processIdentifier
     ) -> Int32? {
-        source == .url && frontmost == own ? beforeTransom : frontmost
+        source.isSilent && frontmost == own ? beforeTransom : frontmost
     }
 
     /// The pointer in top-left global points and the display under it: where every camera command acts (UI-SPEC: hotkeys,
@@ -564,62 +564,115 @@ import os
         return (point, uuid)
     }
 
+    /// The command-line tool's channel (D-07); the app keeps it for its lifetime and the Debug submenu reads it.
+    var cliListener: CLIListener?
+
     /// The refusal sound; a seam for tests.
     var beep: () -> Void = { NSSound.beep() }
 
     /// Every route (hotkey, menu item, URL) calls this. A command that cannot act beeps (UI-SPEC: no hotkey fails
     /// silently), except from a URL, whose user may not be at the keyboard (Pitfall 21).
     public func dispatch(_ command: Command, from source: CommandSource = .hotkey) async {
+        guard let pending = viewSwitch(for: command) else { return await act(on: decide(command, from: source).effects) }
         zoomInput.noteCommand()
-        let refuse = source == .url ? {} : beep
+        overviewController?.interrupt(reason: .command)
+        guard await switchSpace(pending, from: source) else { return }
+        await act(on: decide(command, from: source, afterSwitch: true).effects)
+    }
+
+    /// The CLI's way in (D-07): the reply leaves now and the command acts after it. A view on another Space replies `ok`
+    /// when its switch starts; a later switch failure shows only on screen, as "accepted" allows (RESEARCH A8).
+    public func answerCLI(_ command: Command) -> String {
+        if viewSwitch(for: command) != nil {
+            Task { await dispatch(command, from: .cli) }
+            return CLIProtocol.ok
+        }
+        let decision = decide(command, from: .cli)
+        Task { await act(on: decision.effects) }
+        return decision.reply
+    }
+
+    /// What `command` does now, before any effect runs: the CLI's reply and the effects, already silenced for a URL or CLI
+    /// route. Going to a view on another Space must switch first (`viewSwitch(for:)`); here the engine would refuse it.
+    public func decide(_ command: Command, from source: CommandSource, afterSwitch: Bool = false) -> (reply: String, effects: [ArrangerEffect]) {
+        zoomInput.noteCommand()
+        let effects = refusableEffects(of: command, from: source, afterSwitch: afterSwitch)
+        return (Self.cliReply(for: effects), source.isSilent ? Self.silenced(effects, of: command) : effects)
+    }
+
+    private func refusableEffects(of command: Command, from source: CommandSource, afterSwitch: Bool) -> [ArrangerEffect] {
         if command == .toggleExcludeFrontmost {
             // The store's onChange hands the list to the window system, whose windowChanged events float the windows.
-            if let exclusions, Self.toggleExclusion(of: NSWorkspace.shared.frontmostApplication, in: exclusions) { return }
-            refuse()
-            return
+            if let exclusions, Self.toggleExclusion(of: NSWorkspace.shared.frontmostApplication, in: exclusions) { return [] }
+            return [.beep]
         }
         if command != .camera(.overview) { overviewController?.interrupt(reason: .command) }
-        if case .camera(let camera) = command {
-            await dispatchCamera(camera, from: source)
-            return
-        }
+        if case .camera(let camera) = command { return cameraEffects(camera, from: source, afterSwitch: afterSwitch) }
         let context = commandContext(from: source)
         if case .tabs(let tab) = command {
             // The engine refuses with an announcement (Surface 7); a URL refusal only logs.
-            let via: TabLeaveSource = switch source { case .hotkey: .hotkey; case .menu: .menu; case .url: .url }
-            let effects = arranger.handle(.tab(.command(tab, focused: context.focused, via: via), ready: context.ready), now: .now)
-            guard source == .url else { return await run(effects) }
-            return await run(effects.filter { if case .beep = $0 { false } else if case .tabAnnouncement(.refused) = $0 { false } else { true } })
+            let via: TabLeaveSource = switch source { case .hotkey: .hotkey; case .menu: .menu; case .url, .cli: .url }
+            return arranger.handle(.tab(.command(tab, focused: context.focused, via: via), ready: context.ready), now: .now)
         }
-        guard arranger.availability(command, context: context) else {
-            refuse()
-            return
+        guard arranger.availability(command, context: context) else { return [.beep] }
+        return arranger.handle(.command(command, focused: context.focused), now: .now)
+    }
+
+    /// What a URL or CLI route keeps of `effects`: no beep, and a refusal shows nothing on screen (Phase 3 rule, UI-SPEC
+    /// N16). A camera command says nothing either way; its toasts still show.
+    static func silenced(_ effects: [ArrangerEffect], of command: Command) -> [ArrangerEffect] {
+        let quiet = if case .camera = command { true } else { effects.contains(.beep) }
+        return effects.filter {
+            switch $0 {
+            case .beep, .tabAnnouncement(.refused), .notice(.viewEmpty), .notice(.viewDisplayGone), .notice(.viewNothingToSave): false
+            case .announce: !quiet
+            default: true
+            }
         }
-        let effects = arranger.handle(.command(command, focused: context.focused), now: .now)
-        await run(source == .url ? effects.filter { $0 != .beep } : effects)
+    }
+
+    /// The CLI's reply to `effects` before they are silenced: a beep means refused, with the text VoiceOver would hear.
+    static func cliReply(for effects: [ArrangerEffect]) -> String {
+        guard effects.contains(.beep) else { return CLIProtocol.ok }
+        for effect in effects {
+            switch effect {
+            case .announce(let text): return CLIProtocol.refused(text)
+            case .tabAnnouncement(let announcement): return CLIProtocol.refused(TabCopy.announcement(announcement, appName: appName))
+            case .notice(let notice): return CLIProtocol.refused(NoticeCopy.text(for: notice, appName: appName))
+            default: continue
+            }
+        }
+        return CLIProtocol.refused("")
+    }
+
+    private func act(on effects: [ArrangerEffect]) async {
+        await run(effects)
+        joinedNotice = nil
     }
 
     /// A camera command on the pointer's display. A refusal beeps and announces (Surface 1), except from a URL, which
-    /// only logs; with zoom off a URL is ignored and logged (its hotkeys are disabled then, D-D).
-    private func dispatchCamera(_ camera: CameraCommand, from source: CommandSource) async {
+    /// only logs; with zoom off a URL is ignored and logged (its hotkeys are disabled then, D-D) and the CLI is told.
+    private func cameraEffects(_ camera: CameraCommand, from source: CommandSource, afterSwitch: Bool) -> [ArrangerEffect] {
         guard zoomEnabled else {
             if camera == .overview { logger.info("refused overview: zoom off") }
-            if source == .url { zoomInputLog.info("url \(String(describing: camera), privacy: .public) ignored: zoom off") }
-            return
+            if source.isSilent { zoomInputLog.info("\(String(describing: source), privacy: .public) \(String(describing: camera), privacy: .public) ignored: zoom off") }
+            return source == .cli ? [.beep, .announce(CLICopy.zoomOff)] : []
         }
         let context = commandContext(from: source)
         if case .overview = camera {  // the shell's: it needs no pointer display and is allowed while paused
-            guard context.ready else {
-                let text = OverviewCopy.refusedNotReady
-                return await run(source == .url ? [.info("refused overview: not ready")] : [.beep, .announce(text), .info("refused overview: not ready")])
-            }
-            return await toggleOverview(from: source)
+            guard context.ready else { return [.beep, .announce(OverviewCopy.refusedNotReady), .info("refused overview: not ready")] }
+            if toggleOverview(trigger: String(describing: source)) { return [] }
+            return [.beep, .announce(OverviewCopy.refusedFullScreen), .info("refused overview: full screen")]
         }
         let pointer = pointerDisplay()
         var target = pointer.uuid
         if case .view(let slot) = camera, context.ready {
-            guard let display = await displayForView(slot, pointer: pointer.uuid, from: source) else { return }
-            target = display
+            let route = viewRoute(slot, pointer: pointer.uuid)
+            target = route.display
+            if let destination = route.destination {
+                viewsLog.info(
+                    "go view \(slot.number, privacy: .public) via \(String(describing: source), privacy: .public): desk \(String(describing: destination.key), privacy: .public), \(destination.alive, privacy: .public) of \(destination.total, privacy: .public) windows, target \(String(describing: destination.target), privacy: .public)\(afterSwitch ? ", space switch" : "", privacy: .public)")
+            }
         }
         var effects: [ArrangerEffect]
         if let uuid = target, context.ready {
@@ -630,7 +683,6 @@ import os
         } else {
             effects = [.beep, .info("refused \(camera): no display under the pointer")]
         }
-        if source == .url { effects.removeAll { if case .beep = $0 { true } else if case .announce = $0 { true } else { false } } }
         if camera == .zoomOutAll || camera == .stepOut {
             for case .cameraMove(let move) in effects { zoomInput.expectPick(moveID: move.id) }  // its reveal starts pick mode
         }
@@ -641,36 +693,46 @@ import os
                 joinedNotice = .viewShown(slot, displayUUID: move.displayUUID)
             }
         }
-        await run(effects)
-        joinedNotice = nil
+        return effects
     }
 
     /// D-03: the display going to view `slot` acts on (the pointer's when the engine will refuse: empty slot, paused, display
-    /// gone), showing the view's Space first when that is another one. Nil: the switch failed and was refused here, with the
-    /// camera unchanged. Saved windows all gone on a Space no longer listed: no switch, the engine goes home there.
-    /// shortcut: a second view pressed during a switch posts its own chords; serialize them if that shows up in use.
-    private func displayForView(_ slot: ViewSlot, pointer: String?, from source: CommandSource) async -> String?? {
+    /// gone) and the Space to show first when that is another one. Saved windows all gone on a Space no longer listed: no
+    /// switch, the engine goes home there.
+    private func viewRoute(_ slot: ViewSlot, pointer: String?) -> (display: String?, space: SpaceInfo?, destination: (key: DeskKey, target: ViewTarget, allGone: Bool, alive: Int, total: Int)?) {
         guard arranger.pauseReasons.isEmpty, !arranger.sessionPaused, let destination = arranger.viewDestination(slot: slot),
             let display = arranger.displays.first(where: { $0.uuid == destination.key.displayUUID })
-        else { return .some(pointer) }
+        else { return (pointer, nil, nil) }
         let space = destination.key.spaceID.flatMap { id in
             id == display.currentSpaceID ? nil : system.spacesSnapshot?.displays.first { $0.displayUUID == display.uuid }?.spaces.first { $0.id == id }
         }
-        viewsLog.info(
-            "go view \(slot.number, privacy: .public) via \(String(describing: source), privacy: .public): desk \(String(describing: destination.key), privacy: .public), \(destination.alive, privacy: .public) of \(destination.total, privacy: .public) windows, target \(String(describing: destination.target), privacy: .public)\(space == nil ? "" : ", space switch", privacy: .public)")
-        guard let space else { return display.uuid }
-        let switched = await spaceSwitcher.switchTo(space: space.id, on: display.uuid)
+        return (display.uuid, space, destination)
+    }
+
+    /// The Space that must be shown before going to `command`'s view, when that is another one.
+    private func viewSwitch(for command: Command) -> (slot: ViewSlot, display: String, space: SpaceInfo)? {
+        guard case .camera(.view(let slot)) = command, zoomEnabled, isReady() else { return nil }
+        let route = viewRoute(slot, pointer: nil)
+        guard let display = route.display, let space = route.space else { return nil }
+        return (slot, display, space)
+    }
+
+    /// False: the switch failed and was refused here, with the camera unchanged.
+    /// shortcut: a second view pressed during a switch posts its own chords; serialize them if that shows up in use.
+    private func switchSpace(_ pending: (slot: ViewSlot, display: String, space: SpaceInfo), from source: CommandSource) async -> Bool {
+        let (slot, display, space) = pending
+        let switched = await spaceSwitcher.switchTo(space: space.id, on: display)
         // RESEARCH Pitfall 7: the Arranger hears of the new Space from a later `.spaceChanged`, and plans its desk from that.
         let deadline = ContinuousClock.now + .milliseconds(500)
-        while switched, arranger.displays.first(where: { $0.uuid == display.uuid })?.currentSpaceID != space.id, ContinuousClock.now < deadline {
+        while switched, arranger.displays.first(where: { $0.uuid == display })?.currentSpaceID != space.id, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(20))
         }
-        guard switched, arranger.displays.first(where: { $0.uuid == display.uuid })?.currentSpaceID == space.id else {
+        guard switched, arranger.displays.first(where: { $0.uuid == display })?.currentSpaceID == space.id else {
             viewsLog.info("refused view \(slot.number, privacy: .public): couldn't switch to space \(space.id, privacy: .public)")
-            await run(source == .url ? [] : [.beep, .announce(OverviewCopy.couldNotSwitch(desktop: space.index))])
-            return nil
+            await run(source.isSilent ? [] : [.beep, .announce(OverviewCopy.couldNotSwitch(desktop: space.index))])
+            return false
         }
-        return arranger.viewDestination(slot: slot)?.key.displayUUID ?? display.uuid
+        return true
     }
 
     /// A camera command from pointer input, on a given display with a given window (title-bar and Desktop double-clicks).
@@ -869,14 +931,7 @@ import os
     }
 
     /// Opens or closes the overview with pick mode and any rubber band ended and the collapsed panels hidden (they would
-    /// sit above it); gestures are disarmed while it is open. Every display in full screen refuses: a beep and an
-    /// announcement, or from a URL only a log line.
-    private func toggleOverview(from source: CommandSource) async {
-        guard !toggleOverview(trigger: String(describing: source)) else { return }
-        let text = OverviewCopy.refusedFullScreen
-        await run(source == .url ? [.info("refused overview: full screen")] : [.beep, .announce(text), .info("refused overview: full screen")])
-    }
-
+    /// sit above it); gestures are disarmed while it is open. Every display in full screen refuses.
     /// False, with nothing shown, when it could not open.
     private func toggleOverview(trigger: String) -> Bool {
         let overview = overview()
@@ -1214,8 +1269,12 @@ import os
     }
 }
 
-/// Where a command came from: only a URL dispatch is silent when it cannot act.
-public enum CommandSource { case hotkey, menu, url }
+/// Where a command came from: a URL or CLI dispatch is silent on screen when it cannot act; the CLI gets a reply instead.
+public enum CommandSource {
+    case hotkey, menu, url, cli
+
+    var isSilent: Bool { self == .url || self == .cli }
+}
 
 /// One pending wake-up: `set` replaces any earlier one, so only the latest instant fires.
 @MainActor final class WakeTimer {

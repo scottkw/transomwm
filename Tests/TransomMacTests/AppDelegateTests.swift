@@ -10,7 +10,7 @@ import Testing
         var steps: [String] = []
         let delegate = AppDelegate(
             restore: { steps.append("restore") }, writeCleanExit: { steps.append("cleanExit") }, open: { _ in },
-            urlScheme: "transom", reply: { steps.append("reply \($0)") })
+            gate: CommandGate(scheme: "transom"), reply: { steps.append("reply \($0)") })
         #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
         let replied = await waitFor { steps.count == 3 }
         #expect(replied)
@@ -19,7 +19,7 @@ import Testing
 
     @Test func aValidURLDispatchesOnceAndAnythingElseNothing() throws {
         var opened: [Command] = []
-        let delegate = AppDelegate(restore: {}, writeCleanExit: {}, open: { opened.append($0) }, urlScheme: "transom-debug")
+        let delegate = AppDelegate(restore: {}, writeCleanExit: {}, open: { opened.append($0) }, gate: CommandGate(scheme: "transom-debug"))
         let urls = try ["transom-debug://restore", "transom-debug://restore?x=1", "transom://toggle-desktop", "transom-debug://zoom",
             "transom-debug://restore", "transom-debug://split-finder"].map { try #require(URL(string: $0)) }
         delegate.application(NSApplication.shared, open: urls)
@@ -29,7 +29,7 @@ import Testing
 
     @Test func withNoRegisteredSchemeEveryURLIsRejected() throws {
         var opened: [Command] = []
-        let delegate = AppDelegate(restore: {}, writeCleanExit: {}, open: { opened.append($0) }, urlScheme: nil)
+        let delegate = AppDelegate(restore: {}, writeCleanExit: {}, open: { opened.append($0) }, gate: CommandGate(scheme: nil))
         delegate.application(NSApplication.shared, open: [try #require(URL(string: "transom://restore"))])
         #expect(opened.isEmpty)
     }
@@ -56,6 +56,7 @@ import Testing
         #expect(ArrangeController.commandPID(frontmost: nil, beforeTransom: 7, from: .url, own: own) == nil)
         #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .hotkey, own: own) == own)
         #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .menu, own: own) == own)
+        #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .cli, own: own) == 7)
     }
 
     private func waitFor(_ condition: () -> Bool) async -> Bool {

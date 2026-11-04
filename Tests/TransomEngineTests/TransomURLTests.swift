@@ -46,6 +46,14 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse(string) == nil)
     }
 
+    /// 08 UI-SPEC Surface 4: the same commands as ⌥{n} and ⇧⌥{n}.
+    @Test(arguments: 1...9)
+    func theViewCommandsParse(number: Int) throws {
+        let slot = try #require(ViewSlot(number))
+        #expect(parse("transom://view/\(number)") == .camera(.view(slot)))
+        #expect(parse("transom://save-view/\(number)") == .camera(.saveView(slot)))
+    }
+
     @Test(arguments: [
         "transom://Restore", "transom://restore?x=1", "transom://restore?", "transom://restore#a", "transom://user@restore",
         "transom://user:secret@restore", "transom://restore:80", "transom://restore/extra", "transom://zoom", "transom-debug://restore",
