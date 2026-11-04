@@ -58,6 +58,8 @@ multi-display work beyond what Phase 6 already does.
   - **This supersedes T-03-17** (titles stripped from layout.json by `World.withoutTitleHints()`), because VIEW-04
     needs titles to tell an app's windows apart. layout.json must be written user-only (0600), and titles never go to
     logs at public level.
+- **D-10a (user, 2026-11-03):** A lone window whose title changed matches its tile only if it reopens at about its old
+  frame (WR-03). Opened elsewhere, it floats and the tile expires. Never taking a wrong window outranks keeping the tile.
 - **D-11:** Re-matching runs when Transom launches and whenever an app relaunches while Transom keeps running (new pid).
   Both paths use the same matcher. It extends `LayoutRestore.reattach`, which today removes saved windows whose app
   relaunched.
@@ -66,6 +68,8 @@ multi-display work beyond what Phase 6 already does.
 - **D-12a (user, 2026-11-03):** When an app quits while Transom runs, its docked windows become placeholders (so D-11
   relaunch matching has something to fill). They expire 30 s after the quit if the app has not relaunched. ⌘W on a
   window whose app keeps running still closes the tile at once.
+- **D-12b (user, 2026-11-03):** Tiles for windows on Spaces not being shown wait on every path, including when a stored
+  display arrangement is re-applied after a reboot. They do not expire while their desk is hidden.
 - **D-13:** A placeholder is drawn as a dim tile in the app's colour, with the app icon and "Waiting for <App>…". Clicks
   pass through it. It reuses the Phase 4 app-colour / icon tile (AppColor, CollapsedBlockView).
 
