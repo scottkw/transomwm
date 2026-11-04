@@ -452,6 +452,119 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(sentTiles(effects) == [PlaceholderTile(window: ref(2, title: "Plan"), frame: frame)])
     }
 
+    // MARK: Shown-desk paths (RESEARCH Pitfall 8)
+
+    /// A saved group of a waiting Notes and a live window, its live member selected.
+    private func groupWithAWaitingMember() async throws -> (Harness, [ArrangerEffect], WindowRef) {
+        let live = ref(21, title: "Live", pid: newPID)
+        let (harness, effects) = await launchedWithEffects(
+            try savedGroup(selectWaiting: true, live: live), open: [.standard(id: 21, pid: newPID, frame: openFrame, title: "Live")])
+        return (harness, effects, live)
+    }
+
+    private func sentStrips(_ effects: [ArrangerEffect]) -> [TabStrip]? {
+        effects.compactMap { if case .tabStrips(let strips, "main") = $0 { strips } else { nil } }.last
+    }
+
+    @Test func aCameraMoveCarriesPlaceholdersApartFromTiles() async throws {
+        var harness = await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        _ = await quit(&harness)
+        let third = ref(3, pid: 950, bundle: otherBundle)
+        let leaf = try #require(harness.arranger.leafNode(of: third))
+        let move = try #require(await harness.send(.zoomTo(.node(leaf), displayUUID: "main")).compactMap { effect -> CameraMove? in
+            if case .cameraMove(let move) = effect { move } else { nil }
+        }.first)
+        #expect(move.tiles.map(\.window) == [third])
+        #expect(move.placeholders.map(\.window) == [ref(1), ref(2)])
+        #expect(move.placeholders.allSatisfy { $0.kind == .leaving })
+        #expect(move.placeholders.map(\.start) == harness.arranger.homePlaceholders(on: "main").map(\.frame), "they start at their tiles")
+    }
+
+    @Test func aWaitingMemberGetsNoTab() async throws {
+        let (_, effects, live) = try await groupWithAWaitingMember()
+        let strip = try #require(sentStrips(effects)?.first)
+        #expect(strip.members == [live])
+        #expect(strip.titles == ["Live"])
+        #expect(strip.selected == 0)
+    }
+
+    @Test func aGroupThatAllWaitsHasNoStrip() async throws {
+        let (_, effects) = await launchedWithEffects(try savedGroup(selectWaiting: false, live: ref(2, title: "Plan")))
+        #expect(sentStrips(effects)?.isEmpty ?? true)
+    }
+
+    @Test func nextTabAndCloseGroupSkipAWaitingMember() async throws {
+        var (harness, _, live) = try await groupWithAWaitingMember()
+        let leaf = try #require(harness.arranger.world[key]?.tree.leaf(containing: live))
+        await harness.send(.command(.tabs(.next), focused: live))
+        #expect(harness.arranger.world[key]?.tree.node(leaf) == .tabs(windows: [ref(1), live], selected: 1), "the waiting member is not shown")
+        let closing = await harness.send(.tab(.closeGroup(GroupKey(desk: key, node: leaf)), ready: true))
+        let pressed = closing.flatMap { effect -> [WindowCommand] in if case .perform(let commands) = effect { commands } else { [] } }
+        #expect(pressed.contains(.close(live)))
+        #expect(!pressed.contains(.close(ref(1))))
+    }
+
+    @Test func aFocusMoveNeverTargetsAPlaceholder() async throws {
+        var harness = await threeDocked()
+        _ = await quit(&harness)
+        let effects = await harness.send(.command(.focus(.left), focused: ref(3, pid: 950, bundle: otherBundle)))
+        #expect(effects.contains(.beep))
+        #expect(!effects.contains { if case .perform = $0 { true } else { false } })
+    }
+
+    @Test func stepInAndPanNeverTargetAPlaceholder() async throws {
+        var harness = await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        _ = await quit(&harness)
+        let third = ref(3, pid: 950, bundle: otherBundle)
+        let tree = try #require(harness.arranger.world[key]?.tree)
+        let home = try #require(harness.arranger.homePlaceholders(on: "main").first)
+        func target(_ effects: [ArrangerEffect]) -> NodeID? {
+            effects.compactMap { effect -> NodeID? in if case .cameraMove(let move) = effect, case .node(let id) = move.to { id } else { nil } }.first
+        }
+        func waitingOnly(_ id: NodeID) throws -> Bool {
+            let sub = try tree.subtree(at: id)
+            return sub.nodes[.desktop] == nil && sub.windows.allSatisfy(harness.arranger.isPlaceholder)
+        }
+        // The pointer over a waiting tile: its window is not there to zoom to.
+        let pointer = Point(x: home.frame.midX, y: home.frame.midY)
+        let stepped = await harness.send(.camera(.stepIn, displayUUID: "main", focused: nil, pointer: pointer))
+        #expect(try target(stepped).map(waitingOnly) != true, "step-in chose \(String(describing: target(stepped)))")
+        // Panning from the live tile, whose neighbours across the left edge all wait.
+        let leaf = try #require(harness.arranger.leafNode(of: third))
+        for effect in await harness.send(.zoomTo(.node(leaf), displayUUID: "main")) {
+            if case .cameraMove(let move) = effect { await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id)) }
+        }
+        let panned = await harness.send(.camera(.pan(.left), displayUUID: "main", focused: nil, pointer: nil))
+        #expect(try target(panned).map(waitingOnly) != true, "pan chose \(String(describing: target(panned)))")
+    }
+
+    @Test func aCollapsedPlaceholderIsATileNotABlock() async throws {
+        var harness = Harness()
+        await harness.fake.setDisplays([DisplayInfo(
+            uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: nil)])
+        await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await harness.fake.open(.standard(id: 1, pid: pid, frame: Rect(x: 40, y: 10, width: 1360, height: 885), title: "Notes"))
+        await harness.fake.open(.standard(id: 2, pid: pid, frame: Rect(x: 900, y: 400, width: 300, height: 200), title: "Plan"))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 100, height: 870) }
+        await harness.send(.command(.dock, focused: ref(1)))
+        await harness.fake.advance(by: .seconds(1.1))
+        _ = await harness.refresh()
+        try #require(harness.arranger.windows[ref(1).identity]?.learnedMinimum?.height == 870)
+        await harness.send(.zoomEnabled(true))
+        await harness.send(.command(.dock, focused: ref(1)))
+        try #require(await harness.fake.parked == [ref(1).identity], "the window was not collapsed")
+
+        await harness.send(.event(.appTerminated(pid: pid)))
+        let effects = await harness.send(.event(.windowDestroyed(ref(1))))
+        #expect(effects.contains(.collapsedBlocks([], displayUUID: "main")))
+        #expect(sentTiles(effects)?.map(\.window) == [ref(1)])
+    }
+
     // MARK: Commands
 
     @Test func restoreAllArrangeAllAndUndoLeaveAPlaceholderInItsTile() async throws {

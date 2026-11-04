@@ -27,6 +27,12 @@ import Testing
         #expect(ViewCopy.placeholderHelp == "This tile closes if the window doesn't come back.")
     }
 
+    @Test func theWaitingLineCountsPlaceholders() {
+        #expect(ViewCopy.waitingLine(count: 0) == "Waiting for windows: none")
+        #expect(ViewCopy.waitingLine(count: 1) == "Waiting for windows: 1")
+        #expect(ViewCopy.waitingLine(count: 3) == "Waiting for windows: 3")
+    }
+
     @Test func theJoinedAnnouncementPrefixesTheReveal() {
         #expect(ViewCopy.joinedAnnouncement(slot: 3, reveal: "Showing 2 windows") == "View 3. Showing 2 windows")
     }

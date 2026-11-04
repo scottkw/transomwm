@@ -44,6 +44,22 @@ private func near(_ a: Rect, _ b: Rect) -> Bool { near(a.x, b.x) && near(a.y, b.
         #expect(near(layout.mainArea, Rect(x: 24, y: 169, width: 1392, height: 900 - 169 - 24)))
     }
 
+    @Test func aPlaceholderIsDrawnButNeverCountedOrSelected() throws {
+        let one = ref(1), two = ref(2), waiting = ref(3)
+        var input = display(windows: [
+            OverviewWindow(window: one, frame: Rect(x: 0, y: 0, width: 400, height: 900)), OverviewWindow(window: two, frame: Rect(x: 400, y: 0, width: 400, height: 900)),
+        ])
+        input.placeholders = [OverviewWindow(window: waiting, frame: Rect(x: 800, y: 0, width: 640, height: 900))]
+        let layout = OverviewLayout(displays: [input], stripShown: true)
+        let shown = try #require(layout.displays.first)
+        #expect(shown.tiles.map(\.window) == [one, two], "2 windows")
+        let tile = try #require(shown.placeholders.first)
+        #expect(tile.window == waiting)
+        #expect(layout.item(at: Point(x: tile.rect.midX, y: tile.rect.midY)) == nil)
+        #expect(OverviewSelection.initial(layout: layout, focused: waiting, pointer: Point(x: tile.rect.midX, y: tile.rect.midY)).selected != .tile(waiting))
+        #expect(shown.thumbnails.first?.miniTiles.map(\.window) == [one, two])
+    }
+
     @Test(arguments: [(600.0, 72.0), (400.0, 64.0), (1200.0, 112.0)])
     func thumbnailHeightIsTwelvePercentClamped(height: Double, expected: Double) throws {
         let input = display(Rect(x: 0, y: 0, width: height * 1.6, height: height))
