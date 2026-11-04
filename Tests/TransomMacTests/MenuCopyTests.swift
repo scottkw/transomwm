@@ -111,6 +111,8 @@ import Testing
     }
 
     @Test func zoomItemTitles() {
+        #expect(MenuCopy.commandTitle(.dockFourth(.first, .horizontal)) == "1st Column")
+        #expect(MenuCopy.commandTitle(.dockFourth(.middle, .vertical)) == "Middle Half Row")
         #expect(MenuCopy.commandTitle(.camera(.zoomOutAll)) == "Zoom Out to All Windows")
         #expect(MenuCopy.commandTitle(.camera(.view(ViewSlot(1)!))) == "Go to View 1")
         #expect(MenuCopy.commandTitle(.camera(.saveView(ViewSlot(9)!))) == "Save View 9")

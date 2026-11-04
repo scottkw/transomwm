@@ -20,6 +20,8 @@ import Testing
             "frameDesktop", "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
             "view1", "view2", "view3", "view4", "view5", "view6", "view7", "view8", "view9",
             "saveView1", "saveView2", "saveView3", "saveView4", "saveView5", "saveView6", "saveView7", "saveView8", "saveView9",
+            "dockColumn1", "dockColumn2", "dockColumn3", "dockColumn4", "dockColumnMiddle",
+            "dockRow1", "dockRow2", "dockRow3", "dockRow4", "dockRowMiddle",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
             .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
@@ -30,7 +32,11 @@ import Testing
             .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
             .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
             .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
-        ] + ViewSlot.all.map { .camera(.view($0)) } + ViewSlot.all.map { .camera(.saveView($0)) })
+        ] + ViewSlot.all.map { .camera(.view($0)) } + ViewSlot.all.map { .camera(.saveView($0)) } + [
+            .dockFourth(.first, .horizontal), .dockFourth(.second, .horizontal), .dockFourth(.third, .horizontal), .dockFourth(.fourth, .horizontal),
+            .dockFourth(.middle, .horizontal), .dockFourth(.first, .vertical), .dockFourth(.second, .vertical), .dockFourth(.third, .vertical),
+            .dockFourth(.fourth, .vertical), .dockFourth(.middle, .vertical),
+        ])
     }
 
     @Test func defaultsAreControlOptionCommandPlusALetter() {
@@ -57,6 +63,24 @@ import Testing
         ]
         // 08 UI-SPEC Surface 3: the saved views follow the OS-version rule (ViewChords), not ⌃⌥⌘.
         #expect(Array(Hotkeys.entries.map(\.name.defaultShortcut).prefix(48)) == expected)
+    }
+
+    /// 08.1 UI-SPEC Surface 4: the digit row by key position, columns then rows, 0 last.
+    @Test func theFourthsAreAllFourModifiersPlusADigit() {
+        let digits: [KeyboardShortcuts.Key] = [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero]
+        #expect(Hotkeys.fourthNames.map(\.defaultShortcut) == digits.map { .init($0, modifiers: shifted) })
+    }
+
+    @Test func noTwoEntriesShareADefaultChord() {
+        let chords = Hotkeys.entries.compactMap(\.name.defaultShortcut)
+        #expect(chords.count == Hotkeys.entries.count)
+        #expect(Set(chords).count == chords.count)
+    }
+
+    /// TILE-10: zoom off disables zoom names only, so the fourths must stay out of them.
+    @Test func theFourthsAreNotZoomNames() {
+        #expect(Hotkeys.fourthNames.count == 10)
+        #expect(Set(Hotkeys.zoomNames).isDisjoint(with: Hotkeys.fourthNames))
     }
 
     @Test func togglePauseIsControlOptionCommandP() {
@@ -88,14 +112,14 @@ import Testing
 
     /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, plus Show Overview (06 UI-SPEC Surface 4) and the
     /// 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 33 + 12 + the 3 tab names (07
-    /// Surface 7, enabled with zoom off) + 18 = 66.
+    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) = 76.
     @Test func theZoomNamesAreTheUISpecElevenPlusShowOverviewAndTheSavedViews() {
         let zoom = [
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow", "frameDesktop",
             "showOverview",
         ] + (1...9).map { "view\($0)" } + (1...9).map { "saveView\($0)" }
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 66)
+        #expect(Hotkeys.entries.count == 76)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
     }
 

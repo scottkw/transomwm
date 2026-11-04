@@ -3,17 +3,18 @@ import TransomEngine
 @testable import TransomMac
 import Testing
 
-/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 66 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows,
-/// 08 Surface 3 the Saved Views rows), in the Surface 8 sections and titles.
+/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 76 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows,
+/// 08 Surface 3 the Saved Views rows, 08.1 Surface 4 the Dock to Fourth rows), in the Surface 8 sections and titles.
 @Suite @MainActor struct ShortcutsModelTests {
     @Test func theSectionsFollowSurface8() {
-        #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Saved Views", "Arrange", "Split", "Snap Floating Window", "Tabs", "Safety", "Exclusions"])
+        #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Saved Views", "Arrange", "Dock to Fourth", "Split", "Snap Floating Window", "Tabs", "Safety", "Exclusions"])
     }
 
-    @Test func the66RowsBindTheHotkeyNamesOnceEach() {
+    @Test func the76RowsBindTheHotkeyNamesOnceEach() {
         let names = ShortcutsModel.sections.flatMap(\.rows).map(\.name)
-        #expect(names.count == 66)
-        #expect(Set(names).count == 66)
+        #expect(ShortcutsModel.sections.count == 9)
+        #expect(names.count == 76)
+        #expect(Set(names).count == 76)
         #expect(Set(names) == Set(Hotkeys.entries.map(\.name)))
     }
 
@@ -29,6 +30,10 @@ import Testing
                 "Focus Down", "Move Window Left or Snap to Left Half", "Move Window Right or Snap to Right Half",
                 "Move Window Up or Snap to Top Half", "Move Window Down or Snap to Bottom Half", "Arrange All Windows", "Float All Windows",
                 "Hide or Show Desktop Tile",
+            ],
+            [
+                "Dock to 1st Column", "Dock to 2nd Column", "Dock to 3rd Column", "Dock to 4th Column", "Dock to Middle Half Column",
+                "Dock to 1st Row", "Dock to 2nd Row", "Dock to 3rd Row", "Dock to 4th Row", "Dock to Middle Half Row",
             ],
             ["Grow Tile", "Shrink Tile", "Balance Split", "Rotate Layout", "Flip Split", "Split with New Finder Window"],
             [
@@ -50,6 +55,13 @@ import Testing
         #expect(
             ShortcutsModel.conflictMessage(for: .init(.a, modifiers: [.control, .option, .command]), excluding: .float)
                 == "This shortcut is already used by \u{201C}Show Overview\u{201D} in Transom.")
+    }
+
+    /// 08.1 UI-SPEC Surface 4: directly after Arrange, with no footer.
+    @Test func theDockToFourthSectionFollowsArrange() {
+        let titles = ShortcutsModel.sections.map(\.title)
+        #expect(titles.firstIndex(of: "Dock to Fourth") == titles.firstIndex(of: "Arrange").map { $0 + 1 })
+        #expect(ShortcutsModel.sections.first { $0.title == "Dock to Fourth" }?.rows.map(\.name) == Hotkeys.fourthNames)
     }
 
     @Test func theTabsSectionFollowsSnapWithItsThreeNames() {
