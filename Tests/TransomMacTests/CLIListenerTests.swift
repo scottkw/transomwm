@@ -83,3 +83,62 @@ import Testing
         #expect(gate.admit(try #require(URL(string: "transom://view/3?x=1")), at: now) == .rejected)
     }
 }
+
+/// D-07: the reply carries what VoiceOver would hear; on screen a CLI or URL refusal stays silent.
+@Suite @MainActor struct CLIReplyTests {
+    private let three = ViewSlot(3)!
+
+    @Test func aRefusalRepliesItsAnnouncement() {
+        #expect(ArrangeController.cliReply(for: [.beep, .announce("Arranging is paused"), .info("refused")]) == "refused\tArranging is paused")
+    }
+
+    @Test func anEmptySlotRepliesItsToastText() {
+        #expect(ArrangeController.cliReply(for: [.beep, .notice(.viewEmpty(three, displayUUID: nil)), .info("refused")]) == "refused\tNo view in slot 3")
+    }
+
+    @Test func aTabRefusalRepliesItsAnnouncement() {
+        #expect(ArrangeController.cliReply(for: [.beep, .tabAnnouncement(.refused(.notInGroup))]) == "refused\tThe focused window isn't in a tab group")
+    }
+
+    @Test func aRefusalWithNoAnnouncementHasNoText() {
+        #expect(ArrangeController.cliReply(for: [.beep, .info("refused")]) == "refused\t")
+    }
+
+    @Test func aSuccessRepliesOK() {
+        #expect(ArrangeController.cliReply(for: [.notice(.viewShown(three, displayUUID: nil)), .info("went")]) == "ok")
+        #expect(ArrangeController.cliReply(for: []) == "ok")
+    }
+
+    @Test func zoomOffRefusesTheCLIAndNothingElseSeesIt() {
+        let arrange = ArrangeController(system: AXWindowSystem(), zoomEnabled: false)
+        arrange.beep = {}
+        let decision = arrange.decide(.camera(.view(three)), from: .cli)
+        #expect(decision.reply == "refused\tZoom is off")
+        #expect(decision.effects.isEmpty)
+        #expect(arrange.decide(.camera(.zoomOutAll), from: .url).effects.isEmpty)
+        #expect(arrange.decide(.camera(.zoomOutAll), from: .hotkey).effects.isEmpty)
+    }
+
+    @Test func aSilentRouteKeepsToastsButNotRefusals() {
+        let shown = ArrangerEffect.notice(.viewShown(three, displayUUID: nil))
+        #expect(ArrangeController.silenced([shown, .info("went")], of: .camera(.view(three))) == [shown, .info("went")])
+        for notice in [Notice.viewEmpty(three, displayUUID: nil), .viewDisplayGone(three, displayUUID: nil), .viewNothingToSave(displayUUID: nil)] {
+            #expect(ArrangeController.silenced([.beep, .notice(notice), .info("refused")], of: .camera(.view(three))) == [.info("refused")])
+        }
+        #expect(ArrangeController.silenced([.beep, .announce("No room"), .info("refused")], of: .restoreAll) == [.info("refused")])
+        #expect(ArrangeController.silenced([.beep, .tabAnnouncement(.refused(.paused))], of: .tabs(.next)).isEmpty)
+    }
+
+    /// A non-refusal announcement of a command other than the camera's keeps speaking, as it did.
+    @Test func aSilentRouteKeepsASuccessAnnouncement() {
+        #expect(ArrangeController.silenced([.announce("Swapped")], of: .restoreAll) == [.announce("Swapped")])
+        #expect(ArrangeController.silenced([.announce("Collapsed")], of: .camera(.stepIn)).isEmpty)
+    }
+
+    /// Not started: not ready, so a real command through the real path answers with the text it would announce.
+    @Test func answeringACameraCommandWhenNotReadyRepliesWhy() {
+        let arrange = ArrangeController(system: AXWindowSystem(), zoomEnabled: true)
+        arrange.beep = {}
+        #expect(arrange.answerCLI(.camera(.view(three))).hasPrefix("refused\t"))
+    }
+}

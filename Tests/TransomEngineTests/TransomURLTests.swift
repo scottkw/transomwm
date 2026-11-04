@@ -54,6 +54,33 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse("transom://save-view/\(number)") == .camera(.saveView(slot)))
     }
 
+    /// 08 UI-SPEC Surface 4: every other path form, with no side effect (T-08-13).
+    @Test(arguments: ["view", "save-view"])
+    func malformedViewURLsAreRejected(host: String) {
+        for suffix in ["", "/", "/0", "/10", "/3/", "/03", "/%33", "/a", "/3?x=1", "/3#f", ":80/3", "//3"] {
+            #expect(parse("transom://\(host)\(suffix)") == nil, "\(host)\(suffix)")
+        }
+        #expect(parse("transom://\(host.uppercased())/3") == nil)
+        #expect(parse("transom://user@\(host)/3") == nil)
+    }
+
+    @Test func aPathIsOnlyAcceptedForTheViewCommands() {
+        #expect(parse("transom://zoom-out/3") == nil)
+        #expect(parse("transom://restore/1") == nil)
+    }
+
+    /// D-06: each slot is its own command.
+    @Test func eachSlotIsLimitedSeparately() throws {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let three = try #require(ViewSlot(3))
+        let four = try #require(ViewSlot(4))
+        #expect(limiter.admit(.camera(.view(three)), at: start))
+        #expect(limiter.admit(.camera(.view(four)), at: start + .milliseconds(10)))
+        #expect(limiter.admit(.camera(.saveView(three)), at: start + .milliseconds(20)))
+        #expect(!limiter.admit(.camera(.view(three)), at: start + .milliseconds(30)))
+    }
+
     @Test(arguments: [
         "transom://Restore", "transom://restore?x=1", "transom://restore?", "transom://restore#a", "transom://user@restore",
         "transom://user:secret@restore", "transom://restore:80", "transom://restore/extra", "transom://zoom", "transom-debug://restore",
