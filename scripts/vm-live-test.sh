@@ -30,6 +30,8 @@ rm -rf "$stage" && mkdir -p "$stage"
 dev="$(xcode-select -p)"
 plat="$dev/Platforms/MacOSX.platform/Developer"
 cp -R "$scratch/debug/TransomMacIntegrationTests.xctest" "$scratch/debug/TransomFixtureApp" "$scratch"/debug/*.bundle "$stage/"
+# TRANSOM_VM_APP: a built app bundle to stage beside the tests (scripts/vm-quit-check.sh).
+if [ -n "${TRANSOM_VM_APP:-}" ]; then cp -R "$TRANSOM_VM_APP" "$stage/"; fi
 cp -R "$plat"/Library/Frameworks/{XCTest,XCUIAutomation,Testing}.framework "$plat"/Library/Frameworks/_Testing_*.framework \
     "$plat"/Library/PrivateFrameworks/*.framework "$plat"/usr/lib/{libXCTestSwiftSupport,lib_TestingInterop}.dylib \
     "$dev/Toolchains/XcodeDefault.xctoolchain/usr/libexec/swift/pm/swiftpm-testing-helper" "$stage/"

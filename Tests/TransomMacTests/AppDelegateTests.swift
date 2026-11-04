@@ -3,18 +3,18 @@ import TransomEngine
 @testable import TransomMac
 import Testing
 
-/// SAFE-01, Pattern 11: a quit waits for the restore, then records the clean exit, then lets AppKit terminate.
+/// SAFE-01, Pattern 11: a quit runs the restore, then records the clean exit, before AppKit is told to terminate.
 /// SAFE-03, TILE-15, TILE-17: transom:// URLs reach the dispatcher only when strictly valid, at most once a second.
 @Suite @MainActor struct AppDelegateTests {
-    @Test func quittingRestoresThenWritesTheCleanExitThenReplies() async {
+    /// The work is done by the time the delegate answers, so no quit depends on a later turn of the main queue: the SIGTERM
+    /// source calls terminate from inside that queue, where a block queued for later never runs (sigterm-quit-hang).
+    @Test func quittingRestoresThenWritesTheCleanExitBeforeAnswering() {
         var steps: [String] = []
         let delegate = AppDelegate(
             restore: { steps.append("restore") }, writeCleanExit: { steps.append("cleanExit") }, open: { _ in },
-            gate: CommandGate(scheme: "transom"), reply: { steps.append("reply \($0)") })
-        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
-        let replied = await waitFor { steps.count == 3 }
-        #expect(replied)
-        #expect(steps == ["restore", "cleanExit", "reply true"])
+            gate: CommandGate(scheme: "transom"))
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
+        #expect(steps == ["restore", "cleanExit"])
     }
 
     @Test func aValidURLDispatchesOnceAndAnythingElseNothing() throws {
@@ -57,10 +57,5 @@ import Testing
         #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .hotkey, own: own) == own)
         #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .menu, own: own) == own)
         #expect(ArrangeController.commandPID(frontmost: own, beforeTransom: 7, from: .cli, own: own) == 7)
-    }
-
-    private func waitFor(_ condition: () -> Bool) async -> Bool {
-        for _ in 0..<100 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
-        return condition()
     }
 }
