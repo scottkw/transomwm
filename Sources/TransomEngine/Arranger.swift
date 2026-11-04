@@ -202,6 +202,8 @@ public struct Arranger: Sendable {
     public internal(set) var drag: DragSession?
     /// A title-bar drag is under way (plan 16 defers alerts while it is).
     public var isDragging: Bool { drag?.kind == .move }
+    /// What the tap should do with ⌥ now (D-07a).
+    public var dragOptionStrip: DragOptionStrip { .off }
     /// Desk plans a drag hit-tests against, computed once per drag (and again after the World changes).
     private var dragPlans: [DragPlanKey: FramePlan] = [:]
     /// The gap handles last sent per display, so only a change is sent again.

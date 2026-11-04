@@ -241,4 +241,117 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         #expect(harness.arranger.world[mainKey]?.tree.state(of: b) == nil)
         #expect(announced(released).isEmpty)
     }
+
+    // MARK: ⌥ during a Hold ⌥ drag (D-09)
+
+    @Test func optionPressedMidDragShowsTheRegionsAndDocks() async throws {
+        var (harness, plan) = try await docked()
+        let desktop = try #require(plan.desktopRect)
+        let band = Point(x: desktop.minX + 5, y: desktop.midY)
+        let dx = band.x - grab(smallF).x, dy = band.y - grab(smallF).y
+        _ = await drag(&harness, f, from: smallF, by: dx, dy)
+        await harness.send(pointer(.flagsChanged, band.x, band.y, [.option]))
+        harness.now += .milliseconds(150)
+        let tick = await harness.send(.tick)
+        guard case .dock(let frame)? = previews(tick).first else {
+            Issue.record("no dock preview: \(tick)")
+            return
+        }
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        let released = await harness.send(pointer(.up, band.x, band.y, [.option]))
+
+        #expect(setFrames(released)[f] == frame)
+        #expect(harness.arranger.world[mainKey]?.tree.state(of: f) != nil)
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test func optionPressedWithTheDwellNotElapsedIsAMiss() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b])
+        let to = try toDesktop(plan, from: rb)
+        _ = await drag(&harness, b, from: rb, by: to.dx, to.dy)
+        await harness.send(pointer(.flagsChanged, grab(rb).x + to.dx, grab(rb).y + to.dy, [.option]))
+        let depth = harness.arranger.history.depth(for: mainKey)
+        let released = await up(&harness, from: rb, by: to.dx, to.dy, [.option])
+        #expect(setFrames(released)[b] == rb, "the docked window did not snap back")
+        #expect(harness.arranger.world[mainKey]?.tree.state(of: b) != nil)
+        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+
+        _ = await drag(&harness, f, from: smallF, by: -60)
+        await harness.send(pointer(.flagsChanged, grab(smallF).x - 60, grab(smallF).y, [.option]))
+        await harness.send(pointer(.up, grab(smallF).x - 60, grab(smallF).y, [.option]))
+        #expect(harness.arranger.world[mainKey]?.desktop.frame(of: f) == shifted(smallF, -60))
+    }
+
+    @Test func optionReleasedMidDragWithdrawsThePreviewAndTheReleaseIsPlainAtOnce() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
+        let band = Point(x: desktop.maxX - 5, y: desktop.midY)
+        let dx = band.x - grab(rb).x, dy = band.y - grab(rb).y
+        _ = await drag(&harness, b, from: rb, by: dx, dy, [.option])
+        harness.now += .milliseconds(150)
+        guard case .dock? = previews(await harness.send(.tick)).first else {
+            Issue.record("no dock preview with ⌥ held")
+            return
+        }
+
+        let flags = await harness.send(pointer(.flagsChanged, band.x, band.y))
+        #expect(flags.contains(.preview(nil, displayUUID: "main")))
+        let released = await harness.send(pointer(.up, band.x, band.y))
+
+        #expect(harness.arranger.world[mainKey]?.tree.state(of: b) == nil, "the release was not the plain drag's")
+        #expect(announced(released) == [FourthCopy.floating])
+    }
+
+    // MARK: The tap's ⌥ strip (D-07a)
+
+    @Test func theStripIsOffUntilAPressIsClassifiedAsAMove() async throws {
+        var (harness, _) = try await docked()
+        #expect(harness.arranger.dragOptionStrip == .off)
+        await harness.send(pointer(.down, grab(smallF).x, grab(smallF).y, press: f))
+        #expect(harness.arranger.dragOptionStrip == .off)
+        await harness.send(pointer(.dragged, grab(smallF).x - 10, grab(smallF).y))
+        await harness.send(.dragFrame(f.identity, shifted(smallF, -10)))
+        #expect(harness.arranger.dragOptionStrip == .always)
+        await harness.send(pointer(.up, grab(smallF).x - 10, grab(smallF).y))
+        #expect(harness.arranger.dragOptionStrip == .off)
+    }
+
+    @Test func automaticallyTheStripNeedsControl() async throws {
+        var (harness, _) = try await docked(.automatic)
+        _ = await drag(&harness, f, from: smallF, by: -60)
+        #expect(harness.arranger.dragOptionStrip == .withControl)
+    }
+
+    @Test func aResizeSessionHasNoStrip() async throws {
+        var (harness, plan) = try await docked()
+        let rb = try #require(plan.frames[b])
+        await harness.send(pointer(.down, rb.maxX, rb.midY, press: b))
+        await harness.send(pointer(.dragged, rb.maxX + 10, rb.midY))
+        await harness.send(.dragFrame(b.identity, Rect(x: rb.x, y: rb.y, width: rb.width + 10, height: rb.height)))
+        #expect(harness.arranger.dragOptionStrip == .off)
+    }
+
+    @Test func aPauseThatEndsTheDragTurnsTheStripOff() async throws {
+        var (harness, _) = try await docked()
+        _ = await drag(&harness, f, from: smallF, by: -60)
+        #expect(harness.arranger.dragOptionStrip == .always)
+        await harness.send(.setPaused(.stageManager, true))
+        await harness.send(pointer(.dragged, grab(smallF).x - 70, grab(smallF).y))
+        #expect(harness.arranger.dragOptionStrip == .off)
+    }
+
+    @Test func aMoveSessionAfterALostMouseUpAsksForTheStripAgain() async throws {
+        var (harness, _) = try await docked()
+        _ = await drag(&harness, f, from: smallF, by: -60)
+        #expect(harness.arranger.dragOptionStrip == .always)
+        let frame = try #require(harness.arranger.windows[f.identity]?.frame)
+        // No mouse-up: the next press abandons session A.
+        await harness.send(pointer(.down, grab(frame).x, grab(frame).y, press: f))
+        #expect(harness.arranger.dragOptionStrip == .off)
+        await harness.send(pointer(.dragged, grab(frame).x - 10, grab(frame).y))
+        await harness.send(.dragFrame(f.identity, shifted(frame, -10)))
+        #expect(harness.arranger.dragOptionStrip == .always)
+    }
 }

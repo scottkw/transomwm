@@ -17,6 +17,15 @@ public enum DragToDockMode: String, CaseIterable, Sendable {
     case automatic, holdOption
 }
 
+/// What the event tap does with ⌥ on the events it passes on, so macOS's own ⌥ tiling stays away (D-07a).
+public enum DragOptionStrip: Equatable, Sendable {
+    case off
+    /// A Hold ⌥ move: ⌥ always goes.
+    case always
+    /// An Automatically move: ⌥ goes only with ⌃, the fourths chord (UI-SPEC rows 2-3).
+    case withControl
+}
+
 /// One left-button or modifier event from the event tap, in global top-left points. `pressWindow` is resolved by the
 /// shell on `down` only (RESEARCH Pattern 4); a press on a strip tab carries `pressTab` instead, never `pressWindow`
 /// (Pattern 7, Pitfall 4).
