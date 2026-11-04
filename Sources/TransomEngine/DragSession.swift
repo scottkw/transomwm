@@ -200,6 +200,8 @@ public struct DragSession: Equatable, Sendable {
     public internal(set) var origin: Origin = .window
     public internal(set) var pointer: Point
     public internal(set) var modifiers: Modifiers
+    /// ⌃ was down at the press, a right click, so it means nothing until released and pressed again (D-18).
+    var controlAtPress: Bool
     /// nil until the press is classified; the first verdict sticks.
     public internal(set) var kind: Kind?
     /// The 60 Hz frame poll was asked for.
@@ -229,6 +231,7 @@ public struct DragSession: Equatable, Sendable {
         self.startFrame = startFrame
         pointer = start
         self.modifiers = modifiers
+        controlAtPress = modifiers.contains(.control)
     }
 
     /// The group a tear-off leaves; nil for a window drag.

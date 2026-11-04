@@ -1594,6 +1594,7 @@ public struct Arranger: Sendable {
             guard pauseReasons.isEmpty else { return endDrag() }
             session.pointer = event.location
             session.modifiers = event.modifiers
+            if !event.modifiers.contains(.control) { session.controlAtPress = false }
             if session.tearOffGroup != nil {
                 drag = session
                 return [tearOffGhost(session)] + follow(now: now)
@@ -1748,7 +1749,7 @@ public struct Arranger: Sendable {
         let display = displays.first { $0.frame.contains(point) }
         // ⌃ takes a share of the whole desk under the pointer, ⌘ with it the rows, ⌥ ignored (UI-SPEC rows 2-3). A miss waits
         // for no dwell here, in Hold ⌥ mode too: this is not a plain drag.
-        if session.modifiers.contains(.control) {
+        if session.modifiers.contains(.control), !session.controlAtPress {
             guard let display else { return Hover() }
             let axis: Axis = session.modifiers.contains(.command) ? .vertical : .horizontal
             return Hover(displayUUID: display.uuid, target: .fourth(FourthZones.slot(at: point, in: display.visibleFrame, axis: axis), axis))
