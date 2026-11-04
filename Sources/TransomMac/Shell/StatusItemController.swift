@@ -130,6 +130,7 @@ import os
         for command in [Command.dock, .float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
         menu.addItem(commands.focusMenu)
         menu.addItem(commands.moveMenu)
+        menu.addItem(commands.fourthMenu)
         menu.addItem(commands.splitMenu)
         menu.addItem(commands.snapMenu)
         menu.addItem(commands.tabsMenu)
