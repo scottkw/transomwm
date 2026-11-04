@@ -218,7 +218,8 @@ import os
                     now: .now))
                 launchSettlePending = !saved.arrangement.isUnknown && saved.arrangement != ArrangementID(inventory.displays.map(\.uuid))
             }
-            // This launch's session record (cleanExit false) goes down at once, with the saved layout still in it.
+            // This launch's session record (cleanExit false) goes down at once, with the saved layout still in it. It says this
+            // boot, which is right even now: after a boot change `.restore` has retired every saved identity.
             write()
         }
         fedCompleteInventory = inventory.initialRefreshComplete

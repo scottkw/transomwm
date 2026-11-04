@@ -144,30 +144,72 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 
     /// RESEARCH Pitfall 5: after a reboot window IDs and pids restart, so a new window can carry a saved window's exact
     /// identity. With the boot session changed, identity keeps nothing: window 1 (a's identity, another document) does
-    /// not claim a's tile, and window 2 gets b's tile only because its title matches.
+    /// not claim a's tile, which waits, and window 2 gets b's tile only because its title matches.
     @Test func afterABootChangeAWindowReusingASavedIdentityGetsATileOnlyByItsHints() async throws {
         var source = await twoDocked()
         for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
         _ = await source.refresh()
         let saved = source.arranger.snapshot.world
-        let tileB = try #require(await source.frame(b))
         await source.fake.update(1) { $0.title = "Mail" }
         _ = await source.refresh()
         let inventory = await source.fake.inventory()
 
         var rebooted = Arranger()
-        _ = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
+        let restored = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
         let effects = rebooted.handle(.inventory(inventory), now: .now)
         let desk = try #require(rebooted.world[key])
-        #expect(desk.tree.windows == [b])
+        #expect(desk.tree.windows.contains(b))
+        #expect(rebooted.placeholderCount == 1, "a's tile should wait for its window")
         #expect(desk.desktop.contains(a), "the window reusing a's identity should float")
-        #expect(setFrames(effects)[b].map { $0.width > tileB.width } == true, "b should take the room a's tile left")
-        #expect(effects.contains(.info("boot session changed: matching every saved window by hints")))
+        #expect(setFrames(effects)[b] == nil, "b is in its own tile already")
+        #expect(restored.contains(.info("boot session changed: matching every saved window by hints")))
 
         var sameBoot = Arranger()
         _ = sameBoot.handle(.restore(saved, homeFrames: [:]), now: .now)
         _ = sameBoot.handle(.inventory(inventory), now: .now)
         #expect(sameBoot.world[key]?.tree.windows == [a, b], "an unchanged boot re-attaches by identity")
+    }
+
+    /// WR-01: from the `.restore` on, the snapshot names no window of the old boot, so a launch write can stamp this boot
+    /// even before the restore has run: a crash then a same-boot relaunch can't re-attach a reused ID by identity. The hints
+    /// survive, in layout.json too.
+    @Test func afterABootChangeTheSnapshotNamesNoWindowOfTheOldBoot() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot
+        await source.fake.update(1) { $0.title = "Mail" }
+        _ = await source.refresh()
+        let inventory = await source.fake.inventory()
+
+        func held(_ world: World) -> [WindowRef] { world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) } }
+        var crashed = Arranger()
+        let frame = Rect(x: 1, y: 2, width: 3, height: 4)
+        _ = crashed.handle(.restore(saved.world, homeFrames: [a.identity: frame], wantedFrames: [b.identity: frame], bootChanged: true), now: .now)
+        let written = crashed.snapshot
+        #expect(!held(written.world).isEmpty && held(written.world).allSatisfy { $0.identity.isRetiredWindowID })
+        #expect(Set(held(written.world).map(\.titleHint)) == ["Notes", "Plan"])
+        #expect(Set(held(written.world).map(\.bundleID)) == [bundleID])
+        #expect(written.homeFrames.keys.allSatisfy { $0.isRetiredWindowID } && written.homeFrames.count == 1)
+        #expect(written.wantedFrames.keys.allSatisfy { $0.isRetiredWindowID } && written.wantedFrames.count == 1)
+        let reloaded = try JSONDecoder().decode(World.self, from: JSONEncoder().encode(written.world))
+        #expect(held(reloaded) == held(written.world), "a retired identity must survive layout.json")
+
+        // The relaunch after that crash: the same boot now, and window 1 still carries a's old identity.
+        var relaunched = Arranger()
+        _ = relaunched.handle(.restore(reloaded, homeFrames: written.homeFrames, wantedFrames: written.wantedFrames), now: .now)
+        _ = relaunched.handle(.inventory(inventory), now: .now)
+        let desk = try #require(relaunched.world[key])
+        #expect(desk.desktop.contains(a), "the old identity claimed the tile")
+        #expect(desk.tree.windows.contains(b), "the hints still match")
+        #expect(relaunched.placeholderCount == 1)
+
+        // A second reboot keeps what is already retired, and gives the rest fresh identities beside it.
+        var again = Arranger()
+        _ = again.handle(.restore(relaunched.snapshot.world, homeFrames: [:], bootChanged: true), now: .now)
+        let retired = held(again.snapshot.world)
+        #expect(retired.allSatisfy { $0.identity.isRetiredWindowID })
+        #expect(Set(retired.map(\.identity)).count == retired.count)
     }
 
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.

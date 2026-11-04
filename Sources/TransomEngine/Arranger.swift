@@ -11,8 +11,8 @@ public enum ArrangerInput: Sendable {
     case tick
     /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
     /// `arrangement` and `layoutSets` are the saved display arrangement and the other arrangements' layouts (D-09).
-    /// `views` are the saved views (D-14). `bootChanged`: the saved boot session differs from this one, so identity
-    /// re-attach is skipped (RESEARCH Pitfall 5).
+    /// `views` are the saved views (D-14). `bootChanged`: the saved boot session differs from this one, so no saved
+    /// identity is kept (`LayoutRestore.retire`, RESEARCH Pitfall 5).
     case restore(
         World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:], arrangement: ArrangementID = ArrangementID([]),
         layoutSets: [LayoutSet] = [], views: [SavedView] = [], bootChanged: Bool = false)
@@ -184,10 +184,8 @@ public struct Arranger: Sendable {
     /// A saved layout that could not be re-attached: still what is saved, with the arrangement it was saved under, so
     /// this session cannot overwrite or relabel it (WR-04, CR-01).
     private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID)?
-    /// The pending restore was saved in another boot session: every saved window is matched by hints.
-    private var restoreAfterBootChange = false
-    /// Tests only: the next re-attach throws this. Real data cannot build a World whose re-attach throws (closing a
-    /// window always leaves a valid one), so this stands in for the failure CR-01 guards against.
+    /// The next re-attach throws this. Real data cannot build a World whose re-attach throws (closing a window always
+    /// leaves a valid one), so outside a failed `retire` this is for tests, standing in for the failure CR-01 guards against.
     var reattachFault: LayoutError?
     /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
     private var launch: LaunchMode = .normal
@@ -318,7 +316,7 @@ public struct Arranger: Sendable {
             inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
             let restored: (effects: [ArrangerEffect], unplaced: Int)
             do throws(LayoutError) {
-                restored = try reattach(restore, tracked: inventory.windows, live: live, skipIdentity: restoreAfterBootChange, holdingFrom: now)
+                restored = try reattach(restore, tracked: inventory.windows, live: live, holdingFrom: now)
             } catch {
                 unattached = (restore.world, restore.homeFrames, restore.wantedFrames, arrangement)
                 restored = ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
@@ -388,13 +386,21 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore(let world, let homeFrames, let wantedFrames, let arrangement, let sets, let views, let bootChanged):
+        case .restore(var world, var homeFrames, var wantedFrames, let arrangement, let sets, var views, let bootChanged):
+            var effects: [ArrangerEffect] = []
+            if bootChanged {
+                do throws(LayoutError) {
+                    (world, homeFrames, wantedFrames, views) = try LayoutRestore.retire(world, homeFrames: homeFrames, wantedFrames: wantedFrames, views: views)
+                    effects.append(.info("boot session changed: matching every saved window by hints"))
+                } catch {
+                    reattachFault = error  // never for a decoded World, but no old identity may re-attach: start empty, keep the file
+                }
+            }
             pendingRestore = (world, homeFrames, wantedFrames)
             camera.savedViews = SavedViews(views)
-            restoreAfterBootChange = bootChanged
             self.arrangement = arrangement
             layoutSets = LayoutSets(sets)
-            return []
+            return effects
         case .displaysSettling:
             guard !settling else { return [] }
             preChangeWorld = world
@@ -682,7 +688,7 @@ public struct Arranger: Sendable {
     /// unmatched saved windows wait as placeholders (D-12); without it (a stored arrangement), they had closed, and close.
     private mutating func reattach(
         _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?,
-        skipIdentity: Bool = false, holdingFrom now: ContinuousClock.Instant? = nil
+        holdingFrom now: ContinuousClock.Instant? = nil
     ) throws(LayoutError) -> (effects: [ArrangerEffect], unplaced: Int) {
         if let fault = reattachFault {
             reattachFault = nil
@@ -690,7 +696,7 @@ public struct Arranger: Sendable {
         }
         history = UndoHistory()
         let reattached = try LayoutRestore.reattach(
-            restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world), skipIdentity: skipIdentity, shownDesks: shownDesks)
+            restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world), shownDesks: shownDesks)
         var candidate = reattached.world
         for match in reattached.matches {
             let display = tracked.first { $0.window == match.window }?.displayUUID
@@ -704,8 +710,7 @@ public struct Arranger: Sendable {
             }
         }
         var seeded: [WindowIdentity: Rect] = [:]
-        var faults: [ArrangerEffect] = skipIdentity ? [.info("boot session changed: matching every saved window by hints")] : []
-        faults += Self.matchLog(reattached, saved: restore.world)
+        var faults = Self.matchLog(reattached, saved: restore.world)
         // Through a throwaway identity first, as LayoutRestore does: a returning window can carry another saved one's ID.
         let parked = reattached.matches.indices.map { WindowIdentity(windowID: UInt32($0), pid: -1, bundleID: "") }
         for (match, temp) in zip(reattached.matches, parked) { remapViews(from: match.saved.identity, to: temp) }

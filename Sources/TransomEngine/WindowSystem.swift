@@ -183,4 +183,10 @@ extension WindowIdentity {
     public static let syntheticIDBase: UInt32 = 0xF000_0000
 
     public var isSyntheticWindowID: Bool { windowID >= Self.syntheticIDBase }
+
+    /// Start of the range for saved windows of an earlier boot (`LayoutRestore.retire`), far above any `syntheticIDBase | counter`.
+    public static let retiredIDBase: UInt32 = 0xFFF0_0000
+
+    /// A saved window of an earlier boot: no running window ever has this identity, so only `HintMatcher` can bring it back.
+    public var isRetiredWindowID: Bool { pid == -1 && windowID >= Self.retiredIDBase }
 }

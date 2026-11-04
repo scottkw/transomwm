@@ -8,8 +8,8 @@ public enum LayoutRestore {
     /// window on a Space not shown at launch, G-03-8) until its first windowCreated. Synthetic IDs are session-only
     /// (02-11), so one from another session never claims a window. Every other saved window (one whose app relaunched
     /// has a new pid) goes to `HintMatcher` against the tracked windows no saved window holds, with its frame from
-    /// `savedFrames` and its desk (`shownDesks` are those on screen); a match re-points the saved window to the returning one, keeping its tile. `skipIdentity` (the boot
-    /// session changed, so IDs may be reused, RESEARCH Pitfall 5) sends every saved window to the matcher. Each unmatched
+    /// `savedFrames` and its desk (`shownDesks` are those on screen); a match re-points the saved window to the returning
+    /// one, keeping its tile. A retired window (`retire`) always goes to the matcher. Each unmatched
     /// saved window stays in the World and is returned in `waiting`, docked or floating, for the caller to hold until its
     /// deadline (D-12), or to close. `removed` are the unmatched ones a tracked window now carries the identity of (a reused
     /// or synthetic ID): the identity can't mean both, so they go through the close path (`World.apply(.closed, …)` with a
@@ -19,16 +19,16 @@ public enum LayoutRestore {
     /// window leaves an invalid World; the caller then starts empty.
     public static func reattach(
         _ saved: World, tracked: [WindowInfo], live: [CGWindowEntry]? = [], savedFrames: [WindowIdentity: Rect] = [:],
-        skipIdentity: Bool = false, shownDesks: Set<DeskKey> = []
+        shownDesks: Set<DeskKey> = []
     ) throws(LayoutError) -> (
         world: World, waiting: [WindowRef], removed: [WindowRef], unplaced: [WindowInfo], matches: [HintMatcher.Match], ties: [HintMatcher.Tie]
     ) {
-        let real = skipIdentity ? [] : Set(tracked.filter { $0.idSource != .synthetic }.map(\.window.identity))
+        let real = Set(tracked.filter { $0.idSource != .synthetic }.map(\.window.identity))
         var world = saved
         var history = UndoHistory()
         let all = saved.desks.sorted { $0.key < $1.key }.flatMap { $0.value.tree.windows + $0.value.desktop.windows.map(\.window) }
         let unattached = all.filter {
-            !real.contains($0.identity) && (skipIdentity || live.map { [identity = $0.identity] in !isAlive(identity, in: $0) } ?? false)
+            !real.contains($0.identity) && ($0.identity.isRetiredWindowID || live.map { [identity = $0.identity] in !isAlive(identity, in: $0) } ?? false)
         }
         let held = Set(all.map(\.identity)).subtracting(unattached.map(\.identity))
         let eligible = tracked.filter { $0.kind == .dockable && $0.state == .present && !$0.isExcluded }
@@ -54,6 +54,40 @@ public enum LayoutRestore {
         let placed = Set(world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }.map(\.identity))
         let unplaced = eligible.filter { !placed.contains($0.window.identity) }
         return (world, unmatched.filter { !trackedIDs.contains($0.identity) }, removed, unplaced, assigned.matches, assigned.ties)
+    }
+
+    /// After a reboot a saved ID and pid name no window, and may name another one (RESEARCH Pitfall 5): each saved window
+    /// takes a retired identity, keeping its bundle and hints, so it can only come back through `HintMatcher`. layout.json
+    /// then holds no old-boot identity from the first write on, so it can say this boot at once (WR-01). Sorted order is
+    /// kept. One retired by an earlier boot stays as it is. Throws only if re-pointing leaves an invalid World.
+    public static func retire(
+        _ world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], views: [SavedView]
+    ) throws(LayoutError) -> (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], views: [SavedView]) {
+        let all = world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }
+        var taken = Set(all.map(\.identity).filter(\.isRetiredWindowID).map(\.windowID))
+        var next = WindowIdentity.retiredIDBase
+        var retired: [WindowIdentity: WindowIdentity] = [:]
+        for identity in Set(all.map(\.identity)).sorted() {
+            guard !identity.isRetiredWindowID else {
+                retired[identity] = identity
+                continue
+            }
+            while taken.contains(next) { next += 1 }  // a file under World.maxEncodedBytes can't hold enough to overflow
+            taken.insert(next)
+            retired[identity] = WindowIdentity(windowID: next, pid: -1, bundleID: identity.bundleID)
+        }
+        var history = UndoHistory()
+        var world = world
+        for window in all {
+            guard let identity = retired[window.identity] else { continue }
+            let to = WindowRef(identity: identity, titleHint: window.titleHint, axIdentifier: window.axIdentifier, creationOrder: window.creationOrder)
+            try world.rekey(from: window, to: to, history: &history)
+        }
+        func mapped(_ frames: [WindowIdentity: Rect]) -> [WindowIdentity: Rect] {
+            Dictionary(uniqueKeysWithValues: frames.compactMap { id, frame in retired[id].map { ($0, frame) } })
+        }
+        let views = views.map { SavedView(slot: $0.slot, desk: $0.desk, home: $0.home, windows: $0.windows.compactMap { retired[$0] }) }
+        return (world, mapped(homeFrames), mapped(wantedFrames), views)
     }
 
     /// Whether a CG window at layer 0 has this identity's real window ID and pid, on a Space when its Spaces are known:
