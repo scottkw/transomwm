@@ -274,7 +274,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
         #expect(harness.arranger.world == world && harness.arranger.history == history)
         #expect(harness.arranger.camera.histories["main"] == back)
-        #expect(!saved.contains { if case .perform = $0 { true } else if case .save = $0 { true } else { false } })
+        #expect(!saved.contains { if case .perform = $0 { true } else { false } })
         try await zoom(&harness, to: .home)
         let move = try #require(moves(await camera(.view(three), &harness)).first)
         await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
@@ -399,6 +399,16 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         await harness.send(.inventory(await harness.fake.inventory()))
 
         #expect(harness.arranger.camera.savedViews[three]?.windows == [ref(4).identity, ref(5).identity])
+    }
+
+    /// UI-SPEC Surface 1: a saved view reaches layout.json with the next debounced save, though no window changed (CR-01).
+    @Test func savingAViewSchedulesASave() async throws {
+        var harness = try await threeDocked()
+        let saved = await camera(.saveView(three), &harness)
+        #expect(notices(saved).count == 1)
+        #expect(has(.save(.debounced), saved))
+        let went = await camera(.view(three), &harness)
+        #expect(!has(.save(.debounced), went), "going to a view changes nothing to save")
     }
 
     /// D-05: an identity no desk holds is pruned at the snapshot; a view left with none keeps its slot and desk and goes home.

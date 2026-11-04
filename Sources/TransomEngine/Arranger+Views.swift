@@ -24,6 +24,7 @@ extension Arranger {
         return [
             .notice(.viewSaved(slot, replaced: replaced, displayUUID: uuid)),
             .info("save view \(slot) on display \(uuid) space \(space): \(view == .home ? "home" : "\(windows.count) windows")\(replaced ? ", replaced" : "")"),
+            .save(.debounced),  // the World did not change, so `handle` adds none
         ]
     }
 
