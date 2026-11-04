@@ -462,7 +462,7 @@ Plans:
 **Depends on**: Phase 5, Phase 6, Phase 7, Phase 8, Phase 8.1
 **Requirements**: SHIP-01, SHIP-02, SHIP-03, SHIP-04, SHIP-05, SHIP-06, SHIP-07, SHIP-08
 **Success Criteria** (what must be TRUE):
-  1. The Settings window lets the user change gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
+  1. The Settings window lets the user change gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement, New Windows and Drag to Dock
   2. On first run, onboarding walks the user through Accessibility, optional Screen Recording and the conflicting macOS features, without looping on permission prompts
   3. User can turn on launch at login, and Transom starts at the next login
   4. Settings (opened from the menu-bar icon) has an Updates section: an automatic-check toggle and a "Check for Updates" button; when GitHub has a newer release Transom notifies the user, and the downloaded DMG is opened only after its sha256 digest and Team ID verify
