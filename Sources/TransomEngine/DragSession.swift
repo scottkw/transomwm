@@ -1,7 +1,8 @@
 import TransomModel
 
 /// Modifier keys read from each pointer and flagsChanged event (D-05). ⇧ (bypass) and ⌘ (swap) change a drop in both
-/// modes, and ⌥ shows the regions in Hold ⌥ mode (D-08). ⌃, a right click at the press, is carried and ignored.
+/// modes, and ⌥ shows the regions in Hold ⌥ mode (D-08). ⌃ pressed during a drag shows fourths, and ⌘ with it picks rows
+/// (D-18); ⌃ at the press is a right click.
 public struct Modifiers: OptionSet, Hashable, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
@@ -65,6 +66,8 @@ public enum PreviewState: Equatable, Sendable {
     /// A centre held for the group dwell: the group frame, its strip band, and the label (`GroupCopy`), hidden by the
     /// clearance rule in a small content rect.
     case group(frame: Rect, strip: Rect, label: String?)
+    /// A fourth (D-18): a dock preview with its capsule, "1st column" to "Middle half row".
+    case fourth(Rect, label: String)
 }
 
 /// UI-SPEC Surface 1: the Group preview's labels.

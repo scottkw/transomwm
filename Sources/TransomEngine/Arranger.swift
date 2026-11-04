@@ -1715,6 +1715,13 @@ public struct Arranger: Sendable {
         }
         if session.modifiers.contains(.shift) { return floatHover(plain: false) }
         let display = displays.first { $0.frame.contains(point) }
+        // ⌃ takes a share of the whole desk under the pointer, ⌘ with it the rows, ⌥ ignored (UI-SPEC rows 2-3). A miss waits
+        // for no dwell here, in Hold ⌥ mode too: this is not a plain drag.
+        if session.modifiers.contains(.control) {
+            guard let display else { return Hover() }
+            let axis: Axis = session.modifiers.contains(.command) ? .vertical : .horizontal
+            return Hover(displayUUID: display.uuid, target: .fourth(FourthZones.slot(at: point, in: display.visibleFrame, axis: axis), axis))
+        }
         // ⌘ over any part of another docked panel of the same desk swaps (TILE-11); ⌘ is ignored for a floating window.
         if docked, session.modifiers.contains(.command), let display, Self.key(display) == ownKey,
             let other = ownPlan.resolution.windowRects.first(where: { $0.key != window && $0.value.contains(point) })?.key,
@@ -1802,18 +1809,21 @@ public struct Arranger: Sendable {
         guard let target = hover.target, let uuid = hover.displayUUID, let display = displays.first(where: { $0.uuid == uuid }) else {
             return miss
         }
+        func landing(_ rect: Rect) -> PreviewState {
+            if case .fourth(let slot, let axis) = target { .fourth(rect, label: FourthCopy.label(slot, axis)) } else { .dock(rect) }
+        }
         let key = Self.key(display)
         do throws(LayoutError) {
             guard let desk = try dropping(window, on: key, at: target).world[key] else { return miss }
             let plan = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums)
             if plan.unfit.isEmpty, let frame = shown(plan, on: desk) {
-                return Decision(preview: .dock(frame), action: .dock(key, target), display: uuid)
+                return Decision(preview: landing(frame), action: .dock(key, target), display: uuid)
             }
             let loose = shown(try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]), on: desk)
             // D-A: with zoom on the drop is accepted and the windows without room collapse.
             if let collapsed = try collapse(desk, area: display.visibleFrame) {
                 let copy = Self.collapseCopy(collapsed.newly, moving: window)
-                let preview = loose.map { rect in copy.map { PreviewState.collapsed(rect, label: $0.label) } ?? .dock(rect) }
+                let preview = loose.map { rect in copy.map { PreviewState.collapsed(rect, label: $0.label) } ?? landing(rect) }
                 return Decision(preview: preview, action: .dock(key, target), display: uuid)
             }
             return Decision(preview: loose.map(PreviewState.blocked), action: .refuse(Self.noRoom), display: uuid)
@@ -1919,7 +1929,8 @@ public struct Arranger: Sendable {
         history = candidate.history
         lastRequested[window.identity] = nil
         let note = accept(collapsed, moving: window)
-        return replan() + note
+        guard case .fourth(let slot, let axis) = target else { return replan() + note }
+        return widen(toShow: window, new: false) + replan() + (note.isEmpty ? [.announce(FourthCopy.docked(slot, axis))] : note)
     }
 
     /// ⌘-drop: the two docked windows exchange tiles, one undo step (TILE-11).

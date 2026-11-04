@@ -41,6 +41,12 @@ nonisolated enum PreviewStyle {
             switch state {
             case .dock(let rect):
                 [LayerStyle(rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85)]
+            case .fourth(let rect, let text):
+                [
+                    LayerStyle(
+                        rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85,
+                        label: Label(text: text, glyph: nil, glyphRole: .label))
+                ]
             case .swap(let target, let origin):
                 [
                     LayerStyle(rect: origin, fill: .accent, fillAlpha: 0.10, border: .accent, borderAlpha: 0.85, dash: dash),

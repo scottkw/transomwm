@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import TransomEngine
 @testable import TransomMac
@@ -34,6 +35,65 @@ import Testing
         #expect(weights.count == 2)
         #expect(abs(weights[0] - 0.25) <= 1e-9 && abs(weights[1] - 0.75) <= 1e-9, "root weights \(weights)")
         let visible = try LiveArrange.visibleFrame()
+        let planned = try #require(try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames[ref])
+        let settled = await waitUntil(timeout: .seconds(3)) {
+            guard let now = try? await LiveArrange.frame(fixture, 0) else { return false }
+            return LiveArrange.near(now, planned)
+        }
+        #expect(settled, "the window never reached \(planned)")
+    }
+
+    /// ⌃ pressed during a real title-bar drag docks to the column under the pointer (D-18).
+    @Test(
+        .timeLimit(.minutes(1)),
+        .enabled(if: ProcessInfo.processInfo.environment["TRANSOM_LIVE_DRAG"] == "1", "posts synthetic drags; set TRANSOM_LIVE_DRAG=1"))
+    func aControlDragDocksToTheColumnUnderThePointer() async throws {
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs) = try await LiveArrange.start(fixture)
+        defer { withExtendedLifetime(arrange) {} }
+        let ref = try #require(refs.first)
+        let visible = try LiveArrange.visibleFrame()
+        let size = try #require(fixture.windows.first).frame.size
+        let x = (visible.midX - size.width / 2).rounded(), y = (visible.midY - size.height / 2).rounded()
+        _ = try await fixture.send("move 0 \(Int(x)) \(Int(y))")
+        let seen = await waitUntil(timeout: .seconds(2)) {
+            arrange.arranger.windows[ref.identity].map { abs($0.frame.x - x) <= 1 && abs($0.frame.y - y) <= 1 } ?? false
+        }
+        try #require(seen, "the Arranger never saw the window move")
+        try await Task.sleep(for: .milliseconds(300))  // the fixture activates itself
+        let frame = try #require(try await LiveArrange.frame(fixture, 0))
+        try #require(arrange.startTap(), "the event tap was refused")
+        defer { arrange.stopTap() }
+
+        let drag = PostedDrag()
+        defer { drag.finish() }
+        let grab = try LiveArrange.titleBar(of: ref.windowID, frame: frame)
+        try await drag.press(at: grab)
+        try await drag.move(to: CGPoint(x: grab.x + 40, y: grab.y + 20))
+        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.isDragging }, "the press was never a move")
+        try await drag.hold(.control)
+        try await drag.move(to: CGPoint(x: visible.minX + visible.width * 7 / 8, y: visible.midY))
+        try await Task.sleep(for: .milliseconds(300))  // past the dwell
+        guard case .fourth(_, let label)? = arrange.arranger.drag?.shown else {
+            Issue.record("no fourth preview after the dwell: \(String(describing: arrange.arranger.drag?.shown))")
+            return
+        }
+        #expect(label == "4th column")
+
+        drag.release()
+        try await drag.letGo(.control)
+
+        let docked = await waitUntil(timeout: .seconds(3)) { !arrange.arranger.isFloating(ref) }
+        try #require(docked, "the release did not dock the window")
+        let key = try #require(arrange.arranger.deskKey(of: ref))
+        let desk = try #require(arrange.arranger.world[key])
+        guard case let .split(axis, _, weights)? = desk.tree.node(try #require(desk.tree.root)) else {
+            Issue.record("the root is not a split: \(desk.tree)")
+            return
+        }
+        #expect(axis == .horizontal)
+        #expect(abs((weights.last ?? 0) - 0.25) <= 1e-9, "root weights \(weights)")
         let planned = try #require(try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames[ref])
         let settled = await waitUntil(timeout: .seconds(3)) {
             guard let now = try? await LiveArrange.frame(fixture, 0) else { return false }

@@ -285,3 +285,113 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         expectWeights(try rootWeights(arranger), [0.35, 0.65])
     }
 }
+
+// MARK: Drags (D-12, D-18, UI-SPEC Surface 3)
+
+private func pointer(_ kind: PointerEvent.Kind, _ x: Double, _ y: Double, _ modifiers: Modifiers = [], press: WindowRef? = nil) -> ArrangerInput {
+    .pointer(PointerEvent(kind: kind, location: Point(x: x, y: y), modifiers: modifiers, pressWindow: press))
+}
+
+private func shifted(_ rect: Rect, _ dx: Double, _ dy: Double = 0) -> Rect {
+    Rect(x: rect.x + dx, y: rect.y + dy, width: rect.width, height: rect.height)
+}
+
+private func previews(_ effects: [ArrangerEffect]) -> [PreviewState] {
+    effects.compactMap { if case .preview(let state?, _) = $0 { state } else { nil } }
+}
+
+/// Presses `window`'s title bar with no modifier, drags 10 pt right (the session starts), presses `modifiers`, then goes on
+/// to `point`, the frame following the pointer.
+private func controlDrag(
+    _ harness: inout Harness, _ window: WindowRef, from frame: Rect, to point: Point, _ modifiers: Modifiers = .control
+) async -> [ArrangerEffect] {
+    let grab = Point(x: frame.midX, y: frame.minY + 10)
+    var effects = await harness.send(pointer(.down, grab.x, grab.y, press: window))
+    effects += await harness.send(pointer(.dragged, grab.x + 10, grab.y))
+    effects += await harness.send(.dragFrame(window.identity, shifted(frame, 10)))
+    effects += await harness.send(pointer(.flagsChanged, grab.x + 10, grab.y, modifiers))
+    effects += await harness.send(pointer(.dragged, point.x, point.y, modifiers))
+    effects += await harness.send(.dragFrame(window.identity, shifted(frame, point.x - grab.x, point.y - grab.y)))
+    return effects
+}
+
+/// The dwell passes.
+private func tick(_ harness: inout Harness) async -> [ArrangerEffect] {
+    harness.now += .milliseconds(150)
+    return await harness.send(.tick)
+}
+
+/// The frame a dry run of a fourth gives `window` on the main desk: out of its tree or Desktop layer, `applyDrop`, plan.
+private func fourthFrame(_ arranger: Arranger, _ window: WindowRef, _ slot: FourthSlot, _ axis: Axis) throws -> Rect {
+    var desk = try #require(arranger.world[mainKey])
+    var ids = arranger.world.ids
+    if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
+    try desk.tree.applyDrop(.fourth(slot, axis), window: window, ids: &ids)
+    return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[window])
+}
+
+/// w and a docked by the keyboard, with w's tile.
+private func twoDocked() async throws -> (Harness, Rect) {
+    var harness = await Harness.started(frames: [1: frameW, 2: Rect(x: 700, y: 400, width: 150, height: 120)])
+    await harness.send(.command(.dock, focused: w))
+    await harness.send(.command(.dock, focused: a))
+    let desk = try #require(harness.arranger.world[mainKey])
+    return (harness, try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[w]))
+}
+
+extension ArrangerFourthTests {
+    @Test func controlDuringADragPreviewsTheColumnAfterTheDwellAndDocksThere() async throws {
+        var harness = await Harness.started(frames: [1: frameW])
+        let during = await controlDrag(&harness, w, from: frameW, to: Point(x: 10, y: 310))
+        #expect(previews(during).isEmpty, "a preview before the dwell: \(during)")
+
+        let shown = await tick(&harness)
+        let frame = try fourthFrame(harness.arranger, w, .first, .horizontal)
+        #expect(shown.contains(.preview(.fourth(frame, label: "1st column"), displayUUID: "main")), "tick gave \(shown)")
+
+        let depth = harness.arranger.history.depth(for: mainKey)
+        let up = await harness.send(pointer(.up, 10, 310, .control))
+        #expect(setFrames(up)[w] == frame)
+        #expect(announcements(up) == ["Docked to 1st column"])
+        #expect(harness.arranger.world[mainKey]?.tree.state(of: w) == .present)
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+        expectWeights(try rootWeights(harness.arranger), [0.25, 0.75])
+    }
+
+    @Test func controlCommandPicksARow() async throws {
+        var harness = await Harness.started(frames: [1: frameW])
+        _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 700, y: 30), [.control, .command])
+
+        let shown = await tick(&harness)
+
+        let frame = try fourthFrame(harness.arranger, w, .first, .vertical)
+        #expect(shown.contains(.preview(.fourth(frame, label: "1st row"), displayUUID: "main")), "tick gave \(shown)")
+    }
+
+    /// The window grows into the side with no tile (D-14), so the result is more than the half the zone names.
+    @Test func theMiddleBandShowsTheResultNotTheZone() async throws {
+        var harness = await Harness.started(frames: [1: frameW])
+        _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 720, y: 310))
+
+        let shown = await tick(&harness)
+
+        let frame = try fourthFrame(harness.arranger, w, .middle, .horizontal)
+        #expect(shown.contains(.preview(.fourth(frame, label: "Middle half column"), displayUUID: "main")), "tick gave \(shown)")
+        #expect(frame.width > area.width / 2, "\(frame)")
+    }
+
+    @Test func aDockedWindowMovesInOneUndoStep() async throws {
+        var (harness, tile) = try await twoDocked()
+        _ = await controlDrag(&harness, w, from: tile, to: Point(x: 1300, y: 310))
+        let shown = await tick(&harness)
+        let frame = try fourthFrame(harness.arranger, w, .fourth, .horizontal)
+        #expect(shown.contains(.preview(.fourth(frame, label: "4th column"), displayUUID: "main")), "tick gave \(shown)")
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        let up = await harness.send(pointer(.up, 1300, 310, .control))
+
+        #expect(setFrames(up)[w] == frame)
+        #expect(announcements(up) == ["Docked to 4th column"])
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+    }
+}

@@ -153,4 +153,16 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 1e-9 }
         let layers = PreviewStyle.layers(for: .group(frame: frame, strip: strip, label: nil), increaseContrast: false)
         #expect(layers.count == 2 && layers.allSatisfy { $0.label == nil })
     }
+
+    @Test func aFourthIsTheDockRecipeWithItsCapsule() throws {
+        let layers = PreviewStyle.layers(for: .fourth(r, label: "1st column"), increaseContrast: false)
+        let layer = try #require(layers.first)
+        #expect(layers.count == 1)
+        #expect(layer.rect == r && layer.fill == .accent && near(layer.fillAlpha, 0.20))
+        #expect(layer.border == .accent && near(layer.borderAlpha, 0.85) && layer.dash == nil)
+        #expect(layer.label == PreviewStyle.Label(text: "1st column", glyph: nil, glyphRole: .label))
+
+        let contrasted = try #require(PreviewStyle.layers(for: .fourth(r, label: "1st column"), increaseContrast: true).first)
+        #expect(near(contrasted.fillAlpha, 0.30) && near(contrasted.borderAlpha, 1))
+    }
 }
