@@ -121,6 +121,37 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
         #expect(harness.arranger.view(on: "main") == .home)
     }
 
+    /// The drag path of the same pitfall: the preview is the desk-level frame, and a release outside the view widens it.
+    @Test func aFourthByDragShowsTheDeskFrameAndWidensTheCamera() async throws {
+        var harness = try await threeDocked()
+        await harness.send(.zoomEnabled(true))
+        let into = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: into.id))
+        let tile = try #require(await harness.frame(a))
+        let grab = Point(x: tile.midX, y: tile.minY + 10)
+        let point = Point(x: 1300, y: 310)
+        await harness.send(.pointer(PointerEvent(kind: .down, location: grab, pressWindow: a)))
+        await harness.send(.pointer(PointerEvent(kind: .dragged, location: Point(x: grab.x + 10, y: grab.y))))
+        await harness.send(.dragFrame(a.identity, Rect(x: tile.x + 10, y: tile.y, width: tile.width, height: tile.height)))
+        await harness.send(.pointer(PointerEvent(kind: .dragged, location: point, modifiers: .control)))
+        await harness.send(.dragFrame(a.identity, Rect(x: tile.x + point.x - grab.x, y: tile.y, width: tile.width, height: tile.height)))
+        var desk = try #require(harness.arranger.world[key])
+        var ids = harness.arranger.world.ids
+        try desk.tree.remove(a)
+        try desk.tree.applyDrop(.fourth(.fourth, .horizontal), window: a, ids: &ids)
+        let frame = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).frames[a])
+
+        harness.now += .milliseconds(150)
+        let shown = await harness.send(.tick)
+        #expect(shown.contains(.preview(.fourth(frame, label: "4th column"), displayUUID: "main")), "tick gave \(shown)")
+
+        let up = await harness.send(.pointer(PointerEvent(kind: .up, location: point, modifiers: .control)))
+
+        let move = try #require(moves(up).first, "no camera move: \(up)")
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+        #expect(harness.arranger.view(on: "main") == .home)
+    }
+
     @Test func zoomingHomeUnparksEveryWindow() async throws {
         var harness = try await threeDocked()
         let home = await frames(harness)
