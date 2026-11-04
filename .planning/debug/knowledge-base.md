@@ -24,3 +24,13 @@ Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypothe
 - **Why not caught:** no gate existed for this class: live tests focused windows through Transom's own AX focus path (which does send AX notices) and dispatched URLs in-process, never via a real activation or `open`
 - **Recurrence guard:** VM TabGroupIntegrationTests.activatingTheAppOfAHiddenMemberSelectsIt (AXFrontmost activation, red without the hook); PendingFocusTests activation/dedup cases; AppDelegateTests.aURLActsOnTheAppFrontmostBeforeTransom. Any new "focused window" consumer must ask whether activation and Transom-frontmost cases reach it
 ---
+
+## sigterm-quit-hang — SIGTERM and killall left the app alive for minutes: terminate called inside the main queue while its reply waited on that queue
+- **Date:** 2026-11-04
+- **Error patterns:** pkill -TERM, killall, SIGTERM, app stays alive, no exit, nested run loop, _shouldTerminate, terminateLater, handleSIGTERM, DispatchSource, main queue, __CFRUNLOOP_IS_SERVICING_THE_MAIN_DISPATCH_QUEUE__, cleanExit false, shutdown -r, ⌘Q works, menu Quit works
+- **Root cause(s):** the SIGTERM source (queue .main) calls NSApp.terminate from inside a main-queue drain; applicationShouldTerminate returned .terminateLater and left restore, writeCleanExit and the reply to a main-queue block, which AppKit's wait does not service from inside that queue
+- **Fix:** applicationShouldTerminate does the bounded work itself and returns .terminateNow; no wait, for any caller of terminate
+- **Files changed:** Sources/TransomMac/AppDelegate.swift, Sources/TransomMac/AXWindowSystem.swift, Tests/TransomMacTests/AppDelegateTests.swift, Tests/TransomMacIntegrationTests/QuitRestoreIntegrationTests.swift, Tests/TransomMacIntegrationTests/IntegrationSupport.swift, scripts/vm-live-test.sh, scripts/vm-quit-check.sh
+- **Why not caught:** no gate existed for this class: the unit test called the delegate directly, live tests call the restore in-process, and nothing quit the real app by signal
+- **Recurrence guard:** OutsideQuitIntegrationTests (scripts/vm-quit-check.sh) and AppDelegateTests.quittingRestoresThenWritesTheCleanExitBeforeAnswering. Any AppKit wait entered from a DispatchQueue.main block, Task or signal source cannot be answered by a later main-queue block. Real logout and loginwindow restart behave as the quit Apple Event, not SIGTERM
+---
