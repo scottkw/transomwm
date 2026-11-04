@@ -3,17 +3,19 @@ import TransomModel
 /// A saved window waiting to come back (VIEW-04, D-10 to D-12a): an untracked ref kept in the World, so its tile stays
 /// reserved and gets no write, with a deadline on the Arranger's wake clock, so it can never become a permanent hole. A
 /// tile on a desk not showing (another Space, a display not connected) has no hole to show and can't be filled, as AX lists
-/// only what shows: its deadline waits until the desk shows (UI-SPEC Surface 2, CR-02).
+/// only what shows: its deadline waits until the desk shows (UI-SPEC Surface 2, CR-02). Only `.leftCGList` runs regardless.
 /// shortcut: one on a Space that no longer exists waits in layout.json for good, unseen, like the dormant desk it is on;
 /// prune it if the Spaces snapshot ever reaches the engine.
 public struct Placeholder: Equatable, Sendable {
     public enum Origin: Equatable, Sendable {
         case launch, appQuit, tie
+        /// A dormant docked window the CG list lost with no quit reported yet: closed, or its app is quitting.
+        case leftCGList
     }
 
     /// Which deadline runs (D-12, D-12a), named as the expiry log says it.
     public enum Wait: String, Equatable, Sendable {
-        case afterQuit = "30 s after quit", afterLaunch = "10 s after launch", neverOpened = "5 min, no launch"
+        case afterQuit = "30 s after quit", afterLaunch = "10 s after launch", neverOpened = "5 min, no launch", leftCGList = "10 s after leaving the CG list"
     }
 
     public var ref: WindowRef
@@ -108,9 +110,14 @@ extension Arranger {
         deskKey(of: window).map(shownDesks.contains) ?? true
     }
 
-    /// The next placeholder due. One on a desk not showing is not, so its past deadline can't spin the wake clock.
+    /// Whether its deadline runs: one on a desk not showing waits, unless nothing says its app quit.
+    private func deadlineRuns(_ placeholder: Placeholder) -> Bool {
+        placeholder.origin == .leftCGList || isOnShownDesk(placeholder.ref)
+    }
+
+    /// The next placeholder due. One whose deadline isn't running is not, so a past deadline can't spin the wake clock.
     var earliestPlaceholderDeadline: ContinuousClock.Instant? {
-        placeholders.table.values.filter { isOnShownDesk($0.ref) }.map(\.deadline).min()
+        placeholders.table.values.filter(deadlineRuns).map(\.deadline).min()
     }
 
     /// A placeholder whose desk just came on screen gets at least `launchWait` for its window to be listed and match
@@ -184,6 +191,15 @@ extension Arranger {
         return [.info("placeholder \(leaf) for \(ref.bundleID): shown (app quit)")] + fillPlaceholders(of: ref.bundleID)
     }
 
+    /// The CG list can lose a quitting app's windows before `.appTerminated` arrives, so a dormant docked window it lost
+    /// waits `launchWait`: the quit takes it over (D-12b), or it closes as the closed window it is.
+    /// shortcut: a quit slower than that after its windows go still closes the tile, as WR-06 for a tracked window; check on ⌘Q.
+    mutating func holdLeftCGList(_ left: [WindowRef], now: ContinuousClock.Instant) {
+        for window in left where world.desks.values.contains(where: { $0.tree.leaf(containing: window) != nil }) {
+            placeholders.table[window.identity] = Placeholder(ref: window, origin: .leftCGList, wait: .leftCGList, deadline: now + Self.launchWait)
+        }
+    }
+
     /// A new window of an app with waiting (or about to wait) placeholders may fill one, and restarts their 10 s (D-12).
     mutating func noteCreated(_ info: WindowInfo, now: ContinuousClock.Instant) {
         let bundle = info.window.bundleID
@@ -219,10 +235,10 @@ extension Arranger {
         return faults
     }
 
-    /// Closes every placeholder past its deadline on a shown desk through the close path, as if its window had closed
+    /// Closes every placeholder past a running deadline through the close path, as if its window had closed
     /// (D-12): no undo step, and the neighbours reflow, whose writes wait out a pause (RESEARCH Pitfall 14).
     mutating func expirePlaceholders(now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        let due = placeholders.table.values.filter { now >= $0.deadline && isOnShownDesk($0.ref) }.sorted { $0.ref.identity < $1.ref.identity }
+        let due = placeholders.table.values.filter { now >= $0.deadline && deadlineRuns($0) }.sorted { $0.ref.identity < $1.ref.identity }
         var effects: [ArrangerEffect] = []
         for placeholder in due {
             let tile = tileName(of: placeholder.ref)

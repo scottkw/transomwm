@@ -292,9 +292,12 @@ public struct Arranger: Sendable {
                         faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))
                     }
                 }
-                // A dormant window whose ID left the CG list closed (G-03-8); a paused, unknown or empty list decides nothing.
+                // A dormant window whose ID left the CG list closed (G-03-8), or its app is quitting (D-12b): a docked one
+                // waits to see which. A paused, unknown or empty list decides nothing.
                 guard !inventory.sessionPaused, let live = inventory.liveWindows, !live.isEmpty else { return faults + place(inventory) }
-                return faults + closeDormant { !LayoutRestore.isAlive($0.identity, in: live) } + place(inventory)
+                let left = dormantWindows.filter { !LayoutRestore.isAlive($0.identity, in: live) }
+                holdLeftCGList(left, now: now)
+                return faults + closeDormant { left.contains($0) } + place(inventory)
             }
             // The saved layout waits for every app's first answer, so no saved window is dropped as untracked, and for an
             // unlocked session with a non-empty CG list: a blank one can't tell a closed window from one on a hidden Space
@@ -1016,7 +1019,12 @@ public struct Arranger: Sendable {
                 if selected.isEmpty { selected = raisedStrip(of: window) }
             case .appTerminated(let pid):
                 // Its tracked windows are still in `windows` here; on their own windowDestroyed the docked ones wait (D-12a).
-                if let bundle = windows.values.first(where: { $0.window.pid == pid })?.window.bundleID { placeholders.quitting[pid] = (bundle, now) }
+                // Dormant windows get no windowDestroyed, so the docked ones wait now, and a floater closes (D-12b).
+                let dormant = dormantWindows.filter { $0.pid == pid } + placeholders.table.values.filter { $0.origin == .leftCGList && $0.ref.pid == pid }.map(\.ref)
+                if let bundle = windows.values.first(where: { $0.window.pid == pid })?.window.bundleID ?? dormant.first?.bundleID {
+                    placeholders.quitting[pid] = (bundle, now)
+                }
+                for window in dormant { faults += try holdForQuit(window) ?? [] }
                 faults += closeDormant { $0.pid == pid }
             case .liveWindowsChanged:
                 return []  // the inventory the shell feeds next prunes
