@@ -218,6 +218,30 @@ The script ran in the VM and restored the guest's files.
 
 Neither VM suite exercises this path: it is covered by engine tests only. **Check:** in the real-reboot UAT, with another display's stored arrangement applied, a tile on Desktop 2 survives and is refilled when you go there.
 
+## D-12b: dormant tiles (verification gap)
+
+**Status:** fixed: requires human verification
+**Files modified:** `Sources/TransomEngine/Arranger.swift`, `Sources/TransomEngine/Arranger+Placeholders.swift`, `Tests/TransomEngineTests/ArrangerMultiDeskRestoreTests.swift`
+**Commit:** 1466f8b
+**Applied fix:** when its app quits, a docked window on a Desktop not yet visited since Transom started now waits as an `.appQuit` placeholder, through `holdForQuit`. It does not expire while its desk is hidden, gets at least 10 s once the desk shows, and a relaunched window on that Space fills it. No new schema field or wait length.
+
+- **Tested first:** the inverted test, `aDormantDockedWindowWaitsWhenItsAppTerminatesAndARelaunchFillsIt`, and three new ones failed before the fix.
+- **Floating windows:** unchanged. A dormant floater has no tile to keep, so it closes at once, both on its app's quit and when it leaves the CG list.
+- **The inventory prune:** the CG list can lose a window before `.appTerminated` arrives, and nothing at that moment tells a quit from a close. So a docked dormant window the list lost now waits `launchWait` (10 s, placeholder origin `.leftCGList`), on a hidden desk too. A quit in that time takes over its wait.
+- **Changed timing:** with no quit, such a window's tile closes 10 s later instead of at once, through the same close path with no undo step. This covers a dormant window closed with ⌘W while its app keeps running. A window you can press ⌘W on is on screen and tracked, so its tile still closes at once and README line 57 still holds. `aDormantWindowThatLeftTheCGListIsPrunedWithNoUndoStep` and two other tests pinned the immediate prune; they now tick past the wait.
+- **Known limit:** an app that takes more than 10 s to exit after its windows leave the CG list still loses the tile, as WR-06 for a tracked window (`shortcut:` comment). If a dormant window's Space comes on screen during the 10 s, it can show "Waiting for {App}…" until they end.
+
+**Verification:**
+
+| Gate | Where it ran | Result |
+|---|---|---|
+| `swift test` | The isolated worktree, on the host, with `TRANSOM_LIVE` unset | 226, 432, 100 and 1098 tests across the four test runs (1,856), no ✘ |
+| `scripts/check-no-appkit.sh` | The isolated worktree | OK (62 files) |
+| `RematchIntegrationTests` | `pane-test` VM, its own job, built from the worktree, log at `.build/0808-d12b-vm-Rematch.log` | 3 of 3 passed on the first run, about 4 minutes after boot; no re-run was needed |
+| Debug app build | The main checkout, after the fast-forward | `BUILD SUCCEEDED`, not launched |
+
+No VM suite exercises this path: it is covered by engine tests only. **Check:** restart Transom with a docked window on a Desktop you then don't visit, ⌘Q that app, and go to the Desktop within and after 10 s, with and without a relaunch. Include a document app, whose windows may close before it exits.
+
 ---
 
 _Fixed: 2026-11-04T02:42:45Z_

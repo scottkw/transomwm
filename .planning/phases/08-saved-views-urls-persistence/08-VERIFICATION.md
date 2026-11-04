@@ -1,8 +1,8 @@
 ---
 phase: 08-saved-views-urls-persistence
 verified: 2026-11-04T03:12:29Z
-status: gaps_found
-score: 55/71 must-haves verified (2 failed from one root cause, 4 present but behavior-unverified, 10 need a human)
+status: human_needed
+score: 57/71 must-haves verified (the 2 failed truths closed by 1466f8b, 4 present but behavior-unverified, 10 need a human)
 covered_files:
   - ".planning/phases/08-saved-views-urls-persistence/08-01-PLAN.md"
   - ".planning/phases/08-saved-views-urls-persistence/08-01-SUMMARY.md"
@@ -93,26 +93,14 @@ covered_files:
   - "scripts/release.sh"
   - "scripts/vm-cli-check.sh"
   - "xcode/project.yml"
-covered_digest: "v4:sha256:f222c61fcee521272564ddb333ca13c49ced09f4579c0602cc478a7d92d99df7"
+covered_digest: "v4:sha256:46113c7ea3e1d9939ff819bf9fcd4bd21a9d61df0df671fca0dc7502966fe428"
 behavior_unverified: 4
 overrides_applied: 0
 decision_coverage:
   honored: 18
   total: 20
   not_honored: ["D-10a", "D-12b"]
-gaps:
-  - truth: "When an app quits while Transom runs, each of its docked windows keeps its tile as a placeholder instead of closing it (08-04, D-12a); tiles for windows on Spaces not being shown wait on every path and do not expire while their desk is hidden (D-12b)"
-    status: partial
-    reason: "A docked window that is dormant (on a hidden Space, kept by identity after a Transom restart, not yet visited) closes its tile at once when its app quits, with no placeholder. The tracked case waits; this one does not. The test aDormantWindowIsPrunedWhenItsAppTerminates pins the closing, and README line 57 says the opposite."
-    artifacts:
-      - path: "Sources/TransomEngine/Arranger.swift"
-        issue: "Line 1020, in .appTerminated: `faults += closeDormant { $0.pid == pid }` closes dormant docked windows through the close path"
-      - path: "Tests/TransomEngineTests/ArrangerMultiDeskRestoreTests.swift"
-        issue: "Line 319, aDormantWindowIsPrunedWhenItsAppTerminates, pins the behaviour D-12a and D-12b rule out"
-    missing:
-      - "In .appTerminated, hold a dormant docked window of that pid as an .appQuit placeholder, keeping its bundle and title, instead of closing it. Floaters may still close"
-      - "Make sure the inventory prune (Arranger.swift:297) can't close the same window first when the CG list loses it before .appTerminated arrives"
-      - "Invert the pinning test: the tile stays while its desk is hidden, a relaunched window on that Space fills it, and it expires only after its desk shows"
+gaps: []
 behavior_unverified_items:
   - truth: "After rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires (roadmap SC3, reboot half)"
     test: "Dock windows on Desktop 1 and Desktop 2, save a view on each, restart the Mac, and let apps reopen. Do it again with a second display's stored arrangement applied. Leave one app closed"
@@ -503,3 +491,7 @@ Other truths aren't failures: 4 are present and wired without a test of their be
 
 _Verified: 2026-11-04T03:12:29Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Gap Closure (2026-11-03)
+
+The one gap (a dormant docked tile closing at once when its app quits) was closed by `1466f8b` under D-12b. Host suite after the fix: 1,856 tests, no ✘; VM `RematchIntegrationTests` 3 of 3 (`.build/0808-d12b-vm-Rematch.log`). The path is covered by engine tests only; the live proof is the host check in 08-UAT.md. Trade recorded: a dormant window closed with ⌘W while its app keeps running closes its tile about 10 s later rather than at once, since the CG list cannot tell a quit from a close.
