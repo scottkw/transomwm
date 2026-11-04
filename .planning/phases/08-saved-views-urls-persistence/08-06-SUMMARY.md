@@ -20,10 +20,10 @@ affects: [08-07 UAT looks at the drawing and proves the real-app paths]
 actuals:
   tokens: 20400
   tasks: 2
-  commits: 3
+  commits: 5
 
 plan_head_before: 683b0d4715c6dfae0a0fd751ae4caf04dbb8e232
-plan_head_after: 38b3c8cd67379e8fa0a21b00372c4aed939aef5e
+plan_head_after: 1d62754120bdb3abf42d4a4a30deaff0c8817603
 
 tech-stack:
   added: []
@@ -60,7 +60,7 @@ key-decisions:
   - "A collapsed placeholder is shown as a placeholder tile at its block rect, never as a collapsed block with a double-click"
   - "A placeholder on another Space gets no mini tile: it would count and select as a window"
   - "An expired tile leaves at once during a pause; a filled one stays until Resume, when its window is written"
-  - "The click-through VM check aims at a fixture window sent behind the panel: a posted click on the guest's bare desktop does not activate Finder, panel or no panel"
+  - "The click-through VM check clicks twice at one point: through the panel to a fixture window sent behind it, then, with that window closed, to Finder's desktop"
 
 patterns-established:
   - "Tests that click in the guest pick a point at least 16 pt clear of its own windows: a click just outside a window goes to that window's resize margin"
@@ -69,7 +69,7 @@ requirements-completed: [VIEW-04]
 
 coverage:
   - id: D1
-    description: "A waiting tile shows a click-through panel at its rect, at normal level, behind real windows; a click goes through it to the window beneath and leaves Transom inactive"
+    description: "A waiting tile shows a click-through panel at its rect, at normal level, behind real windows; a click goes through it to the window beneath, or to Finder's desktop, and leaves Transom inactive"
     requirement: VIEW-04
     verification:
       - kind: e2e
@@ -117,10 +117,10 @@ coverage:
     human_judgment: true
     rationale: "No test asserts pixels, and the panel is sharingType .none, so a screenshot may not show it; check it by eye in 08-07 UAT"
   - id: D7
-    description: "A real Finder desktop click through a placeholder, the fade timing, Space changes with a stranded panel"
+    description: "The fade timing, and Space changes with a placeholder shown or a panel stranded"
     verification: []
     human_judgment: true
-    rationale: "The guest's bare desktop did not activate Finder on a posted click even with no panel, and no VM test switches Spaces with a placeholder shown; check in 08-07 UAT"
+    rationale: "No VM test switches Spaces with a placeholder shown, and no test measures the 120 ms fades; check in 08-07 UAT"
 
 duration: 23min
 completed: 2026-11-04
@@ -166,13 +166,15 @@ Checked and left alone: `groupable` (already refuses untracked windows), `stageC
 ## VM logs
 
 - `.build/0806-t1-vm.log`: `RematchIntegrationTests`, 3 tests passed, tracer gate re-run after the commit.
-- `.build/0806-t2-RematchIntegrationTests.log` and `.build/0806-t2-OverviewIntegrationTests.log`: both passed, one VM job each, on the Task 2 code before a one-line copy refactor.
+- `.build/0806-t2-RematchIntegrationTests.log`: 3 tests passed on the final code, with the Finder check.
+- `.build/0806-t2-OverviewIntegrationTests.log`: 3 tests passed, one VM job, before a one-line refactor of `waitingLine`.
 - Host: `.build/0806-t2.log`, full `swift test` passed on the final code. Nothing live ran on the host.
 
 ## Task Commits
 
 1. **Task 1: Tracer, a dim click-through tile at its rect** - `a984e50` (feat). The tracer gate re-ran its verify after the commit and passed.
 2. **Task 2: Stage, overview, Debug line, audit** - `a365bd8` (test), `38b3c8c` (feat)
+3. **Finder check added after the first close-out** - `1d62754` (test); `39595be` is the first docs commit, so `commits` counts it too
 
 ## Files Created/Modified
 
@@ -188,7 +190,7 @@ Checked and left alone: `groupable` (already refuses untracked windows), `stageC
 
 ## Decisions Made
 
-See `key-decisions` above. VIEW-04 is marked complete, as the orchestrator allowed; VIEW-03 and VIEW-05 stay open for 08-07.
+See `key-decisions` above. VIEW-04 stays unchecked in REQUIREMENTS.md: 08-07 also declares it, so the shared-ID gate (`requirements.ready-ids`) reports it blocked until 08-07's SUMMARY exists. I did not override the gate. `requirements-completed` lists it because the template copies the plan's array.
 
 ## Deviations from Plan
 
@@ -214,12 +216,12 @@ See `key-decisions` above. VIEW-04 is marked complete, as the orchestrator allow
 - **Fix:** edited them. `PlaceholderView` hosts a `TileLayer`, so the plan's `CAShapeLayer` lives there rather than in the panel file.
 - **Committed in:** `a984e50`, `38b3c8c`
 
-**4. [Rule 3 - Blocking] The VM test's click proof changed**
+**4. [Rule 3 - Blocking] The VM test's click check grew**
 - **Found during:** Task 1
-- **Issue:** the truth says a click reaches Finder, but a probe in the guest with no panel and no Transom showed a posted click on the bare desktop leaves the frontmost app unchanged, so Finder cannot be the witness there.
-- **Fix:** a fixture window is sent behind the panel, and a click through the panel must make it frontmost. That is a stronger proof of click-through. The Finder wording stays a UAT item (coverage D7).
+- **Issue:** the plan checks only that Transom does not activate, which a swallowed click would also pass, and the guest's own windows cover much of each tile.
+- **Fix:** the test picks a point 16 pt clear of the guest's windows, then requires a click through the panel to reach a fixture window sent behind it (new fixture `order-back`), and with that window closed to make Finder frontmost.
 - **Files modified:** `Tests/TransomMacIntegrationTests/RematchIntegrationTests.swift`, `Sources/TransomFixtureApp/main.swift`
-- **Committed in:** `a984e50`
+- **Committed in:** `a984e50`, `1d62754`
 
 ---
 
@@ -228,7 +230,7 @@ See `key-decisions` above. VIEW-04 is marked complete, as the orchestrator allow
 
 ## Issues Encountered
 
-- The first VM click landed 6 pt beside a guest TextEdit window, inside its resize margin, and did nothing. The test now needs 16 pt of clearance. It picks the first such point in tile 0; if the guest's windows ever cover that tile, the test fails with an explicit message.
+- My first VM clicks and a guest probe landed 6 pt beside a TextEdit window, inside its resize margin, and did nothing. From that I wrongly concluded a posted click on the guest's desktop never activates Finder, and wrote so in the first SUMMARY and a test comment. A second probe at a clear point showed Finder does activate, so both were corrected and the Finder check added. The test now needs 16 pt of clearance; it picks the first such point in tile 0, and if the guest's windows ever cover that tile it fails with an explicit message.
 - A stray file from a mistyped `rsync` destination landed in the repo root. It was never staged, and was removed.
 
 ## Known Stubs
@@ -241,7 +243,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-- 08-07 UAT should look at a placeholder by eye (coverage D6), click one over the real desktop, switch Spaces with one shown (D7), and ⌘Q a real app (08-04's D4).
+- 08-07 UAT should look at a placeholder by eye (coverage D6), switch Spaces with one shown (D7), and ⌘Q a real app (08-04's D4).
 - The VM is stopped.
 
 ---
