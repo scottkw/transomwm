@@ -56,18 +56,20 @@ public enum LayoutRestore {
         return (world, unmatched.filter { !trackedIDs.contains($0.identity) }, removed, unplaced, assigned.matches, assigned.ties)
     }
 
-    /// After a reboot a saved ID and pid name no window, and may name another one (RESEARCH Pitfall 5): each saved window
-    /// takes a retired identity, keeping its bundle and hints, so it can only come back through `HintMatcher`. layout.json
-    /// then holds no old-boot identity from the first write on, so it can say this boot at once (WR-01). Sorted order is
-    /// kept. One retired by an earlier boot stays as it is. Throws only if re-pointing leaves an invalid World.
+    /// After a reboot a saved ID and pid name no window, and may name another one (RESEARCH Pitfall 5): each saved window,
+    /// in the World and every stored layout set alike, takes a retired identity, keeping its bundle and hints, so it can
+    /// only come back through `HintMatcher`. layout.json then holds no old-boot identity from the first write on, so it can
+    /// say this boot at once (WR-01). Sorted order is kept. One retired by an earlier boot stays as it is. Throws only if
+    /// re-pointing leaves an invalid World.
     public static func retire(
-        _ world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], views: [SavedView]
-    ) throws(LayoutError) -> (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], views: [SavedView]) {
-        let all = world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }
-        var taken = Set(all.map(\.identity).filter(\.isRetiredWindowID).map(\.windowID))
+        _ world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], sets: [LayoutSet], views: [SavedView]
+    ) throws(LayoutError) -> (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], sets: [LayoutSet], views: [SavedView]) {
+        func held(_ world: World) -> [WindowRef] { world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) } }
+        let all = Set(([world] + sets.map(\.world)).flatMap(held).map(\.identity))
+        var taken = Set(all.filter(\.isRetiredWindowID).map(\.windowID))
         var next = WindowIdentity.retiredIDBase
         var retired: [WindowIdentity: WindowIdentity] = [:]
-        for identity in Set(all.map(\.identity)).sorted() {
+        for identity in all.sorted() {
             guard !identity.isRetiredWindowID else {
                 retired[identity] = identity
                 continue
@@ -76,18 +78,22 @@ public enum LayoutRestore {
             taken.insert(next)
             retired[identity] = WindowIdentity(windowID: next, pid: -1, bundleID: identity.bundleID)
         }
-        var history = UndoHistory()
-        var world = world
-        for window in all {
-            guard let identity = retired[window.identity] else { continue }
-            let to = WindowRef(identity: identity, titleHint: window.titleHint, axIdentifier: window.axIdentifier, creationOrder: window.creationOrder)
-            try world.rekey(from: window, to: to, history: &history)
+        func repointed(_ world: World) throws(LayoutError) -> World {
+            var world = world, history = UndoHistory()
+            for window in held(world) {
+                guard let identity = retired[window.identity] else { continue }
+                let to = WindowRef(identity: identity, titleHint: window.titleHint, axIdentifier: window.axIdentifier, creationOrder: window.creationOrder)
+                try world.rekey(from: window, to: to, history: &history)
+            }
+            return world
         }
         func mapped(_ frames: [WindowIdentity: Rect]) -> [WindowIdentity: Rect] {
             Dictionary(uniqueKeysWithValues: frames.compactMap { id, frame in retired[id].map { ($0, frame) } })
         }
-        let views = views.map { SavedView(slot: $0.slot, desk: $0.desk, home: $0.home, windows: $0.windows.compactMap { retired[$0] }) }
-        return (world, mapped(homeFrames), mapped(wantedFrames), views)
+        var newSets: [LayoutSet] = []
+        for set in sets { newSets.append(LayoutSet(arrangement: set.arrangement, world: try repointed(set.world), lastUsed: set.lastUsed)) }
+        let newViews = views.map { SavedView(slot: $0.slot, desk: $0.desk, home: $0.home, windows: $0.windows.compactMap { retired[$0] }) }
+        return (try repointed(world), mapped(homeFrames), mapped(wantedFrames), newSets, newViews)
     }
 
     /// Whether a CG window at layer 0 has this identity's real window ID and pid, on a Space when its Spaces are known:

@@ -386,11 +386,12 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore(var world, var homeFrames, var wantedFrames, let arrangement, let sets, var views, let bootChanged):
+        case .restore(var world, var homeFrames, var wantedFrames, let arrangement, var sets, var views, let bootChanged):
             var effects: [ArrangerEffect] = []
             if bootChanged {
                 do throws(LayoutError) {
-                    (world, homeFrames, wantedFrames, views) = try LayoutRestore.retire(world, homeFrames: homeFrames, wantedFrames: wantedFrames, views: views)
+                    (world, homeFrames, wantedFrames, sets, views) = try LayoutRestore.retire(
+                        world, homeFrames: homeFrames, wantedFrames: wantedFrames, sets: sets, views: views)
                     effects.append(.info("boot session changed: matching every saved window by hints"))
                 } catch {
                     reattachFault = error  // never for a decoded World, but no old identity may re-attach: start empty, keep the file

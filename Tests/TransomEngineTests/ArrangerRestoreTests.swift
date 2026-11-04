@@ -212,6 +212,45 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(Set(retired.map(\.identity)).count == retired.count)
     }
 
+    /// WR-02: a layout set from an earlier boot names no window of this one either, so applying it can't re-attach a reused
+    /// ID; the same window keeps one identity across the World and the sets.
+    @Test func afterABootChangeAStoredSetIsRetiredWithTheWorld() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        let set = LayoutSet(arrangement: ArrangementID(["elsewhere"]), world: saved, lastUsed: Date(timeIntervalSince1970: 0))
+
+        var rebooted = Arranger()
+        _ = rebooted.handle(.restore(saved, homeFrames: [:], layoutSets: [set], bootChanged: true), now: .now)
+        let stored = try #require(rebooted.snapshot.layoutSets.first?.world[key])
+        #expect(stored.tree.windows.allSatisfy { $0.identity.isRetiredWindowID })
+        #expect(stored.tree.windows.map(\.titleHint) == ["Notes", "Plan"])
+        #expect(stored.tree.windows == rebooted.snapshot.world[key]?.tree.windows)
+    }
+
+    /// WR-02: after a boot change an identity match alone never ends a wait, by event or by inventory: only hints fill a tile.
+    @Test func afterABootChangeAWindowWithASavedIdentityDoesNotEndAWait() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        var inventory = await source.fake.inventory()
+        let reused = WindowInfo(window: WindowRef(identity: a.identity, titleHint: "Mail"), frame: Rect(x: 300, y: 300, width: 400, height: 300), state: .present, displayUUID: "main")
+        inventory.windows = []
+
+        var rebooted = Arranger()
+        _ = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
+        _ = rebooted.handle(.inventory(inventory), now: .now)
+        try #require(rebooted.placeholderCount == 2)
+        _ = rebooted.handle(.event(.windowCreated(reused)), now: .now)
+        #expect(rebooted.placeholderCount == 2, "a reused identity ended the wait")
+        inventory.windows = [reused]
+        _ = rebooted.handle(.inventory(inventory), now: .now)
+        #expect(rebooted.placeholderCount == 2, "a reused identity ended the wait")
+        #expect(rebooted.world[key]?.desktop.contains(a) == true)
+    }
+
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
     @Test func reattachKeepsAnUntrackedWindowTheCGListStillHasUnderItsIDAndPid() async throws {
         // Saved: [a | b | Desktop], c floating. Only a is tracked.
