@@ -12,19 +12,23 @@ private let right = Rect(x: 720, y: 25, width: 720, height: 875)
 private let parked = Rect(x: 20_000, y: 20_000, width: 400, height: 300)
 
 private func saved(
-    _ id: UInt32, _ title: String = "", frame: Rect? = nil, ax: String? = nil, order: UInt64 = 0, bundle: String = bundleID
+    _ id: UInt32, _ title: String = "", frame: Rect? = nil, ax: String? = nil, order: UInt64 = 0, bundle: String = bundleID, desk: DeskKey? = nil
 ) -> HintMatcher.Saved {
     let identity = WindowIdentity(windowID: id, pid: savedPID, bundleID: bundle)
-    return HintMatcher.Saved(ref: WindowRef(identity: identity, titleHint: title, axIdentifier: ax, creationOrder: order), frame: frame)
+    return HintMatcher.Saved(ref: WindowRef(identity: identity, titleHint: title, axIdentifier: ax, creationOrder: order), frame: frame, desk: desk)
 }
 
 private func candidate(
     _ id: UInt32, _ title: String = "", frame: Rect = Rect(x: 100, y: 100, width: 400, height: 300), ax: String? = nil, order: UInt64 = 0,
-    bundle: String = bundleID
+    bundle: String = bundleID, display: String? = nil, spaces: Set<UInt64>? = nil
 ) -> HintMatcher.Candidate {
     let identity = WindowIdentity(windowID: id, pid: newPID, bundleID: bundle)
-    return HintMatcher.Candidate(ref: WindowRef(identity: identity, titleHint: title, axIdentifier: ax, creationOrder: order), frame: frame)
+    return HintMatcher.Candidate(
+        ref: WindowRef(identity: identity, titleHint: title, axIdentifier: ax, creationOrder: order), frame: frame, displayUUID: display, spaces: spaces)
 }
+
+private let spaceOne = DeskKey(displayUUID: "D", spaceID: 1)
+private let spaceTwo = DeskKey(displayUUID: "D", spaceID: 2)
 
 /// One case of the D-10 scoring table: saved windows, returning windows, the expected matches (saved ID → window ID)
 /// and the expected ties (saved IDs, window IDs).
@@ -99,7 +103,35 @@ private let table: [HintCase] = [
         name: "an edited title as the sole pair matches",
         saved: [saved(1, "Doc.txt - Edited")], candidates: [candidate(10, " doc.TXT ")],
         matches: [1: 10]),
+    HintCase(
+        name: "a window on another Space never matches, even by its exact title",
+        saved: [saved(1, "Notes", desk: spaceTwo)], candidates: [candidate(10, "Notes", display: "D", spaces: [1])],
+        matches: [:]),
+    HintCase(
+        name: "a window on the desk's Space matches",
+        saved: [saved(1, "Notes", desk: spaceTwo)], candidates: [candidate(10, "Notes", display: "D", spaces: [1, 2])],
+        matches: [1: 10]),
+    HintCase(
+        name: "unknown Spaces, or none (a hidden tab), never rule a window out",
+        saved: [saved(1, "A", desk: spaceTwo), saved(2, "B", desk: spaceTwo)],
+        candidates: [candidate(10, "A", display: "D"), candidate(20, "B", display: "D", spaces: [])],
+        matches: [1: 10, 2: 20]),
+    HintCase(
+        name: "the sole pair counts the windows that fit: one tile per Space, one window on the first",
+        saved: [saved(1, desk: spaceOne), saved(2, desk: spaceTwo)], candidates: [candidate(10, display: "D", spaces: [1])],
+        matches: [1: 10]),
+    HintCase(
+        name: "the sole pair counts the windows that fit: one tile, a window per Space",
+        saved: [saved(1, desk: spaceTwo)], candidates: [candidate(10, display: "D", spaces: [1]), candidate(20, display: "D", spaces: [2])],
+        matches: [1: 20]),
+    HintCase(
+        name: "a window on another display reaches a shown desk only",
+        saved: [saved(1, "A", desk: DeskKey(displayUUID: "E", spaceID: 7)), saved(2, "B", desk: DeskKey(displayUUID: "E", spaceID: 8))],
+        candidates: [candidate(10, "A", display: "D", spaces: [1]), candidate(20, "B", display: "D", spaces: [1])],
+        matches: [1: 10]),
 ]
+
+private let shown: Set<DeskKey> = [DeskKey(displayUUID: "E", spaceID: 7)]
 
 /// Saved window ID → matched candidate window ID.
 private func pairs(_ matches: [HintMatcher.Match]) -> [UInt32: UInt32] {
@@ -113,7 +145,7 @@ private func pairs(_ matches: [HintMatcher.Match]) -> [UInt32: UInt32] {
     @Test(arguments: table)
     func theScoringTable(_ row: HintCase) {
         for (saved, candidates) in [(row.saved, row.candidates), (row.saved.reversed(), row.candidates.reversed())] {
-            let result = HintMatcher.assign(saved: saved, candidates: candidates)
+            let result = HintMatcher.assign(saved: saved, candidates: candidates, shown: shown)
             #expect(pairs(result.matches) == row.matches)
             #expect(result.ties.flatMap { [$0.saved.map(\.windowID), $0.candidates.map(\.windowID)] } == row.ties)
         }

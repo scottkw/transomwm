@@ -8,7 +8,7 @@ public enum LayoutRestore {
     /// window on a Space not shown at launch, G-03-8) until its first windowCreated. Synthetic IDs are session-only
     /// (02-11), so one from another session never claims a window. Every other saved window (one whose app relaunched
     /// has a new pid) goes to `HintMatcher` against the tracked windows no saved window holds, with its frame from
-    /// `savedFrames`; a match re-points the saved window to the returning one, keeping its tile. `skipIdentity` (the boot
+    /// `savedFrames` and its desk (`shownDesks` are those on screen); a match re-points the saved window to the returning one, keeping its tile. `skipIdentity` (the boot
     /// session changed, so IDs may be reused, RESEARCH Pitfall 5) sends every saved window to the matcher. Each unmatched
     /// saved window stays in the World and is returned in `waiting`, docked or floating, for the caller to hold until its
     /// deadline (D-12), or to close. `removed` are the unmatched ones a tracked window now carries the identity of (a reused
@@ -19,7 +19,7 @@ public enum LayoutRestore {
     /// window leaves an invalid World; the caller then starts empty.
     public static func reattach(
         _ saved: World, tracked: [WindowInfo], live: [CGWindowEntry]? = [], savedFrames: [WindowIdentity: Rect] = [:],
-        skipIdentity: Bool = false
+        skipIdentity: Bool = false, shownDesks: Set<DeskKey> = []
     ) throws(LayoutError) -> (
         world: World, waiting: [WindowRef], removed: [WindowRef], unplaced: [WindowInfo], matches: [HintMatcher.Match], ties: [HintMatcher.Tie]
     ) {
@@ -33,8 +33,13 @@ public enum LayoutRestore {
         let held = Set(all.map(\.identity)).subtracting(unattached.map(\.identity))
         let eligible = tracked.filter { $0.kind == .dockable && $0.state == .present && !$0.isExcluded }
         let assigned = HintMatcher.assign(
-            saved: unattached.map { HintMatcher.Saved(ref: $0, frame: savedFrames[$0.identity]) },
-            candidates: eligible.filter { !held.contains($0.window.identity) }.map { HintMatcher.Candidate(ref: $0.window, frame: $0.frame) })
+            saved: unattached.map { window in
+                HintMatcher.Saved(ref: window, frame: savedFrames[window.identity], desk: saved.desks.first { $0.value.contains(window) }?.key)
+            },
+            candidates: eligible.filter { !held.contains($0.window.identity) }.map {
+                HintMatcher.Candidate(ref: $0.window, frame: $0.frame, displayUUID: $0.displayUUID, spaces: $0.spaces)
+            },
+            shown: shownDesks)
         let matched = Set(assigned.matches.map(\.saved))
         let trackedIDs = Set(tracked.map(\.window.identity))
         let unmatched = unattached.filter { !matched.contains($0) }

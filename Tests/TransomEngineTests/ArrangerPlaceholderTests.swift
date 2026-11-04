@@ -390,6 +390,101 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(harness.arranger.placeholderCount == 1)
     }
 
+    /// CR-03: a window on the wrong Space never takes a tile, even by its exact title: a frame write can't move it there,
+    /// so `rehome` would float it and the tile would be gone. It floats where it is and the tile keeps waiting.
+    @Test func aWindowOnAnotherSpaceNeverFillsATile() async throws {
+        var harness = await threeDockedOnSpaceOne()
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        _ = await quit(&harness)
+
+        let wrong = returning(11, title: "Notes", spaces: [2])
+        await harness.send(.event(.windowCreated(wrong)))
+        await harness.send(.event(.windowChanged(wrong)))
+        #expect(harness.arranger.isPlaceholder(ref(1)) && harness.arranger.isPlaceholder(ref(2)))
+        #expect(harness.arranger.world[spaceOne]?.tree.windows.map(\.windowID) == [1, 2, 3])
+        #expect(harness.arranger.world[spaceTwo]?.desktop.contains(ref(11, pid: newPID)) == true)
+
+        // Its own Space's window still gets the tile, as does one whose Spaces are unknown.
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 1)))
+        await harness.send(.event(.windowCreated(returning(12, title: "Notes", spaces: [1]))))
+        await harness.send(.event(.windowCreated(returning(13, title: "Plan"))))
+        #expect(harness.arranger.world[spaceOne]?.tree.windows.map(\.windowID) == [12, 13, 3])
+    }
+
+    /// CR-03: the launch path too. A window restored to another Space than its tile's floats there.
+    @Test func atLaunchAWindowOnAnotherSpaceTakesNoTile() async throws {
+        var harness = await onSpaceOne([otherOnSpaceOne, .standard(id: 11, pid: newPID, frame: openFrame, title: "Notes", space: 1)])
+        await harness.send(.restore(try savedTwo(on: spaceTwo), homeFrames: [:], bootChanged: true))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(harness.arranger.placeholderCount == 2)
+        #expect(harness.arranger.world[spaceOne]?.desktop.contains(ref(11, pid: newPID)) == true)
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.contains(ref(11, pid: newPID)) == false)
+    }
+
+    /// Two displays, nothing on them yet, each showing its one desk. Window 1's tile is on B.
+    private func twoDisplays(tileSpace: UInt64? = nil, bShows: UInt64? = nil) -> (arranger: Arranger, a: DisplayInfo, b: DisplayInfo, desk: DeskKey) {
+        (
+            Arranger(),
+            DisplayInfo(uuid: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 25, width: 1000, height: 775), currentSpaceID: nil),
+            DisplayInfo(uuid: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 1000, y: 25, width: 1000, height: 775), currentSpaceID: bShows),
+            DeskKey(displayUUID: "B", spaceID: tileSpace)
+        )
+    }
+
+    private func other(on display: String) -> WindowInfo {
+        WindowInfo(window: ref(3, pid: 950, bundle: otherBundle), frame: Rect(x: 10, y: 40, width: 100, height: 100), state: .present, displayUUID: display)
+    }
+
+    /// CR-03: a window on another display can still match, since a frame write moves it to the desk that display shows,
+    /// and it is not floated before that write lands, at a launch or by a later event. A refused write does float it.
+    @Test func aWindowOnAnotherDisplayKeepsItsMatchUntilTheWriteLands() async throws {
+        var (arranger, a, b, desk) = twoDisplays()
+        let start = ContinuousClock.now
+        let window = WindowInfo(window: ref(11, title: "Notes", pid: newPID), frame: Rect(x: 100, y: 100, width: 300, height: 200), state: .present, displayUUID: "A")
+        let inventory = WindowInventory(
+            displays: [a, b], windows: [window, other(on: "A")], initialRefreshComplete: true,
+            liveWindows: [CGWindowEntry(windowID: 3, pid: 950, bounds: Rect(x: 0, y: 0, width: 10, height: 10), layer: 0, onScreen: true, alpha: 1)])
+        _ = arranger.handle(.restore(try savedTwo(on: desk), homeFrames: [:], bootChanged: true), now: start)
+        let effects = arranger.handle(.inventory(inventory), now: start)
+        #expect(arranger.world[desk]?.tree.windows.contains(window.window) == true, "the launch took the match away")
+        let tile = try #require(setFrames(effects)[window.window])
+
+        _ = arranger.handle(.event(.windowChanged(window)), now: start)
+        #expect(arranger.world[desk]?.tree.windows.contains(window.window) == true, "floated before the write landed")
+
+        _ = arranger.handle(.event(.frameApplied(window.window, requested: tile, actual: window.frame)), now: start)
+        _ = arranger.handle(.event(.windowChanged(window)), now: start)
+        #expect(arranger.world[desk]?.tree.windows.contains(window.window) == false, "the app refused the move: it stays where it is")
+    }
+
+    /// CR-03: the fill path holds the window the same way.
+    @Test func aRelaunchedWindowOnAnotherDisplayFillsAndStays() async throws {
+        var (arranger, a, b, desk) = twoDisplays()
+        let start = ContinuousClock.now
+        let inventory = WindowInventory(
+            displays: [a, b], windows: [other(on: "A")], initialRefreshComplete: true,
+            liveWindows: [CGWindowEntry(windowID: 3, pid: 950, bounds: Rect(x: 0, y: 0, width: 10, height: 10), layer: 0, onScreen: true, alpha: 1)])
+        _ = arranger.handle(.restore(try savedTwo(on: desk), homeFrames: [:]), now: start)
+        _ = arranger.handle(.inventory(inventory), now: start)
+        let window = WindowInfo(window: ref(11, title: "Notes", pid: newPID), frame: Rect(x: 100, y: 100, width: 300, height: 200), state: .present, displayUUID: "A")
+        _ = arranger.handle(.event(.windowCreated(window)), now: start)
+        _ = arranger.handle(.event(.windowChanged(window)), now: start)
+        #expect(arranger.world[desk]?.tree.windows.contains(window.window) == true)
+    }
+
+    /// CR-03: a frame write lands on the Space a display shows, so a tile on another display's hidden Space can't be reached.
+    @Test func aWindowOnAnotherDisplayCannotReachAHiddenSpace() async throws {
+        var (arranger, a, b, desk) = twoDisplays(tileSpace: 2, bShows: 1)
+        let start = ContinuousClock.now
+        let window = WindowInfo(window: ref(11, title: "Notes", pid: newPID), frame: Rect(x: 100, y: 100, width: 300, height: 200), state: .present, displayUUID: "A")
+        let inventory = WindowInventory(
+            displays: [a, b], windows: [window, other(on: "A")], initialRefreshComplete: true,
+            liveWindows: [CGWindowEntry(windowID: 3, pid: 950, bounds: Rect(x: 0, y: 0, width: 10, height: 10), layer: 0, onScreen: true, alpha: 1)])
+        _ = arranger.handle(.restore(try savedTwo(on: desk), homeFrames: [:], bootChanged: true), now: start)
+        _ = arranger.handle(.inventory(inventory), now: start)
+        #expect(arranger.placeholderCount == 2)
+    }
+
     // MARK: Matching
 
     /// D-10: a tie fills nothing; the tile waits and the tied windows float, with one log line. (Equal creation orders: a

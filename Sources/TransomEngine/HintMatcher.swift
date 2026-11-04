@@ -30,10 +30,13 @@ public enum HintMatcher {
     public struct Saved: Equatable, Sendable {
         public var ref: WindowRef
         public var frame: Rect?
+        /// The desk holding it, which only a window that can be there may match (`canFill`); nil when unknown.
+        public var desk: DeskKey?
 
-        public init(ref: WindowRef, frame: Rect?) {
+        public init(ref: WindowRef, frame: Rect?, desk: DeskKey? = nil) {
             self.ref = ref
             self.frame = frame
+            self.desk = desk
         }
     }
 
@@ -41,10 +44,15 @@ public enum HintMatcher {
     public struct Candidate: Equatable, Sendable {
         public var ref: WindowRef
         public var frame: Rect
+        public var displayUUID: String?
+        /// As `WindowInfo.spaces`: nil unknown, empty for a hidden tab.
+        public var spaces: Set<UInt64>?
 
-        public init(ref: WindowRef, frame: Rect) {
+        public init(ref: WindowRef, frame: Rect, displayUUID: String? = nil, spaces: Set<UInt64>? = nil) {
             self.ref = ref
             self.frame = frame
+            self.displayUUID = displayUUID
+            self.spaces = spaces
         }
     }
 
@@ -71,6 +79,16 @@ public enum HintMatcher {
             self.saved = saved
             self.candidates = candidates
         }
+    }
+
+    /// Whether `candidate` can be in `saved`'s tile (CR-03). A frame write can't move a window to another Space of its own
+    /// display, so its known Spaces must hold the desk's, or `rehome` floats it and the tile is lost. On another display a
+    /// write lands on the Space that display shows, so the desk must be showing (`shown`).
+    static func canFill(_ saved: Saved, with candidate: Candidate, shown: Set<DeskKey>) -> Bool {
+        guard let desk = saved.desk else { return true }
+        if let display = candidate.displayUUID, display != desk.displayUUID { return shown.contains(desk) }
+        guard let space = desk.spaceID, let spaces = candidate.spaces, !spaces.isEmpty else { return true }
+        return spaces.contains(space)
     }
 
     public static func score(_ saved: Saved, _ candidate: Candidate, solePair sole: Bool, sameRank same: Bool) -> Int {
@@ -114,21 +132,23 @@ public enum HintMatcher {
         Dictionary(uniqueKeysWithValues: refs.map { ref in (ref.identity, refs.count { $0.creationOrder < ref.creationOrder }) })
     }
 
-    /// Per bundle: every pair at or above `threshold`, then repeatedly the best remaining pair, unless another remaining
-    /// pair with the same score shares its saved window or candidate; then all of those pairs' windows are a tie and
-    /// leave the pool. Deterministic for any input order: equal scores are taken in identity order.
-    public static func assign(saved: [Saved], candidates: [Candidate]) -> (matches: [Match], ties: [Tie]) {
+    /// Per bundle: every pair that `canFill` and is at or above `threshold`, then repeatedly the best remaining pair, unless
+    /// another remaining pair with the same score shares its saved window or candidate; then all of those pairs' windows are
+    /// a tie and leave the pool. Deterministic for any input order: equal scores are taken in identity order. `shown` are the
+    /// desks on screen.
+    public static func assign(saved: [Saved], candidates: [Candidate], shown: Set<DeskKey> = []) -> (matches: [Match], ties: [Tie]) {
         var matches: [Match] = []
         var ties: [Tie] = []
         let bundles = Set(saved.map(\.ref.bundleID)).intersection(candidates.map(\.ref.bundleID))
         for bundle in bundles.sorted() {
             let s = saved.filter { $0.ref.bundleID == bundle }.sorted { $0.ref.identity < $1.ref.identity }
             let c = candidates.filter { $0.ref.bundleID == bundle }.sorted { $0.ref.identity < $1.ref.identity }
-            let sole = s.count == 1 && c.count == 1
             let savedRanks = ranks(s.map(\.ref)), candidateRanks = ranks(c.map(\.ref))
             var pairs: [Match] = []
             for one in s {
-                for other in c {
+                let fitting = c.filter { canFill(one, with: $0, shown: shown) }
+                for other in fitting {
+                    let sole = fitting.count == 1 && s.count { canFill($0, with: other, shown: shown) } == 1
                     let points = score(one, other, solePair: sole, sameRank: savedRanks[one.ref.identity] == candidateRanks[other.ref.identity])
                     if points >= threshold { pairs.append(Match(saved: one.ref, window: other.ref, score: points)) }
                 }

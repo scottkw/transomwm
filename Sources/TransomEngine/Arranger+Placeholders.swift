@@ -45,6 +45,8 @@ public struct PlaceholderState: Sendable {
     var quitting: [Int32: (bundleID: String, at: ContinuousClock.Instant)] = [:]
     /// Windows that may fill a placeholder: created after the app's placeholders appeared and not touched by the user.
     var fresh: Set<WindowIdentity> = []
+    /// Windows matched into a tile on another display, until their first write lands: `rehome` would float them (CR-03).
+    var arriving: Set<WindowIdentity> = []
     /// The tiles last sent per display, so only a change is sent again.
     var shown: [String: [PlaceholderTile]] = [:]
 
@@ -86,9 +88,12 @@ extension Arranger {
         placeholders.table.values.count { isPlaceholder($0.ref) }
     }
 
+    /// The desks on screen.
+    var shownDesks: Set<DeskKey> { Set(displays.map(Self.key)) }
+
     /// Whether a display shows the desk holding `window`.
     private func isOnShownDesk(_ window: WindowRef) -> Bool {
-        deskKey(of: window).map { key in displays.contains { Self.key($0) == key } } ?? true
+        deskKey(of: window).map(shownDesks.contains) ?? true
     }
 
     /// The next placeholder due. One on a desk not showing is not, so its past deadline can't spin the wake clock.
@@ -229,13 +234,16 @@ extension Arranger {
         guard !waiting.isEmpty, !candidates.isEmpty else { return [] }
         let frames = savedFrames(world)
         let assigned = HintMatcher.assign(
-            saved: waiting.map { HintMatcher.Saved(ref: $0.ref, frame: frames[$0.ref.identity]) },
-            candidates: candidates.map { HintMatcher.Candidate(ref: $0.window, frame: $0.frame) })
+            saved: waiting.map { HintMatcher.Saved(ref: $0.ref, frame: frames[$0.ref.identity], desk: deskKey(of: $0.ref)) },
+            candidates: candidates.map { HintMatcher.Candidate(ref: $0.window, frame: $0.frame, displayUUID: $0.displayUUID, spaces: $0.spaces) },
+            shown: shownDesks)
         var effects: [ArrangerEffect] = []
         for match in assigned.matches {
             let tile = tileName(of: match.saved)
+            let desk = deskKey(of: match.saved)
             do throws(LayoutError) {
                 try world.adopt(match.saved, by: match.window, history: &history)
+                if let desk, windows[match.window.identity]?.displayUUID != desk.displayUUID { placeholders.arriving.insert(match.window.identity) }
                 placeholders.table[match.saved.identity] = nil
                 placeholders.fresh.remove(match.window.identity)
                 if camera.collapsible.contains(match.saved.identity) { camera.collapsible.insert(match.window.identity) }

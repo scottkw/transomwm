@@ -690,8 +690,14 @@ public struct Arranger: Sendable {
         }
         history = UndoHistory()
         let reattached = try LayoutRestore.reattach(
-            restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world), skipIdentity: skipIdentity)
+            restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world), skipIdentity: skipIdentity, shownDesks: shownDesks)
         var candidate = reattached.world
+        for match in reattached.matches {
+            let display = tracked.first { $0.window == match.window }?.displayUUID
+            if let desk = candidate.desks.first(where: { $0.value.contains(match.window) })?.key, display != desk.displayUUID {
+                placeholders.arriving.insert(match.window.identity)
+            }
+        }
         if now == nil {
             for window in reattached.waiting where placeholders.table[window.identity] == nil {
                 try candidate.apply(.closed, for: window, on: DeskKey(displayUUID: "", spaceID: nil), history: &history)
@@ -929,12 +935,14 @@ public struct Arranger: Sendable {
                 if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 remapViews(from: from.identity, to: to.window.identity)
+                if placeholders.arriving.remove(from.identity) != nil { placeholders.arriving.insert(to.window.identity) }
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
                 windows[window.identity]?.frame = frame
                 return try moved(window, to: frame, now: now)
             case .frameApplied(let window, let requested, let actual):
                 lastApplied[window.identity] = actual
+                placeholders.arriving.remove(window.identity)
                 if let shown = revealed(window, actual: actual, now: now) { return shown }
                 if isFloating(window) {
                     let t = MinimumSizeLearner.tolerance, old = floaterFloors[window.identity] ?? Size(width: 0, height: 0)
@@ -1082,6 +1090,7 @@ public struct Arranger: Sendable {
         floaterFloors[window.identity] = nil
         camera.collapsible.remove(window.identity)
         camera.unparkedNew.remove(window.identity)
+        placeholders.arriving.remove(window.identity)
         focusOrder.removeAll { $0 == window.identity }
         tabs.minimizing.remove(window.identity)
         // The model picks the group's selection when a member goes; nothing is left to wait for.
@@ -1250,6 +1259,7 @@ public struct Arranger: Sendable {
             !(desk.tree.isDesktopHidden == true && desk.desktop.contains(info.window)),  // parked: off its display on purpose
             !parkRequested.contains(info.window.identity),  // camera-parked too (RESEARCH Pitfall 1)
             !isHiddenTab(info.window),  // a hidden member never moves on its own; its group follows the selected one
+            !placeholders.arriving.contains(info.window.identity),  // on its way to its tile (CR-03)
             let to = home(of: info), to != from
         else { return }
         let spaces = info.spaces ?? []
