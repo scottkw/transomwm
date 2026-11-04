@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 8
 current_phase_name: Saved Views, URLs & Persistence
 current_plan: 7
-status: executing
-stopped_at: Completed 08-06-PLAN.md
-last_updated: "2026-11-04T01:36:20.255Z"
+status: verifying
+stopped_at: Completed 08-07-PLAN.md
+last_updated: "2026-11-04T01:49:00.766Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: 38b3c8cd67379e8fa0a21b00372c4aed939aef5e
+state_head: 610d7188348c0fc5b4c336cd06a3c41793cec045
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 98
-  completed_plans: 97
+  completed_plans: 98
   percent: 78
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 Phase: 8 (Saved Views, URLs & Persistence) — EXECUTING
 Current Plan: 7
 Total Plans in Phase: 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-03 — Completed 08-01 (saved views tracer)
 
 Progress: [████████░░] 78%
@@ -154,6 +154,7 @@ Progress: [████████░░] 78%
 | Phase 8 P04 | 22min | 2 tasks | 13 files |
 | Phase 08 P05 | 22 min | 3 tasks | 22 files |
 | Phase 08 P06 | 23 min | 2 tasks | 19 files |
+| Phase 08 P07 | 7 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -437,6 +438,8 @@ Recent decisions affecting current work:
 - [Phase 8]: The placeholder panel view hosts a TileLayer, so panel, stage and overview share one recipe
 - [Phase 8]: A collapsed placeholder is a placeholder tile at its block rect; a group that all waits has one tile and no strip
 - [Phase 8]: An expired tile leaves at once during a pause; a filled one stays until Resume
+- [Phase 8]: 08-07: A2 measured on guest macOS 15.7.7: plain SSH reaches the app (exit 0), so the README has no SSH note
+- [Phase 8]: 08-07: VM checks run the tool with sudo launchctl asuser; as a normal user asuser fails with 'Could not switch to audit session'
 
 ### Quick Tasks Completed
 
@@ -477,8 +480,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T01:36:19.081Z
-Stopped at: Completed 08-06-PLAN.md
+Last session: 2026-11-04T01:48:59.593Z
+Stopped at: Completed 08-07-PLAN.md
 Resume file: None
 
 ## Deferred Verification
