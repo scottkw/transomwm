@@ -23,6 +23,7 @@ import TransomModel
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
     let splitMenu = NSMenuItem(title: "Split", action: nil, keyEquivalent: "")
     let moveMenu = NSMenuItem(title: MenuCopy.moveMenu, action: nil, keyEquivalent: "")
+    let fourthMenu = NSMenuItem(title: MenuCopy.fourthMenu, action: nil, keyEquivalent: "")
     let snapMenu = NSMenuItem(title: MenuCopy.snapMenu, action: nil, keyEquivalent: "")
     let moveViewMenu = NSMenuItem(title: ZoomCopy.moveViewMenu, action: nil, keyEquivalent: "")
     let tabsMenu = NSMenuItem(title: TabCopy.tabsMenu, action: nil, keyEquivalent: "")
