@@ -18,6 +18,8 @@ public enum Command: Hashable, Sendable {
     /// Move a docked window into the tile across that edge, or snap a floating one to that half of the Desktop tile
     /// (D-09, D-11, TILE-13, TILE-14).
     case moveOrSnap(Edge)
+    /// Dock the focused window, or move it if docked, to a share of the whole desk (TILE-23, D-14, D-15).
+    case dockFourth(FourthSlot, Axis)
     /// Swap the focused docked window with the docked window focused before it on the same desk (TILE-11).
     case swapPrevious
     /// Grow or shrink the focused tile by a tenth of its split's length (TILE-13).

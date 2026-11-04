@@ -24,6 +24,7 @@ nonisolated public enum MenuCopy {
     public static let arrangeSection = "Arrange"
     public static let safetySection = "Safety"
     public static let exclusionsSection = "Exclusions"
+    public static let fourthMenu = "Dock to Fourth"
 
     /// A command item's title. Toggles have their own functions (`desktopToggle`).
     public static func commandTitle(_ command: Command) -> String {
@@ -33,6 +34,7 @@ nonisolated public enum MenuCopy {
         case .undo: "Undo Layout Change"
         case .toggleDesktop: desktopToggle(hidden: false)
         case .focus(let edge), .moveOrSnap(let edge): direction(edge)
+        case .dockFourth(let slot, let axis): fourthTitle(slot, axis)
         case .swapPrevious: "Swap with Previous Window"
         case .growTile: "Grow Tile"
         case .shrinkTile: "Shrink Tile"
@@ -50,6 +52,18 @@ nonisolated public enum MenuCopy {
         case .tabs(.next): TabCopy.nextTab
         case .tabs(.previous): TabCopy.previousTab
         case .tabs(.moveOut): TabCopy.moveOut
+        }
+    }
+
+    /// A Dock to Fourth item (UI-SPEC Surface 4).
+    public static func fourthTitle(_ slot: FourthSlot, _ axis: Axis) -> String {
+        let line = axis == .horizontal ? "Column" : "Row"
+        return switch slot {
+        case .first: "1st \(line)"
+        case .second: "2nd \(line)"
+        case .third: "3rd \(line)"
+        case .fourth: "4th \(line)"
+        case .middle: "Middle Half \(line)"
         }
     }
 

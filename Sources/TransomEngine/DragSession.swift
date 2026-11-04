@@ -90,6 +90,24 @@ public enum CollapseCopy {
 /// UI-SPEC Surface 2: the announcement of a pulled-out window in Hold ⌥ mode.
 public enum FourthCopy {
     public static let floating = "Floating"
+
+    /// A fourth's name, in sentence case: "1st column", "Middle half row" (UI-SPEC Surface 3).
+    public static func label(_ slot: FourthSlot, _ axis: Axis) -> String {
+        let line = axis == .horizontal ? "column" : "row"
+        return switch slot {
+        case .first: "1st \(line)"
+        case .second: "2nd \(line)"
+        case .third: "3rd \(line)"
+        case .fourth: "4th \(line)"
+        case .middle: "Middle half \(line)"
+        }
+    }
+
+    /// The announcement of a docked fourth: "Docked to 1st column", "Docked to middle half row" (UI-SPEC Surface 3).
+    public static func docked(_ slot: FourthSlot, _ axis: Axis) -> String {
+        let label = label(slot, axis)
+        return "Docked to \(slot == .middle ? label.lowercased() : label)"
+    }
 }
 
 /// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain

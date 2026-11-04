@@ -25,6 +25,21 @@ extension Arranger {
         }
     }
 
+    /// Docks `window`, or moves it if docked, to a share of the whole desk (D-14, D-15): one undo step. A group member
+    /// moves its whole group.
+    mutating func dockFourth(_ window: WindowRef, slot: FourthSlot, axis: Axis) throws(LayoutError) -> [ArrangerEffect] {
+        guard let key = deskKey(of: window), let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let candidate = try dropping(window, on: key, at: .fourth(slot, axis), moving: tabGroup(holding: window))
+        guard let edited = candidate.world[key] else { return [.beep] }
+        guard try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums).unfit.isEmpty else {
+            return [.beep, .announce(Self.noRoom)]
+        }
+        world = candidate.world
+        history = candidate.history
+        lastRequested[window.identity] = nil  // settles exactly into the new tile
+        return replan() + [.announce(FourthCopy.docked(slot, axis))]
+    }
+
     /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every
     /// hidden Desktop tile holding windows shown, one undo step per desk shown. Runs while paused; N6 counts the windows
     /// moved, camera-parked ones included. Collapsed windows come back too and float with N1, as with zoom off (CR-01).

@@ -368,6 +368,7 @@ public struct Arranger: Sendable {
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
                 case (.finderSplit, _): return try finderSplit(focused, now: now)
                 case (.moveOrSnap(let edge), let window?): return try moveOrSnap(window, toward: edge)
+                case (.dockFourth(let slot, let axis), let window?): return try dockFourth(window, slot: slot, axis: axis)
                 case (.swapPrevious, let window?): return try swapPrevious(window)
                 case (.growTile, let window?): return try resize(window, by: Self.resizeStep)
                 case (.shrinkTile, let window?): return try resize(window, by: -Self.resizeStep)
@@ -382,7 +383,7 @@ public struct Arranger: Sendable {
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
                 case (.camera, _): return [.fault("camera command without a display")]  // answered above
                 case (.tabs, _): return [.fault("tab command reached the command switch")]  // answered above
-                case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.swapPrevious, nil), (.growTile, nil),
+                case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.dockFourth, nil), (.swapPrevious, nil), (.growTile, nil),
                     (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
                     return [.beep]
                 }
@@ -882,7 +883,7 @@ public struct Arranger: Sendable {
             return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
         case .focus:
             return trackable && focused.flatMap(deskKey(of:)) != nil
-        case .moveOrSnap:
+        case .moveOrSnap, .dockFourth:
             // Docked or floating alike; the menu shows the pair's matching item (`isFloating`).
             guard trackable, let focused, let key = deskKey(of: focused) else { return false }
             return world[key]?.state(of: focused) == .present
@@ -1823,9 +1824,12 @@ public struct Arranger: Sendable {
 
     /// The World and history with `window` taken off its desk and dropped on `key`'s at `target`: one undo step there.
     /// The selected member of a group takes its whole group, as one leaf (Surface 5).
-    func dropping(_ window: WindowRef, on key: DeskKey, at target: DropTarget) throws(LayoutError) -> (world: World, history: UndoHistory) {
+    /// `group` is the keyboard's whole group, for any focused member; a drag leaves it nil and uses `movingGroup`.
+    func dropping(
+        _ window: WindowRef, on key: DeskKey, at target: DropTarget, moving group: TabGroupRef? = nil
+    ) throws(LayoutError) -> (world: World, history: UndoHistory) {
         var candidate = world, candidateHistory = history
-        let group = movingGroup(window)
+        let group = group ?? movingGroup(window)
         var taken: (node: Node, states: [WindowIdentity: WindowState])?
         if let from = deskKey(of: window), from != key {
             // Leaving another display's desk is a fact of where it was dropped, not a second undo step.
