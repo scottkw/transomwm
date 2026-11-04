@@ -261,10 +261,13 @@ extension Arranger {
                 placeholders.table[match.saved.identity] = nil
                 placeholders.fresh.remove(match.window.identity)
                 if camera.collapsible.contains(match.saved.identity) { camera.collapsible.insert(match.window.identity) }
+                let wanted = wantedFrames[match.saved.identity], home = homeFrames[match.saved.identity]
                 forget(match.saved)
                 remapViews(from: match.saved.identity, to: match.window.identity)
                 lastRequested[match.window.identity] = nil
-                if wantedFrames[match.window.identity] == nil { wantedFrames[match.window.identity] = windows[match.window.identity]?.frame }
+                // What the saved window wanted before it docked, as a rekey keeps it (WR-10).
+                wantedFrames[match.window.identity] = wanted ?? wantedFrames[match.window.identity] ?? windows[match.window.identity]?.frame
+                if let home { homeFrames[match.window.identity] = home }
                 try showLiveMember(of: match.window)
                 effects.append(.info("placeholder \(tile) filled by window \(match.window.windowID)"))
             } catch {

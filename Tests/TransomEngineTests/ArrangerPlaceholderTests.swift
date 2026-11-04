@@ -233,6 +233,38 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(!same.contains(.save(.debounced)))
     }
 
+    /// WR-10: the frame a window wanted before it docked, and its home frame, follow the window that fills its tile.
+    @Test func aFilledTileKeepsItsSavedFrames() async throws {
+        var harness = await threeDocked()
+        let wanted = try #require(harness.arranger.snapshot.wantedFrames[ref(1).identity])
+        _ = await quit(&harness)
+        #expect(harness.arranger.snapshot.wantedFrames[ref(1).identity] == wanted, "a tile that waits keeps it")
+        await harness.send(.event(.windowCreated(returning(11, title: "Notes"))))
+        let frames = harness.arranger.snapshot.wantedFrames
+        #expect(frames[ref(11, pid: newPID).identity] == wanted)
+        #expect(frames[ref(1).identity] == nil)
+    }
+
+    /// WR-10: at a launch too.
+    @Test func aWindowMatchedAtLaunchKeepsItsSavedFrames() async throws {
+        let wanted = Rect(x: 10, y: 40, width: 300, height: 200), home = Rect(x: 20, y: 50, width: 300, height: 200)
+        var harness = Harness()
+        await harness.fake.setDisplays([DisplayInfo(
+            uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: nil)])
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        await harness.fake.open(.standard(id: 11, pid: newPID, frame: openFrame, title: "Notes"))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(try savedTwo(), homeFrames: [ref(1).identity: home], wantedFrames: [ref(1).identity: wanted, ref(2).identity: wanted]))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        let saved = harness.arranger.snapshot
+        #expect(harness.arranger.world[key]?.tree.windows.first == ref(11, pid: newPID))
+        #expect(saved.wantedFrames[ref(11, pid: newPID).identity] == wanted)
+        #expect(saved.homeFrames[ref(11, pid: newPID).identity] == home)
+        #expect(saved.wantedFrames[ref(1).identity] == nil && saved.homeFrames[ref(1).identity] == nil)
+        #expect(saved.wantedFrames[ref(2).identity] == wanted, "the window still waiting keeps its own")
+    }
+
     /// D-02, RESEARCH Pitfall 3: a saved view follows the window that fills the placeholder.
     @Test func aSavedViewFollowsTheFilledPlaceholder() async throws {
         var harness = await threeDocked()

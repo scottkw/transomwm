@@ -146,7 +146,7 @@ public struct Arranger: Sendable {
     public private(set) var windows: [WindowIdentity: WindowInfo] = [:]
     public private(set) var displays: [DisplayInfo] = []
     /// Where each parked window goes back to (plan 08); restored from layout.json.
-    public private(set) var homeFrames: [WindowIdentity: Rect] = [:]
+    public internal(set) var homeFrames: [WindowIdentity: Rect] = [:]
     /// The frame each window goes back to when it floats (G-03-11). Only user actions and the frames a window takes
     /// on its own write it; it is kept while the window is docked, so it is the pre-dock frame (G-03-4). Undo (except
     /// to give back `undockedWanted`), echoes of Transom's own writes, parks and rescues leave it alone. Dock's centre and
@@ -716,9 +716,17 @@ public struct Arranger: Sendable {
         let parked = reattached.matches.indices.map { WindowIdentity(windowID: UInt32($0), pid: -1, bundleID: "") }
         for (match, temp) in zip(reattached.matches, parked) { remapViews(from: match.saved.identity, to: temp) }
         for (match, temp) in zip(reattached.matches, parked) { remapViews(from: temp, to: match.window.identity) }
-        // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
+        // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74). A
+        // match's follow it, as a rekey's do (WR-10). All in one pass, as a returning window can carry another saved one's ID.
+        let matchedSaved = Set(reattached.matches.map(\.saved.identity))
         var wanted = restore.wantedFrames.filter { id, frame in
-            candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
+            !matchedSaved.contains(id) && candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
+        }
+        homeFrames = homeFrames.filter { !matchedSaved.contains($0.key) }
+        for id in matchedSaved { wantedFrames[id] = nil }
+        for match in reattached.matches {
+            if let frame = restore.wantedFrames[match.saved.identity], !Recovery.isStranded(frame, displays: displays) { wanted[match.window.identity] = frame }
+            if let frame = restore.homeFrames[match.saved.identity] { homeFrames[match.window.identity] = frame }
         }
         for info in tracked where info.state != .closed {
             guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
@@ -977,8 +985,12 @@ public struct Arranger: Sendable {
                 suppressFocus(ofGroupHolding: window, now: now)
                 if let held = try holdForQuit(window) {
                     let collapsible = camera.collapsible.contains(window.identity)
+                    let wanted = wantedFrames[window.identity], home = homeFrames[window.identity]
                     forget(window)
                     if collapsible { camera.collapsible.insert(window.identity) }  // its block keeps its share, as its minimum does
+                    // For the window that fills its tile (WR-10).
+                    wantedFrames[window.identity] = wanted
+                    homeFrames[window.identity] = home
                     return faults + held + replan()
                 }
                 forget(window)
