@@ -26,18 +26,31 @@ extension Arranger {
     }
 
     /// Docks `window`, or moves it if docked, to a share of the whole desk (D-14, D-15): one undo step. A group member
-    /// moves its whole group.
+    /// moves its whole group. Without room it collapses with zoom on, and with zoom off it is refused and changes
+    /// nothing (D-16). A docked window already there only beeps; `commit` can't tell, because it compares rects by node
+    /// and the new leaf has a new ID.
     mutating func dockFourth(_ window: WindowRef, slot: FourthSlot, axis: Axis) throws(LayoutError) -> [ArrangerEffect] {
-        guard let key = deskKey(of: window), let area = display(for: key)?.visibleFrame else { return [.beep] }
-        let candidate = try dropping(window, on: key, at: .fourth(slot, axis), moving: tabGroup(holding: window))
+        guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
+        let group = tabGroup(holding: window)
+        let shown = group.map { $0.members[$0.selected] } ?? window
+        let candidate = try dropping(window, on: key, at: .fourth(slot, axis), moving: group)
         guard let edited = candidate.world[key] else { return [.beep] }
-        guard try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums).unfit.isEmpty else {
-            return [.beep, .announce(Self.noRoom)]
+        let plan = try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums)
+        let collapsed = plan.unfit.isEmpty ? nil : try collapse(edited, area: area)
+        guard plan.unfit.isEmpty || collapsed != nil else {
+            let loose = try Planner.plan(desk: edited, area: area, gap: gap, mins: [:])
+            let frame = group == nil ? loose.frames[window] : edited.tree.leaf(containing: shown).flatMap { loose.resolution.nodeRects[$0] }
+            return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
+        }
+        // A floating window docking is a change even if no frame moves.
+        if collapsed == nil, desk.tree.state(of: shown) != nil, try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames == plan.frames {
+            return [.beep]
         }
         world = candidate.world
         history = candidate.history
         lastRequested[window.identity] = nil  // settles exactly into the new tile
-        return replan() + [.announce(FourthCopy.docked(slot, axis))]
+        let note = accept(collapsed, moving: shown)
+        return widen(toShow: window, new: false) + replan() + (note.isEmpty ? [.announce(FourthCopy.docked(slot, axis))] : note)
     }
 
     /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every

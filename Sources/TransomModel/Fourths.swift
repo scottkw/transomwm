@@ -16,9 +16,28 @@ public enum FourthSlot: String, CaseIterable, Hashable, Sendable {
     }
 }
 
+/// The drag's five bands across a display's visible frame (UI-SPEC Surface 3), the middle one being the central quarter.
 public enum FourthZones {
-    public static func slot(at point: Point, in visible: Rect, axis: Axis) -> FourthSlot { .first }
-    public static func bands(in visible: Rect, axis: Axis) -> [Rect] { [] }
+    private static let bands: [(end: Double, slot: FourthSlot)] = [
+        (0.25, .first), (0.375, .second), (0.625, .middle), (0.75, .third), (1, .fourth),
+    ]
+
+    /// The band under `point`, clamped into `visible`.
+    public static func slot(at point: Point, in visible: Rect, axis: Axis) -> FourthSlot {
+        let raw = axis == .horizontal ? (point.x - visible.minX) / visible.width : (point.y - visible.minY) / visible.height
+        return bands.first { raw < $0.end }?.slot ?? .fourth
+    }
+
+    /// The five bands in hit order along `axis`, each the whole cross-axis length.
+    public static func bands(in visible: Rect, axis: Axis) -> [Rect] {
+        var start = 0.0
+        return bands.map { band in
+            defer { start = band.end }
+            return axis == .horizontal
+                ? Rect(x: visible.minX + start * visible.width, y: visible.y, width: (band.end - start) * visible.width, height: visible.height)
+                : Rect(x: visible.x, y: visible.minY + start * visible.height, width: visible.width, height: (band.end - start) * visible.height)
+        }
+    }
 }
 
 extension LayoutTree {
