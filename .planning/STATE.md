@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 8
 current_phase_name: Saved Views, URLs & Persistence
-current_plan: 4
+current_plan: 5
 status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-11-03T21:36:28.244Z"
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-11-04T00:36:43.321Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: 9ef02f0f646adc2ad3c7a532b73009ab146b825e
+state_head: 1d03e3a5221e8624dd5b9a5a5b5e016725bac213
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 98
-  completed_plans: 94
+  completed_plans: 95
   percent: 78
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 8 (Saved Views, URLs & Persistence) — EXECUTING
-Current Plan: 4
+Current Plan: 5
 Total Plans in Phase: 7
 Status: Ready to execute
 Last activity: 2026-11-03 — Completed 08-01 (saved views tracer)
@@ -151,6 +151,7 @@ Progress: [████████░░] 78%
 | Phase 08 P01 | 11min | 3 tasks | 21 files |
 | Phase 8 P02 | 14min | 3 tasks | 14 files |
 | Phase 8 P03 | 23min | 3 tasks | 16 files |
+| Phase 8 P04 | 22min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -425,6 +426,8 @@ Recent decisions affecting current work:
 - [Phase 8]: 08-03: pruning keeps identities held by any desk of the World or a layout set, so a view keeps windows stored under another display arrangement
 - [Phase 8]: 08-03: relaunch matches remap views through throwaway identities, so reused IDs after a reboot never merge two windows
 - [Phase 8]: 08-03: N18 covers any destination on a disconnected display; a view whose desk is still not shown beeps and logs
+- [Phase 8]: 08-04: the Pitfall 1 rollback was not added; fixture quits reach the Arranger as appTerminated first (real-app quit left to 08-07 UAT)
+- [Phase 8]: 08-04: a stored display arrangement still closes windows that did not come back; only a launch or an app quit makes placeholders
 
 ### Quick Tasks Completed
 
@@ -465,8 +468,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-03T21:36:27.580Z
-Stopped at: Completed 08-03-PLAN.md
+Last session: 2026-11-04T00:36:42.167Z
+Stopped at: Completed 08-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification
