@@ -266,6 +266,31 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(logged(due, "expired (10 s after launch)"))
     }
 
+    /// WR-04: an app opening a window every 8 s can't keep an empty tile for ever: the slide stops 60 s after its first.
+    @Test func newWindowsSlideTheTenSecondsForAtMostAMinute() async throws {
+        var harness = await threeDocked()
+        let start = harness.now
+        _ = await quit(&harness)
+        var id: UInt32 = 20
+        var elapsed = 0
+        while elapsed < 56 {
+            elapsed += 8
+            harness.now = start + .seconds(elapsed)
+            id += 1
+            await harness.send(.event(.windowCreated(returning(id, title: "Other \(id)"))))
+            _ = await ticked(&harness, at: harness.now)
+            #expect(harness.arranger.placeholderCount == 2, "gone after \(elapsed) s")
+        }
+        // The first new window came at 8 s, so the limit is 68 s, before this window's own 10 s would end.
+        harness.now = start + .seconds(64)
+        await harness.send(.event(.windowCreated(returning(id + 1, title: "Last"))))
+        _ = await ticked(&harness, at: start + .milliseconds(67_900))
+        #expect(harness.arranger.placeholderCount == 2)
+        let due = await ticked(&harness, at: start + .seconds(68))
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(logged(due, "expired (10 s after launch)"))
+    }
+
     /// The last session's app is not running: 5 min, then the sliding 10 s once it launches.
     @Test func aSavedWindowWhoseAppNeverOpensWaitsFiveMinutes() async throws {
         var harness = await launched(try savedTwo())

@@ -18,6 +18,8 @@ public struct Placeholder: Equatable, Sendable {
     public var origin: Origin
     public var wait: Wait
     public var deadline: ContinuousClock.Instant
+    /// When the app's launch or new windows first moved `deadline`, for `launchWaitLimit`.
+    public var slideStart: ContinuousClock.Instant? = nil
     /// The size the window refused to go below, so its tile, and with it the neighbours, stay as they were.
     public var minimum: Size? = nil
 
@@ -52,10 +54,13 @@ public struct PlaceholderState: Sendable {
 
     func waits(for bundleID: String) -> Bool { table.values.contains { $0.bundleID == bundleID } }
 
-    /// The app launched or opened another window: its placeholders wait `launchWait` from now (D-12).
+    /// The app launched or opened another window: its placeholders wait `launchWait` from now (D-12), up to
+    /// `launchWaitLimit` after the first of these, so an app that keeps opening windows can't hold a tile for ever.
     mutating func restartLaunchWait(of bundleID: String, now: ContinuousClock.Instant) {
         for (id, placeholder) in table where placeholder.bundleID == bundleID {
-            table[id]?.deadline = now + Arranger.launchWait
+            let start = placeholder.slideStart ?? now
+            table[id]?.slideStart = start
+            table[id]?.deadline = min(now + Arranger.launchWait, start + Arranger.launchWaitLimit)
             table[id]?.wait = .afterLaunch
         }
     }
@@ -75,6 +80,8 @@ extension Arranger {
     public static let quitWait: Duration = .seconds(30)
     /// How long placeholders wait after their app launched or opened its latest window (D-12).
     public static let launchWait: Duration = .seconds(10)
+    /// The most new windows can keep sliding `launchWait` (WR-04).
+    public static let launchWaitLimit: Duration = .seconds(60)
     /// How long placeholders wait after Transom's launch for an app that never opens (D-12).
     public static let neverOpenedWait: Duration = .seconds(300)
 
@@ -105,8 +112,10 @@ extension Arranger {
     /// (CR-02). The deadlines of D-12 and D-12a only ever move later here.
     mutating func extendPlaceholdersShown(since previous: [DisplayInfo], now: ContinuousClock.Instant) {
         let before = Set(previous.map(Self.key))
-        for (id, placeholder) in placeholders.table where placeholder.deadline < now + Self.launchWait {
+        for (id, placeholder) in placeholders.table {
             guard let key = deskKey(of: placeholder.ref), !before.contains(key), isOnShownDesk(placeholder.ref) else { continue }
+            placeholders.table[id]?.slideStart = nil  // what its app did while it was hidden doesn't count against it
+            guard placeholder.deadline < now + Self.launchWait else { continue }
             placeholders.table[id]?.deadline = now + Self.launchWait
             placeholders.table[id]?.wait = .afterLaunch
         }
