@@ -84,6 +84,22 @@ private func sampleFile() throws -> LayoutFile {
         }
     }
 
+    /// WR-09: `load` rejects a file over the cap whole, so `save` never writes one: the last good file stays.
+    @Test func aSaveOverTheSizeCapKeepsTheLastGoodFile() throws {
+        let dir = Directory()
+        let store = LayoutStore(directory: dir.url, saveLimit: 8192)
+        try store.save(try sampleFile())
+        let good = try dir.text()
+        var world = World()
+        try world.addDesk(key)
+        try world.reflow(key) { desk, ids throws(LayoutError) in
+            try desk.tree.insert(ref(1, title: String(repeating: "x", count: 8192)), at: .left, of: .desktop, ids: &ids)
+        }
+        let huge = LayoutFile(world: world, homeFrames: [:], session: SessionRecord(cleanExit: false, launchedAt: .now))
+        #expect(throws: LayoutStoreError.self) { try store.save(huge) }
+        #expect(try dir.text() == good)
+    }
+
     /// D-10 (supersedes T-03-17): titles are written, so windows can be re-matched after a relaunch, and the file
     /// stays owner-only.
     @Test func titlesAreWrittenAndTheFileIsOwnerOnly() throws {

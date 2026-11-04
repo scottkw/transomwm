@@ -25,10 +25,13 @@ public enum LayoutStoreError: Error, Equatable {
     /// Set by a newer-schema file, or a rejected one that could not be moved aside: every `save` this session is a no-op.
     public private(set) var savingDisabled = false
     private let directory: URL
+    /// `World.maxEncodedBytes`; a test lowers it, as encoding that much would hold the main actor for seconds.
+    private let saveLimit: Int
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "persist")
 
-    public init(directory: URL) {
+    public init(directory: URL, saveLimit: Int = World.maxEncodedBytes) {
         self.directory = directory
+        self.saveLimit = saveLimit
     }
 
     private var file: URL { directory.appending(path: Self.fileName) }
@@ -53,15 +56,23 @@ public enum LayoutStoreError: Error, Equatable {
     }
 
     /// Writes `contents`, window titles included, atomically and owner-only (0600); creates the directory if needed.
-    /// Returns false, writing nothing, when saving is disabled.
+    /// Returns false, writing nothing, when saving is disabled. Over `World.maxEncodedBytes` it throws and keeps the last
+    /// good file, since `load` would reject this one whole.
     @discardableResult
     public func save(_ contents: LayoutFile) throws(LayoutStoreError) -> Bool {
         guard !savingDisabled else { return false }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        let data: Data
+        do {
+            data = try encoder.encode(contents)
+        } catch {
+            throw .writeFailed(String(describing: error))
+        }
+        guard data.count <= saveLimit else { throw .tooLarge(data.count) }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try encoder.encode(contents).write(to: file, options: .atomic)
+            try data.write(to: file, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         } catch {
             throw .writeFailed(String(describing: error))
