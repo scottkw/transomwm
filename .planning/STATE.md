@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 8
-current_phase_name: Saved Views, URLs & Persistence
-current_plan: 7
-status: verifying
-stopped_at: Completed 08-07-PLAN.md
-last_updated: "2026-11-04T01:49:00.766Z"
-last_activity: 2026-11-03
-last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: 610d7188348c0fc5b4c336cd06a3c41793cec045
+current_phase: "08.1"
+current_phase_name: Window Behaviour Options
+current_plan: Not started
+status: planning
+stopped_at: Phase 8 complete, ready to plan Phase 08.1
+last_updated: "2026-11-04T17:19:29.089Z"
+last_activity: 2026-11-04
+last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
+state_head: c9b27e8fabf0b8fdc2e62f5d732ae712c5c20679
 progress:
-  total_phases: 9
-  completed_phases: 7
+  total_phases: 10
+  completed_phases: 8
   total_plans: 98
   completed_plans: 98
-  percent: 78
+  percent: 80
 ---
 
 # Project State
@@ -28,18 +28,18 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 ## Current Position
 
-Phase: 8 (Saved Views, URLs & Persistence) — EXECUTING
-Current Plan: 7
+Phase: 08.1 — Window Behaviour Options
+Current Plan: Not started
 Total Plans in Phase: 7
-Status: Phase complete — ready for verification
-Last activity: 2026-11-03 — Completed 08-01 (saved views tracer)
+Status: Ready to plan
+Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 91
+- Total plans completed: 98
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -54,6 +54,7 @@ Progress: [████████░░] 78%
 | 5 | 8 | - | - |
 | 6 | 12 | - | - |
 | 7 | 12 | - | - |
+| 8 | 7 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -470,6 +471,10 @@ Recent decisions affecting current work:
 - Phase 2 obligation: OS lifecycle events (open/close/minimise/fullscreen) go through `World.apply`, never `World.edit`, so they stay off the undo stack; `.closed` needs no valid desk key — MET by 02-04 (`LifecycleSync.handle`)
 - Phase 1 work is on branch `gsd/phase-01-layout-model` (main is protected); merging to main is the developer's call
 
+### Roadmap Evolution
+
+- Phase 8.1 inserted after Phase 8: Window Behaviour Options: choose auto-tile or float for new windows, and automatic or key-held docking regions while dragging (URGENT)
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -481,7 +486,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-04T01:48:59.593Z
-Stopped at: Completed 08-07-PLAN.md
+Stopped at: Phase 8 complete, ready to plan Phase 08.1
 Resume file: None
 
 ## Deferred Verification

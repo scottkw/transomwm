@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 08-saved-views-urls-persistence
 source: [08-VERIFICATION.md, 08-UI-SPEC.md host checklist, 08-REVIEW-FIX.md human-verification items]
 started: 2026-11-03
@@ -7,7 +7,7 @@ updated: 2026-11-04
 ---
 
 ## Current Test
-Item 7 on the user's Mac (macOS 27.2): a real reboot. The macOS 27 VM cannot test a reboot.
+None. All 7 items passed; a reboot on the user's own Mac was not required.
 
 ## Build under test
 - Code: `1466f8b` and later docs commits.
@@ -45,6 +45,11 @@ Same method as above, with a fresh guest. The app under test is the same Debug b
 - Item 3: pass. ⌥5 switched from Space 1 to Space 16, and Dictionary stayed framed at +4 s and +8 s.
 - Item 4: pass, run three times. Waiting tiles after ⌘Q, each window back in its own tile on reopening, tiles kept for 40 s on a hidden Desktop, gone within 36 s of returning.
 - Item 5: pass. Exit codes 0, 64, 1, 2, and URLs through LaunchServices. Plain SSH with no `launchctl asuser` also works on 27 (exit 2 with the app stopped, 0 with it running), which extends A2 to 27.
-- Item 7: not testable here. The guest's display UUID changed on each of two reboots (8264526F, then 5E48442F, then F42A9510), so Transom saw a new display each time, quarantined the Desktop 1 desk and refused view 5 ("display not connected"). Whether a real display can do this was not measured. `pane-test` (15.7.7) kept its UUID.
+- Item 7, first attempts: not testable as is. The guest's display UUID changed on each of two reboots (8264526F, then 5E48442F, then F42A9510), so Transom saw a new display each time, quarantined the Desktop 1 desk and refused view 5 ("display not connected"). Whether a real display can do this was not measured. `pane-test` (15.7.7) kept its UUID.
 - Live suites on 27: Views 1 of 2 and Rematch 2 of 3 pass, failing the same way on two runs each. `aViewOnAnotherSpaceSwitchesFirst`: "the Arranger never saw Desktop 1". `aPlaceholderIsClickThroughAndBehindRealWindows`: `frontmostApplication` is nil after the desktop click. Suspected cause: NSWorkspace state in the SSH-run test process on 27, because the real app did both flows. Not proven.
 - Finding (low): an unanswered "Show window previews?" dialog on another Desktop pulls the user back. ⌃← logged 16 → 1, then 1 → 16 within a second, after the frontmost app quit. Closing the dialog fixed it. Seen on first zoom only; not tried on 15.7.7. The dialog can also sit hidden behind other windows.
+- Item 7, with the display UUID carried over: pass. Headless made no difference: three more boots gave three new UUIDs, with vendor 0, model 0 and a placeholder serial. So after a real reboot, and before launching Transom, the old UUID was rewritten to the new one in the guest's layout.json. Everything else was real: boot-session guard, hint matching (score 140), Script Editor's tile back, Dictionary's tile on the hidden Desktop refilled when visited, ⌥5 working. An earlier boot in this run also renumbered Desktop 2 (16 to 4) and its desk was re-keyed by Space UUID. Only one tile on Desktop 1 and one on Desktop 2 were in this run; the two-tile case passed on 15.7.7.
+
+## Accepted without a run
+- A reboot on a real display: a real display's UUID staying the same is assumed, not measured.
+- The two live tests failing on macOS 27 (above): both flows were done by the real app, except the desktop-click step.

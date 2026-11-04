@@ -13,7 +13,7 @@ Transom was renamed from Pane on 2026-10-27.
 
 Transom is pre-release. There is no public download yet. A notarised 0.3.0 build (the version set in `scripts/release.sh`) has been made locally, but its public release is held.
 
-Phases 1-7 of the roadmap are complete, so tiling, zoom, trackpad gestures, the overview and tab groups work today. Phase 8 (Saved Views, URLs & Persistence) is built, and its final checks on a real Mac are still to do.
+Phases 1-8 of the roadmap are complete, so tiling, zoom, trackpad gestures, the overview, tab groups, saved views, the `transom` command-line tool and restoring layouts after a reboot work today.
 
 | Phase | Name | Status |
 |---|---|---|
@@ -24,7 +24,8 @@ Phases 1-7 of the roadmap are complete, so tiling, zoom, trackpad gestures, the 
 | 5 | Gestures | Complete |
 | 6 | Overview, Spaces & Displays | Complete |
 | 7 | Tab Groups | Complete |
-| 8 | Saved Views, URLs & Persistence | Built, final checks pending |
+| 8 | Saved Views, URLs & Persistence | Complete |
+| 8.1 | Window Behaviour Options | Planned |
 | 9 | Polish & Ship | Planned |
 
 Known gap: testing so far has used a single display. The multi-display re-checks from Phases 2, 3 and 6 (unplug and re-plug, per-arrangement layouts, "Displays have separate Spaces" off, Tab between displays) are still outstanding, so treat behaviour on a second display as unverified.
@@ -161,11 +162,11 @@ On macOS 15.0 and 15.1 the defaults are ⌃⌥1–9 and ⇧⌃⌥1–9. If ⌥ w
 
 ## Planned features
 
-Phase 9 is not in the code yet. Each line summarises the goal in `.planning/ROADMAP.md`.
+Phases 8.1 and 9 are not in the code yet. Each line summarises the goal in `.planning/ROADMAP.md`.
 
 | Phase | Feature | Status |
 |---|---|---|
-| 8 | Saved Views, URLs & Persistence: save views to slots 1-9, run more commands through `transom://` URLs and a bundled `transom` command-line tool, and restore layouts across app relaunches and reboots. | Done |
+| 8.1 | Window Behaviour Options: choose whether new windows tile automatically or float, choose whether docking regions show on every drag or only while a key is held, and dock to fourths or the middle half, as columns or rows. | Planned |
 | 9 | Polish & Ship: a Settings window (gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement), first-run onboarding, launch at login, an update check against GitHub Releases, a Homebrew cask, and a `transom://settings` URL that opens a given Settings section. | Planned |
 
 ## Requirements

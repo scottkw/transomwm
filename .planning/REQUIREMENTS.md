@@ -52,6 +52,9 @@
 - [x] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
 - [x] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
 - [x] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
+- [ ] **TILE-21**: User can choose whether new windows tile automatically or float on the Desktop tile until docked (default: float)
+- [ ] **TILE-22**: User can choose whether a drag shows the docking regions automatically or only while a key is held (default: automatic). In hold-a-key mode, a plain drag pulls a docked window out to floating and just moves a floating one
+- [ ] **TILE-23**: User can dock a window to the 1st, 2nd, 3rd or 4th fourth, or to the middle half, as columns or rows, by keyboard or by dragging; windows already docked shrink to fit
 
 ### Safety & Recovery
 
@@ -108,7 +111,7 @@
 - [x] **VIEW-01**: User can save the current view to slots 1–9 and return to it with a hotkey
 - [x] **VIEW-02**: Saved views survive layout changes and app restarts
 - [x] **VIEW-03**: Transom commands run from `transom://` URLs (for Raycast, Alfred, Shortcuts, scripts)
-- [ ] **VIEW-04**: Layouts persist across reboots and app relaunches (new window IDs), with windows re-matched to their tiles
+- [x] **VIEW-04**: Layouts persist across reboots and app relaunches (new window IDs), with windows re-matched to their tiles
 - [x] **VIEW-05**: A bundled `transom` command-line tool runs the same commands as `transom://` URLs and reports errors with a non-zero exit code
 
 ### Ship
@@ -139,7 +142,7 @@
 | Mac App Store | Private APIs required |
 | Features needing SIP disabled | Keeps install safe and simple |
 | Moving windows between native Spaces | Needs SIP since macOS 14.5 |
-| Auto-tiling every new window | Research: top source of user frustration; new windows go to the Desktop tile |
+| Auto-tiling every new window by default | Research: top source of user frustration; new windows go to the Desktop tile unless the user opts in (TILE-21) |
 | Animating real windows during zoom | Causes resize storms; only the snapshot overlay animates |
 | Borders drawn around other apps' windows | Fragile, performance cost, low value |
 | Scripting language / text-config DSL as main interface | Transom is GUI-first; URL commands cover automation |
@@ -192,6 +195,9 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-18 | Phase 3 | Complete |
 | TILE-19 | Phase 3 | Complete |
 | TILE-20 | Phase 3 | Complete |
+| TILE-21 | Phase 8.1 | Pending |
+| TILE-22 | Phase 8.1 | Pending |
+| TILE-23 | Phase 8.1 | Pending |
 | SAFE-01 | Phase 3 | Complete |
 | SAFE-02 | Phase 3 | Complete |
 | SAFE-03 | Phase 3 | Complete |
@@ -230,7 +236,7 @@ Populated by the roadmapper on 2026-10-23.
 | VIEW-01 | Phase 8 | Complete |
 | VIEW-02 | Phase 8 | Complete |
 | VIEW-03 | Phase 8 | Complete |
-| VIEW-04 | Phase 8 | Pending |
+| VIEW-04 | Phase 8 | Complete |
 | VIEW-05 | Phase 8 | Complete |
 | SHIP-01 | Phase 9 | Pending |
 | SHIP-02 | Phase 9 | Pending |
@@ -242,8 +248,8 @@ Populated by the roadmapper on 2026-10-23.
 | SHIP-08 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 87 total
-- Mapped to phases: 87
+- v1 requirements: 90 total
+- Mapped to phases: 90
 - Unmapped: 0 ✓
 
 ---

@@ -1,7 +1,7 @@
 ---
 phase: 08-saved-views-urls-persistence
 verified: 2026-11-04T03:12:29Z
-status: human_needed
+status: passed
 score: 57/71 must-haves verified (the 2 failed truths closed by 1466f8b, 4 present but behavior-unverified, 10 need a human)
 covered_files:
   - ".planning/phases/08-saved-views-urls-persistence/08-01-PLAN.md"
@@ -93,7 +93,7 @@ covered_files:
   - "scripts/release.sh"
   - "scripts/vm-cli-check.sh"
   - "xcode/project.yml"
-covered_digest: "v4:sha256:46113c7ea3e1d9939ff819bf9fcd4bd21a9d61df0df671fca0dc7502966fe428"
+covered_digest: "v4:sha256:dc299c4f8d520202da3206f992936d6df24be1352fcf9996c2867e8745fa4723"
 behavior_unverified: 4
 overrides_applied: 0
 decision_coverage:
@@ -495,3 +495,7 @@ _Verifier: Claude (gsd-verifier)_
 ## Gap Closure (2026-11-03)
 
 The one gap (a dormant docked tile closing at once when its app quits) was closed by `1466f8b` under D-12b. Host suite after the fix: 1,856 tests, no ✘; VM `RematchIntegrationTests` 3 of 3 (`.build/0808-d12b-vm-Rematch.log`). The path is covered by engine tests only; the live proof is the host check in 08-UAT.md. Trade recorded: a dormant window closed with ⌘W while its app keeps running closes its tile about 10 s later rather than at once, since the CG list cannot tell a quit from a close.
+
+## Human Verification Result (2026-11-04)
+
+All 7 items in 08-UAT.md passed. Items 1, 2 and 6 ran on the user's Mac (macOS 27.2). Items 3, 4, 5 and 7 ran in Tart VMs with real chords and real apps, on macOS 15.7.7 and on 27.2. On 27.2, item 7 needed the guest's display UUID carried over by hand, because that virtual display gets a new UUID on each boot. 08-UAT.md lists what was accepted without a run.
