@@ -250,9 +250,10 @@ public struct Arranger: Sendable {
 
     /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        let before = world, beforeHistory = history, earliest = placeholders.earliestDeadline
+        let before = world, beforeHistory = history, earliest = earliestPlaceholderDeadline, shownBefore = displays
         var effects = process(input, now: now)
-        if placeholders.earliestDeadline != earliest, let wake = nextWake { effects.append(.wake(at: wake)) }
+        if displays != shownBefore { extendPlaceholdersShown(since: shownBefore, now: now) }
+        if earliestPlaceholderDeadline != earliest, let wake = nextWake { effects.append(.wake(at: wake)) }
         // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
         if !homeFrames.isEmpty {
             for desk in world.desks.values where desk.tree.isDesktopHidden != true {
@@ -1196,7 +1197,7 @@ public struct Arranger: Sendable {
         let dwell = drag?.kind == .move ? drag?.dwellEnds : nil
         let groupDwell = drag?.kind == .move ? drag?.groupDwellEnds : nil
         return (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } }
-            + [finderExpectation?.deadline, dwell, groupDwell, tabs.pendingReveal?.deadline, tabs.closeQueue?.deadline, placeholders.earliestDeadline]
+            + [finderExpectation?.deadline, dwell, groupDwell, tabs.pendingReveal?.deadline, tabs.closeQueue?.deadline, earliestPlaceholderDeadline]
             .compactMap { $0 }).min()
     }
 

@@ -13,12 +13,14 @@ private func ref(_ id: UInt32, title: String = "", pid: Int32 = pid, bundle: Str
     WindowRef(identity: WindowIdentity(windowID: id, pid: pid, bundleID: bundle), titleHint: title, creationOrder: order)
 }
 
-private func tracked(_ window: WindowRef, frame: Rect = Rect(x: 300, y: 300, width: 400, height: 300)) -> WindowInfo {
-    WindowInfo(window: window, frame: frame, state: .present, displayUUID: "main")
+private func tracked(_ window: WindowRef, frame: Rect = Rect(x: 300, y: 300, width: 400, height: 300), spaces: Set<UInt64>? = nil) -> WindowInfo {
+    WindowInfo(window: window, frame: frame, state: .present, displayUUID: "main", spaces: spaces)
 }
 
 /// A window of the relaunched app, under a new pid.
-private func returning(_ id: UInt32, title: String) -> WindowInfo { tracked(ref(id, title: title, pid: newPID)) }
+private func returning(_ id: UInt32, title: String, spaces: Set<UInt64>? = nil) -> WindowInfo {
+    tracked(ref(id, title: title, pid: newPID), spaces: spaces)
+}
 
 /// [Notes (1) | Plan (2) | Other (3) | Desktop]: two docked windows of one app, titled, beside another app's.
 private func threeDocked() async -> Harness {
@@ -54,16 +56,16 @@ private let openFrame = Rect(x: 300, y: 300, width: 400, height: 300)
 private let otherApp = FakeWindow.standard(id: 3, pid: 950, frame: Rect(x: 1000, y: 600, width: 150, height: 120), title: "Other")
 
 /// A saved layout. The saved windows belong to the last session's pid.
-private func saved(_ build: (inout Desk, inout IDSource) throws(LayoutError) -> Void) throws -> World {
+private func saved(on desk: DeskKey = key, _ build: (inout Desk, inout IDSource) throws(LayoutError) -> Void) throws -> World {
     var world = World()
-    try world.addDesk(key)
-    try world.reflow(key, build)
+    try world.addDesk(desk)
+    try world.reflow(desk, build)
     return world
 }
 
 /// [Notes (1) | Plan (2) | Desktop] saved, under the last session's pid.
-private func savedTwo() throws -> World {
-    try saved { desk, ids throws(LayoutError) in
+private func savedTwo(on desk: DeskKey = key) throws -> World {
+    try saved(on: desk) { desk, ids throws(LayoutError) in
         try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids)
         guard let leaf = desk.tree.leaf(containing: ref(1)) else { throw .windowNotFound(ref(1)) }
         try desk.tree.insert(ref(2, title: "Plan"), at: .right, of: leaf, ids: &ids)
@@ -87,6 +89,47 @@ private func launchedWithEffects(_ layout: World, open: [FakeWindow] = []) async
     await harness.send(.restore(layout, homeFrames: [:]))
     let effects = await harness.send(.inventory(await harness.fake.inventory()))
     return (harness, effects)
+}
+
+private let spaceOne = DeskKey(displayUUID: "main", spaceID: 1)
+private let spaceTwo = DeskKey(displayUUID: "main", spaceID: 2)
+
+/// The display on Desktop 1 with Spaces data on, and `open` on it.
+private func onSpaceOne(_ open: [FakeWindow]) async -> Harness {
+    var harness = Harness()
+    await harness.fake.setDisplays([DisplayInfo(
+        uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: 1)])
+    await harness.fake.setSpacesAvailable(true)
+    await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+    await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+    await harness.fake.addApp(FakeApp(pid: 950, bundleID: otherBundle))
+    for window in open { await harness.fake.open(window) }
+    await harness.fake.showSpace(1, notifies: false)
+    await harness.fake.refreshAll()
+    _ = await harness.inbox.take()
+    return harness
+}
+
+private let otherOnSpaceOne = FakeWindow.standard(id: 3, pid: 950, frame: Rect(x: 1000, y: 600, width: 150, height: 120), title: "Other", space: 1)
+
+/// Transom launches on Desktop 1 on `layout`, with only another app's window open.
+private func launchedOnSpaceOne(_ layout: World, bootChanged: Bool = true) async -> Harness {
+    var harness = await onSpaceOne([otherOnSpaceOne])
+    await harness.send(.restore(layout, homeFrames: [:], bootChanged: bootChanged))
+    await harness.send(.inventory(await harness.fake.inventory()))
+    return harness
+}
+
+/// [Notes (1) | Plan (2) | Other (3) | Desktop] docked on Desktop 1.
+private func threeDockedOnSpaceOne() async -> Harness {
+    var harness = await onSpaceOne([
+        .standard(id: 1, pid: pid, frame: Rect(x: 40, y: 80, width: 320, height: 232), title: "Notes", space: 1),
+        .standard(id: 2, pid: pid, frame: Rect(x: 730, y: 400, width: 150, height: 120), title: "Plan", space: 1),
+        otherOnSpaceOne,
+    ])
+    await harness.send(.inventory(await harness.fake.inventory()))
+    for window in [ref(1), ref(2), ref(3, pid: 950, bundle: otherBundle)] { await harness.send(.command(.dock, focused: window)) }
+    return harness
 }
 
 /// The placeholder tiles sent for the display, the latest list when several.
@@ -270,6 +313,81 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(harness.arranger.placeholderCount == 0)
         _ = await ticked(&harness, at: start + .seconds(300))
         #expect(harness.arranger.world[key]?.contains(ref(1)) == false)
+    }
+
+    // MARK: Spaces
+
+    /// UI-SPEC Surface 2, CR-02: AX lists only the shown Space, so a tile on another one can't be filled and must not
+    /// expire. Its wait starts when its Space shows; a past deadline asks for no wake, or the wake would spin.
+    @Test(arguments: [true, false])
+    func aTileOnAHiddenSpaceWaitsUntilItsSpaceShows(bootChanged: Bool) async throws {
+        var harness = await launchedOnSpaceOne(try savedTwo(on: spaceTwo), bootChanged: bootChanged)
+        let start = harness.now
+        #expect(harness.arranger.placeholderCount == 2)
+
+        let late = await ticked(&harness, at: start + .seconds(3600))
+        #expect(harness.arranger.placeholderCount == 2)
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.count == 2)
+        #expect(wakes(late).isEmpty)
+
+        let shown = await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        #expect(wakes(shown).contains(start + .seconds(3610)))
+        _ = await ticked(&harness, at: start + .milliseconds(3_609_900))
+        #expect(harness.arranger.placeholderCount == 2)
+        let due = await ticked(&harness, at: start + .seconds(3610))
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.isEmpty == true)
+        #expect(logged(due, "expired (10 s after launch)"))
+    }
+
+    /// D-12: a hidden tile whose Space shows inside its 5 min still gets the rest of them.
+    @Test func aHiddenTileShownEarlyKeepsItsLaterDeadline() async throws {
+        var harness = await launchedOnSpaceOne(try savedTwo(on: spaceTwo))
+        let start = harness.now
+        harness.now = start + .seconds(60)
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        _ = await ticked(&harness, at: start + .seconds(299))
+        #expect(harness.arranger.placeholderCount == 2)
+        let due = await ticked(&harness, at: start + .seconds(300))
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(logged(due, "expired (5 min, no launch)"))
+    }
+
+    /// CR-02: an app that quits with a tile on a Space not shown keeps that tile past the 30 s, until the Space shows.
+    @Test func aQuitTileOnAHiddenSpaceWaitsUntilItsSpaceShows() async throws {
+        var harness = await threeDockedOnSpaceOne()
+        let start = harness.now
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        _ = await quit(&harness)
+        _ = await ticked(&harness, at: start + .seconds(600))
+        #expect(harness.arranger.placeholderCount == 2)
+
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 1)))
+        _ = await ticked(&harness, at: start + .seconds(610))
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(harness.arranger.world[spaceOne]?.tree.windows.map(\.windowID) == [3])
+    }
+
+    /// An inventory, not a notification, can be the first word of a Space change: the wait starts all the same.
+    @Test func anInventoryThatShowsTheSpaceStartsTheWait() async throws {
+        var harness = await launchedOnSpaceOne(try savedTwo(on: spaceTwo))
+        let start = harness.now
+        harness.now = start + .seconds(600)
+        var inventory = await harness.fake.inventory()
+        inventory.displays[0].currentSpaceID = 2
+        let shown = await harness.send(.inventory(inventory))
+        #expect(wakes(shown).contains(start + .seconds(610)))
+        _ = await ticked(&harness, at: start + .seconds(610))
+        #expect(harness.arranger.placeholderCount == 0)
+    }
+
+    /// A window of the Space fills its tile when the Space shows, as AX lists it then.
+    @Test func aWindowOnTheHiddenSpaceFillsItsTileWhenTheSpaceShows() async throws {
+        var harness = await launchedOnSpaceOne(try savedTwo(on: spaceTwo))
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        await harness.send(.event(.windowCreated(returning(11, title: "Notes", spaces: [2]))))
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.contains(ref(11, pid: newPID)) == true)
+        #expect(harness.arranger.placeholderCount == 1)
     }
 
     // MARK: Matching

@@ -236,14 +236,15 @@ extension Harness {
         var harness = await relaunched(with: carried, displays: [displayA], showing: ["A": 1])
         await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
         await harness.send(.inventory(await harness.fake.inventory()))
-        // Its tile waits like any unattached window's (D-12), so window 3's tile changes when it expires.
+        // Its tile waits like any unattached window's (D-12), from when its Space shows (CR-02), so window 3's tile changes
+        // when it expires.
         #expect(harness.arranger.isPlaceholder(ref(4)))
+        _ = await harness.switchDisplay("A", to: 2)
         harness.now += Arranger.launchWait
         await harness.send(.tick)
         let desk = try #require(harness.arranger.world[deskA2])
         #expect(desk.tree.windows == [ref(3)], "window 4 is removed and window 3 kept: \(desk.tree.windows)")
 
-        _ = await harness.switchDisplay("A", to: 2)
         let tile = try #require(try Planner.plan(desk: desk, area: visibleA, gap: harness.arranger.gap, mins: [:]).frames[ref(3)])
         let old = try #require(first.tiles[ref(3)])
         #expect(tile.width > old.width)
@@ -253,8 +254,9 @@ extension Harness {
     }
 
     /// The VIEW-04 boundary: a saved window whose app relaunched has a new pid, so it is not the saved window; on a
-    /// Space not shown it is not tracked either, so nothing re-matches it: its tile waits out its deadline, then closes.
-    @Test func aSavedWindowWhoseAppRelaunchedOnAHiddenSpaceWaitsThenCloses() async throws {
+    /// Space not shown it is not tracked either, so nothing can re-match it yet: its tile waits past its deadline (CR-02),
+    /// and the window takes it when its Space shows.
+    @Test func aSavedWindowWhoseAppRelaunchedOnAHiddenSpaceWaitsUntilItsSpaceShows() async throws {
         let first = try await firstSession(space2: [3])
         let relaunchedPID: Int32 = 901
         var carried = Array(await first.harness.fake.windows.values)
@@ -265,13 +267,19 @@ extension Harness {
         await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
         await harness.send(.inventory(await harness.fake.inventory()))
         #expect(harness.arranger.isPlaceholder(ref(3)))
-        harness.now += Arranger.launchWait
+        harness.now += Arranger.neverOpenedWait
         await harness.send(.tick)
-        let holds3 = harness.arranger.world.desks.values.contains { desk in
-            (desk.tree.windows + desk.desktop.windows.map(\.window)).contains { $0.windowID == 3 }
-        }
-        #expect(!holds3, "a window of the relaunched app was kept")
+        #expect(harness.arranger.isPlaceholder(ref(3)), "a tile on a Space not shown must not expire")
         #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+
+        _ = await harness.switchDisplay("A", to: 2)
+        for _ in 0..<2 {
+            await harness.fake.refresh(pid: relaunchedPID)
+            for event in await harness.inbox.take() { await harness.send(.event(event)) }
+            await harness.fake.advance(by: .milliseconds(300))
+        }
+        #expect(harness.arranger.world[deskA2]?.tree.windows.map(\.pid) == [relaunchedPID])
+        #expect(harness.arranger.placeholderCount == 0)
     }
 
     @Test func aDormantWindowIsNoLongerDormantOnceItsSpaceIsShown() async throws {
