@@ -21,7 +21,9 @@ public enum HintMatcher {
     public static let overlapIoU = 0.5
     /// The same rank of `creationOrder` within the bundle (`WindowTracker`'s order is session-global).
     public static let sameRank = 10
-    /// Exactly one unmatched saved window and one unclaimed candidate of the bundle.
+    /// Exactly one unmatched saved window and one unclaimed candidate of the bundle, with no title against it: the saved
+    /// window has none, or the candidate's agrees, or else the frames overlap (a one-window app whose title changed, but
+    /// not its Welcome or sign-in window, or a window whose title has yet to come; WR-03).
     public static let solePair = 40
     /// The lowest score that matches.
     public static let threshold = 40
@@ -94,20 +96,24 @@ public enum HintMatcher {
     public static func score(_ saved: Saved, _ candidate: Candidate, solePair sole: Bool, sameRank same: Bool) -> Int {
         var score = 0
         let a = saved.ref, b = candidate.ref
+        var noTitleAgainst = a.titleHint.isEmpty
         if !a.titleHint.isEmpty, !b.titleHint.isEmpty {
             if a.titleHint == b.titleHint {
                 score += exactTitle
+                noTitleAgainst = true
             } else if normalised(a.titleHint) == normalised(b.titleHint) {
                 score += normalisedTitle
+                noTitleAgainst = true
             }
         }
         if let x = a.axIdentifier, let y = b.axIdentifier { score += x == y ? sameAXIdentifier : differentAXIdentifier }
         if let frame = saved.frame {
             let overlap = iou(frame, candidate.frame)
             score += overlap >= closeIoU ? closeFrame : overlap >= overlapIoU ? overlappingFrame : 0
+            if overlap >= overlapIoU { noTitleAgainst = true }
         }
         if same { score += sameRank }
-        if sole { score += solePair }
+        if sole, noTitleAgainst { score += solePair }
         return score
     }
 

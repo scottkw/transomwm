@@ -178,8 +178,8 @@ extension Arranger {
     }
 
     /// The saved windows the launch could not attach wait (D-10, D-12): 10 s when their app already runs (a tracked window
-    /// of the bundle), else 5 min. A tied window, or one still without a title, may match later (RESEARCH Pitfall 4). A
-    /// live member takes a waiting one's selection, so a group's tile shows what is there.
+    /// of the bundle), else 5 min. A tied window, or any other its app left unplaced, may match later as its title settles
+    /// (RESEARCH Pitfall 4). A live member takes a waiting one's selection, so a group's tile shows what is there.
     mutating func holdAtLaunch(
         _ waiting: [WindowRef], tracked: [WindowInfo], unplaced: [WindowInfo], ties: [HintMatcher.Tie], now: ContinuousClock.Instant
     ) -> [ArrangerEffect] {
@@ -198,7 +198,7 @@ extension Arranger {
             }
         }
         placeholders.fresh.formUnion(ties.flatMap(\.candidates).map(\.identity))
-        placeholders.fresh.formUnion(unplaced.filter { $0.window.titleHint.isEmpty && placeholders.waits(for: $0.window.bundleID) }.map(\.window.identity))
+        placeholders.fresh.formUnion(unplaced.filter { placeholders.waits(for: $0.window.bundleID) }.map(\.window.identity))
         return faults
     }
 

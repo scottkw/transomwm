@@ -505,6 +505,28 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(logged(first, "tie at") && !logged(second, "tie at"), "one line, not one per event")
     }
 
+    /// WR-03: an app's first window, a Welcome window or one with no title yet, doesn't take a lone tile on the sole-pair
+    /// bonus alone; the real window can when it comes, or when the title settles.
+    @Test func aLoneTileIsNotTakenAgainstTheTitleEvidence() async throws {
+        let layout = try saved { desk, ids throws(LayoutError) in try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids) }
+        var harness = await launched(layout)
+        await harness.send(.event(.windowCreated(returning(11, title: "Welcome"))))
+        await harness.send(.event(.windowCreated(returning(12, title: ""))))
+        #expect(harness.arranger.isPlaceholder(ref(1)))
+        await harness.send(.event(.windowChanged(returning(12, title: "Notes"))))
+        #expect(harness.arranger.world[key]?.tree.windows == [ref(12, pid: newPID)])
+        #expect(harness.arranger.world[key]?.desktop.contains(ref(11, pid: newPID)) == true)
+    }
+
+    /// WR-03, RESEARCH Pitfall 4: at a launch too, a window with another title floats and can match once its title settles.
+    @Test func aWindowAtLaunchWithAnotherTitleCanMatchLater() async throws {
+        let layout = try saved { desk, ids throws(LayoutError) in try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids) }
+        var harness = await launched(layout, open: [.standard(id: 11, pid: newPID, frame: openFrame, title: "Loading")])
+        #expect(harness.arranger.isPlaceholder(ref(1)))
+        await harness.send(.event(.windowChanged(returning(11, title: "Notes"))))
+        #expect(harness.arranger.world[key]?.tree.windows == [ref(11, pid: newPID)])
+    }
+
     @Test func aTitleThatArrivesLateStillMatches() async throws {
         var harness = await threeDocked()
         _ = await quit(&harness)

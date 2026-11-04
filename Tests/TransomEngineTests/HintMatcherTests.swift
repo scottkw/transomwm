@@ -58,8 +58,20 @@ private let table: [HintCase] = [
         candidates: [candidate(10, "Untitled", frame: left, order: 9), candidate(20, "Untitled", frame: left, order: 9)],
         matches: [:], ties: [[1, 2], [10, 20]]),
     HintCase(
-        name: "a one-window app whose title changed is the sole pair",
-        saved: [saved(1, "Draft", frame: left)], candidates: [candidate(10, "Final", frame: parked)],
+        name: "a one-window app whose title changed at the same place is the sole pair",
+        saved: [saved(1, "Draft", frame: left)], candidates: [candidate(10, "Final", frame: left)],
+        matches: [1: 10]),
+    HintCase(
+        name: "a title against it and nowhere near: the sole pair decides nothing (a Welcome window)",
+        saved: [saved(1, "Draft", frame: left)], candidates: [candidate(10, "Welcome", frame: parked)],
+        matches: [:]),
+    HintCase(
+        name: "a title yet to come and nowhere near: the sole pair waits for it",
+        saved: [saved(1, "Draft", frame: left)], candidates: [candidate(10, frame: parked)],
+        matches: [:]),
+    HintCase(
+        name: "a title yet to come at the same place is the sole pair",
+        saved: [saved(1, "Draft", frame: left)], candidates: [candidate(10, frame: left)],
         matches: [1: 10]),
     HintCase(
         name: "one window, empty title, parked frame: sole pair",
