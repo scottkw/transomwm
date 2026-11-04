@@ -7,7 +7,7 @@ updated: 2026-11-04
 ---
 
 ## Current Test
-All user checks done. Items 3, 4, 5, 7 ran in the VM on macOS 15.7.7 and are to be repeated on a macOS 27 VM.
+Item 7 on the user's Mac (macOS 27.2): a real reboot. The macOS 27 VM cannot test a reboot.
 
 ## Build under test
 - Code: `1466f8b` and later docs commits.
@@ -39,3 +39,12 @@ Bundled Debug app, real chords posted in the guest, real apps (Script Editor, Di
 - Item 5: exit codes 0, 64, 1, 2 from the installed symlink. `open transom-debug://save-view/6` then `transom view 6` exit 0.
 - Item 7: real `shutdown -r`. macOS reopened Dictionary and an Untitled Script Editor window. Script Editor documents refilled their own tiles, Untitled floated, Dictionary kept its Desktop 2 tile, ⌥5 worked, boot session updated. Not run: a Desktop 2 tile whose app does not come back after a reboot (engine tests only).
 - Finding: `open` launched a second Transom Debug from a stale registered copy, alongside the running one. There is no single-instance guard, so two copies of the same bundle ID run together. Not fixed.
+
+## VM run on macOS 27.2 (`pane-test-27`, 2026-11-04)
+Same method as above, with a fresh guest. The app under test is the same Debug build.
+- Item 3: pass. ⌥5 switched from Space 1 to Space 16, and Dictionary stayed framed at +4 s and +8 s.
+- Item 4: pass, run three times. Waiting tiles after ⌘Q, each window back in its own tile on reopening, tiles kept for 40 s on a hidden Desktop, gone within 36 s of returning.
+- Item 5: pass. Exit codes 0, 64, 1, 2, and URLs through LaunchServices. Plain SSH with no `launchctl asuser` also works on 27 (exit 2 with the app stopped, 0 with it running), which extends A2 to 27.
+- Item 7: not testable here. The guest's display UUID changed on each of two reboots (8264526F, then 5E48442F, then F42A9510), so Transom saw a new display each time, quarantined the Desktop 1 desk and refused view 5 ("display not connected"). Whether a real display can do this was not measured. `pane-test` (15.7.7) kept its UUID.
+- Live suites on 27: Views 1 of 2 and Rematch 2 of 3 pass, failing the same way on two runs each. `aViewOnAnotherSpaceSwitchesFirst`: "the Arranger never saw Desktop 1". `aPlaceholderIsClickThroughAndBehindRealWindows`: `frontmostApplication` is nil after the desktop click. Suspected cause: NSWorkspace state in the SSH-run test process on 27, because the real app did both flows. Not proven.
+- Finding (low): an unanswered "Show window previews?" dialog on another Desktop pulls the user back. ⌃← logged 16 → 1, then 1 → 16 within a second, after the frontmost app quit. Closing the dialog fixed it. Seen on first zoom only; not tried on 15.7.7. The dialog can also sit hidden behind other windows.
