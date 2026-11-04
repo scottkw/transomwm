@@ -552,6 +552,19 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(harness.arranger.world[key]?.tree.windows == [ref(11, pid: newPID)])
     }
 
+    /// WR-05: an app relaunching during the terminate lag opens its window before the old one's destroy event. It floats
+    /// first, a World change that must not cost it its place in line.
+    @Test func aWindowCreatedBeforeTheOldOnesDestroyStillFillsItsTile() async throws {
+        var harness = await threeDocked()
+        await harness.send(.event(.appTerminated(pid: pid)))
+        await harness.send(.event(.windowCreated(returning(11, title: "Notes"))))
+        #expect(harness.arranger.world[key]?.desktop.contains(ref(11, pid: newPID)) == true)
+        await harness.send(.event(.windowDestroyed(ref(1))))
+        await harness.send(.event(.windowDestroyed(ref(2))))
+        #expect(harness.arranger.world[key]?.tree.windows.map(\.windowID) == [11, 2, 3])
+        #expect(harness.arranger.isPlaceholder(ref(2)))
+    }
+
     @Test func aTitleThatArrivesLateStillMatches() async throws {
         var harness = await threeDocked()
         _ = await quit(&harness)

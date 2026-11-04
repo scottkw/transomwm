@@ -66,11 +66,14 @@ public struct PlaceholderState: Sendable {
     }
 
     /// After a World change: what no desk holds any more waits for nothing, and a docked or grouped window is the user's.
+    /// A window of an app still quitting stays fresh: its placeholders are about to appear (`holdForQuit`).
     mutating func prune(_ world: World) {
         table = table.filter { id, _ in world.desks.values.contains { $0.contains(WindowRef(identity: id)) } }
+        let quittingBundles = Set(quitting.values.map(\.bundleID))
         fresh = fresh.filter { id in
             let window = WindowRef(identity: id)
-            return waits(for: id.bundleID) && !world.desks.values.contains { $0.tree.state(of: window) != nil || $0.desktop.group(containing: window) != nil }
+            return (waits(for: id.bundleID) || quittingBundles.contains(id.bundleID))
+                && !world.desks.values.contains { $0.tree.state(of: window) != nil || $0.desktop.group(containing: window) != nil }
         }
     }
 }
