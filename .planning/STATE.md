@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: "08.1"
 current_phase_name: Window Behaviour Options
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: Completed 08.1-02-PLAN.md
-last_updated: "2026-11-04T21:25:26.499Z"
+stopped_at: Completed 08.1-03-PLAN.md
+last_updated: "2026-11-04T21:44:25.188Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
-state_head: f3d54902745758082be15918f113ce411dced722
+state_head: 2c747e66b2aca39a9c2e02919c22063be13452ed
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 105
-  completed_plans: 100
+  completed_plans: 101
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1 — Window Behaviour Options
-Current Plan: 3
+Current Plan: 4
 Total Plans in Phase: 7
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
@@ -158,6 +158,7 @@ Progress: [████████░░] 80%
 | Phase 08 P07 | 7 min | 2 tasks | 3 files |
 | Phase 08.1 P01 | 28 min | 3 tasks | 14 files |
 | Phase 08.1 P02 | 8 min | 2 tasks | 9 files |
+| Phase 08.1 P03 | 18 min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -446,6 +447,7 @@ Recent decisions affecting current work:
 - [Phase 08.1]: A Hold Option pull-out's travel is the pointer's distance from the press at the last drag sample, so coming back inside 16 pt snaps back
 - [Phase 08.1]: publishDragOption has no change-only cache: a mutant with one failed the live lost mouse-up test on macOS 27.2
 - [Phase 08.1]: 08.1-02: Group dwell, whole-group drags and keyboard docking needed no engine change in Hold ⌥ mode; only ⌘ with no swap target and a torn tab did, and the table pins the rest
+- [Phase 08.1]: The no-change beep of a fourth applies only to a window already docked: a floating window at the would-be frame still docks (D-15)
 
 ### Quick Tasks Completed
 
@@ -490,8 +492,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T21:25:24.850Z
-Stopped at: Completed 08.1-02-PLAN.md
+Last session: 2026-11-04T21:44:23.660Z
+Stopped at: Completed 08.1-03-PLAN.md
 Resume file: None
 
 ## Deferred Verification
