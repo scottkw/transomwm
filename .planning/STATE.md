@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 8
 current_phase_name: Saved Views, URLs & Persistence
-current_plan: 6
+current_plan: 7
 status: executing
-stopped_at: Completed 08-05-PLAN.md
-last_updated: "2026-11-04T01:00:49.737Z"
+stopped_at: Completed 08-06-PLAN.md
+last_updated: "2026-11-04T01:36:20.255Z"
 last_activity: 2026-11-03
 last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: d41e602aae5707a359167bb2cdf53bd9d49cf907
+state_head: 38b3c8cd67379e8fa0a21b00372c4aed939aef5e
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 98
-  completed_plans: 96
+  completed_plans: 97
   percent: 78
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 8 (Saved Views, URLs & Persistence) — EXECUTING
-Current Plan: 6
+Current Plan: 7
 Total Plans in Phase: 7
 Status: Ready to execute
 Last activity: 2026-11-03 — Completed 08-01 (saved views tracer)
@@ -153,6 +153,7 @@ Progress: [████████░░] 78%
 | Phase 8 P03 | 23min | 3 tasks | 16 files |
 | Phase 8 P04 | 22min | 2 tasks | 13 files |
 | Phase 08 P05 | 22 min | 3 tasks | 22 files |
+| Phase 08 P06 | 23 min | 2 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -433,6 +434,9 @@ Recent decisions affecting current work:
 - [Phase 08]: A URL refused for a view shows no toast either (N16, N18, N19 are silenced on URL and CLI routes), which 08-03's filter still let through
 - [Phase 08]: CLICopy.ascii also replaces every other non-printable or non-ASCII character with ?, so whoever answers on the port cannot send terminal escapes
 - [Phase 08]: A view on another Space goes through dispatch: viewSwitch(for:) runs first on every route, and decide runs after the switch
+- [Phase 8]: The placeholder panel view hosts a TileLayer, so panel, stage and overview share one recipe
+- [Phase 8]: A collapsed placeholder is a placeholder tile at its block rect; a group that all waits has one tile and no strip
+- [Phase 8]: An expired tile leaves at once during a pause; a filled one stays until Resume
 
 ### Quick Tasks Completed
 
@@ -473,8 +477,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T01:00:48.600Z
-Stopped at: Completed 08-05-PLAN.md
+Last session: 2026-11-04T01:36:19.081Z
+Stopped at: Completed 08-06-PLAN.md
 Resume file: None
 
 ## Deferred Verification
