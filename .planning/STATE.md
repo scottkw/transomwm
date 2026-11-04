@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: "08.1"
 current_phase_name: Window Behaviour Options
-current_plan: 5
+current_plan: 6
 status: executing
-stopped_at: Completed 08.1-04-PLAN.md
-last_updated: "2026-11-04T22:39:40.368Z"
+stopped_at: Completed 08.1-05-PLAN.md
+last_updated: "2026-11-04T23:02:50.210Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
-state_head: d7e54438e53695b10f8e6e4b92dc4ca8c9816d8e
+state_head: 824565dc7aeb05da32d2ce16dcdce73f71e965b5
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 105
-  completed_plans: 102
+  completed_plans: 103
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1 — Window Behaviour Options
-Current Plan: 5
+Current Plan: 6
 Total Plans in Phase: 7
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
@@ -160,6 +160,7 @@ Progress: [████████░░] 80%
 | Phase 08.1 P02 | 8 min | 2 tasks | 9 files |
 | Phase 08.1 P03 | 18 min | 3 tasks | 20 files |
 | Phase 08.1 P04 | 54 min | 2 tasks | 9 files |
+| Phase 08.1 P05 | 21 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -450,6 +451,7 @@ Recent decisions affecting current work:
 - [Phase 08.1]: 08.1-02: Group dwell, whole-group drags and keyboard docking needed no engine change in Hold ⌥ mode; only ⌘ with no swap target and a torn tab did, and the table pins the rest
 - [Phase 08.1]: The no-change beep of a fourth applies only to a window already docked: a floating window at the would-be frame still docks (D-15)
 - [Phase 08.1]: TILE-23 stays unchecked after 08.1-04: 08.1-05 and 08.1-07 declare it too, and the drag route and the real bundle check aren't done
+- [Phase 08.1]: 08.1-05: TILE-22 and TILE-23 stay unchecked: 08.1-07 declares both and runs the two-OS check
 
 ### Quick Tasks Completed
 
@@ -494,8 +496,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T22:39:38.813Z
-Stopped at: Completed 08.1-04-PLAN.md
+Last session: 2026-11-04T23:02:49.131Z
+Stopped at: Completed 08.1-05-PLAN.md
 Resume file: None
 
 ## Deferred Verification

@@ -439,14 +439,14 @@ Plans:
   4. Both choices survive a relaunch, and the Phase 9 Settings window shows them
   5. The user can dock a window to the 1st, 2nd, 3rd or 4th fourth, or the middle half, as columns or rows, by keyboard or by dragging, and windows already docked shrink to fit
 
-**Plans:** 4/7 plans executed
+**Plans:** 5/7 plans executed
 
 Plans:
 - [x] 08.1-01-PLAN.md — Hold ⌥ on real windows: plain drag floats, 16 pt nudge snaps back, ⌥ docks with macOS's tiling kept away by the tap; UI-SPEC corrected
 - [x] 08.1-02-PLAN.md — Drag to Dock in menu ▸ Arrange and every remaining Hold ⌥ precedence row
 - [x] 08.1-03-PLAN.md — Fourths by keyboard: D-14 arithmetic, Command.dockFourth with its rules, ten chords and the Shortcuts section
 - [x] 08.1-04-PLAN.md — Fourths by URL, CLI and menu; a refused URL or CLI fourth shows nothing on screen
-- [ ] 08.1-05-PLAN.md — Fourths by dragging: ⌃ and ⌃⌘, labelled result preview, steady zone guides, the full matrix
+- [x] 08.1-05-PLAN.md — Fourths by dragging: ⌃ and ⌃⌘, labelled result preview, steady zone guides, the full matrix
 - [ ] 08.1-06-PLAN.md — New Windows: Tile: openedWhileRunning, autoTile with its guards, the menu item
 - [ ] 08.1-07-PLAN.md — The real bundle in the VM across a relaunch, live suites on both OSes, README and the final gate
 
@@ -489,5 +489,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Overview, Spaces & Displays | 12/12 | Complete    | 2026-11-01 |
 | 7. Tab Groups | 12/12 | Complete    | 2026-11-03 |
 | 8. Saved Views, URLs & Persistence | 7/7 | Complete    | 2026-11-04 |
-| 8.1. Window Behaviour Options (INSERTED) | 4/7 | In Progress | - |
+| 8.1. Window Behaviour Options (INSERTED) | 5/7 | In Progress | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |
