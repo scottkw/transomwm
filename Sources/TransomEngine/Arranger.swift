@@ -26,6 +26,8 @@ public enum ArrangerInput: Sendable {
     case setPaused(PauseReason, Bool)
     /// The gap between tiles (D-27), already validated by the shell's allow-list.
     case gap(Double)
+    /// How a title-bar drag docks (D-07), from the shell's stored preference.
+    case dragToDock(DragToDockMode)
     /// A left-button or modifier event from the event tap (TILE-01).
     case pointer(PointerEvent)
     /// The pressed window's CG bounds from the 60 Hz drag poll.
@@ -161,6 +163,7 @@ public struct Arranger: Sendable {
     /// never learned or saved; only boundary drags count it, so a drag stops at the floater's real size.
     private var floaterFloors: [WindowIdentity: Size] = [:]
     public var gap: Double
+    public internal(set) var dragToDock: DragToDockMode
     /// While any reason is set, facts still change the World but no window command is sent (TILE-08).
     public private(set) var pauseReasons: Set<PauseReason> = []
     /// The last frame requested for each window that is still planned; a frame within 0.5 pt of it is not written
@@ -242,8 +245,9 @@ public struct Arranger: Sendable {
         let deadline: ContinuousClock.Instant
     }
 
-    public init(gap: Double = 8) {
+    public init(gap: Double = 8, dragToDock: DragToDockMode = .automatic) {
         self.gap = gap
+        self.dragToDock = dragToDock
     }
 
     /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
@@ -419,6 +423,9 @@ public struct Arranger: Sendable {
         case .gap(let value):
             gap = value
             return replan()
+        case .dragToDock(let mode):
+            dragToDock = mode
+            return []
         case .pointer(let event):
             return pointer(event, now: now)
         case .dragFrame(let id, let frame):
@@ -1693,13 +1700,14 @@ public struct Arranger: Sendable {
         if session.modifiers.contains(.shift), torn != nil {
             return Hover(displayUUID: displays.first { $0.frame.contains(point) }?.uuid, modifiers: [.shift])
         }
-        if session.modifiers.contains(.shift) {
-            // Anywhere goes: only whether the frame would cross a docked tile, once floating, matters (TILE-02).
+        // Anywhere goes: only whether the frame would cross a docked tile, once floating, matters (TILE-02).
+        func floatHover(plain: Bool) -> Hover {
             let plan = ownDesk.tree.isDesktopHidden == true ? nil : docked ? dragPlan(.undock) : ownPlan
             return Hover(
                 displayUUID: ownKey.displayUUID, modifiers: [.shift],
-                crossesTiles: plan.map { Self.crosses(frame, $0, except: window) } ?? false)
+                crossesTiles: plan.map { Self.crosses(frame, $0, except: window) } ?? false, plain: plain)
         }
+        if session.modifiers.contains(.shift) { return floatHover(plain: false) }
         let display = displays.first { $0.frame.contains(point) }
         // ⌘ over any part of another docked panel of the same desk swaps (TILE-11); ⌘ is ignored for a floating window.
         if docked, session.modifiers.contains(.command), let display, Self.key(display) == ownKey,
@@ -1707,6 +1715,11 @@ public struct Arranger: Sendable {
             let leaf = ownDesk.tree.leaf(containing: other), case .panel? = ownDesk.tree.node(leaf)
         {
             return Hover(displayUUID: ownKey.displayUUID, swapWith: other, modifiers: [.command])
+        }
+        // Hold ⌥ with ⌥ up (D-08, D-08a): under 16 pt a docked window is decide's ordinary snap-back miss.
+        if dragToDock == .holdOption, !session.modifiers.contains(.option), torn == nil {
+            if docked, !session.travelledToPullOut { return Hover(displayUUID: ownKey.displayUUID) }
+            return floatHover(plain: true)
         }
         var target: DropTarget?
         var groupTarget: GroupTarget?
@@ -1836,6 +1849,12 @@ public struct Arranger: Sendable {
     /// Mouse-up: applies exactly the decision whose preview is on screen; with none, the miss rules (WYSIWYG).
     private mutating func release(now: ContinuousClock.Instant) -> [ArrangerEffect] {
         guard let session = drag else { return [] }
+        // Before endDrag, which clears what undockPlan reads (RESEARCH Pitfall 2).
+        var plain: Decision?
+        if session.kind == .move, session.tearOffGroup == nil {
+            let hover = hover(for: session)
+            if hover.plain { plain = decide(hover, window: session.window) }
+        }
         var effects = endDrag()
         let window = session.window
         guard windows[window.identity]?.isExcluded == false, deskKey(of: window) != nil else { return effects }
@@ -1851,7 +1870,7 @@ public struct Arranger: Sendable {
             }
         }
         if session.tearOffGroup != nil { return effects + releaseTearOff(session) }
-        let action = kind == .move ? session.current?.action ?? .miss : .miss
+        let action = kind == .move ? plain?.action ?? session.current?.action ?? .miss : .miss
         do throws(LayoutError) {
             if kind == .resize, let key = deskKey(of: window), world[key]?.tree.state(of: window) != nil,
                 let change = try boundaryChange(key, edgeMoves(session))
@@ -1927,7 +1946,7 @@ public struct Arranger: Sendable {
         undockedWanted[window.identity] = wantedFrames[window.identity]
         wantedFrames[window.identity] = world[key]?.desktop.frame(of: window)
         lastRequested[window.identity] = nil
-        return replan()
+        return replan() + (dragToDock == .holdOption ? [.announce(FourthCopy.floating)] : [])
     }
 
     /// The miss rules (D-01, D-06): a docked window snaps back to its tile; a floating one stays where it was released,

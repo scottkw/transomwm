@@ -61,11 +61,13 @@ public enum TransomMacApp {
         // The layout survives a quit and relaunch (SAFE-06); the store loads when tracking starts.
         let layoutStore = LayoutStore(directory: MinimumHintsStore.defaultDirectory)
         let gaps = GapPreference()
+        let dragToDock = DragToDockPreference()
         let arrangeController = ArrangeController(
-            system: system, store: layoutStore, exclusions: exclusions, gap: gaps.value,
+            system: system, store: layoutStore, exclusions: exclusions, gap: gaps.value, dragToDock: dragToDock.value,
             zoomEnabled: zoomEnabled)
         arrangeController.takeover = takeover
         gaps.onChange = { gap in Task { await arrangeController.setGap(gap) } }
+        dragToDock.onChange = { mode in Task { await arrangeController.setDragToDock(mode) } }
         arrangeController.isReady = { permissionController.state.phase == .ready }
         // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).
         let dispatch: @MainActor (Command) -> Void = { command in Task { await arrangeController.dispatch(command) } }

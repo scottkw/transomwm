@@ -136,13 +136,14 @@ import os
     var isRectZoomActive: Bool { zoomInput.isBandActive }
 
     public init(
-        system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, zoomEnabled: Bool = false
+        system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, dragToDock: DragToDockMode = .automatic,
+        zoomEnabled: Bool = false
     ) {
         self.system = system
         self.store = store
         self.exclusions = exclusions
         self.zoomEnabled = zoomEnabled
-        arranger = Arranger(gap: gap)
+        arranger = Arranger(gap: gap, dragToDock: dragToDock)
         system.releaseFramesBeforeExcluding = { [weak self] bundleIDs in self?.arranger.releaseFrames(forExcluding: bundleIDs) ?? [:] }
         gapPanels.onDrag = { [weak self] handle, delta, ended in
             Task { [weak self] in
@@ -173,6 +174,11 @@ import os
     /// A new gap from the Gaps submenu: applied at once, or on Resume while paused (D-27).
     public func setGap(_ gap: Double) async {
         await run(arranger.handle(.gap(gap), now: .now))
+    }
+
+    /// A new Drag to Dock choice: the next drag follows it (D-07, D-19).
+    public func setDragToDock(_ mode: DragToDockMode) async {
+        await run(arranger.handle(.dragToDock(mode), now: .now))
     }
 
     /// Queues a toast from outside the Arranger (ConflictController's N7 and N8).

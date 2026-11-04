@@ -12,6 +12,11 @@ public struct Modifiers: OptionSet, Hashable, Sendable {
     public static let control = Modifiers(rawValue: 1 << 3)
 }
 
+/// How a title-bar drag docks (D-07): automatically, or only with ⌥ held.
+public enum DragToDockMode: String, CaseIterable, Sendable {
+    case automatic, holdOption
+}
+
 /// One left-button or modifier event from the event tap, in global top-left points. `pressWindow` is resolved by the
 /// shell on `down` only (RESEARCH Pattern 4); a press on a strip tab carries `pressTab` instead, never `pressWindow`
 /// (Pattern 7, Pitfall 4).
@@ -73,6 +78,11 @@ public enum CollapseCopy {
     }
 }
 
+/// UI-SPEC Surface 2: the announcement of a pulled-out window in Hold ⌥ mode.
+public enum FourthCopy {
+    public static let floating = "Floating"
+}
+
 /// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain
 /// floating window (the middle 50% of its frame) or a floating group (the middle 50% of its content rect).
 enum GroupTarget: Equatable, Sendable {
@@ -110,6 +120,8 @@ struct Hover: Equatable, Sendable {
     var groupTarget: GroupTarget?
     /// A tear-off's pointer is back over its source strip: no preview, and a release cancels (D-10).
     var overStrip = false
+    /// Hold ⌥'s plain drag: the result never depends on the dwell, so it is decided at mouse-up (UI-SPEC Surface 2).
+    var plain = false
 }
 
 /// The dry run's verdict for one hover (UI-SPEC Surface 2 state matrix).
@@ -135,6 +147,8 @@ public struct DragSession: Equatable, Sendable {
     public static let groupDwell: Duration = .milliseconds(400)
     /// How far the pointer may wander from where the group dwell started before it restarts there (D-01).
     public static let groupRest = 16.0
+    /// Hold ⌥: a plain drag of a docked window pulls it out only from this far from the press, so a nudge can't float it (D-08a).
+    public static let pullOutTravel = 16.0
 
     /// What the press grabbed: a window's title bar, or a tab torn out of its strip (D-10), whose window does not move
     /// until release and lands at `landingSize` under the pointer.
@@ -203,6 +217,12 @@ public struct DragSession: Equatable, Sendable {
     public var travelled: Bool {
         let dx = pointer.x - start.x, dy = pointer.y - start.y
         return (dx * dx + dy * dy).squareRoot() >= Self.minimumTravel
+    }
+
+    /// The pointer is at least `pullOutTravel` from the press now, so coming back inside it counts as not travelled.
+    public var travelledToPullOut: Bool {
+        let dx = pointer.x - start.x, dy = pointer.y - start.y
+        return (dx * dx + dy * dy).squareRoot() >= Self.pullOutTravel
     }
 
     /// Classifies a frame report of the press window (RESEARCH Pattern 1): within 2 pt of Transom's last read-back it is an
