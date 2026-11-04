@@ -168,11 +168,13 @@ extension Arranger {
     }
 
     /// A docked window of a quitting app keeps its tile (D-12a); nil when `window` closes as usual (⌘W, or a floater).
-    /// The ref keeps the latest title, which the matcher and layout.json need once `windows` has forgotten it.
+    /// The ref keeps the latest real title, which the matcher and layout.json need once `windows` has forgotten it.
     mutating func holdForQuit(_ window: WindowRef) throws(LayoutError) -> [ArrangerEffect]? {
         guard let quit = placeholders.quitting[window.pid], let key = deskKey(of: window), let leaf = world[key]?.tree.leaf(containing: window)
         else { return nil }
-        let info = windows[window.identity], ref = info?.window ?? window
+        let info = windows[window.identity]
+        var ref = info?.window ?? window
+        if ref.titleHint.isEmpty, let held = world[key]?.tree.windows.first(where: { $0 == window }) { ref.titleHint = held.titleHint }
         world = world.refreshingTitles([ref.identity: ref.titleHint])
         placeholders.table[ref.identity] = Placeholder(
             ref: ref, origin: .appQuit, wait: .afterQuit, deadline: quit.at + Self.quitWait, minimum: info?.learnedMinimum)

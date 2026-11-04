@@ -207,6 +207,32 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(harness.arranger.world[key]?.tree.windows.first?.titleHint == "Renamed")
     }
 
+    /// WR-07: a window that momentarily reports no title (teardown, loading) keeps its latest real one, in layout.json and
+    /// in the placeholder, or the matcher scores nothing for it.
+    @Test func anEmptyTitleNeverReplacesARealOne() async throws {
+        var harness = await threeDocked()
+        let frame = try #require(await harness.frame(ref(1)))
+        await harness.send(.event(.windowChanged(tracked(ref(1, title: "Renamed"), frame: frame))))
+        let blank = await harness.send(.event(.windowChanged(tracked(ref(1, title: ""), frame: frame))))
+        #expect(!blank.contains(.save(.debounced)))
+        #expect(harness.arranger.snapshot.world[key]?.tree.windows.first?.titleHint == "Renamed")
+
+        _ = await quit(&harness)
+        #expect(harness.arranger.snapshot.world[key]?.tree.windows.first?.titleHint == "Renamed")
+        await harness.send(.event(.windowCreated(returning(11, title: "Renamed"))))
+        #expect(harness.arranger.world[key]?.tree.windows.first?.windowID == 11)
+    }
+
+    /// WR-07: a title is worth the most in matching, and no World change follows it, so it schedules its own save.
+    @Test func aTitleChangeOfAHeldWindowSchedulesASave() async throws {
+        var harness = await threeDocked()
+        let frame = try #require(await harness.frame(ref(1)))
+        let renamed = await harness.send(.event(.windowChanged(tracked(ref(1, title: "Renamed"), frame: frame))))
+        #expect(renamed.contains(.save(.debounced)))
+        let same = await harness.send(.event(.windowChanged(tracked(ref(1, title: "Renamed"), frame: frame))))
+        #expect(!same.contains(.save(.debounced)))
+    }
+
     /// D-02, RESEARCH Pitfall 3: a saved view follows the window that fills the placeholder.
     @Test func aSavedViewFollowsTheFilledPlaceholder() async throws {
         var harness = await threeDocked()

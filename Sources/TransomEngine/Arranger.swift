@@ -916,6 +916,12 @@ public struct Arranger: Sendable {
                         faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))
                     }
                 }
+                // A title decides matches and is no World change, so it saves itself, and `world` keeps the latest real one (WR-07).
+                let title = info.window.titleHint
+                if !title.isEmpty, title != windows[info.window.identity]?.window.titleHint, deskKey(of: info.window) != nil {
+                    world = world.refreshingTitles([info.window.identity: title])
+                    faults.append(.save(.debounced))
+                }
                 windows[info.window.identity] = info
                 subject = info.window.identity
                 if case .windowCreated = event { noteCreated(info, now: now) }

@@ -133,11 +133,12 @@ public struct World: Codable, Equatable, Sendable {
 
     /// A copy whose docked, tabbed and floating windows take their title from `titles` where it has their identity, so
     /// layout.json holds current titles for re-matching after a relaunch (D-10, RESEARCH Pitfall 2). Every other window
-    /// keeps the title it has. Equal to `self`, since WindowRef equality is identity-only.
+    /// keeps the title it has, as does one reporting no title for now (teardown, loading). Equal to `self`, since WindowRef
+    /// equality is identity-only.
     public func refreshingTitles(_ titles: [WindowIdentity: String]) -> World {
         func titled(_ window: WindowRef) -> WindowRef {
             var window = window
-            if let title = titles[window.identity] { window.titleHint = title }
+            if let title = titles[window.identity], !title.isEmpty { window.titleHint = title }
             return window
         }
         var copy = self
