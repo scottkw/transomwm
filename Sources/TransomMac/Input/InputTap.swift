@@ -52,9 +52,10 @@ nonisolated private final class TapBox: @unchecked Sendable {
 
 /// The one active session event tap (RESEARCH Pattern 6): left mouse down, dragged and up, and flagsChanged. No keyboard
 /// key events are in the mask, so Transom never sees typed characters (T-03-28). It runs on its own thread with its own
-/// CFRunLoop, never main (Pitfall 5). The callback copies four fields and returns the event unchanged: no AX, no file
-/// I/O, no logging (T-03-29). The exceptions are a press on a published green button (TILE-06) and the zoom presses
-/// `ZoomTapRules` takes (04-06).
+/// CFRunLoop, never main (Pitfall 5). The callback copies four fields and passes the event on: no AX, no file I/O, no
+/// logging (T-03-29). The exceptions are a press on a published green button (TILE-06) and the zoom presses `ZoomTapRules`
+/// takes (04-06), which it takes, and ⌥, which it removes from a passed `flagsChanged`, `leftMouseDragged` or `leftMouseUp`
+/// during a window move when `DragOptionRule` says so, after Transom has its own copy (D-07a).
 /// Call `start`, `stop` and `watchdogTick` from one thread (main).
 nonisolated final class InputTap: @unchecked Sendable {
     let events: AsyncStream<TapEvent>
