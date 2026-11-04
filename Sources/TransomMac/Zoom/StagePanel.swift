@@ -1,5 +1,7 @@
 import AppKit
 import QuartzCore
+import TransomEngine
+import TransomModel
 
 /// One window's tile on the stage. Rects are AppKit global coordinates (bottom-left origin); callers convert with
 /// `Coordinates.appKit(fromTopLeft:primaryHeight:)`.
@@ -26,6 +28,15 @@ public struct StageTile {
     /// window, so it does nothing.
     /// shortcut: flips the top bit, so a CG window ID ≥ 0x7000_0000 could meet a synthetic tile's strip; CG IDs stay small.
     static func stripID(_ tileID: UInt32) -> UInt32 { tileID ^ 0x8000_0000 }
+
+    /// A camera move's placeholders: the panel's recipe, laid out for each tile's end size. Their IDs are their dead
+    /// windows', which match no click (no accessibility element either, Phase 4/6 rule): a dead ID isn't reused within a
+    /// boot, and after a reboot they are retired ones (`LayoutRestore.retire`), which no live window can have.
+    static func placeholders(of move: CameraMove, appKit: (Rect) -> CGRect) -> [StageTile] {
+        move.placeholders.map { tile in
+            StageTile(id: tile.window.windowID, start: appKit(tile.start), end: appKit(tile.end), content: PlaceholderLook(bundleID: tile.window.bundleID).content)
+        }
+    }
 }
 
 /// The overview's strip and empty-message capsule (06 UI-SPEC Surfaces 1-2), drawn above the tiles. AppKit global rects.

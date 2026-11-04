@@ -19,7 +19,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Gestures** - Trackpad pinch and pan with ⌥ anywhere and bare on the desktop (completed 2026-10-30)
 - [x] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts (completed 2026-11-01)
 - [x] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons (completed 2026-11-03)
-- [ ] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `transom://` commands, layouts restored across restarts and reboots
+- [x] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `transom://` commands, layouts restored across restarts and reboots (completed 2026-11-04)
+- [ ] **Phase 08.1: Window Behaviour Options**
 - [ ] **Phase 9: Polish & Ship** - Settings, onboarding, launch at login, GitHub Releases update check, Homebrew cask
 
 ## Phase Details
@@ -404,15 +405,55 @@ Plans:
   3. After quitting and relaunching Transom, or rebooting the Mac, layouts come back with each window re-matched to its tile, and windows that never return leave a placeholder that expires rather than a permanent hole
   4. A bundled `transom` command-line tool runs every `transom://` command and exits non-zero with a message on errors
 
-**Plans**: TBD
+**Plans**: 7/7 plans complete
+
+**Wave 1**
+- [x] 08-01-PLAN.md — Saved views by hotkey: ⇧⌥N saves, ⌥N goes to the smallest node holding the saved windows; brief toasts; 15.0/15.1 chord rule; Shortcuts section
+- [x] 08-02-PLAN.md — Re-match on Transom relaunch: layout.json schema 3 with titles (0600), HintMatcher scoring table, boot-session guard
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 08-03-PLAN.md — Views persisted under `views`, identity remapping and Space rekey, going to a view on another Space/display, joined VoiceOver line
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 08-04-PLAN.md — Placeholder lifecycle: app quit keeps tiles (30 s), relaunch fills them, sliding 10 s / 5 min expiry through the close path
+- [x] 08-05-PLAN.md — `transom://view/N` and `save-view/N`, the `transom` CLI over CFMessagePort with exit codes, shared gate and rate limit, Contents/Helpers embedding
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 08-06-PLAN.md — Placeholder drawing: click-through "Waiting for {App}…" tiles, stage and overview, Debug line, tracked-window audit
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 08-07-PLAN.md — VM CLI check of the built bundle (exit codes 0/1/2/64) and README additions
 **Research**: Standard patterns; cheap on top of the Phase 3 command dispatcher and Phase 4 `NodeID` camera targets
 **Scope notes**: Layout-aware default chords for views; `transom://` with an allow-list and rate limit; re-matching uses persisted match hints with a score threshold.
+
+### Phase 08.1: Window Behaviour Options (INSERTED)
+
+**Goal**: As a user, I want to choose how new windows and window drags behave, and to dock by fourths, so that Transom fits the way I work.
+**Mode:** mvp
+**Depends on**: Phase 8
+**Requirements**: TILE-21, TILE-22, TILE-23
+**Success Criteria** (what must be TRUE):
+  1. The user can choose whether new windows tile automatically or float on the Desktop tile until docked; floating stays the default
+  2. The user can choose whether a drag shows the docking regions automatically or only while a key is held; automatic stays the default. In hold-a-key mode, a plain drag pulls a docked window out to floating and just moves a floating one
+  3. With the default choices, behaviour is the same as before this phase
+  4. Both choices survive a relaunch, and the Phase 9 Settings window shows them
+  5. The user can dock a window to the 1st, 2nd, 3rd or 4th fourth, or the middle half, as columns or rows, by keyboard or by dragging, and windows already docked shrink to fit
+
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 08.1 to break down)
+
+**UI hint**: yes
+**Scope notes**: Inserted 2026-11-04 from user feedback after daily use. Settings doesn't exist until Phase 9, so the options need a home here, such as the status menu. Open for discuss-phase: where an auto-tiled window lands, which windows are never auto-tiled (dialogs, panels, excluded apps), which key is held, how that key interacts with the existing ⇧ and ⌘ drag modifiers.
+**Decided (user, 2026-11-04)**: Fourths come as columns and as rows, each with a middle half. They work from the keyboard and from drag regions. Windows already docked shrink to fit. Today's halves, thirds and quarters are snaps for floating windows only, so this is new tiling behaviour.
+**Decided (user, 2026-11-04, on Claude's recommendation; may revisit)**: Drag docking stays, and keyboard docking works in both modes. Removing drag docking was considered and rejected: it is the core value, and the keyboard can't name a position in a nested layout.
 
 ### Phase 9: Polish & Ship
 
 **Goal**: As a new user, I want to install Transom with Homebrew and be guided through setup, so that it starts at login and keeps itself updated.
 **Mode:** mvp
-**Depends on**: Phase 5, Phase 6, Phase 7, Phase 8
+**Depends on**: Phase 5, Phase 6, Phase 7, Phase 8, Phase 8.1
 **Requirements**: SHIP-01, SHIP-02, SHIP-03, SHIP-04, SHIP-05, SHIP-06, SHIP-07, SHIP-08
 **Success Criteria** (what must be TRUE):
   1. The Settings window lets the user change gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
@@ -430,7 +471,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.1 → 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -441,5 +482,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Gestures | 8/8 | Complete    | 2026-10-30 |
 | 6. Overview, Spaces & Displays | 12/12 | Complete    | 2026-11-01 |
 | 7. Tab Groups | 12/12 | Complete    | 2026-11-03 |
-| 8. Saved Views, URLs & Persistence | 0/TBD | Not started | - |
+| 8. Saved Views, URLs & Persistence | 7/7 | Complete    | 2026-11-04 |
+| 8.1. Window Behaviour Options (INSERTED) | 0/TBD | Not started | - |
 | 9. Polish & Ship | 0/TBD | Not started | - |

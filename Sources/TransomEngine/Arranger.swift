@@ -11,9 +11,11 @@ public enum ArrangerInput: Sendable {
     case tick
     /// The layout saved by the last session (layout.json). It is re-attached by identity at the first complete inventory.
     /// `arrangement` and `layoutSets` are the saved display arrangement and the other arrangements' layouts (D-09).
+    /// `views` are the saved views (D-14). `bootChanged`: the saved boot session differs from this one, so no saved
+    /// identity is kept (`LayoutRestore.retire`, RESEARCH Pitfall 5).
     case restore(
         World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect] = [:], arrangement: ArrangementID = ArrangementID([]),
-        layoutSets: [LayoutSet] = [])
+        layoutSets: [LayoutSet] = [], views: [SavedView] = [], bootChanged: Bool = false)
     /// Displays began reconfiguring (OVER-05): until `.displaysSettled` no window is re-homed by display and no frame is
     /// written, so macOS moving windows off a vanishing display cannot destroy the tiles a re-plug needs (Pitfall 4).
     case displaysSettling
@@ -110,6 +112,8 @@ public enum ArrangerEffect: Equatable, Sendable {
     case tabAnnouncement(TabAnnouncement)
     /// The tab strips to show on that display; empty hides them (UI-SPEC Surface 2).
     case tabStrips([TabStrip], displayUUID: String)
+    /// The tiles held for absent windows on that display's shown desk; empty hides them (08 UI-SPEC Surface 2).
+    case placeholders([PlaceholderTile], displayUUID: String)
     /// Order this group's strip front: one of its members was just selected (UI-SPEC Surface 2 ordering).
     case raiseStrip(GroupKey)
     /// Show or move the tear-off ghost at this pointer; nil hides it (UI-SPEC Surface 4).
@@ -142,7 +146,7 @@ public struct Arranger: Sendable {
     public private(set) var windows: [WindowIdentity: WindowInfo] = [:]
     public private(set) var displays: [DisplayInfo] = []
     /// Where each parked window goes back to (plan 08); restored from layout.json.
-    public private(set) var homeFrames: [WindowIdentity: Rect] = [:]
+    public internal(set) var homeFrames: [WindowIdentity: Rect] = [:]
     /// The frame each window goes back to when it floats (G-03-11). Only user actions and the frames a window takes
     /// on its own write it; it is kept while the window is docked, so it is the pre-dock frame (G-03-4). Undo (except
     /// to give back `undockedWanted`), echoes of Transom's own writes, parks and rescues leave it alone. Dock's centre and
@@ -163,7 +167,7 @@ public struct Arranger: Sendable {
     /// again, so an app echoing frames cannot cause a write storm (T-03-08).
     var lastRequested: [WindowIdentity: Rect] = [:]
     /// Locked or asleep: nothing is written until the session resumes, then every visible desk is re-planned.
-    var sessionPaused = false
+    public internal(set) var sessionPaused = false
     /// The Spaces-off fallback (A7) is reported once per session.
     private var reportedSpacesOff = false
     /// Each window's last read-back (`frameApplied`): a move or resize within 2 pt of it is Transom's own write coming
@@ -180,8 +184,8 @@ public struct Arranger: Sendable {
     /// A saved layout that could not be re-attached: still what is saved, with the arrangement it was saved under, so
     /// this session cannot overwrite or relabel it (WR-04, CR-01).
     private var unattached: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID)?
-    /// Tests only: the next re-attach throws this. Real data cannot build a World whose re-attach throws (closing a
-    /// window always leaves a valid one), so this stands in for the failure CR-01 guards against.
+    /// The next re-attach throws this. Real data cannot build a World whose re-attach throws (closing a window always
+    /// leaves a valid one), so outside a failed `retire` this is for tests, standing in for the failure CR-01 guards against.
     var reattachFault: LayoutError?
     /// How this launch treats the saved layout (D-17, D-18): read once, at the re-attach.
     private var launch: LaunchMode = .normal
@@ -205,6 +209,8 @@ public struct Arranger: Sendable {
     var camera = CameraState()
     /// Tab strips shown and the selection waiting for its read-back (Arranger+Tabs.swift).
     var tabs = TabGroupState()
+    /// Windows waiting to come back and their deadlines (Arranger+Placeholders.swift).
+    var placeholders = PlaceholderState()
     /// Displays are reconfiguring (`.displaysSettling`): no display-based re-homing, no frames.
     public private(set) var settling = false
     /// The World when settling began: stored as the old arrangement's layout set at the settle.
@@ -242,15 +248,19 @@ public struct Arranger: Sendable {
 
     /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        let before = world, beforeHistory = history
+        let before = world, beforeHistory = history, earliest = earliestPlaceholderDeadline, shownBefore = displays
         var effects = process(input, now: now)
+        if displays != shownBefore { extendPlaceholdersShown(since: shownBefore, now: now) }
+        if earliestPlaceholderDeadline != earliest, let wake = nextWake { effects.append(.wake(at: wake)) }
         // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
         if !homeFrames.isEmpty {
             for desk in world.desks.values where desk.tree.isDesktopHidden != true {
                 for floating in desk.desktop.windows { homeFrames[floating.window.identity] = nil }
             }
         }
+        if let dragged = drag, dragged.kind != nil { placeholders.fresh.remove(dragged.window.identity) }  // the user's now
         guard world != before else { return effects }
+        placeholders.prune(world)
         dragPlans = [:]  // the plans a drag caches are of the World before
         // A window that left its floating group (a dissolve, an undo, a drag out) wanted the group's content rect: from
         // now on it wants its stored frame, the whole group frame for a survivor (the band returns to it).
@@ -270,20 +280,24 @@ public struct Arranger: Sendable {
     private mutating func process(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         switch input {
         case .inventory(var inventory):
-            let dormant = Set(dormantWindows.map(\.identity))
+            let dormant = Set(dormantWindows.map(\.identity)).union(placeholders.table.keys)
             adopt(inventory)
             if arrangement.isUnknown, !settling, !displays.isEmpty { arrangement = ArrangementID(displays.map(\.uuid)) }
             guard let restore = pendingRestore else {
                 // A dormant window this inventory tracks before its windowCreated is handled wakes here (WR-01).
                 var faults: [ArrangerEffect] = []
                 for info in inventory.windows where dormant.contains(info.window.identity) {
+                    placeholders.table[info.window.identity] = nil  // the very window came back
                     do throws(LayoutError) { try wakeDormant(info) } catch {
                         faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))
                     }
                 }
-                // A dormant window whose ID left the CG list closed (G-03-8); a paused, unknown or empty list decides nothing.
+                // A dormant window whose ID left the CG list closed (G-03-8), or its app is quitting (D-12b): a docked one
+                // waits to see which. A paused, unknown or empty list decides nothing.
                 guard !inventory.sessionPaused, let live = inventory.liveWindows, !live.isEmpty else { return faults + place(inventory) }
-                return faults + closeDormant { !LayoutRestore.isAlive($0.identity, in: live) } + place(inventory)
+                let left = dormantWindows.filter { !LayoutRestore.isAlive($0.identity, in: live) }
+                holdLeftCGList(left, now: now)
+                return faults + closeDormant { left.contains($0) } + place(inventory)
             }
             // The saved layout waits for every app's first answer, so no saved window is dropped as untracked, and for an
             // unlocked session with a non-empty CG list: a blank one can't tell a closed window from one on a hidden Space
@@ -295,8 +309,8 @@ public struct Arranger: Sendable {
             // kept dormant because the CG list still has them (G-03-8).
             let real = Set(inventory.windows.filter { $0.idSource != .synthetic }.map(\.window.identity))
             // Only a window on a known Space that is not shown is a hidden-Space window. One AX does not list on a shown
-            // Space is a hidden tab of a group now tracked under another member (CR-01) or an AX read that failed: it is
-            // removed, as before G-03-8 (`isAlive` drops one on no Space). Unknown Spaces keep the G-03-8 rule.
+            // Space is a hidden tab of a group now tracked under another member (CR-01) or an AX read that failed: it
+            // waits like any unattached window (`isAlive` drops one on no Space). Unknown Spaces keep the G-03-8 rule.
             let shown = Set(displays.compactMap(\.currentSpaceID))
             let live = inventory.liveWindows?.filter { $0.spaces?.isDisjoint(with: shown) ?? true }
             homeFrames = restore.homeFrames.filter { home in real.contains(home.key) || live.map { LayoutRestore.isAlive(home.key, in: $0) } ?? true }
@@ -305,7 +319,7 @@ public struct Arranger: Sendable {
             inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
             let restored: (effects: [ArrangerEffect], unplaced: Int)
             do throws(LayoutError) {
-                restored = try reattach(restore, tracked: inventory.windows, live: live)
+                restored = try reattach(restore, tracked: inventory.windows, live: live, holdingFrom: now)
             } catch {
                 unattached = (restore.world, restore.homeFrames, restore.wantedFrames, arrangement)
                 restored = ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
@@ -375,11 +389,22 @@ public struct Arranger: Sendable {
             return replan()
         case .tick:
             return tick(now: now)
-        case .restore(let world, let homeFrames, let wantedFrames, let arrangement, let sets):
+        case .restore(var world, var homeFrames, var wantedFrames, let arrangement, var sets, var views, let bootChanged):
+            var effects: [ArrangerEffect] = []
+            if bootChanged {
+                do throws(LayoutError) {
+                    (world, homeFrames, wantedFrames, sets, views) = try LayoutRestore.retire(
+                        world, homeFrames: homeFrames, wantedFrames: wantedFrames, sets: sets, views: views)
+                    effects.append(.info("boot session changed: matching every saved window by hints"))
+                } catch {
+                    reattachFault = error  // never for a decoded World, but no old identity may re-attach: start empty, keep the file
+                }
+            }
             pendingRestore = (world, homeFrames, wantedFrames)
+            camera.savedViews = SavedViews(views)
             self.arrangement = arrangement
             layoutSets = LayoutSets(sets)
-            return []
+            return effects
         case .displaysSettling:
             guard !settling else { return [] }
             preChangeWorld = world
@@ -434,13 +459,24 @@ public struct Arranger: Sendable {
 
     /// What layout.json should hold now: while a restore waits, or after it failed, the saved layout itself, so a write
     /// then loses nothing.
-    /// While displays settle, the World from before the change.
+    /// While displays settle, the World from before the change. Every tracked window's ref carries its current title
+    /// (re-matching reads it, RESEARCH Pitfall 2); an untracked one keeps the title it was loaded with.
     public var snapshot: (
-        world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID, layoutSets: [LayoutSet]
+        world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect], arrangement: ArrangementID, layoutSets: [LayoutSet],
+        views: [SavedView]
     ) {
-        if let unattached { return (unattached.world, unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, layoutSets.all) }
+        let titles = windows.mapValues(\.window.titleHint)
+        let sets = layoutSets.all.map { set in
+            var set = set
+            set.world = set.world.refreshingTitles(titles)
+            return set
+        }
+        if let unattached {
+            let views = heldViews(in: [unattached.world] + sets.map(\.world))
+            return (unattached.world.refreshingTitles(titles), unattached.homeFrames, unattached.wantedFrames, unattached.arrangement, sets, views)
+        }
         let saved = pendingRestore ?? (settling ? preChangeWorld ?? world : world, homeFrames, wantedFrames)
-        return (saved.world, saved.homeFrames, saved.wantedFrames, arrangement, layoutSets.all)
+        return (saved.world.refreshingTitles(titles), saved.homeFrames, saved.wantedFrames, arrangement, sets, heldViews(in: [saved.world] + sets.map(\.world)))
     }
 
     /// Takes the displays, session state and windows of `inventory`. A Space lookup that answers 0 or switches off
@@ -505,7 +541,7 @@ public struct Arranger: Sendable {
             let live = inventory.liveWindows?.filter { $0.spaces?.isDisjoint(with: shown) ?? true }
             do throws(LayoutError) {
                 let merged = try Self.merged(set.world, current: world, keeping: userPlacedSinceSwitch)
-                effects += try reattach((merged, homeFrames, wantedFrames), tracked: inventory.windows, live: live).effects
+                effects += try reattach((merged, homeFrames, wantedFrames), tracked: inventory.windows, live: live, holdingFrom: now, closingShown: true).effects
             } catch {
                 layoutSets.store(set.world, for: id, at: set.lastUsed)
                 effects.append(.fault("could not apply the layout set for arrangement \(id.shortHash); keeping the current layout: \(error)"))
@@ -652,22 +688,52 @@ public struct Arranger: Sendable {
     /// a present floating window, its real frame. Each docked window's current frame counts as already requested, so
     /// only tiles more than 0.5 pt off are written. Undo history starts empty (session-only). A window whose real state
     /// or frame cannot be applied keeps its saved one. Throws, changing nothing but the history, if the saved layout cannot
-    /// be re-attached at all. `unplaced` counts the tracked windows the saved layout did not hold.
+    /// be re-attached at all. `unplaced` counts the tracked windows the saved layout did not hold. Unmatched saved windows
+    /// wait as placeholders from `now` (D-12). With `closingShown` (a stored arrangement, not a launch), only those on a desk
+    /// not showing do, as AX can't list them there (D-12b); the rest close unless they already wait.
     private mutating func reattach(
-        _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?
+        _ restore: (world: World, homeFrames: [WindowIdentity: Rect], wantedFrames: [WindowIdentity: Rect]), tracked: [WindowInfo], live: [CGWindowEntry]?,
+        holdingFrom now: ContinuousClock.Instant, closingShown: Bool = false
     ) throws(LayoutError) -> (effects: [ArrangerEffect], unplaced: Int) {
         if let fault = reattachFault {
             reattachFault = nil
             throw fault
         }
         history = UndoHistory()
-        let reattached = try LayoutRestore.reattach(restore.world, tracked: tracked, live: live)
+        let reattached = try LayoutRestore.reattach(
+            restore.world, tracked: tracked, live: live, savedFrames: savedFrames(restore.world), shownDesks: shownDesks)
         var candidate = reattached.world
+        for match in reattached.matches {
+            let display = tracked.first { $0.window == match.window }?.displayUUID
+            if let desk = candidate.desks.first(where: { $0.value.contains(match.window) })?.key, display != desk.displayUUID {
+                placeholders.arriving.insert(match.window.identity)
+            }
+        }
+        var holding = reattached.waiting
+        if closingShown {
+            let new = reattached.waiting.filter { placeholders.table[$0.identity] == nil }
+            holding = new.filter { window in candidate.desks.contains { !shownDesks.contains($0.key) && $0.value.contains(window) } }
+            for window in new where !holding.contains(window) {
+                try candidate.apply(.closed, for: window, on: DeskKey(displayUUID: "", spaceID: nil), history: &history)
+            }
+        }
         var seeded: [WindowIdentity: Rect] = [:]
-        var faults: [ArrangerEffect] = []
-        // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74).
+        var faults = Self.matchLog(reattached, saved: restore.world)
+        // Through a throwaway identity first, as LayoutRestore does: a returning window can carry another saved one's ID.
+        let parked = reattached.matches.indices.map { WindowIdentity(windowID: UInt32($0), pid: -1, bundleID: "") }
+        for (match, temp) in zip(reattached.matches, parked) { remapViews(from: match.saved.identity, to: temp) }
+        for (match, temp) in zip(reattached.matches, parked) { remapViews(from: temp, to: match.window.identity) }
+        // Saved wanted frames come back for the windows the World still holds; a stranded one is dropped (T-03-74). A
+        // match's follow it, as a rekey's do (WR-10). All in one pass, as a returning window can carry another saved one's ID.
+        let matchedSaved = Set(reattached.matches.map(\.saved.identity))
         var wanted = restore.wantedFrames.filter { id, frame in
-            candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
+            !matchedSaved.contains(id) && candidate.desks.values.contains { $0.contains(WindowRef(identity: id)) } && !Recovery.isStranded(frame, displays: displays)
+        }
+        homeFrames = homeFrames.filter { !matchedSaved.contains($0.key) }
+        for id in matchedSaved { wantedFrames[id] = nil }
+        for match in reattached.matches {
+            if let frame = restore.wantedFrames[match.saved.identity], !Recovery.isStranded(frame, displays: displays) { wanted[match.window.identity] = frame }
+            if let frame = restore.homeFrames[match.saved.identity] { homeFrames[match.window.identity] = frame }
         }
         for info in tracked where info.state != .closed {
             guard let key = candidate.desks.first(where: { $0.value.contains(info.window) })?.key, let desk = candidate[key] else {
@@ -693,7 +759,44 @@ public struct Arranger: Sendable {
                 wantedFrames[floating.window.identity] = floating.frame
             }
         }
+        if !holding.isEmpty { faults += holdAtLaunch(holding, tracked: tracked, unplaced: reattached.unplaced, ties: reattached.ties, now: now) }
         return (faults, reattached.unplaced.count)
+    }
+
+    /// Each saved window's frame for the matcher: a docked one's home-view tile on its desk's display (the frame a clean
+    /// quit left it at; a parked frame means nothing, RESEARCH Pitfall 9), a floating one's saved frame.
+    func savedFrames(_ saved: World) -> [WindowIdentity: Rect] {
+        var frames: [WindowIdentity: Rect] = [:]
+        for (key, desk) in saved.desks {
+            // No display or no plan: no frame hint, which only means frame scores nothing.
+            if let area = displays.first(where: { $0.uuid == key.displayUUID })?.visibleFrame,
+                let plan = try? Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
+            {
+                for (window, frame) in plan.frames { frames[window.identity] = frame }
+            }
+            for floating in desk.desktop.windows { frames[floating.window.identity] = floating.frame }
+        }
+        return frames
+    }
+
+    /// One info line per hint match, per tie and per bundle with saved windows left unmatched; identities only, never
+    /// titles (D-10).
+    private static func matchLog(
+        _ result: (world: World, waiting: [WindowRef], removed: [WindowRef], unplaced: [WindowInfo], matches: [HintMatcher.Match], ties: [HintMatcher.Tie]),
+        saved: World
+    ) -> [ArrangerEffect] {
+        func tile(_ window: WindowRef) -> String {
+            saved.desks.values.lazy.compactMap { $0.tree.leaf(containing: window) }.first.map { "\($0)" } ?? "Desktop"
+        }
+        let tied = Set(result.ties.flatMap(\.saved))
+        let unmatched = Dictionary(grouping: (result.waiting + result.removed).filter { !tied.contains($0) }, by: \.bundleID)
+        return result.matches.map { .info("match \($0.window.bundleID): window \($0.window.windowID) -> tile \(tile($0.saved)), score \($0.score)") }
+            + result.ties.map { tie in
+                let windows = tie.candidates.map { "\($0.windowID)" }.joined(separator: " and ")
+                let tiles = tie.saved.map(tile).joined(separator: ", ")
+                return .info("match \(tie.saved[0].bundleID): tie at \(tie.score) between windows \(windows); tile \(tiles) waits, windows float")
+            }
+            + unmatched.sorted { $0.key < $1.key }.map { .info("match \($0.key): \($0.value.count) unmatched, below threshold") }
     }
 
     /// Moves every stranded window Transom may move (tracked, dockable, present, not excluded) back on screen: its home
@@ -818,16 +921,30 @@ public struct Arranger: Sendable {
         var faults: [ArrangerEffect] = []
         var selected: [ArrangerEffect] = []
         var dissolved: [ArrangerEffect] = []
+        var filled = false
         do throws(LayoutError) {
             switch event {
             case .windowCreated(let info), .windowChanged(let info):
                 if case .windowCreated = event, windows[info.window.identity] == nil, deskKey(of: info.window) != nil {
+                    placeholders.table[info.window.identity] = nil  // the very window came back
                     do throws(LayoutError) { try wakeDormant(info) } catch {
                         faults.append(.fault("kept the saved state and frame of \(info.window): \(error)"))
                     }
                 }
+                // A title decides matches and is no World change, so it saves itself, and `world` keeps the latest real one (WR-07).
+                let title = info.window.titleHint
+                if !title.isEmpty, title != windows[info.window.identity]?.window.titleHint, deskKey(of: info.window) != nil {
+                    world = world.refreshingTitles([info.window.identity: title])
+                    faults.append(.save(.debounced))
+                }
                 windows[info.window.identity] = info
                 subject = info.window.identity
+                if case .windowCreated = event { noteCreated(info, now: now) }
+                // Before `admit`, so a returning window never shows a hidden Desktop on its way to its tile (D-31).
+                if placeholders.fresh.contains(info.window.identity) {
+                    faults += fillPlaceholders(of: info.window.bundleID)
+                    filled = !placeholders.fresh.contains(info.window.identity)
+                }
             case .windowRekeyed(let from, let to):
                 windows[from.identity] = nil
                 windows[to.window.identity] = to
@@ -844,12 +961,15 @@ public struct Arranger: Sendable {
                 if tabs.pendingReveal?.previous == from { tabs.pendingReveal?.previous = to.window }
                 if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
+                remapViews(from: from.identity, to: to.window.identity)
+                if placeholders.arriving.remove(from.identity) != nil { placeholders.arriving.insert(to.window.identity) }
                 subject = to.window.identity
             case .windowMoved(let window, let frame), .windowResized(let window, let frame):
                 windows[window.identity]?.frame = frame
                 return try moved(window, to: frame, now: now)
             case .frameApplied(let window, let requested, let actual):
                 lastApplied[window.identity] = actual
+                placeholders.arriving.remove(window.identity)
                 if let shown = revealed(window, actual: actual, now: now) { return shown }
                 if isFloating(window) {
                     let t = MinimumSizeLearner.tolerance, old = floaterFloors[window.identity] ?? Size(width: 0, height: 0)
@@ -870,6 +990,16 @@ public struct Arranger: Sendable {
                 subject = window.identity
             case .windowDestroyed(let window):
                 suppressFocus(ofGroupHolding: window, now: now)
+                if let held = try holdForQuit(window) {
+                    let collapsible = camera.collapsible.contains(window.identity)
+                    let wanted = wantedFrames[window.identity], home = homeFrames[window.identity]
+                    forget(window)
+                    if collapsible { camera.collapsible.insert(window.identity) }  // its block keeps its share, as its minimum does
+                    // For the window that fills its tile (WR-10).
+                    wantedFrames[window.identity] = wanted
+                    homeFrames[window.identity] = home
+                    return faults + held + replan()
+                }
                 forget(window)
             case .sessionPaused(let paused):
                 sessionPaused = paused
@@ -888,11 +1018,19 @@ public struct Arranger: Sendable {
                 selected = activated(window, now: now)
                 if selected.isEmpty { selected = raisedStrip(of: window) }
             case .appTerminated(let pid):
-                // Its tracked windows are still in `windows` here and close on their own windowDestroyed.
+                // Its tracked windows are still in `windows` here; on their own windowDestroyed the docked ones wait (D-12a).
+                // Dormant windows get no windowDestroyed, so the docked ones wait now, and a floater closes (D-12b).
+                let dormant = dormantWindows.filter { $0.pid == pid } + placeholders.table.values.filter { $0.origin == .leftCGList && $0.ref.pid == pid }.map(\.ref)
+                if let bundle = windows.values.first(where: { $0.window.pid == pid })?.window.bundleID ?? dormant.first?.bundleID {
+                    placeholders.quitting[pid] = (bundle, now)
+                }
+                for window in dormant { faults += try holdForQuit(window) ?? [] }
                 faults += closeDormant { $0.pid == pid }
             case .liveWindowsChanged:
                 return []  // the inventory the shell feeds next prunes
-            case .appResponsiveness, .appLaunched, .displaysChanged:
+            case .appLaunched(_, let bundleID):
+                placeholders.restartLaunchWait(of: bundleID, now: now)
+            case .appResponsiveness, .displaysChanged:
                 break
             }
             let leaving: (group: TabGroupRef, window: WindowRef)? = switch event {
@@ -913,7 +1051,7 @@ public struct Arranger: Sendable {
         }
         // CONTEXT E: focus outside the view widens the camera.
         let widened = if case .windowFocused(let window) = event { widen(toShow: window, new: false) } else { [ArrangerEffect]() }
-        guard case .windowCreated(let info) = event else {
+        guard case .windowCreated(let info) = event, !filled else {
             return faults + hidden + selected + dissolved + widened + replan() + closeProgress(now: now)
         }
         do throws(LayoutError) {
@@ -956,7 +1094,7 @@ public struct Arranger: Sendable {
 
     private var dormantWindows: [WindowRef] {
         world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) }
-            .filter { windows[$0.identity] == nil }.sorted { $0.identity < $1.identity }
+            .filter { windows[$0.identity] == nil && placeholders.table[$0.identity] == nil }.sorted { $0.identity < $1.identity }
     }
 
     /// Closes the dormant windows `predicate` picks, in identity order, through the OS-fact close path any closed window
@@ -974,7 +1112,7 @@ public struct Arranger: Sendable {
         return faults
     }
 
-    private mutating func forget(_ window: WindowRef) {
+    mutating func forget(_ window: WindowRef) {
         windows[window.identity] = nil
         lastRequested[window.identity] = nil
         lastApplied[window.identity] = nil
@@ -988,6 +1126,7 @@ public struct Arranger: Sendable {
         floaterFloors[window.identity] = nil
         camera.collapsible.remove(window.identity)
         camera.unparkedNew.remove(window.identity)
+        placeholders.arriving.remove(window.identity)
         focusOrder.removeAll { $0 == window.identity }
         tabs.minimizing.remove(window.identity)
         // The model picks the group's selection when a member goes; nothing is left to wait for.
@@ -1084,7 +1223,8 @@ public struct Arranger: Sendable {
             return world.desks.values.contains { $0.tree.state(of: info.window) == .present } && !Self.near(info.frame, tile, within: 2)
         }
         let effects = off.isEmpty ? [] : correct(off, now: now)
-        return missed + revealTimedOut(now: now) + effects + closeProgress(now: now) + settleDrag(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
+        let expired = expirePlaceholders(now: now)
+        return missed + expired + revealTimedOut(now: now) + effects + closeProgress(now: now) + settleDrag(now: now) + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
 
     /// Forgets the tile last sent, so the re-plan writes it again.
@@ -1096,12 +1236,14 @@ public struct Arranger: Sendable {
         return replan()
     }
 
-    /// The earliest instant a waiting correction, the Finder deadline or a drag's dwell is due: the shell keeps one wake.
+    /// The earliest instant a waiting correction, the Finder deadline, a drag's dwell or a placeholder is due: the shell
+    /// keeps one wake.
     var nextWake: ContinuousClock.Instant? {
         let dwell = drag?.kind == .move ? drag?.dwellEnds : nil
         let groupDwell = drag?.kind == .move ? drag?.groupDwellEnds : nil
         return (pendingCorrections.compactMap { lastCorrection[$0].map { $0 + Self.correctionInterval } }
-            + [finderExpectation?.deadline, dwell, groupDwell, tabs.pendingReveal?.deadline, tabs.closeQueue?.deadline].compactMap { $0 }).min()
+            + [finderExpectation?.deadline, dwell, groupDwell, tabs.pendingReveal?.deadline, tabs.closeQueue?.deadline, earliestPlaceholderDeadline]
+            .compactMap { $0 }).min()
     }
 
     /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
@@ -1153,6 +1295,7 @@ public struct Arranger: Sendable {
             !(desk.tree.isDesktopHidden == true && desk.desktop.contains(info.window)),  // parked: off its display on purpose
             !parkRequested.contains(info.window.identity),  // camera-parked too (RESEARCH Pitfall 1)
             !isHiddenTab(info.window),  // a hidden member never moves on its own; its group follows the selected one
+            !placeholders.arriving.contains(info.window.identity),  // on its way to its tile (CR-03)
             let to = home(of: info), to != from
         else { return }
         let spaces = info.spaces ?? []
@@ -1309,9 +1452,9 @@ public struct Arranger: Sendable {
         let leaf = desk.tree.leaf(containing: window)
         guard let rect = leaf.flatMap({ resolution.nodeRects[$0] }) ?? desk.desktop.frame(of: window) else { return [.beep] }
         // A hidden tab never takes focus this way (UI-SPEC Surface 3); its group's selected member stands for it.
-        let floating = desk.desktop.windows.filter { $0.state == .present && !isHiddenTab($0.window) }.map(\.window)
+        let floating = desk.desktop.windows.filter { $0.state == .present && !isHiddenTab($0.window) && placeholders.table[$0.window.identity] == nil }.map(\.window)
         guard let id = Neighbours.neighbour(
-            of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: resolution, gap: gap, recency: recency(on: desk))
+            of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: withoutWaiting(resolution, tree: desk.tree), gap: gap, recency: recency(on: desk))
         else { return [.beep] }
         let target: WindowRef?
         switch desk.tree.node(id) {
@@ -1986,12 +2129,14 @@ public struct Arranger: Sendable {
         var handles: [String: [GapHandle]] = [:]
         var blocks: [String: [CollapsedBlock]] = [:]
         var strips: [String: [TabStrip]] = [:]
+        var waiting: [String: [PlaceholderTile]] = [:]
         var fitAtHome: Set<WindowIdentity> = []
         let mins = minimums
         for display in displays {
             let key = Self.key(display)
             guard world[key] != nil else { continue }
             var plan: FramePlan
+            var collapsed: [WindowRef: Rect] = [:]
             // Lost room at home is an OS fact and still floats (CONTEXT E); a zoomed display then plans its view.
             let view = effectiveView(for: key, notes: &faults)
             do throws(LayoutError) {
@@ -2004,8 +2149,9 @@ public struct Arranger: Sendable {
                         desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
                         collapsible: camera.collapsible)
                     (plan.frames, plan.parks, plan.parkSizes, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.parkSizes, viewPlan.resolution)
-                    blocks[display.uuid] = viewPlan.collapsed.map {
-                        CollapsedBlock(window: $0.key, rect: $0.value, groupSize: tabGroup(holding: $0.key)?.members.count ?? 1)
+                    collapsed = viewPlan.collapsed
+                    blocks[display.uuid] = viewPlan.collapsed.filter { !isPlaceholder($0.key) }.map {
+                        CollapsedBlock(window: $0.key, rect: $0.value, groupSize: tabGroup(holding: $0.key).map { liveTabs($0.members, selected: $0.selected).members.count } ?? 1)
                     }
                         .sorted { $0.window.identity < $1.window.identity }
                     let home = view == .home ? viewPlan : try ViewPlanner.plan(
@@ -2019,6 +2165,7 @@ public struct Arranger: Sendable {
             }
             guard let desk = world[key] else { continue }
             strips[display.uuid] = tabStrips(key, desk: desk, plan: plan)
+            waiting[display.uuid] = placeholderTiles(frames: plan.frames, collapsed: collapsed, resolution: plan.resolution)
             // A gap drag edits home weights, so a zoomed display shows no handles.
             if drag?.kind != .move {
                 handles[display.uuid] = view == .home ? GapHandles.handles(tree: desk.tree, resolution: plan.resolution, gap: gap) : []
@@ -2089,7 +2236,7 @@ public struct Arranger: Sendable {
         commands = parks + commands
         return faults + (parks.isEmpty ? [] : [.save(.now)]) + (commands.isEmpty ? [] : [.perform(commands)])
             + (lost.isEmpty ? [] : [.notice(.lostRoom(lost.sorted { $0.identity < $1.identity }))]) + show(handles) + showBlocks(blocks)
-            + showStrips(strips)
+            + showStrips(strips) + showPlaceholders(waiting)
     }
 
     /// Sends each display's collapsed blocks that changed; a display with none (or gone) gets an empty list.
@@ -2152,11 +2299,20 @@ public struct Arranger: Sendable {
     private mutating func planFloatingLostRoom(
         _ key: DeskKey, area: Rect, mins: [WindowRef: Size]
     ) throws(LayoutError) -> (FramePlan, [WindowRef]) {
+        var mins = mins
         guard let desk = world[key] else { throw .deskNotFound(key) }
         var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wantedFrames)
         var lost: [WindowRef] = []
         // Each pass takes at least one window out of the tree, so this ends.
         while !plan.unfit.isEmpty {
+            // A window that is not there has no frame to float at, and its minimum can wait until it comes back.
+            let waiting = plan.unfit.filter { isPlaceholder($0) && mins[$0] != nil }
+            guard waiting.isEmpty else {
+                for window in waiting { mins[window] = nil }
+                guard let desk = world[key] else { throw .deskNotFound(key) }
+                plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wantedFrames)
+                continue
+            }
             var unfit: [(WindowRef, Rect)] = []
             for window in plan.unfit.sorted(by: { $0.identity < $1.identity }) {
                 guard let frame = windows[window.identity]?.frame else { throw .windowNotFound(window) }
@@ -2191,7 +2347,9 @@ public struct Arranger: Sendable {
     /// so it can tell which collapsible windows are collapsed.
     var learnedMinimums: [WindowRef: Size] {
         Dictionary(
-            windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }, uniquingKeysWith: { $1 })
+            windows.values.compactMap { info in info.isExcluded ? nil : info.learnedMinimum.map { (info.window, $0) } }
+                + placeholders.table.values.compactMap { held in held.minimum.map { (held.ref, $0) } },
+            uniquingKeysWith: { $1 })
     }
 
     func display(for key: DeskKey) -> DisplayInfo? {

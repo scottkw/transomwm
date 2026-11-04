@@ -52,6 +52,8 @@ import os
     var windowInfo: (WindowIdentity) -> WindowInfo? = { _ in nil }
     /// Posts a VoiceOver announcement (ArrangeController's `postAnnouncement` path).
     var announce: (String) -> Void = { _ in }
+    /// The saved view a move goes to: its reveal announcement starts with "View {n}." (08 UI-SPEC Announcements).
+    var joinedView: (moveID: UInt64, slot: Int)?
     /// The app name for a one-window view's announcement.
     var appName: (TransomModel.WindowRef) -> String = { $0.bundleID }
     /// Whether a drag or rubber band is in progress: the explainer waits for it to end.
@@ -373,9 +375,9 @@ import os
         active[uuid] = nil
         let shown = move.tiles.filter { $0.kind != .leaving && $0.kind != .collapsed }
         let collapsed = move.tiles.filter { $0.kind == .collapsed }.count
-        announce(
-            ZoomCopy.revealAnnouncement(
-                view: move.to, appName: shown.count == 1 ? appName(shown[0].window) : nil, windowCount: shown.count, collapsed: collapsed))
+        let reveal = ZoomCopy.revealAnnouncement(
+            view: move.to, appName: shown.count == 1 ? appName(shown[0].window) : nil, windowCount: shown.count, collapsed: collapsed)
+        announce(joinedView?.moveID == move.id ? ViewCopy.joinedAnnouncement(slot: joinedView?.slot ?? 0, reveal: reveal) : reveal)
         if granted == true { refresh(shown, on: uuid) }
         onRevealed?(uuid, move)
         if let queued {
@@ -521,7 +523,7 @@ import os
                 content: tile.kind == .collapsed ? collapsedBlock(tile.window) : image.map { .snapshot($0) } ?? fallback(tile.window))
         }
         // After the windows, so each strip draws above its group's tile (07 UI-SPEC Surface 6).
-        return windows + move.strips.map { strip in
+        return StageTile.placeholders(of: move, appKit: appKit) + windows + move.strips.map { strip in
             let shown = strip.members[strip.selected]
             return StageTile(
                 id: StageTile.stripID(cgWindow(shown) ?? shown.windowID), start: appKit(strip.start), end: appKit(strip.end),

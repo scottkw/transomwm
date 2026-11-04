@@ -96,7 +96,7 @@ public struct DesktopLayer: Codable, Equatable, Sendable {
         if let g = groupIndex(of: from) { groups[g].members = groups[g].members.map { $0 == from ? to : $0 } }
     }
 
-    /// Replaces each window's ref with `change(ref)`, which must keep its identity (World.withoutTitleHints).
+    /// Replaces each window's ref with `change(ref)`, which must keep its identity (World.refreshingTitles).
     mutating func mapWindows(_ change: (WindowRef) -> WindowRef) {
         windows = windows.map { FloatingWindow(window: change($0.window), frame: $0.frame, state: $0.state) }
         for g in groups.indices { groups[g].members = groups[g].members.map(change) }

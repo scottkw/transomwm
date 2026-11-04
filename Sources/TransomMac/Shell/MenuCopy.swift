@@ -65,6 +65,8 @@ nonisolated public enum MenuCopy {
         case .frameWindow: "Frame Focused Window"
         case .frameDesktop: "Frame Desktop"
         case .overview: "Show Overview"
+        case .view(let slot): "Go to View \(slot.number)"
+        case .saveView(let slot): "Save View \(slot.number)"
         }
     }
 

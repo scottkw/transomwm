@@ -41,17 +41,234 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 
         let kept = try LayoutRestore.reattach(saved, tracked: [tracked(a, frame: frame), tracked(b, frame: frame, idSource: .cgFrameMatch)])
         #expect(kept.world[key].map { Set($0.tree.windows) } == [a, b])
-        #expect(kept.removed == [c])
+        #expect(kept.waiting == [c])
+        #expect(kept.removed.isEmpty)
         #expect(kept.unplaced.isEmpty)
 
         let synthetic = try LayoutRestore.reattach(
             saved, tracked: [tracked(a, frame: frame, idSource: .synthetic), tracked(b, frame: frame), tracked(d, frame: frame)])
         let desk = try #require(synthetic.world[key])
         #expect(desk.tree.windows == [b])
-        #expect(!desk.contains(a) && !desk.contains(c))
-        #expect(Set(synthetic.removed) == [a, c])
+        #expect(!desk.contains(a), "a tracked window carries its identity now")
+        #expect(desk.contains(c))
+        #expect(synthetic.removed == [a])
+        #expect(synthetic.waiting == [c])
         // a is tracked but its synthetic ID is session-only, so it is placed afresh, like d.
         #expect(Set(synthetic.unplaced.map(\.window)) == [a, d])
+    }
+
+    /// VIEW-04, D-10, D-11: the app relaunched while Transom was not running (new pid, new window IDs, same titles), so
+    /// identity finds neither saved window; each goes back into its own leaf by its saved title.
+    @Test func aRelaunchedAppsWindowsGoBackToTheirOwnTilesByTitle() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        try #require(saved[key]?.tree.windows.map(\.titleHint) == ["Notes", "Plan"], "the snapshot did not carry the current titles")
+        let tiles = [try #require(await source.frame(a)), try #require(await source.frame(b))]
+
+        let newPID: Int32 = 901
+        func relaunchedRef(_ id: UInt32) -> WindowRef { WindowRef(identity: WindowIdentity(windowID: id, pid: newPID, bundleID: bundleID)) }
+        var harness = Harness()
+        await harness.fake.setDisplays(await source.fake.inventory().displays)
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        // Reopened in the other order, so creation order alone would swap them.
+        await harness.fake.open(.standard(id: 11, pid: newPID, frame: Rect(x: 100, y: 100, width: 400, height: 300), title: "Plan"))
+        await harness.fake.open(.standard(id: 12, pid: newPID, frame: Rect(x: 200, y: 200, width: 400, height: 300), title: "Notes"))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved, homeFrames: [:]))
+        let effects = await harness.send(.inventory(await harness.fake.inventory()))
+
+        #expect(harness.arranger.world[key]?.tree.windows == [relaunchedRef(12), relaunchedRef(11)])
+        #expect(await harness.frame(relaunchedRef(12)) == tiles[0])
+        #expect(await harness.frame(relaunchedRef(11)) == tiles[1])
+        let lines = effects.compactMap { if case .info(let line) = $0, line.hasPrefix("match ") { line } else { nil } }
+        #expect(lines.count == 2 && lines.allSatisfy { !$0.contains("Notes") && !$0.contains("Plan") }, "\(lines)")
+    }
+
+    /// VIEW-04, D-10, D-12: a docked saved window still unattached after the matcher holds its tile as a placeholder, and
+    /// the neighbour matched beside it takes no more room.
+    @Test func aDockedSavedWindowStillUnattachedHoldsItsTile() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        let tileB = try #require(await source.frame(b))
+
+        let newPID: Int32 = 901
+        let returned = WindowRef(identity: WindowIdentity(windowID: 12, pid: newPID, bundleID: bundleID))
+        var harness = Harness()
+        await harness.fake.setDisplays(await source.fake.inventory().displays)
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        await harness.fake.open(.standard(id: 12, pid: newPID, frame: Rect(x: 200, y: 200, width: 400, height: 300), title: "Plan"))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved, homeFrames: [:]))
+        await harness.send(.inventory(await harness.fake.inventory()))
+
+        #expect(harness.arranger.world[key]?.tree.windows == [a, returned])
+        #expect(harness.arranger.isPlaceholder(a))
+        #expect(await harness.frame(returned) == tileB)
+    }
+
+    /// D-10: a tie at launch: the tiles wait and the tied windows float, with a log line. Equal creation orders, so no
+    /// rank settles it.
+    @Test func aTieAtLaunchLeavesTheTilesWaitingAndTheWindowsFloating() async throws {
+        let one = WindowRef(identity: a.identity, titleHint: "Untitled"), two = WindowRef(identity: b.identity, titleHint: "Untitled")
+        var saved = World()
+        try saved.addDesk(key)
+        try saved.reflow(key) { desk, ids throws(LayoutError) in
+            try desk.tree.insert(one, at: .left, of: .desktop, ids: &ids)
+            guard let leaf = desk.tree.leaf(containing: one) else { throw .windowNotFound(one) }
+            try desk.tree.insert(two, at: .right, of: leaf, ids: &ids)
+        }
+
+        let newPID: Int32 = 901
+        let windows = [UInt32(11), 12].map { WindowRef(identity: WindowIdentity(windowID: $0, pid: newPID, bundleID: bundleID)) }
+        var harness = Harness()
+        await harness.fake.setDisplays([DisplayInfo(
+            uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: nil)])
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        for id in [UInt32(11), 12] { await harness.fake.open(.standard(id: id, pid: newPID, frame: Rect(x: 300, y: 300, width: 400, height: 300), title: "Untitled")) }
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved, homeFrames: [:]))
+        let effects = await harness.send(.inventory(await harness.fake.inventory()))
+
+        #expect(harness.arranger.placeholderCount == 2)
+        #expect(harness.arranger.world[key]?.tree.windows == [a, b])
+        #expect(windows.allSatisfy { harness.arranger.world[key]?.desktop.contains($0) == true })
+        #expect(effects.contains { if case .info(let line) = $0 { line.contains("tie at") } else { false } })
+    }
+
+    /// RESEARCH Pitfall 5: after a reboot window IDs and pids restart, so a new window can carry a saved window's exact
+    /// identity. With the boot session changed, identity keeps nothing: window 1 (a's identity, another document) does
+    /// not claim a's tile, which waits, and window 2 gets b's tile only because its title matches.
+    @Test func afterABootChangeAWindowReusingASavedIdentityGetsATileOnlyByItsHints() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        await source.fake.update(1) { $0.title = "Mail" }
+        _ = await source.refresh()
+        let inventory = await source.fake.inventory()
+
+        var rebooted = Arranger()
+        let restored = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
+        let effects = rebooted.handle(.inventory(inventory), now: .now)
+        let desk = try #require(rebooted.world[key])
+        #expect(desk.tree.windows.contains(b))
+        #expect(rebooted.placeholderCount == 1, "a's tile should wait for its window")
+        #expect(desk.desktop.contains(a), "the window reusing a's identity should float")
+        #expect(setFrames(effects)[b] == nil, "b is in its own tile already")
+        #expect(restored.contains(.info("boot session changed: matching every saved window by hints")))
+
+        var sameBoot = Arranger()
+        _ = sameBoot.handle(.restore(saved, homeFrames: [:]), now: .now)
+        _ = sameBoot.handle(.inventory(inventory), now: .now)
+        #expect(sameBoot.world[key]?.tree.windows == [a, b], "an unchanged boot re-attaches by identity")
+    }
+
+    /// WR-01: from the `.restore` on, the snapshot names no window of the old boot, so a launch write can stamp this boot
+    /// even before the restore has run: a crash then a same-boot relaunch can't re-attach a reused ID by identity. The hints
+    /// survive, in layout.json too.
+    @Test func afterABootChangeTheSnapshotNamesNoWindowOfTheOldBoot() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot
+        await source.fake.update(1) { $0.title = "Mail" }
+        _ = await source.refresh()
+        let inventory = await source.fake.inventory()
+
+        func held(_ world: World) -> [WindowRef] { world.desks.values.flatMap { $0.tree.windows + $0.desktop.windows.map(\.window) } }
+        var crashed = Arranger()
+        let frame = Rect(x: 1, y: 2, width: 3, height: 4)
+        _ = crashed.handle(.restore(saved.world, homeFrames: [a.identity: frame], wantedFrames: [b.identity: frame], bootChanged: true), now: .now)
+        let written = crashed.snapshot
+        #expect(!held(written.world).isEmpty && held(written.world).allSatisfy { $0.identity.isRetiredWindowID })
+        #expect(Set(held(written.world).map(\.titleHint)) == ["Notes", "Plan"])
+        #expect(Set(held(written.world).map(\.bundleID)) == [bundleID])
+        #expect(written.homeFrames.keys.allSatisfy { $0.isRetiredWindowID } && written.homeFrames.count == 1)
+        #expect(written.wantedFrames.keys.allSatisfy { $0.isRetiredWindowID } && written.wantedFrames.count == 1)
+        let reloaded = try JSONDecoder().decode(World.self, from: JSONEncoder().encode(written.world))
+        #expect(held(reloaded) == held(written.world), "a retired identity must survive layout.json")
+
+        // The relaunch after that crash: the same boot now, and window 1 still carries a's old identity.
+        var relaunched = Arranger()
+        _ = relaunched.handle(.restore(reloaded, homeFrames: written.homeFrames, wantedFrames: written.wantedFrames), now: .now)
+        _ = relaunched.handle(.inventory(inventory), now: .now)
+        let desk = try #require(relaunched.world[key])
+        #expect(desk.desktop.contains(a), "the old identity claimed the tile")
+        #expect(desk.tree.windows.contains(b), "the hints still match")
+        #expect(relaunched.placeholderCount == 1)
+
+        // A second reboot keeps what is already retired, and gives the rest fresh identities beside it.
+        var again = Arranger()
+        _ = again.handle(.restore(relaunched.snapshot.world, homeFrames: [:], bootChanged: true), now: .now)
+        let retired = held(again.snapshot.world)
+        #expect(retired.allSatisfy { $0.identity.isRetiredWindowID })
+        #expect(Set(retired.map(\.identity)).count == retired.count)
+    }
+
+    /// WR-02: a layout set from an earlier boot names no window of this one either, so applying it can't re-attach a reused
+    /// ID; the same window keeps one identity across the World and the sets.
+    @Test func afterABootChangeAStoredSetIsRetiredWithTheWorld() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        let set = LayoutSet(arrangement: ArrangementID(["elsewhere"]), world: saved, lastUsed: Date(timeIntervalSince1970: 0))
+
+        var rebooted = Arranger()
+        _ = rebooted.handle(.restore(saved, homeFrames: [:], layoutSets: [set], bootChanged: true), now: .now)
+        let stored = try #require(rebooted.snapshot.layoutSets.first?.world[key])
+        #expect(stored.tree.windows.allSatisfy { $0.identity.isRetiredWindowID })
+        #expect(stored.tree.windows.map(\.titleHint) == ["Notes", "Plan"])
+        #expect(stored.tree.windows == rebooted.snapshot.world[key]?.tree.windows)
+    }
+
+    /// WR-02: after a boot change an identity match alone never ends a wait, by event or by inventory: only hints fill a tile.
+    @Test func afterABootChangeAWindowWithASavedIdentityDoesNotEndAWait() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        var inventory = await source.fake.inventory()
+        let reused = WindowInfo(window: WindowRef(identity: a.identity, titleHint: "Mail"), frame: Rect(x: 300, y: 300, width: 400, height: 300), state: .present, displayUUID: "main")
+        inventory.windows = []
+
+        var rebooted = Arranger()
+        _ = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
+        _ = rebooted.handle(.inventory(inventory), now: .now)
+        try #require(rebooted.placeholderCount == 2)
+        _ = rebooted.handle(.event(.windowCreated(reused)), now: .now)
+        #expect(rebooted.placeholderCount == 2, "a reused identity ended the wait")
+        inventory.windows = [reused]
+        _ = rebooted.handle(.inventory(inventory), now: .now)
+        #expect(rebooted.placeholderCount == 2, "a reused identity ended the wait")
+        #expect(rebooted.world[key]?.desktop.contains(a) == true)
+    }
+
+    /// WR-11: the stage and the overview key a placeholder's tile by its window ID, so after a reboot it must not be a live
+    /// window's, and retired IDs stay clear of synthetic ones and of strips' IDs.
+    @Test func afterABootChangeAPlaceholdersIDIsNoLiveWindows() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        await source.fake.update(1) { $0.title = "Mail" }
+        _ = await source.refresh()
+        let inventory = await source.fake.inventory()
+
+        var rebooted = Arranger()
+        _ = rebooted.handle(.restore(saved, homeFrames: [:], bootChanged: true), now: .now)
+        _ = rebooted.handle(.inventory(inventory), now: .now)
+        let tile = try #require(rebooted.homePlaceholders(on: "main").first)
+        #expect(tile.window.identity.isRetiredWindowID)
+        #expect(!inventory.windows.contains { $0.window.windowID == tile.window.windowID })
+        #expect(WindowIdentity.retiredIDBase > WindowIdentity.syntheticIDBase)
     }
 
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
@@ -67,20 +284,20 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 
         let docked = try LayoutRestore.reattach(saved, tracked: live, live: [entry(2), entry(3, pid: 901)])
         #expect(docked.world[key].map { Set($0.tree.windows) } == [a, b])
-        #expect(docked.removed == [c], "the same ID under another pid is another window")
+        #expect(docked.waiting == [c], "the same ID under another pid is another window")
         #expect(docked.unplaced.isEmpty)
 
         let floating = try LayoutRestore.reattach(saved, tracked: live, live: [entry(3)])
         #expect(floating.world[key]?.desktop.contains(c) == true)
-        #expect(floating.removed == [b])
+        #expect(floating.waiting == [b])
 
         let layered = try LayoutRestore.reattach(saved, tracked: live, live: [entry(2, layer: 20), entry(3, layer: 20)])
-        #expect(Set(layered.removed) == [b, c])
+        #expect(Set(layered.waiting) == [b, c])
 
         let empty = try LayoutRestore.reattach(saved, tracked: live, live: [])
         let today = try LayoutRestore.reattach(saved, tracked: live)
-        #expect(empty.world == today.world && empty.removed == today.removed && empty.unplaced == today.unplaced)
-        #expect(Set(today.removed) == [b, c])
+        #expect(empty.world == today.world && empty.waiting == today.waiting && empty.unplaced == today.unplaced)
+        #expect(Set(today.waiting) == [b, c])
 
         let synthetic = WindowIdentity(windowID: WindowIdentity.syntheticIDBase | 2, pid: pid, bundleID: bundleID)
         #expect(!LayoutRestore.isAlive(synthetic, in: [entry(synthetic.windowID)]), "a synthetic ID is session-only")

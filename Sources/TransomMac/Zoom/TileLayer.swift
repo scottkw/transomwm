@@ -13,6 +13,8 @@ nonisolated final class TileLayer: CALayer {
         case collapsed(color: NSColor, icon: NSImage?)
         /// A group's icon-only strip (07 UI-SPEC Surface 6): drawn once at the end size, stretched while it moves.
         case strip(icons: [NSImage?], selected: Int)
+        /// A tile waiting for its window (08 UI-SPEC Surface 2): a dim fill, a dashed border, the fallback's icon and capsule.
+        case placeholder(color: NSColor, icon: NSImage?, label: String)
     }
 
     static let cornerRadius: CGFloat = 12
@@ -26,6 +28,7 @@ nonisolated final class TileLayer: CALayer {
     private let iconLayer = CALayer()
     private let capsule = CALayer()
     private let label = CALayer()
+    private let dash = CAShapeLayer()
     private var titleText = ""
     private var labelSize = CGSize.zero
 
@@ -61,6 +64,16 @@ nonisolated final class TileLayer: CALayer {
             }
         case .strip:
             contentsGravity = .resize
+        case .placeholder(_, let icon, let label):
+            cornerRadius = Self.cornerRadius
+            layoutFallback(icon: icon, title: label, endSize: endSize, scale: scale)
+            let outline = CGRect(x: -endSize.width / 2, y: -endSize.height / 2, width: endSize.width, height: endSize.height).insetBy(dx: 0.5, dy: 0.5)
+            let radius = min(Self.cornerRadius, min(outline.width, outline.height) / 2)
+            dash.path = CGPath(roundedRect: outline, cornerWidth: max(radius, 0), cornerHeight: max(radius, 0), transform: nil)
+            dash.fillColor = nil
+            dash.lineWidth = 1
+            dash.lineDashPattern = [8, 4]
+            addSublayer(dash)
         }
         resolveColors(appearance)
     }
@@ -135,10 +148,17 @@ nonisolated final class TileLayer: CALayer {
             return
         }
         appearance.performAsCurrentDrawingAppearance {
+            var text = NSColor.labelColor
+            if case .placeholder(let color, _, _)? = content {
+                let contrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+                backgroundColor = color.withAlphaComponent(contrast ? 0.6 : 0.4).cgColor
+                dash.strokeColor = NSColor.labelColor.withAlphaComponent(contrast ? 1 : 0.5).cgColor
+                if !contrast { text = .secondaryLabelColor }
+            }
             borderColor = NSColor.separatorColor.cgColor
             capsule.backgroundColor = NSColor.windowBackgroundColor.cgColor
             capsule.borderColor = NSColor.separatorColor.cgColor
-            if labelSize != .zero { label.contents = Self.text(titleText, size: labelSize).layerContents(forContentsScale: contentsScale) }
+            if labelSize != .zero { label.contents = Self.text(titleText, size: labelSize, color: text).layerContents(forContentsScale: contentsScale) }
         }
     }
 
@@ -189,12 +209,12 @@ nonisolated final class TileLayer: CALayer {
         return NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: style])
     }
 
-    /// The title image. `labelColor` is resolved now, in the caller's drawing appearance: the image draws lazily, when
+    /// The title image. `color` is resolved now, in the caller's drawing appearance: the image draws lazily, when
     /// that appearance is no longer current (black text on a dark capsule otherwise, UAT 04).
-    static func text(_ title: String, size: CGSize) -> NSImage {
-        let color = NSColor(cgColor: NSColor.labelColor.cgColor) ?? .labelColor
+    static func text(_ title: String, size: CGSize, color: NSColor = .labelColor) -> NSImage {
+        let resolved = NSColor(cgColor: color.cgColor) ?? color
         return NSImage(size: size, flipped: false) { rect in
-            attributed(title, color: color).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+            attributed(title, color: resolved).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
             return true
         }
     }

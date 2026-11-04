@@ -8,12 +8,13 @@ public enum LayoutStoreError: Error, Equatable {
 }
 
 /// layout.json: the World, the home frames and the session record in one file (D-16, RESEARCH Pattern 10), in the
-/// shape of `MinimumHintsStore`. Window titles are never written (T-03-17) and the file is owner-only.
+/// shape of `MinimumHintsStore`. Window titles are written so windows can be re-matched after a relaunch (D-10, which
+/// supersedes T-03-17), so the file is owner-only.
 ///
 /// The file is user-writable and decides where windows go (T-03-15), so `load` rejects it whole on any doubt: over
 /// `World.maxEncodedBytes`, malformed JSON, an invalid World, an invalid or duplicate home frame, an incomplete session
-/// record. It logs why, moves the file aside as `.corrupt` and starts empty. A file from a newer schema is the
-/// exception (T-03-18): it is left in place and nothing is saved this session, so a downgrade never destroys it.
+/// record. It logs why, moves the file aside as `.corrupt-<unix seconds>` and starts empty. A file from a newer schema is
+/// the exception (T-03-18): it is left in place and nothing is saved this session, so a downgrade never destroys it.
 @MainActor public final class LayoutStore {
     nonisolated public static let fileName = "layout.json"
 
@@ -21,13 +22,16 @@ public enum LayoutStoreError: Error, Equatable {
     public private(set) var contents: LayoutFile?
     /// Why the last `load` rejected the file; nil when it loaded or there was none.
     public private(set) var loadError: LayoutStoreError?
-    /// Set by a newer-schema file: every `save` this session is a no-op.
+    /// Set by a newer-schema file, or a rejected one that could not be moved aside: every `save` this session is a no-op.
     public private(set) var savingDisabled = false
     private let directory: URL
+    /// `World.maxEncodedBytes`; a test lowers it, as encoding that much would hold the main actor for seconds.
+    private let saveLimit: Int
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "persist")
 
-    public init(directory: URL) {
+    public init(directory: URL, saveLimit: Int = World.maxEncodedBytes) {
         self.directory = directory
+        self.saveLimit = saveLimit
     }
 
     private var file: URL { directory.appending(path: Self.fileName) }
@@ -51,19 +55,24 @@ public enum LayoutStoreError: Error, Equatable {
         }
     }
 
-    /// Writes `contents`, with every window title removed, atomically and owner-only (0600); creates the directory if
-    /// needed. Returns false, writing nothing, when saving is disabled.
+    /// Writes `contents`, window titles included, atomically and owner-only (0600); creates the directory if needed.
+    /// Returns false, writing nothing, when saving is disabled. Over `World.maxEncodedBytes` it throws and keeps the last
+    /// good file, since `load` would reject this one whole.
     @discardableResult
     public func save(_ contents: LayoutFile) throws(LayoutStoreError) -> Bool {
         guard !savingDisabled else { return false }
-        var redacted = contents
-        redacted.world = contents.world.withoutTitleHints()
-        for index in redacted.layoutSets.indices { redacted.layoutSets[index].world = redacted.layoutSets[index].world.withoutTitleHints() }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        let data: Data
+        do {
+            data = try encoder.encode(contents)
+        } catch {
+            throw .writeFailed(String(describing: error))
+        }
+        guard data.count <= saveLimit else { throw .tooLarge(data.count) }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try encoder.encode(redacted).write(to: file, options: .atomic)
+            try data.write(to: file, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         } catch {
             throw .writeFailed(String(describing: error))
@@ -112,12 +121,15 @@ public enum LayoutStoreError: Error, Equatable {
             throw .corrupt("no schemaVersion: \(error)")
         }
         guard version <= LayoutFile.schemaVersion else { throw .newerVersion(version) }
-        let contents: LayoutFile
+        var contents: LayoutFile
         do {
             switch version {
-            // Every user's file at the upgrade: migrated in memory, saved as schema 2 (RESEARCH Pitfall 1).
+            // Every user's file at the upgrade: migrated in memory, saved as the current schema (RESEARCH Pitfall 1).
             case 1: contents = try decoder.decode(LayoutFileV1.self, from: data).migrated()
-            case LayoutFile.schemaVersion: contents = try decoder.decode(LayoutFile.self, from: data)
+            // Schema 2 has schema 3's shape with empty titles; the next save writes schema 3.
+            case 2, LayoutFile.schemaVersion:
+                contents = try decoder.decode(LayoutFile.self, from: data)
+                contents.schemaVersion = LayoutFile.schemaVersion
             default: throw LayoutStoreError.corrupt("unknown schemaVersion \(version)")
             }
         } catch let error as LayoutStoreError {
@@ -143,14 +155,15 @@ public enum LayoutStoreError: Error, Equatable {
         return contents
     }
 
-    /// Moves the rejected file to `<name>.corrupt`, replacing an older one, so the next save cannot destroy it.
+    /// Moves the rejected file to `<name>.corrupt-<unix seconds>`, as `backUp` names its copies, so no earlier one is
+    /// replaced and the next save cannot destroy it. If it won't move, no save this session can either.
     private func setAside() {
-        let corrupt = directory.appending(path: Self.fileName + ".corrupt")
+        let corrupt = directory.appending(path: "\(Self.fileName).corrupt-\(Int(Date.now.timeIntervalSince1970))")
         do {
-            if FileManager.default.fileExists(atPath: corrupt.path) { try FileManager.default.removeItem(at: corrupt) }
             try FileManager.default.moveItem(at: file, to: corrupt)
         } catch {
-            Self.logger.error("could not move the rejected \(Self.fileName, privacy: .public) aside: \(error.localizedDescription, privacy: .public)")
+            savingDisabled = true
+            Self.logger.error("could not move the rejected \(Self.fileName, privacy: .public) aside, so not saving layouts this session: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

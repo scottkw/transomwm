@@ -33,6 +33,8 @@ staging=build/dmg-staging
 fail() { echo "release: $1" >&2; exit 1; }
 
 # 1. Build and verify. build-debug.sh already checks the designated requirement (identifier + team).
+# An incremental build can keep an old signed copy of the tool in Contents/Helpers (08-05), so start from no bundle.
+rm -rf "xcode/.xcode-build/Build/Products/Release/Transom.app"
 app="$(scripts/build-debug.sh --release | tail -n 1)"
 [ -d "$app" ] || fail "no app at $app"
 
@@ -55,6 +57,21 @@ shown="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist"
 [ "$shown" = "$version" ] || fail "CFBundleShortVersionString is $shown, want $version"
 scheme="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$plist")"
 [ "$scheme" = transom ] || fail "URL scheme is $scheme, want transom"
+
+# The bundled command-line tool (D-09): notarisation checks every executable, and so does this.
+helper="$app/Contents/Helpers/transom"
+[ -x "$helper" ] || fail "no executable tool at $helper"
+details="$(codesign -dv --verbose=4 "$helper" 2>&1)"
+grep -q '^Timestamp=' <<<"$details" || fail "no secure timestamp on $helper"
+grep -q 'flags=.*runtime' <<<"$details" || fail "no hardened runtime on $helper"
+grep -q "^TeamIdentifier=$team\$" <<<"$details" || fail "$helper is not signed by team $team"
+entitlements="$(codesign -d --entitlements - "$helper" 2>/dev/null)"
+for forbidden in get-task-allow application-identifier; do
+    case "$entitlements" in *"$forbidden"*) fail "forbidden entitlement on $helper: $forbidden" ;; esac
+done
+archs="$(lipo -archs "$helper")"
+case " $archs " in *" x86_64 "*) ;; *) fail "$helper lacks x86_64 (has: $archs)" ;; esac
+case " $archs " in *" arm64 "*) ;; *) fail "$helper lacks arm64 (has: $archs)" ;; esac
 
 if [ "$build_only" = 1 ]; then
     echo "$app"

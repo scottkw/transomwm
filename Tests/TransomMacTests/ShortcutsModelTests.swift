@@ -3,17 +3,17 @@ import TransomEngine
 @testable import TransomMac
 import Testing
 
-/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 48 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows), in the
-/// Surface 8 sections and titles.
+/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 66 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows,
+/// 08 Surface 3 the Saved Views rows), in the Surface 8 sections and titles.
 @Suite @MainActor struct ShortcutsModelTests {
     @Test func theSectionsFollowSurface8() {
-        #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Arrange", "Split", "Snap Floating Window", "Tabs", "Safety", "Exclusions"])
+        #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Saved Views", "Arrange", "Split", "Snap Floating Window", "Tabs", "Safety", "Exclusions"])
     }
 
-    @Test func the48RowsBindTheHotkeyNamesOnceEach() {
+    @Test func the66RowsBindTheHotkeyNamesOnceEach() {
         let names = ShortcutsModel.sections.flatMap(\.rows).map(\.name)
-        #expect(names.count == 48)
-        #expect(Set(names).count == 48)
+        #expect(names.count == 66)
+        #expect(Set(names).count == 66)
         #expect(Set(names) == Set(Hotkeys.entries.map(\.name)))
     }
 
@@ -23,6 +23,7 @@ import Testing
                 "Show Overview", "Zoom Out to All Windows", "Zoom Out One Level", "Zoom In One Level", "Back", "Forward", "Move View Left", "Move View Right",
                 "Move View Up", "Move View Down", "Frame Focused Window", "Frame Desktop",
             ],
+            (1...9).map { "Go to View \($0)" } + (1...9).map { "Save View \($0)" },
             [
                 "Dock Window", "Float Window", "Swap with Previous Window", "Undo Layout Change", "Focus Left", "Focus Right", "Focus Up",
                 "Focus Down", "Move Window Left or Snap to Left Half", "Move Window Right or Snap to Right Half",
@@ -55,6 +56,15 @@ import Testing
         let titles = ShortcutsModel.sections.map(\.title)
         #expect(titles.firstIndex(of: "Tabs") == titles.firstIndex(of: "Snap Floating Window").map { $0 + 1 })
         #expect(ShortcutsModel.sections.first { $0.title == "Tabs" }?.rows.map(\.name) == [.nextTab, .previousTab, .moveOutOfGroup])
+    }
+
+    /// 08 UI-SPEC Surface 3: the section right after Zoom, go rows first, with its footer.
+    @Test func theSavedViewsSectionFollowsZoom() {
+        #expect(ShortcutsModel.sections[1].title == ViewCopy.savedViewsSection)
+        #expect(ShortcutsModel.sections[1].rows.map(\.name) == [
+            .view1, .view2, .view3, .view4, .view5, .view6, .view7, .view8, .view9,
+            .saveView1, .saveView2, .saveView3, .saveView4, .saveView5, .saveView6, .saveView7, .saveView8, .saveView9,
+        ])
     }
 
     @Test func showOverviewIsTheFirstZoomRowAndTheZoomSectionHasTheTakeoverFooter() {

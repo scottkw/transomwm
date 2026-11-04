@@ -31,6 +31,7 @@ let package = Package(
         .executableTarget(name: "TransomApp", dependencies: ["TransomMac"], swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(name: "TransomFixtureApp", swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(name: "transom-dump", dependencies: ["TransomMac", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
+        .executableTarget(name: "transom-cli", dependencies: ["TransomEngine"]),
         .executableTarget(name: "transom-zoom-spike", dependencies: ["TransomMac", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(name: "transom-gesture-spike", dependencies: ["TransomMac", "TransomPrivate", "TransomEngine"], swiftSettings: [.defaultIsolation(MainActor.self)]),
         .executableTarget(

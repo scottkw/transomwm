@@ -15,6 +15,10 @@ enum ShortcutsModel {
         (ZoomCopy.zoomSection, [
             .showOverview, .zoomOutAll, .stepOut, .stepIn, .zoomBack, .zoomForward, .panLeft, .panRight, .panUp, .panDown, .frameWindow, .frameDesktop,
         ]),
+        (ViewCopy.savedViewsSection, [
+            .view1, .view2, .view3, .view4, .view5, .view6, .view7, .view8, .view9,
+            .saveView1, .saveView2, .saveView3, .saveView4, .saveView5, .saveView6, .saveView7, .saveView8, .saveView9,
+        ]),
         (MenuCopy.arrangeSection, [
             .dock, .float, .swapPrevious, .undo, .focusLeft, .focusRight, .focusUp, .focusDown, .moveLeft, .moveRight, .moveUp, .moveDown,
             .arrangeAll, .floatAll, .toggleDesktop,
@@ -65,6 +69,7 @@ struct ShortcutsView: View {
                         Text(section.title)
                     } footer: {
                         if section.title == ZoomCopy.zoomSection { Text(ShortcutsModel.zoomFooter).font(.subheadline).foregroundStyle(.secondary) }
+                        if section.title == ViewCopy.savedViewsSection { Text(ViewCopy.shortcutsFooter).font(.subheadline).foregroundStyle(.secondary) }
                     }
                 }
                 Section {

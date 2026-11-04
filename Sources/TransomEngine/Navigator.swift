@@ -185,7 +185,12 @@ extension Arranger {
         guard command != .overview else { return [.fault("overview reached the Arranger; the shell handles it")] }
         do throws(LayoutError) {
             switch try cameraStep(command, displayUUID: uuid, focused: focused, pointer: pointer) {
-            case .success(let step): return zoomTo(step.target, displayUUID: uuid, kind: step.kind)
+            case .success(let step):
+                switch command {
+                case .view(let slot): return goView(slot, displayUUID: uuid, focused: focused)
+                case .saveView(let slot): return try saveView(slot, displayUUID: uuid)
+                default: return zoomTo(step.target, displayUUID: uuid, kind: step.kind)
+                }
             case .failure(let refusal): return [.beep, .announce(refusal.announcement), .info("refused \(command): \(refusal)")]
             }
         } catch {
@@ -267,9 +272,10 @@ extension Arranger {
         case .stepOut:
             return navigate(Navigator.stepOut(view: view, tree: desk.tree), else: .alreadyHome)
         case .stepIn:
-            let resolution = try ViewPlanner.plan(
-                desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames, collapsible: camera.collapsible
-            ).resolution
+            let resolution = withoutWaiting(
+                try ViewPlanner.plan(
+                    desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames, collapsible: camera.collapsible
+                ).resolution, tree: desk.tree)
             let focusedLeaf = focused.flatMap { deskKey(of: $0) == key ? leafNode(of: $0) : nil }
             let child = Navigator.stepIn(view: view, tree: desk.tree, resolution: resolution, focusedLeaf: focusedLeaf, pointer: pointer)
             return navigate(child.map { .node($0) }, else: .nothingToZoomIn)
@@ -278,8 +284,9 @@ extension Arranger {
         case .forward:
             return forward().map { .success($0) } ?? .failure(.noLaterView)
         case .pan(let edge):
-            guard view != .home else { return .failure(.noArea(edge)) }
-            let home = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames).resolution
+            guard case .node(let viewed) = view else { return .failure(.noArea(edge)) }
+            let home = withoutWaiting(
+                try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames).resolution, tree: desk.tree, keeping: viewed)
             let recency = history.back.reversed().compactMap { entry -> NodeID? in
                 if entry.desk == key, case .node(let id) = entry.target { id } else { nil }
             }
@@ -295,6 +302,8 @@ extension Arranger {
             return toggle(Navigator.target(.desktop, in: desk.tree))
         case .overview:
             return .failure(.notReady)  // never a camera step: `camera` faults first and the shell decides availability
+        case .view, .saveView:
+            return .success((view, .navigate))  // past the shared refusals; `camera` hands these to goView and saveView
         }
     }
 }

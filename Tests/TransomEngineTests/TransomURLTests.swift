@@ -46,6 +46,42 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse(string) == nil)
     }
 
+    /// 08 UI-SPEC Surface 4: the same commands as ⌥{n} and ⇧⌥{n}.
+    @Test(arguments: 1...9)
+    func theViewCommandsParse(number: Int) throws {
+        let slot = try #require(ViewSlot(number))
+        #expect(parse("transom://view/\(number)") == .camera(.view(slot)))
+        #expect(parse("transom://save-view/\(number)") == .camera(.saveView(slot)))
+    }
+
+    /// 08 UI-SPEC Surface 4: every other path form, with no side effect (T-08-13).
+    @Test(arguments: ["view", "save-view"])
+    func malformedViewURLsAreRejected(host: String) {
+        for suffix in ["", "/", "/0", "/10", "/3/", "/03", "/%33", "/a", "/3?x=1", "/3#f", ":80/3", "//3"] {
+            #expect(parse("transom://\(host)\(suffix)") == nil, "\(host)\(suffix)")
+        }
+        #expect(parse("transom://\(host.uppercased())/3") == nil)
+        #expect(parse("transom://user@\(host)/3") == nil)
+    }
+
+    @Test func aPathIsOnlyAcceptedForTheViewCommands() {
+        #expect(parse("transom://zoom-out/3") == nil)
+        #expect(parse("transom://restore/1") == nil)
+    }
+
+    /// D-06: each slot is its own command.
+    @Test func eachSlotIsLimitedSeparately() throws {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let three = try #require(ViewSlot(3))
+        let four = try #require(ViewSlot(4))
+        let attempts: [(Command, Duration)] = [
+            (.camera(.view(three)), .zero), (.camera(.view(four)), .milliseconds(10)), (.camera(.saveView(three)), .milliseconds(20)),
+            (.camera(.view(three)), .milliseconds(30)),
+        ]
+        #expect(attempts.map { limiter.admit($0.0, at: start + $0.1) } == [true, true, true, false])
+    }
+
     @Test(arguments: [
         "transom://Restore", "transom://restore?x=1", "transom://restore?", "transom://restore#a", "transom://user@restore",
         "transom://user:secret@restore", "transom://restore:80", "transom://restore/extra", "transom://zoom", "transom-debug://restore",

@@ -45,6 +45,13 @@ nonisolated public enum NoticeCopy {
                 + (unplaced == 0 ? ""
                     : unplaced == 1 ? " 1 window couldn't be placed and is floating on the Desktop."
                     : " \(unplaced) windows couldn't be placed and are floating on the Desktop.")
+        // Saved views (08 UI-SPEC View toasts): N13–N16 are short labels, N17–N19 sentences.
+        case .viewSaved(let slot, let replaced, _): replaced ? "Replaced view \(slot.number)" : "Saved view \(slot.number)"
+        case .viewShown(let slot, _): "View \(slot.number)"
+        case .viewEmpty(let slot, _): "No view in slot \(slot.number)"
+        case .viewWindowsClosed(let slot, _): "The windows in view \(slot.number) have closed. Showing all windows."
+        case .viewDisplayGone(let slot, _): "View \(slot.number) is on a display that isn't connected."
+        case .viewNothingToSave: "There are no windows in this view to save."
         }
     }
 
@@ -56,7 +63,10 @@ nonisolated public enum NoticeCopy {
         case .crashRecovered, .crashLoop, .takeoverCrashed: "lifepreserver"
         case .restored, .settingsRestored: "checkmark.circle"
         case .turnOffFailed, .takeoverApplyFailed: "exclamationmark.triangle.fill"
-        case .displaysDisconnected: "display"
+        case .displaysDisconnected, .viewDisplayGone: "display"
+        case .viewSaved: "bookmark"
+        case .viewShown, .viewEmpty: "viewfinder"
+        case .viewWindowsClosed, .viewNothingToSave: "info.circle"
         }
     }
 

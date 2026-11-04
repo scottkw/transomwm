@@ -56,6 +56,30 @@ private func world(_ spaces: [UInt64]) throws -> World {
         #expect(table == [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4"), SavedSpace(id: 6, uuid: "U6")])
     }
 
+    private func view(_ slot: Int, _ space: UInt64?) -> SavedView {
+        SavedView(slot: ViewSlot(slot)!, desk: key(space), home: true, windows: [])
+    }
+
+    /// A view's desk can be a Space no desk uses any more: its UUID is listed all the same.
+    @Test func theTableListsTheSpacesOfSavedViews() throws {
+        let table = SpaceRekey.table(for: try world([3]), views: [view(1, 4), view(2, nil)], uuids: [3: "U3", 4: "U4", 8: "U8"])
+        #expect(table == [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4")])
+    }
+
+    /// A view's desk follows its Space like a desk, and one whose Space is gone keeps its saved key (D-05's N17 path).
+    @Test func aViewsDeskIsRekeyedWithTheSameMapping() throws {
+        let raw: [[String: Any]] = [["Display Identifier": display, "Spaces": [["ManagedSpaceID": 7, "type": 0, "uuid": "U3"], ["ManagedSpaceID": 9, "type": 0, "uuid": "U4"]]]]
+        let live = SpacesSnapshot.parse(raw, mainDisplayUUID: display, separateSpaces: true)
+        let file = LayoutFile(
+            world: try world([3]), homeFrames: [:], session: SessionRecord(cleanExit: true, launchedAt: Date(timeIntervalSinceReferenceDate: 0)),
+            arrangement: ArrangementID([display]), spaces: [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4"), SavedSpace(id: 5, uuid: "GONE")],
+            views: [view(1, 3), view(2, 4), view(3, 5), view(4, nil)])
+        let loaded = try SpaceRekey.rekey(file, live: live)
+        #expect(loaded.result.world.desks.keys.sorted() == [key(7)])
+        #expect(loaded.views.map(\.desk) == [key(7), key(9), key(5), key(nil)])
+        #expect(loaded.views.map(\.slot.number) == [1, 2, 3, 4])
+    }
+
     /// CR-02: after a reboot renumbers the Spaces, every layout set's desks move to their Space's new ID, like the World's.
     @Test func everyLayoutSetIsRekeyedWithTheWorld() throws {
         let raw: [[String: Any]] = [["Display Identifier": display, "Spaces": [["ManagedSpaceID": 7, "type": 0, "uuid": "U3"], ["ManagedSpaceID": 9, "type": 0, "uuid": "U4"]]]]

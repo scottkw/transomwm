@@ -101,6 +101,11 @@ public enum TransomMacApp {
         Hotkeys.logSystemConflicts()
         permissionController.send(.launched(trusted: AXIsProcessTrusted()))
         setupController.decideAtLaunch()
+        // One allow-list and one rate limit for URL opens and CLI requests (D-07).
+        let commandGate = CommandGate(scheme: TransomURL.registeredScheme(in: .main))
+        arrangeController.cliListener = CLIListener(
+            name: CLIProtocol.portName(bundleID: Bundle.main.bundleIdentifier ?? "com.eightabyte.transom"), gate: commandGate,
+            decide: { arrangeController.answerCLI($0) })
         // A quit first returns parked and off-screen windows, then records cleanExit in layout.json (SAFE-01).
         let appDelegate = AppDelegate(
             restore: {
@@ -108,7 +113,7 @@ public enum TransomMacApp {
                 arrangeController.restoreForTermination()
             }, writeCleanExit: { arrangeController.writeCleanExit() },
             open: { command in Task { await arrangeController.dispatch(command, from: .url) } },
-            urlScheme: AppDelegate.registeredScheme())
+            gate: commandGate)
         appDelegate.handleSIGTERM()
         delegate = appDelegate
         app.delegate = appDelegate

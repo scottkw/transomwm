@@ -24,14 +24,17 @@ private func sampleFile() throws -> LayoutFile {
         session: SessionRecord(cleanExit: false, launchedAt: Date(timeIntervalSinceReferenceDate: 800_000_000.25)))
 }
 
-/// D-16, T-03-15..18: layout.json is validated whole on load, written atomically and owner-only, never holds titles,
+/// D-16, T-03-15..18, D-10: layout.json is validated whole on load, written atomically and owner-only with titles,
 /// and a newer Transom's file is never overwritten.
 @MainActor @Suite struct LayoutStoreTests {
     /// A fresh temporary directory per test, removed afterwards. Never the user's real Application Support.
     final class Directory {
         let url = FileManager.default.temporaryDirectory.appending(path: "transom-layout-\(UUID().uuidString)", directoryHint: .isDirectory)
         var file: URL { url.appending(path: LayoutStore.fileName) }
-        var corrupt: URL { url.appending(path: LayoutStore.fileName + ".corrupt") }
+        /// The rejected files set aside.
+        var corrupted: [URL] {
+            ((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []).filter { $0.hasPrefix(LayoutStore.fileName + ".corrupt-") }.sorted().map { url.appending(path: $0) }
+        }
         init() { try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
         deinit { try? FileManager.default.removeItem(at: url) }
         func write(_ text: String) throws { try Data(text.utf8).write(to: file) }
@@ -52,7 +55,7 @@ private func sampleFile() throws -> LayoutFile {
         let file = try sampleFile()
         #expect(try LayoutStore(directory: dir.url).save(file))
         let text = try dir.text()
-        #expect(text.contains("\"schemaVersion\" : 2"))
+        #expect(text.contains("\"schemaVersion\" : 3"))
         let homeFrames = try #require(text.range(of: "\"homeFrames\"")), session = try #require(text.range(of: "\"session\""))
         let world = try #require(text.range(of: "\"world\""))
         #expect(homeFrames.lowerBound < session.lowerBound && session.lowerBound < world.lowerBound)
@@ -81,11 +84,30 @@ private func sampleFile() throws -> LayoutFile {
         }
     }
 
-    @Test func titlesAreNeverWritten() throws {
+    /// WR-09: `load` rejects a file over the cap whole, so `save` never writes one: the last good file stays.
+    @Test func aSaveOverTheSizeCapKeepsTheLastGoodFile() throws {
+        let dir = Directory()
+        let store = LayoutStore(directory: dir.url, saveLimit: 8192)
+        try store.save(try sampleFile())
+        let good = try dir.text()
+        var world = World()
+        try world.addDesk(key)
+        try world.reflow(key) { desk, ids throws(LayoutError) in
+            try desk.tree.insert(ref(1, title: String(repeating: "x", count: 8192)), at: .left, of: .desktop, ids: &ids)
+        }
+        let huge = LayoutFile(world: world, homeFrames: [:], session: SessionRecord(cleanExit: false, launchedAt: .now))
+        #expect(throws: LayoutStoreError.self) { try store.save(huge) }
+        #expect(try dir.text() == good)
+    }
+
+    /// D-10 (supersedes T-03-17): titles are written, so windows can be re-matched after a relaunch, and the file
+    /// stays owner-only.
+    @Test func titlesAreWrittenAndTheFileIsOwnerOnly() throws {
         let dir = Directory()
         try LayoutStore(directory: dir.url).save(try sampleFile())
         let text = try dir.text()
-        #expect(!text.contains("Secret plan") && !text.contains("Bank statement"))
+        #expect(text.contains("Secret plan.txt") && text.contains("Bank statement"))
+        #expect(try FileManager.default.attributesOfItem(atPath: dir.file.path)[.posixPermissions] as? Int == 0o600)
     }
 
     @Test func noFileStartsEmptyWithoutAnError() {
@@ -95,7 +117,7 @@ private func sampleFile() throws -> LayoutFile {
         #expect(store.contents == nil)
         #expect(store.loadError == nil)
         #expect(!store.savingDisabled)
-        #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
+        #expect(dir.corrupted.isEmpty)
     }
 
     /// `sampleFile()`'s JSON with top-level keys changed, for schema 2's keys, which `edited` cannot reach cleanly.
@@ -115,8 +137,16 @@ private func sampleFile() throws -> LayoutFile {
         { try mutated { json in json.merging([key: value(json)]) { $1 } } }
     }
 
+    /// One saved view as layout.json holds it.
+    static func view(_ slot: Int, windows: [UInt32] = []) -> [String: Any] {
+        [
+            "slot": slot, "desk": ["displayUUID": "main"], "home": windows.isEmpty,
+            "windows": windows.map { ["windowID": $0, "pid": 300, "bundleID": "com.example.editor"] as [String: Any] },
+        ]
+    }
+
     nonisolated static let badFiles: [(String, @MainActor @Sendable () throws -> String)] = [
-        ("too large", { try edited("\"schemaVersion\" : 2", "\"schemaVersion\" : 2" + String(repeating: " ", count: World.maxEncodedBytes)) }),
+        ("too large", { try edited("\"schemaVersion\" : 3", "\"schemaVersion\" : 3" + String(repeating: " ", count: World.maxEncodedBytes)) }),
         ("malformed", { #"{"schemaVersion":1,"world":"# }),
         ("duplicate window", { try edited("\"windowID\" : 2", "\"windowID\" : 1") }),
         // JSON has no NaN; an overflowing literal is the nearest a file gets to a non-finite frame.
@@ -139,6 +169,12 @@ private func sampleFile() throws -> LayoutFile {
         }),
         ("duplicate space ID", { try setting("spaces") { _ in [["id": 3, "uuid": "U3"], ["id": 3, "uuid": "U4"]] }() }),
         ("empty space uuid", { try setting("spaces") { _ in [["id": 3, "uuid": ""]] }() }),
+        ("duplicate view slot", { try setting("views") { _ in [view(3), view(3)] }() }),
+        ("unsorted view slots", { try setting("views") { _ in [view(4), view(3)] }() }),
+        ("ten views", { try setting("views") { _ in (1...9).map { view($0) } + [view(9)] }() }),
+        ("view slot out of range", { try setting("views") { _ in [view(10)] }() }),
+        ("unsorted view windows", { try setting("views") { _ in [view(3, windows: [2, 1])] }() }),
+        ("duplicate view window", { try setting("views") { _ in [view(3, windows: [1, 1])] }() }),
         ("duplicate wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}},{\"frame\":{\"x\":5,\"y\":5,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
     ]
 
@@ -146,8 +182,8 @@ private func sampleFile() throws -> LayoutFile {
     func aBadFileIsRejectedWholeAndMovedAside(name: String, text: @MainActor @Sendable () throws -> String) throws {
         let text = try text()
         let dir = Directory()
-        try dir.write("older")
-        try FileManager.default.moveItem(at: dir.file, to: dir.corrupt)  // an older .corrupt is replaced
+        let older = dir.url.appending(path: LayoutStore.fileName + ".corrupt-100")
+        try Data("older".utf8).write(to: older)
         try dir.write(text)
         let store = LayoutStore(directory: dir.url)
         store.load()
@@ -155,7 +191,23 @@ private func sampleFile() throws -> LayoutFile {
         #expect(store.loadError != nil, "\(name) was accepted")
         #expect(!store.savingDisabled, "\(name) disabled saving")
         #expect(!FileManager.default.fileExists(atPath: dir.file.path), "\(name) left in place")
-        #expect(try String(contentsOf: dir.corrupt, encoding: .utf8) == text, "\(name) not moved aside")
+        #expect(try String(contentsOf: older, encoding: .utf8) == "older", "\(name) replaced an earlier copy")
+        let moved = try #require(dir.corrupted.first { $0.lastPathComponent != older.lastPathComponent })
+        #expect(try String(contentsOf: moved, encoding: .utf8) == text, "\(name) not moved aside")
+    }
+
+    /// WR-08: a rejected file that can't be moved aside is still the only copy, so nothing is saved over it.
+    @Test func aRejectedFileThatCannotMoveTurnsSavingOff() throws {
+        let dir = Directory()
+        try dir.write("not json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: dir.url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.url.path) }
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.contents == nil)
+        #expect(store.savingDisabled)
+        #expect(try store.save(try sampleFile()) == false)
+        #expect(try dir.text() == "not json")
     }
 
     @Test func rejectionsNameTheirReason() throws {
@@ -175,15 +227,15 @@ private func sampleFile() throws -> LayoutFile {
 
     @Test func aNewerFileIsKeptUntouchedAndNeverOverwritten() throws {
         let dir = Directory()
-        let newer = try Self.edited("\"schemaVersion\" : 2", "\"schemaVersion\" : 3")
+        let newer = try Self.edited("\"schemaVersion\" : 3", "\"schemaVersion\" : 4")
         try dir.write(newer)
         let store = LayoutStore(directory: dir.url)
         store.load()
         #expect(store.contents == nil)
-        #expect(store.loadError == .newerVersion(3))
+        #expect(store.loadError == .newerVersion(4))
         #expect(store.savingDisabled)
         #expect(try dir.text() == newer)
-        #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
+        #expect(dir.corrupted.isEmpty)
         #expect(try store.save(try sampleFile()) == false)
         #expect(try dir.text() == newer, "a save overwrote a newer Transom's layout")
     }
@@ -268,9 +320,9 @@ extension LayoutStoreTests {
         store.load()
         #expect(store.loadError == nil)
         #expect(!store.savingDisabled)
-        #expect(!FileManager.default.fileExists(atPath: dir.corrupt.path))
+        #expect(dir.corrupted.isEmpty)
         let contents = try #require(store.contents)
-        #expect(contents.schemaVersion == 2)
+        #expect(contents.schemaVersion == 3)
         #expect(contents.arrangement.isUnknown)
         #expect(contents.layoutSets.isEmpty)
         #expect(contents.spaces.isEmpty)
@@ -280,7 +332,7 @@ extension LayoutStoreTests {
         #expect(contents.wantedFrames.map(\.window.windowID) == [1])
     }
 
-    @Test func aMigratedFileSavesAsSchema2WithItsSpaceTableAndRoundTrips() throws {
+    @Test func aMigratedFileSavesAsSchema3WithItsSpaceTableAndRoundTrips() throws {
         let dir = Directory()
         try dir.write(LayoutFileV1Fixture.json)
         let store = LayoutStore(directory: dir.url)
@@ -289,7 +341,7 @@ extension LayoutStoreTests {
         contents.spaces = [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4")]
         #expect(try store.save(contents))
         let text = try dir.text()
-        #expect(text.contains("\"schemaVersion\" : 2"))
+        #expect(text.contains("\"schemaVersion\" : 3"))
         #expect(text.contains("\"spaces\" : ["))
 
         let fresh = LayoutStore(directory: dir.url)
@@ -316,5 +368,87 @@ extension LayoutStoreTests {
             Issue.record("17 layout sets gave \(String(describing: store.loadError))")
             return
         }
+    }
+}
+
+/// D-10, D-14, RESEARCH Pitfall 5: schema 3 keeps titles and the boot session; schema 2 loads and saves as schema 3.
+extension LayoutStoreTests {
+    @Test func aSchema3FileRoundTripsItsTitlesAndBootSession() throws {
+        let dir = Directory()
+        var file = try sampleFile()
+        file.session.bootSession = "BOOT-A"
+        try LayoutStore(directory: dir.url).save(file)
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == file)
+        #expect(fresh.contents?.session.bootSession == "BOOT-A")
+        let desk = try #require(fresh.contents?.world[key])
+        #expect(desk.tree.windows.map(\.titleHint) == ["Secret plan.txt"])
+        #expect(desk.desktop.windows.map(\.window.titleHint) == ["Bank statement"])
+    }
+
+    /// D-14: views come back sorted by slot, as written.
+    @Test func savedViewsRoundTripSortedBySlot() throws {
+        let dir = Directory()
+        var file = try sampleFile()
+        file = LayoutFile(
+            world: file.world, homeFrames: file.homeFrameMap, session: file.session,
+            views: [
+                SavedView(slot: ViewSlot(5)!, desk: key, home: true, windows: []),
+                SavedView(slot: ViewSlot(3)!, desk: key, home: false, windows: [ref(2).identity, ref(1).identity]),
+            ])
+        try LayoutStore(directory: dir.url).save(file)
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == file)
+        #expect(fresh.contents?.views.map(\.slot.number) == [3, 5])
+        #expect(fresh.contents?.views.first?.windows == [ref(1).identity, ref(2).identity])
+    }
+
+    @Test func aSchema2FileLoadsWithEmptyTitlesAndSavesAsSchema3() throws {
+        let dir = Directory()
+        // Schema 2 as its Transom wrote it: titles redacted (T-03-17) and no boot session.
+        let schema2 = try Self.mutated { json in
+            var json = json
+            json["schemaVersion"] = 2
+            var session = json["session"] as? [String: Any] ?? [:]
+            session["bootSession"] = nil
+            json["session"] = session
+            json["views"] = nil
+            return json
+        }
+        .replacingOccurrences(of: "Secret plan.txt", with: "").replacingOccurrences(of: "Bank statement", with: "")
+        try #require(!schema2.contains("bootSession") && schema2.contains(#""schemaVersion":2"#))
+        try dir.write(schema2)
+
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(!store.savingDisabled)
+        let contents = try #require(store.contents)
+        #expect(contents.session.bootSession == nil)
+        #expect(contents.views.isEmpty, "a schema-2 file has no saved views")
+        #expect(contents.world == (try sampleFile()).world)
+        #expect(contents.world.desks.values.allSatisfy { desk in
+            (desk.tree.windows + desk.desktop.windows.map(\.window)).allSatisfy { $0.titleHint.isEmpty }
+        })
+        #expect(try store.save(contents))
+        #expect(try dir.text().contains("\"schemaVersion\" : 3"))
+    }
+}
+
+/// RESEARCH Pitfall 5: only a known boot session that differs from the current one counts as a reboot.
+@Suite struct BootSessionTests {
+    @Test(arguments: [("A", "B", true), ("A", "A", false), (nil, "A", false), ("A", nil, false), (nil, nil, false)] as [(String?, String?, Bool)])
+    func changedOnlyWhenBothAreKnownAndDiffer(saved: String?, current: String?, changed: Bool) {
+        #expect(BootSession.changed(saved: saved, current: current) == changed)
+    }
+
+    @Test func theCurrentBootSessionIsReadable() {
+        #expect(BootSession.current()?.isEmpty == false)
     }
 }

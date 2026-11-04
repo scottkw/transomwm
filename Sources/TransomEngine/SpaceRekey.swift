@@ -13,16 +13,20 @@ public enum SpaceRekey {
         public let quarantined: [DeskKey]
     }
 
-    /// The Space table for layout.json: each Space ID a desk of `world` or of a layout set uses that `uuids` knows,
-    /// sorted by ID. A set's Spaces are listed too, so its desks can be re-keyed after a reboot (CR-02).
-    public static func table(for world: World, layoutSets: [LayoutSet] = [], uuids: [UInt64: String]) -> [SavedSpace] {
-        let ids = Set(([world] + layoutSets.map(\.world)).flatMap { $0.desks.keys.compactMap(\.spaceID) })
+    /// The Space table for layout.json: each Space ID a desk of `world` or of a layout set, or a saved view's desk, uses
+    /// that `uuids` knows, sorted by ID. A set's Spaces are listed too, so its desks can be re-keyed after a reboot (CR-02).
+    public static func table(for world: World, layoutSets: [LayoutSet] = [], views: [SavedView] = [], uuids: [UInt64: String]) -> [SavedSpace] {
+        let ids = Set(([world] + layoutSets.map(\.world)).flatMap { $0.desks.keys.compactMap(\.spaceID) } + views.compactMap(\.desk.spaceID))
         return ids.sorted().compactMap { id in uuids[id].map { SavedSpace(id: id, uuid: $0) } }
     }
 
-    /// A loaded file's World and every layout set's World re-keyed with one table, the file's Space table over the live
-    /// one (D-13, CR-02). A set whose World cannot be rebuilt (only an already invalid one) keeps its saved keys.
-    public static func rekey(_ file: LayoutFile, live: SpacesSnapshot) throws(LayoutError) -> (result: Result, layoutSets: [LayoutSet], setsQuarantined: [DeskKey]) {
+    /// A loaded file's World, every layout set's World and every saved view's desk re-keyed with one table, the file's
+    /// Space table over the live one (D-13, CR-02). A set whose World cannot be rebuilt (only an already invalid one) keeps
+    /// its saved keys. A view whose Space is unknown now keeps its key, so going there takes the N17 path.
+    /// shortcut: a view on a gone Space whose ID a new Space reused goes to the new Space's home; quarantine it if that shows up.
+    public static func rekey(
+        _ file: LayoutFile, live: SpacesSnapshot
+    ) throws(LayoutError) -> (result: Result, layoutSets: [LayoutSet], setsQuarantined: [DeskKey], views: [SavedView]) {
         let table = live.uuidByID.merging(file.spaceMap) { _, saved in saved }
         var quarantined: [DeskKey] = []
         let sets = file.layoutSets.map { set in
@@ -30,7 +34,11 @@ public enum SpaceRekey {
             quarantined += result.quarantined
             return LayoutSet(arrangement: set.arrangement, world: result.world, lastUsed: set.lastUsed)
         }
-        return (try rekey(file.world, saved: table, current: live.idByUUID), sets, quarantined)
+        let views = file.views.map { view -> SavedView in
+            guard let id = view.desk.spaceID, let uuid = table[id], let now = live.idByUUID[uuid] else { return view }
+            return SavedView(slot: view.slot, desk: DeskKey(displayUUID: view.desk.displayUUID, spaceID: now), home: view.home, windows: view.windows)
+        }
+        return (try rekey(file.world, saved: table, current: live.idByUUID), sets, quarantined, views)
     }
 
     /// Moves each desk whose saved UUID (`saved`, by old ID) has a current ID (`current`, by UUID) to that ID. A desk

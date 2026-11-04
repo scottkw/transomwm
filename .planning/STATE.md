@@ -1,19 +1,20 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 8
-current_phase_name: Saved Views, URLs & Persistence
+current_phase: "08.1"
+current_phase_name: Window Behaviour Options
+current_plan: Not started
 status: planning
-stopped_at: Phase 7 complete, ready to plan Phase 8
-last_updated: "2026-11-03T14:46:34.405Z"
-last_activity: 2026-11-03
-last_activity_desc: Phase 7 complete, transitioned to Phase 8
-state_head: 66c3a7343bcda79f3703e586a9a6552c168ada9f
+stopped_at: Phase 8 complete, ready to plan Phase 08.1
+last_updated: "2026-11-04T17:19:29.089Z"
+last_activity: 2026-11-04
+last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
+state_head: c9b27e8fabf0b8fdc2e62f5d732ae712c5c20679
 progress:
-  total_phases: 9
-  completed_phases: 7
-  total_plans: 91
-  completed_plans: 91
-  percent: 78
+  total_phases: 10
+  completed_phases: 8
+  total_plans: 98
+  completed_plans: 98
+  percent: 80
 ---
 
 # Project State
@@ -27,17 +28,18 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 ## Current Position
 
-Phase: 8 — Saved Views, URLs & Persistence
-Plan: Not started
+Phase: 08.1 — Window Behaviour Options
+Current Plan: Not started
+Total Plans in Phase: 7
 Status: Ready to plan
-Last activity: 2026-11-03 — Phase 7 complete, transitioned to Phase 8
+Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
 
-Progress: [████████░░] 78%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 91
+- Total plans completed: 98
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -52,6 +54,7 @@ Progress: [████████░░] 78%
 | 5 | 8 | - | - |
 | 6 | 12 | - | - |
 | 7 | 12 | - | - |
+| 8 | 7 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -146,6 +149,13 @@ Progress: [████████░░] 78%
 | Phase 07 P10 | 25min | 3 tasks | 9 files |
 | Phase 07 P11 | 15min | 3 tasks | 15 files |
 | Phase 07 P12 | 5min | 2 tasks | 2 files |
+| Phase 08 P01 | 11min | 3 tasks | 21 files |
+| Phase 8 P02 | 14min | 3 tasks | 14 files |
+| Phase 8 P03 | 23min | 3 tasks | 16 files |
+| Phase 8 P04 | 22min | 2 tasks | 13 files |
+| Phase 08 P05 | 22 min | 3 tasks | 22 files |
+| Phase 08 P06 | 23 min | 2 tasks | 19 files |
+| Phase 08 P07 | 7 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -410,6 +420,27 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-11: strip panels hide with the collapsed-block panels whenever a stage is up and fade back at reveal, overview close or zoom off
 - [Phase 07]: 07-12: No keyboard or VoiceOver way to form a group in Phase 7 is an accepted gap, carried to Phase 8's URL/CLI work as a "group with" candidate
 - [Phase 07]: 07-12: Items earlier plans left to the VM UAT are folded into 07-UAT.md VM checks V11-V13; the host checklist stays at the UI-SPEC's 5 items
+- [Phase 08]: View commands reuse cameraStep refusal path so paused/full-screen refusals keep Phase 4 announcements
+- [Phase 08]: Saved view desk tie between two non-saved desks goes to the smaller DeskKey (deterministic)
+- [Phase 08]: Dropped brief notice is announced from ArrangeController.post (brief + .unchanged means dropped)
+- [Phase 8]: Hint match rank counts smaller creationOrders (equal orders share a rank), so identical windows tie
+- [Phase 8]: HintMatcher ties are a Tie struct (score, saved, candidates) for the log
+- [Phase 8]: Hint matching also runs when a known arrangement's layout set is re-applied (same LayoutRestore path)
+- [Phase 8]: Matched saved refs are rekeyed through a throwaway identity so reboot-reused IDs never collide
+- [Phase 8]: 08-03: pruning keeps identities held by any desk of the World or a layout set, so a view keeps windows stored under another display arrangement
+- [Phase 8]: 08-03: relaunch matches remap views through throwaway identities, so reused IDs after a reboot never merge two windows
+- [Phase 8]: 08-03: N18 covers any destination on a disconnected display; a view whose desk is still not shown beeps and logs
+- [Phase 8]: 08-04: the Pitfall 1 rollback was not added; fixture quits reach the Arranger as appTerminated first (real-app quit left to 08-07 UAT)
+- [Phase 8]: 08-04: a stored display arrangement still closes windows that did not come back; only a launch or an app quit makes placeholders
+- [Phase 08]: The Xcode target is transom-tool with PRODUCT_NAME transom: a target named transom would share a build folder with Transom on a case-insensitive volume
+- [Phase 08]: A URL refused for a view shows no toast either (N16, N18, N19 are silenced on URL and CLI routes), which 08-03's filter still let through
+- [Phase 08]: CLICopy.ascii also replaces every other non-printable or non-ASCII character with ?, so whoever answers on the port cannot send terminal escapes
+- [Phase 08]: A view on another Space goes through dispatch: viewSwitch(for:) runs first on every route, and decide runs after the switch
+- [Phase 8]: The placeholder panel view hosts a TileLayer, so panel, stage and overview share one recipe
+- [Phase 8]: A collapsed placeholder is a placeholder tile at its block rect; a group that all waits has one tile and no strip
+- [Phase 8]: An expired tile leaves at once during a pause; a filled one stays until Resume
+- [Phase 8]: 08-07: A2 measured on guest macOS 15.7.7: plain SSH reaches the app (exit 0), so the README has no SSH note
+- [Phase 8]: 08-07: VM checks run the tool with sudo launchctl asuser; as a normal user asuser fails with 'Could not switch to audit session'
 
 ### Quick Tasks Completed
 
@@ -440,6 +471,10 @@ Recent decisions affecting current work:
 - Phase 2 obligation: OS lifecycle events (open/close/minimise/fullscreen) go through `World.apply`, never `World.edit`, so they stay off the undo stack; `.closed` needs no valid desk key — MET by 02-04 (`LifecycleSync.handle`)
 - Phase 1 work is on branch `gsd/phase-01-layout-model` (main is protected); merging to main is the developer's call
 
+### Roadmap Evolution
+
+- Phase 8.1 inserted after Phase 8: Window Behaviour Options: choose auto-tile or float for new windows, and automatic or key-held docking regions while dragging (URGENT)
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -450,8 +485,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-02T03:36:21.041Z
-Stopped at: Phase 7 complete, ready to plan Phase 8
+Last session: 2026-11-04T01:48:59.593Z
+Stopped at: Phase 8 complete, ready to plan Phase 08.1
 Resume file: None
 
 ## Deferred Verification

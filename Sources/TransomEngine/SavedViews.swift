@@ -1,0 +1,49 @@
+import Foundation
+import TransomModel
+
+/// One saved view (D-02): the desk it was saved on and the identities of the windows inside it, or `home` for a
+/// whole-desk view. Never a NodeID or a rect: going back finds the smallest node holding the windows still there.
+public struct SavedView: Codable, Equatable, Sendable {
+    public var slot: ViewSlot
+    public var desk: DeskKey
+    public var home: Bool
+    /// Sorted.
+    public var windows: [WindowIdentity]
+
+    public init(slot: ViewSlot, desk: DeskKey, home: Bool, windows: [WindowIdentity]) {
+        self.slot = slot
+        self.desk = desk
+        self.home = home
+        self.windows = windows.sorted()
+    }
+}
+
+/// The nine slots (D-01). A slot is only ever filled or replaced, never emptied (D-16).
+public struct SavedViews: Equatable, Sendable {
+    private var slots: [ViewSlot: SavedView] = [:]
+
+    public init() {}
+
+    /// Loaded from layout.json, whose slots are validated unique.
+    public init(_ views: [SavedView]) {
+        for view in views { save(view) }
+    }
+
+    public subscript(slot: ViewSlot) -> SavedView? { slots[slot] }
+
+    /// Stores `view` in its slot; true when that replaced an earlier view (D-15).
+    @discardableResult
+    public mutating func save(_ view: SavedView) -> Bool {
+        slots.updateValue(view, forKey: view.slot) != nil
+    }
+
+    /// A window's identity changed: every view holding `from` holds `to` instead, once.
+    mutating func remap(from: WindowIdentity, to: WindowIdentity) {
+        for (slot, view) in slots where view.windows.contains(from) {
+            slots[slot]?.windows = Set(view.windows.map { $0 == from ? to : $0 }).sorted()
+        }
+    }
+
+    /// By slot.
+    public var sorted: [SavedView] { slots.values.sorted { $0.slot < $1.slot } }
+}

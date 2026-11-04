@@ -28,6 +28,13 @@ targets:
     dependencies:
       - package: Transom
         product: TransomMac
+      # The command-line tool (D-09). Never Contents/MacOS: on a case-insensitive volume it would be the Transom binary.
+      - target: transom-tool
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     entitlements:
       # XcodeGen rewrites this file from `properties` on every generate. AX needs no sandbox.
       path: Transom.entitlements
@@ -49,4 +56,30 @@ targets:
           # No debugger-attach (get-task-allow) entitlement in Release (T-02-05).
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
           # Notarisation needs a secure timestamp; Debug stays fast and offline.
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
+  # Named apart from the Transom target and the package's transom-cli target: their build folders would collide.
+  transom-tool:
+    type: tool
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - ../Sources/transom-cli
+    dependencies:
+      - package: Transom
+        product: TransomEngine
+    settings:
+      base:
+        PRODUCT_NAME: transom
+        PRODUCT_MODULE_NAME: transom_tool
+        PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.transom.cli
+        # Without a file of its own Xcode signs in com.apple.application-identifier, which needs a provisioning profile.
+        CODE_SIGN_ENTITLEMENTS: Transom.entitlements
+        # A tool has no bundle: its Info.plist goes in the binary, which gives the code signature the identifier above.
+        INFOPLIST_FILE: ""
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+      configs:
+        Release:
+          SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+          # Notarisation refuses the debugger-attach entitlement and needs a secure timestamp on every executable.
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
           OTHER_CODE_SIGN_FLAGS: "--timestamp"

@@ -30,13 +30,36 @@ public enum Notice: Equatable, Sendable {
     case takeoverCrashed
     /// N11: applying the takeover failed on read-back; the originals are back (D-07).
     case takeoverApplyFailed
+    // Saved views (08 UI-SPEC View toasts). Each carries the display its toast belongs on: the pointer display when
+    // saving or for an empty slot, the destination display when going; nil falls back to the menu-bar display.
+    /// N13 / N14: a view was saved into an empty slot, or replaced the one there (D-15).
+    case viewSaved(ViewSlot, replaced: Bool, displayUUID: String?)
+    /// N15: going to a view.
+    case viewShown(ViewSlot, displayUUID: String?)
+    /// N16: going to an empty slot (D-04).
+    case viewEmpty(ViewSlot, displayUUID: String?)
+    /// N17: every window of the view has closed, so the camera shows the saved desk's home; the slot stays (D-05).
+    case viewWindowsClosed(ViewSlot, displayUUID: String?)
+    /// N18: every window of the view has closed and its display isn't connected; nothing moved.
+    case viewDisplayGone(ViewSlot, displayUUID: String?)
+    /// N19: the view to save holds no windows; the slot is unchanged.
+    case viewNothingToSave(displayUUID: String?)
 
     /// Crash notices (N2/N3) are never replaced by a newer toast and stay up longer.
     public var isCrashNotice: Bool {
         switch self {
         case .crashRecovered, .crashLoop: true
         case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .restored, .turnOffFailed, .settingsRestored, .displaysDisconnected, .takeoverCrashed,
-            .takeoverApplyFailed: false
+            .takeoverApplyFailed, .viewSaved, .viewShown, .viewEmpty, .viewWindowsClosed, .viewDisplayGone, .viewNothingToSave: false
+        }
+    }
+
+    /// Brief toasts (1.5 s, never queued behind a crash notice): every view notice except N17.
+    public var isBrief: Bool {
+        switch self {
+        case .viewSaved, .viewShown, .viewEmpty, .viewDisplayGone, .viewNothingToSave: true
+        case .lostRoom, .finderNoWindow, .floatedAll, .arrangeLeftovers, .crashRecovered, .crashLoop, .restored, .turnOffFailed, .settingsRestored,
+            .displaysDisconnected, .takeoverCrashed, .takeoverApplyFailed, .viewWindowsClosed: false
         }
     }
 }

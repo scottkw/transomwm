@@ -167,9 +167,9 @@ extension Harness {
             }
         }
 
-        // Saved as LayoutStore saves it (no titles, sorted keys), read back as it loads.
+        // Saved as LayoutStore saves it (sorted keys), read back as it loads.
         let snapshot = harness.arranger.snapshot
-        let file = LayoutFile(world: snapshot.world.withoutTitleHints(), homeFrames: snapshot.homeFrames,
+        let file = LayoutFile(world: snapshot.world, homeFrames: snapshot.homeFrames,
                               session: SessionRecord(cleanExit: true, launchedAt: Date()))
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
@@ -236,10 +236,15 @@ extension Harness {
         var harness = await relaunched(with: carried, displays: [displayA], showing: ["A": 1])
         await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
         await harness.send(.inventory(await harness.fake.inventory()))
+        // Its tile waits like any unattached window's (D-12), from when its Space shows (CR-02), so window 3's tile changes
+        // when it expires.
+        #expect(harness.arranger.isPlaceholder(ref(4)))
+        _ = await harness.switchDisplay("A", to: 2)
+        harness.now += Arranger.launchWait
+        await harness.send(.tick)
         let desk = try #require(harness.arranger.world[deskA2])
         #expect(desk.tree.windows == [ref(3)], "window 4 is removed and window 3 kept: \(desk.tree.windows)")
 
-        _ = await harness.switchDisplay("A", to: 2)
         let tile = try #require(try Planner.plan(desk: desk, area: visibleA, gap: harness.arranger.gap, mins: [:]).frames[ref(3)])
         let old = try #require(first.tiles[ref(3)])
         #expect(tile.width > old.width)
@@ -248,9 +253,10 @@ extension Harness {
         #expect(harness.arranger.world[deskA2]?.tree.windows == [ref(3)])
     }
 
-    /// The VIEW-04 boundary: a saved window whose app relaunched has a new pid, so it is not the saved window and is
-    /// removed at the restore (re-matching is Phase 8).
-    @Test func aSavedWindowWhoseAppRelaunchedIsRemoved() async throws {
+    /// The VIEW-04 boundary: a saved window whose app relaunched has a new pid, so it is not the saved window; on a
+    /// Space not shown it is not tracked either, so nothing can re-match it yet: its tile waits past its deadline (CR-02),
+    /// and the window takes it when its Space shows.
+    @Test func aSavedWindowWhoseAppRelaunchedOnAHiddenSpaceWaitsUntilItsSpaceShows() async throws {
         let first = try await firstSession(space2: [3])
         let relaunchedPID: Int32 = 901
         var carried = Array(await first.harness.fake.windows.values)
@@ -260,11 +266,20 @@ extension Harness {
             apps: [FakeApp(pid: pid, bundleID: bundleID), FakeApp(pid: relaunchedPID, bundleID: bundleID)])
         await harness.send(.restore(first.saved, homeFrames: first.homeFrames))
         await harness.send(.inventory(await harness.fake.inventory()))
-        let holds3 = harness.arranger.world.desks.values.contains { desk in
-            (desk.tree.windows + desk.desktop.windows.map(\.window)).contains { $0.windowID == 3 }
-        }
-        #expect(!holds3, "a window of the relaunched app was kept")
+        #expect(harness.arranger.isPlaceholder(ref(3)))
+        harness.now += Arranger.neverOpenedWait
+        await harness.send(.tick)
+        #expect(harness.arranger.isPlaceholder(ref(3)), "a tile on a Space not shown must not expire")
         #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
+
+        _ = await harness.switchDisplay("A", to: 2)
+        for _ in 0..<2 {
+            await harness.fake.refresh(pid: relaunchedPID)
+            for event in await harness.inbox.take() { await harness.send(.event(event)) }
+            await harness.fake.advance(by: .milliseconds(300))
+        }
+        #expect(harness.arranger.world[deskA2]?.tree.windows.map(\.pid) == [relaunchedPID])
+        #expect(harness.arranger.placeholderCount == 0)
     }
 
     @Test func aDormantWindowIsNoLongerDormantOnceItsSpaceIsShown() async throws {
@@ -274,13 +289,19 @@ extension Harness {
         #expect(!harness.arranger.hasDormantWindows)
     }
 
-    /// G-03-8 prune: a dormant window that closed (its ID left the CG list) leaves its desk, so layout.json drops it.
+    /// G-03-8 prune: a dormant window that closed (its ID left the CG list) leaves its desk, so layout.json drops it. It
+    /// goes `launchWait` later, even on a hidden desk, as its app may be quitting (D-12b).
     @Test func aDormantWindowThatLeftTheCGListIsPrunedWithNoUndoStep() async throws {
         var (harness, tiles) = try await dormantRelaunch()
         let history = harness.arranger.history
         await harness.fake.close(3)
         await harness.fake.refreshAll()
-        let effects = await harness.send(.inventory(await harness.fake.inventory()))
+        let start = harness.now
+        let held = await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) == true)
+        #expect(held.contains(.wake(at: start + Arranger.launchWait)))
+        harness.now = start + Arranger.launchWait
+        let effects = await harness.send(.tick)
         #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
         #expect(effects.contains(.save(.debounced)))
         #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
@@ -300,12 +321,77 @@ extension Harness {
         #expect(harness.arranger.world == world)
     }
 
-    /// Its app quit: dormant windows of that pid close now; a tracked one of the same pid waits for its windowDestroyed.
-    @Test func aDormantWindowIsPrunedWhenItsAppTerminates() async throws {
+    /// D-12a, D-12b: its app quit, so a dormant docked window waits like a tracked one: never expiring while its desk is
+    /// hidden, whatever the CG list says, and filled by a relaunched window on that Space. A tracked window of the same
+    /// pid waits for its windowDestroyed.
+    @Test func aDormantDockedWindowWaitsWhenItsAppTerminatesAndARelaunchFillsIt() async throws {
         var (harness, _) = try await dormantRelaunch()
+        let start = harness.now
         await harness.send(.event(.appTerminated(pid: pid)))
-        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
+        #expect(harness.arranger.isPlaceholder(ref(3)))
+        #expect(!harness.arranger.hasDormantWindows)
         #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)], "the tracked window was closed by appTerminated")
+
+        await harness.fake.terminate(pid: pid)
+        await harness.send(.inventory(await harness.fake.inventory()))
+        harness.now = start + .seconds(600)
+        await harness.send(.tick)
+        #expect(harness.arranger.isPlaceholder(ref(3)), "it expired while its desk was hidden")
+
+        await harness.send(.event(.spaceChanged(displayUUID: "A", spaceID: 2)))
+        let relaunched = WindowRef(identity: WindowIdentity(windowID: 9, pid: pid + 1, bundleID: bundleID))
+        await harness.send(.event(.windowCreated(WindowInfo(window: relaunched, frame: visibleA, state: .present, displayUUID: "A", spaces: [2]))))
+        #expect(harness.arranger.world[deskA2]?.tree.windows == [relaunched])
+        #expect(harness.arranger.placeholderCount == 0)
+    }
+
+    /// With no relaunch, the tile closes only once its desk shows.
+    @Test func aDormantDockedWindowOfAQuitAppExpiresOnlyAfterItsDeskShows() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        let start = harness.now
+        await harness.send(.event(.appTerminated(pid: pid)))
+        harness.now = start + .seconds(600)
+        await harness.send(.tick)
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) == true)
+
+        await harness.send(.event(.spaceChanged(displayUUID: "A", spaceID: 2)))
+        harness.now = start + .seconds(610)
+        await harness.send(.tick)
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
+    }
+
+    /// The CG list can lose the window before `.appTerminated` arrives: the prune must not close the tile first.
+    @Test func aDormantWindowTheCGListLostBeforeItsAppTerminatedStillWaits() async throws {
+        var (harness, _) = try await dormantRelaunch()
+        let start = harness.now
+        await harness.fake.close(3)
+        await harness.fake.refreshAll()
+        await harness.send(.inventory(await harness.fake.inventory()))
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) == true, "the prune closed it first")
+
+        await harness.send(.event(.appTerminated(pid: pid)))
+        harness.now = start + .seconds(600)
+        await harness.send(.tick)
+        #expect(harness.arranger.isPlaceholder(ref(3)), "the quit did not take over its wait")
+    }
+
+    /// A dormant floating window has no tile to keep, so it closes with its app.
+    @Test func aDormantFloatingWindowClosesWhenItsAppTerminates() async throws {
+        var first = try await firstSession(space2: [3])
+        await first.harness.fake.open(.standard(id: 4, pid: pid, frame: startFrame(1, on: visibleA), space: 2))
+        _ = await first.harness.switchDisplay("A", to: 2)
+        _ = await first.harness.switchDisplay("A", to: 1)
+        let saved = first.harness.arranger.world
+        try #require(saved[deskA2]?.desktop.contains(ref(4)) == true)
+
+        var harness = await relaunched(with: Array(await first.harness.fake.windows.values), displays: [displayA], showing: ["A": 1])
+        await harness.send(.restore(saved, homeFrames: first.harness.arranger.snapshot.homeFrames))
+        await harness.send(.inventory(await harness.fake.inventory()))
+        try #require(harness.arranger.world[deskA2]?.contains(ref(4)) == true)
+
+        await harness.send(.event(.appTerminated(pid: pid)))
+        #expect(harness.arranger.world[deskA2]?.contains(ref(4)) != true)
+        #expect(harness.arranger.isPlaceholder(ref(3)))
     }
 
     /// Nothing is decided blind: a locked session, an unknown CG list or an empty one prunes nothing (T-03-63).
@@ -330,9 +416,10 @@ extension Harness {
     }
 
     /// CR-01: a tab group keeps its oldest member's identity for life, but a fresh window system founds it under its
-    /// shown tab. The saved leader, now a hidden tab on the shown Space, is no hidden-Space window: it is removed, so
-    /// the group is never both docked (an empty reserved tile) and floating. Whether the hidden tab reports the Space
-    /// or none, as the live lookup may answer.
+    /// shown tab. The saved leader, now a hidden tab on the shown Space, is no hidden-Space window, so identity does not
+    /// keep it; the hint matcher gives its tile to the group under its new leader (the sole pair of the app, D-10), so
+    /// the group is docked once and never also floating. Whether the hidden tab reports the Space or none, as the live
+    /// lookup may answer.
     @Test(arguments: [false, true])
     func aTabGroupShownUnderAnotherTabAtRelaunchIsNotKeptTwice(hiddenTabsReportSpace: Bool) async throws {
         func setUp(_ harness: Harness) async {
@@ -371,8 +458,8 @@ extension Harness {
         try #require(harness.arranger.windows[ref(11).identity] != nil, "the fresh tracker founds the group under tab 11")
         #expect(!harness.arranger.hasDormantWindows)
         #expect(harness.arranger.deskKey(of: ref(10)) == nil, "the saved leader is kept as an empty docked tile")
-        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
-        #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(11)) == true)
+        #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1), ref(11)])
+        #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(11)) == false)
     }
 
     /// CR-02, D-17: after a crash, a floating window parked on a hidden Space's desk (its Desktop hidden) comes back on
@@ -489,6 +576,8 @@ extension Harness {
         await harness.fake.close(3)
         await harness.fake.refreshAll()
         await harness.send(.inventory(await harness.fake.inventory()))
+        harness.now += Arranger.launchWait
+        await harness.send(.tick)
         #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
         #expect(harness.arranger.world[deskA1]?.tree.windows == [ref(1)])
     }
@@ -571,8 +660,10 @@ extension Harness {
             return entry
         }
         await harness.send(.inventory(inventory))
-        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
         #expect(!harness.arranger.hasDormantWindows)
+        harness.now += Arranger.launchWait
+        await harness.send(.tick)
+        #expect(harness.arranger.world[deskA2]?.contains(ref(3)) != true)
     }
 
     @Test func liveWindowsChangedAloneDoesNothing() async throws {
