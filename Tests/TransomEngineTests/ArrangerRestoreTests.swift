@@ -84,6 +84,61 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         #expect(lines.count == 2 && lines.allSatisfy { !$0.contains("Notes") && !$0.contains("Plan") }, "\(lines)")
     }
 
+    /// VIEW-04, D-10, D-12: a docked saved window still unattached after the matcher holds its tile as a placeholder, and
+    /// the neighbour matched beside it takes no more room.
+    @Test func aDockedSavedWindowStillUnattachedHoldsItsTile() async throws {
+        var source = await twoDocked()
+        for (id, title) in [(UInt32(1), "Notes"), (2, "Plan")] { await source.fake.update(id) { $0.title = title } }
+        _ = await source.refresh()
+        let saved = source.arranger.snapshot.world
+        let tileB = try #require(await source.frame(b))
+
+        let newPID: Int32 = 901
+        let returned = WindowRef(identity: WindowIdentity(windowID: 12, pid: newPID, bundleID: bundleID))
+        var harness = Harness()
+        await harness.fake.setDisplays(await source.fake.inventory().displays)
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        await harness.fake.open(.standard(id: 12, pid: newPID, frame: Rect(x: 200, y: 200, width: 400, height: 300), title: "Plan"))
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved, homeFrames: [:]))
+        await harness.send(.inventory(await harness.fake.inventory()))
+
+        #expect(harness.arranger.world[key]?.tree.windows == [a, returned])
+        #expect(harness.arranger.isPlaceholder(a))
+        #expect(await harness.frame(returned) == tileB)
+    }
+
+    /// D-10: a tie at launch: the tiles wait and the tied windows float, with a log line. Equal creation orders, so no
+    /// rank settles it.
+    @Test func aTieAtLaunchLeavesTheTilesWaitingAndTheWindowsFloating() async throws {
+        let one = WindowRef(identity: a.identity, titleHint: "Untitled"), two = WindowRef(identity: b.identity, titleHint: "Untitled")
+        var saved = World()
+        try saved.addDesk(key)
+        try saved.reflow(key) { desk, ids throws(LayoutError) in
+            try desk.tree.insert(one, at: .left, of: .desktop, ids: &ids)
+            guard let leaf = desk.tree.leaf(containing: one) else { throw .windowNotFound(one) }
+            try desk.tree.insert(two, at: .right, of: leaf, ids: &ids)
+        }
+
+        let newPID: Int32 = 901
+        let windows = [UInt32(11), 12].map { WindowRef(identity: WindowIdentity(windowID: $0, pid: newPID, bundleID: bundleID)) }
+        var harness = Harness()
+        await harness.fake.setDisplays([DisplayInfo(
+            uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: nil)])
+        await harness.fake.addApp(FakeApp(pid: newPID, bundleID: bundleID))
+        for id in [UInt32(11), 12] { await harness.fake.open(.standard(id: id, pid: newPID, frame: Rect(x: 300, y: 300, width: 400, height: 300), title: "Untitled")) }
+        await harness.fake.refreshAll()
+        _ = await harness.inbox.take()
+        await harness.send(.restore(saved, homeFrames: [:]))
+        let effects = await harness.send(.inventory(await harness.fake.inventory()))
+
+        #expect(harness.arranger.placeholderCount == 2)
+        #expect(harness.arranger.world[key]?.tree.windows == [a, b])
+        #expect(windows.allSatisfy { harness.arranger.world[key]?.desktop.contains($0) == true })
+        #expect(effects.contains { if case .info(let line) = $0 { line.contains("tie at") } else { false } })
+    }
+
     /// RESEARCH Pitfall 5: after a reboot window IDs and pids restart, so a new window can carry a saved window's exact
     /// identity. With the boot session changed, identity keeps nothing: window 1 (a's identity, another document) does
     /// not claim a's tile, and window 2 gets b's tile only because its title matches.
