@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: "08.1"
 current_phase_name: Window Behaviour Options
 current_plan: 7
-status: executing
-stopped_at: Completed 08.1-06-PLAN.md
-last_updated: "2026-11-05T01:05:01.332Z"
+status: verifying
+stopped_at: Completed 08.1-07-PLAN.md
+last_updated: "2026-11-05T01:34:29.429Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
-state_head: 149a338b295ac558309b5ce758d11c1a311bada5
+state_head: f6eb2595f38e320470733435d60237772083a33c
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 105
-  completed_plans: 104
+  completed_plans: 105
   percent: 80
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 Phase: 08.1 — Window Behaviour Options
 Current Plan: 7
 Total Plans in Phase: 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
 
 Progress: [████████░░] 80%
@@ -162,6 +162,7 @@ Progress: [████████░░] 80%
 | Phase 08.1 P04 | 54 min | 2 tasks | 9 files |
 | Phase 08.1 P05 | 21 min | 3 tasks | 10 files |
 | Phase 08.1 P06 | 94 min | 3 tasks | 16 files |
+| Phase 08.1 P07 | 30 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -456,6 +457,8 @@ Recent decisions affecting current work:
 - [Phase 08.1]: autoTileMinimum is 200 x 120 pt (RESEARCH A5)
 - [Phase 08.1]: A window first seen under a sheet doesn't count as new, because the Classifier can't judge it yet: it floats (D-04)
 - [Phase 08.1]: A new window on a Space not showing floats on that Space's desk rather than docking there
+- [Phase 08.1]: vm-session.sh syncs the guest before tart stop, because stopping straight after a suite undid its restored guest state
+- [Phase 08.1]: TILE-21, TILE-22 and TILE-23 marked complete at 08.1-07 with UI-SPEC's four host checks still open for /gsd-verify-work
 
 ### Quick Tasks Completed
 
@@ -500,8 +503,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T01:05:00.169Z
-Stopped at: Completed 08.1-06-PLAN.md
+Last session: 2026-11-05T01:34:28.762Z
+Stopped at: Completed 08.1-07-PLAN.md
 Resume file: None
 
 ## Deferred Verification
