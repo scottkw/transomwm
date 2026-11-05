@@ -5,7 +5,7 @@ public enum FourthSlot: String, CaseIterable, Hashable, Sendable {
     case first, second, third, fourth, middle
 
     /// The slot's span as fractions of the axis, 0 being the left edge or the top.
-    var span: (start: Double, end: Double) {
+    public var span: (start: Double, end: Double) {
         switch self {
         case .first: (0, 0.25)
         case .second: (0.25, 0.5)
@@ -47,9 +47,8 @@ extension LayoutTree {
         _ node: Node, states: [WindowIdentity: WindowState], slot: FourthSlot, axis: Axis, ids: inout IDSource
     ) throws(LayoutError) {
         guard let root else { return try insertRootLeaf(node, states: states, ids: &ids) }
-        let (children, weights): ([NodeID], [Double]) =
-            if case let .split(rootAxis, c, w)? = nodes[root], rootAxis == axis { (c, w) } else { ([root], [1]) }
-        let (index, shares) = Self.fourthShares(weights: weights, takesPart: children.map(takesPart), span: slot.span)
+        let (children, weights) = fourthChildren(of: root, axis: axis)
+        let (index, shares, _) = Self.fourthShares(weights: weights, takesPart: children.map(takesPart), span: slot.span)
         var next = self
         var nextIDs = ids
         let leading: Edge = axis == .horizontal ? .left : .top
@@ -65,6 +64,19 @@ extension LayoutTree {
         ids = nextIDs
     }
 
+    /// The share of the desk `insertFourth` would give a window: `slot`'s span, grown into a side with no tile (D-14, D-23).
+    /// A window being moved has to be off this tree already.
+    public func fourthSpan(_ slot: FourthSlot, axis: Axis) -> (start: Double, end: Double) {
+        guard let root else { return (0, 1) }
+        let (children, weights) = fourthChildren(of: root, axis: axis)
+        return Self.fourthShares(weights: weights, takesPart: children.map(takesPart), span: slot.span).span
+    }
+
+    /// The root's children along `axis`; a leaf root, or a root split the other way, is one child.
+    private func fourthChildren(of root: NodeID, axis: Axis) -> ([NodeID], [Double]) {
+        if case let .split(rootAxis, children, weights)? = nodes[root], rootAxis == axis { (children, weights) } else { ([root], [1]) }
+    }
+
     /// Mirrors `Solver.aggregate`: whether a node gets any space when resolved.
     func takesPart(_ id: NodeID) -> Bool {
         switch nodes[id] {
@@ -76,11 +88,11 @@ extension LayoutTree {
         }
     }
 
-    /// The insertion index and the new weights, the window's at that index. Children not taking part keep their stored
+    /// The insertion index, the new weights (the window's at that index) and the span it gets. Children not taking part keep their stored
     /// weight and the rest share what they leave, so positions are worked out over the children taking part only.
     private static func fourthShares(
         weights: [Double], takesPart: [Bool], span: (start: Double, end: Double)
-    ) -> (index: Int, shares: [Double]) {
+    ) -> (index: Int, shares: [Double], span: (start: Double, end: Double)) {
         let room = weights.indices.reduce(0) { takesPart[$1] ? $0 + weights[$1] : $0 }
         var index = weights.count
         if span.start == 0 {
@@ -110,6 +122,6 @@ extension LayoutTree {
         // stored total keeps it from being a sliver when the others return (WR-07).
         let basis = room > 0 ? room : weights.reduce(0, +)
         shares.insert(max((end - start) * basis, minWeight), at: index)
-        return (index, shares)
+        return (index, shares, (start, end))
     }
 }

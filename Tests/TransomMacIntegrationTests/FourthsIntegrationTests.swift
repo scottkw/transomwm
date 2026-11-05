@@ -166,7 +166,7 @@ import Testing
             Issue.record("no fourth preview after the dwell: \(String(describing: arrange.arranger.drag?.shown))")
             return
         }
-        #expect(label == "2nd row")
+        #expect(label == "Top half")  // alone with the Desktop tile, the window grows into the empty side (D-14, D-23)
 
         drag.release()
         try await drag.letGo(.command, .control)

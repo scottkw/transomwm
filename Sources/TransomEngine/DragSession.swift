@@ -106,11 +106,21 @@ public enum FourthCopy {
         }
     }
 
-    /// The announcement of a docked fourth: "Docked to 1st column", "Docked to middle half row" (UI-SPEC Surface 3).
-    public static func docked(_ slot: FourthSlot, _ axis: Axis) -> String {
-        let label = label(slot, axis)
-        return "Docked to \(slot == .middle ? label.lowercased() : label)"
+    /// What a window given `span` of the desk gets (D-23): a slot grown into an empty side is named by its share.
+    public static func label(_ slot: FourthSlot, _ axis: Axis, span: (start: Double, end: Double)) -> String {
+        let (lead, trail) = axis == .horizontal ? ("Left", "Right") : ("Top", "Bottom")
+        return switch (span.start, span.end) {
+        case (0, 1): "Whole desk"
+        case (0, 0.5): "\(lead) half"
+        case (0.5, 1): "\(trail) half"
+        case (0, 0.75): "\(lead) three quarters"
+        case (0.25, 1): "\(trail) three quarters"
+        default: label(slot, axis)  // the slot's own span, the only other result of `fourthSpan`
+        }
     }
+
+    /// The announcement of a docked fourth: "Docked to 1st column", "Docked to top half" (UI-SPEC Surface 3).
+    public static func docked(_ label: String) -> String { "Docked to \(label.lowercased())" }
 }
 
 /// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain

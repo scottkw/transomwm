@@ -269,6 +269,41 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
         }
     }
 
+    /// D-23: `fourthSpan` says what `insertFourth` then does, read back off the weights, along either axis.
+    @Test(arguments: [
+        ([("D", 1.0)], Set<String>(), FourthSlot.first, 0.0, 0.25),
+        ([("D", 1)], [], .second, 0, 0.5),
+        ([("D", 1)], [], .middle, 0, 0.75),
+        ([("D", 1)], [], .third, 0.5, 1),
+        ([("D", 1)], [], .fourth, 0.75, 1),
+        ([("D", 1)], ["D"], .third, 0, 1),
+        ([("A", 0.5), ("D", 0.5)], [], .second, 0.25, 0.5),
+        ([("A", 0.5), ("D", 0.5)], [], .middle, 0.25, 0.75),
+        ([("A", 0.5), ("D", 0.5)], [], .third, 0.5, 0.75),
+        ([("A", 0.5), ("D", 0.5)], ["D"], .middle, 0, 0.75),
+        ([("A", 0.5), ("D", 0.5)], ["A", "D"], .second, 0, 1),
+        ([("A", 0.2), ("D", 0.8)], [], .third, 0.5, 1),
+        ([("A", 0.8), ("D", 0.2)], [], .second, 0, 0.5),
+        ([("A", 0.8), ("D", 0.2)], [], .third, 0.5, 0.75),
+        ([("A", 0.2), ("D", 0.8)], [], .first, 0, 0.25),
+        ([("A", 0.125), ("B", 0.875)], [], .third, 0.5, 1),
+    ] as [([(String, Double)], Set<String>, FourthSlot, Double, Double)])
+    func theSpanIsWhatTheWindowGets(children: [(String, Double)], absent: Set<String>, slot: FourthSlot, start: Double, end: Double) throws {
+        for axis in [Axis.horizontal, .vertical] {
+            let tree = try flat(children, axis, absent: absent)
+            let span = tree.fourthSpan(slot, axis: axis)
+            #expect(span.start == start && span.end == end, "\(span)")
+            let result = try inserted(tree, slot, axis)
+            let root = rootChildren(result)
+            let index = try #require(root.firstIndex { $0.0 == "W" })
+            let taking = root.enumerated().filter { $0.element.0 == "W" || !absent.contains($0.element.0) }
+            let total = taking.reduce(0) { $0 + $1.element.1 }
+            let before = taking.filter { $0.offset < index }.reduce(0) { $0 + $1.element.1 }
+            #expect(abs(before / total - start) <= 1e-9, "\(root)")
+            #expect(abs((before + root[index].1) / total - end) <= 1e-9, "\(root)")
+        }
+    }
+
     @Test(arguments: [Axis.horizontal, .vertical])
     func theBandsCoverTheVisibleFrameInHitOrder(axis: Axis) throws {
         let bands = FourthZones.bands(in: Self.visible, axis: axis)

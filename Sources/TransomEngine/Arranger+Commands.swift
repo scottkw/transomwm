@@ -34,7 +34,7 @@ extension Arranger {
         let group = tabGroup(holding: window)
         let shown = group.map { $0.members[$0.selected] } ?? window
         let candidate = try dropping(window, on: key, at: .fourth(slot, axis), moving: group)
-        guard let edited = candidate.world[key] else { return [.beep] }
+        guard let edited = candidate.world[key], let label = candidate.fourthLabel else { return [.beep] }
         let plan = try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums)
         let collapsed = plan.unfit.isEmpty ? nil : try collapse(edited, area: area)
         guard plan.unfit.isEmpty || collapsed != nil else {
@@ -47,7 +47,7 @@ extension Arranger {
         history = candidate.history
         lastRequested[window.identity] = nil  // settles exactly into the new tile
         let note = accept(collapsed, moving: shown)
-        return widen(toShow: window, new: false) + replan() + (note.isEmpty ? [.announce(FourthCopy.docked(slot, axis))] : note)
+        return widen(toShow: window, new: false) + replan() + (note.isEmpty ? [.announce(FourthCopy.docked(label))] : note)
     }
 
     /// `window` is already docked on `desk` and the edit moves no frame. `commit` can't tell, because the new leaf has a new

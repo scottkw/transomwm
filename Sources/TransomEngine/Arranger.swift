@@ -1893,21 +1893,22 @@ public struct Arranger: Sendable {
         guard let target = hover.target, let uuid = hover.displayUUID, let display = displays.first(where: { $0.uuid == uuid }) else {
             return miss
         }
-        func landing(_ rect: Rect) -> PreviewState {
-            if case .fourth(let slot, let axis) = target { .fourth(rect, label: FourthCopy.label(slot, axis)) } else { .dock(rect) }
+        func landing(_ rect: Rect, _ label: String?) -> PreviewState {
+            label.map { .fourth(rect, label: $0) } ?? .dock(rect)
         }
         let key = Self.key(display)
         do throws(LayoutError) {
-            guard let desk = try dropping(window, on: key, at: target).world[key] else { return miss }
+            let candidate = try dropping(window, on: key, at: target)
+            guard let desk = candidate.world[key] else { return miss }
             let plan = try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums)
             if plan.unfit.isEmpty, let frame = shown(plan, on: desk) {
-                return Decision(preview: landing(frame), action: .dock(key, target), display: uuid)
+                return Decision(preview: landing(frame, candidate.fourthLabel), action: .dock(key, target), display: uuid)
             }
             let loose = shown(try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: [:]), on: desk)
             // D-A: with zoom on the drop is accepted and the windows without room collapse.
             if let collapsed = try collapse(desk, area: display.visibleFrame) {
                 let copy = Self.collapseCopy(collapsed.newly, moving: window)
-                let preview = loose.map { rect in copy.map { PreviewState.collapsed(rect, label: $0.label) } ?? landing(rect) }
+                let preview = loose.map { rect in copy.map { PreviewState.collapsed(rect, label: $0.label) } ?? landing(rect, candidate.fourthLabel) }
                 return Decision(preview: preview, action: .dock(key, target), display: uuid)
             }
             return Decision(preview: loose.map(PreviewState.blocked), action: .refuse(Self.noRoom), display: uuid)
@@ -1919,10 +1920,16 @@ public struct Arranger: Sendable {
     /// The World and history with `window` taken off its desk and dropped on `key`'s at `target`: one undo step there.
     /// The selected member of a group takes its whole group, as one leaf (Surface 5).
     /// `group` is the keyboard's whole group, for any focused member; a drag leaves it nil and uses `movingGroup`.
+    /// `fourthLabel` names what a fourth gets, read off the desk with the window out of it (D-23).
     func dropping(
         _ window: WindowRef, on key: DeskKey, at target: DropTarget, moving group: TabGroupRef? = nil
-    ) throws(LayoutError) -> (world: World, history: UndoHistory) {
+    ) throws(LayoutError) -> (world: World, history: UndoHistory, fourthLabel: String?) {
         var candidate = world, candidateHistory = history
+        var fourthLabel: String?
+        func nameFourth(on tree: LayoutTree) {
+            guard case .fourth(let slot, let axis) = target else { return }
+            fourthLabel = FourthCopy.label(slot, axis, span: tree.fourthSpan(slot, axis: axis))
+        }
         let group = group ?? movingGroup(window)
         var taken: (node: Node, states: [WindowIdentity: WindowState])?
         if let from = deskKey(of: window), from != key {
@@ -1938,6 +1945,7 @@ public struct Arranger: Sendable {
             if let group {
                 let moved: (node: Node, states: [WindowIdentity: WindowState])
                 if let taken { moved = taken } else { moved = try Self.takeGroup(group, from: &desk) }
+                nameFourth(on: desk.tree)
                 try desk.tree.applyDrop(target, leaf: moved.node, states: moved.states, ids: &ids)
                 return
             }
@@ -1946,9 +1954,10 @@ public struct Arranger: Sendable {
             } else if desk.tree.state(of: window) != nil {
                 try desk.tree.remove(window)
             }
+            nameFourth(on: desk.tree)
             try desk.tree.applyDrop(target, window: window, ids: &ids)
         }
-        return (candidate, candidateHistory)
+        return (candidate, candidateHistory, fourthLabel)
     }
 
     /// Mouse-up: applies exactly the decision whose preview is on screen; with none, the miss rules (WYSIWYG). A Hold ⌥
@@ -2017,8 +2026,8 @@ public struct Arranger: Sendable {
         history = candidate.history
         lastRequested[window.identity] = nil
         let note = accept(collapsed, moving: window)
-        guard case .fourth(let slot, let axis) = target else { return replan() + note }
-        return widen(toShow: window, new: false) + replan() + (note.isEmpty ? [.announce(FourthCopy.docked(slot, axis))] : note)
+        guard let label = candidate.fourthLabel else { return replan() + note }
+        return widen(toShow: window, new: false) + replan() + (note.isEmpty ? [.announce(FourthCopy.docked(label))] : note)
     }
 
     /// ⌘-drop: the two docked windows exchange tiles, one undo step (TILE-11).

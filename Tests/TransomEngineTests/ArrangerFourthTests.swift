@@ -107,9 +107,36 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         #expect(announcements(command(&arranger, slot, .vertical, focused: w)) == ["Docked to \(name)"])
     }
 
-    @Test func aWindowAloneWithTheDesktopTileHiddenGetsTheWholeDesk() throws {
-        var arranger = arranger([info(w)])
+    /// Every span `FourthCopy` words, on both axes. An own span keeps the slot's name. No layout reaches (0.25, 1) today: the
+    /// last tile's centre is never before the 2nd or middle slot's, but the label is the user's table all the same.
+    @Test(arguments: [
+        (0.0, 0.25, FourthSlot.first, "1st column", "1st row"),
+        (0.25, 0.5, .second, "2nd column", "2nd row"),
+        (0.5, 0.75, .third, "3rd column", "3rd row"),
+        (0.75, 1, .fourth, "4th column", "4th row"),
+        (0.25, 0.75, .middle, "Middle half column", "Middle half row"),
+        (0, 0.5, .second, "Left half", "Top half"),
+        (0.5, 1, .third, "Right half", "Bottom half"),
+        (0, 0.75, .middle, "Left three quarters", "Top three quarters"),
+        (0.25, 1, .middle, "Right three quarters", "Bottom three quarters"),
+        (0, 1, .first, "Whole desk", "Whole desk"),
+    ])
+    func everySpanHasItsLabel(start: Double, end: Double, slot: FourthSlot, column: String, row: String) {
+        #expect(FourthCopy.label(slot, .horizontal, span: (start, end)) == column)
+        #expect(FourthCopy.label(slot, .vertical, span: (start, end)) == row)
+    }
+
+    @Test func theAnnouncementLowersTheLabelsCase() {
+        #expect(FourthCopy.docked("Whole desk") == "Docked to whole desk")
+        #expect(FourthCopy.docked("Middle half row") == "Docked to middle half row")
+        #expect(FourthCopy.docked("1st row") == "Docked to 1st row")
+    }
+
+    @Test func aWindowWithNothingElseTakingPartGetsTheWholeDesk() throws {
+        var arranger = arranger([info(w), info(a)])
+        try dockFlat([a], in: &arranger)
         try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in try desk.tree.setDesktopHidden(true) }
+        try arranger.world.apply(.absent, for: a, on: mainKey, history: &arranger.history)
         #expect(announcements(command(&arranger, .third, .vertical, focused: w)) == ["Docked to whole desk"])
     }
 
@@ -410,7 +437,7 @@ extension ArrangerFourthTests {
         #expect(shown.contains(.preview(.fourth(frame, label: "1st row"), displayUUID: "main")), "tick gave \(shown)")
     }
 
-    /// The window grows into the side with no tile (D-14), so the result is more than the half the zone names.
+    /// The window grows into the side with no tile (D-14), and the capsule names that result, not the zone (D-23).
     @Test func theMiddleBandShowsTheResultNotTheZone() async throws {
         var harness = await Harness.started(frames: [1: frameW])
         _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 720, y: 310))
@@ -418,7 +445,7 @@ extension ArrangerFourthTests {
         let shown = await tick(&harness)
 
         let frame = try fourthFrame(harness.arranger, w, .middle, .horizontal)
-        #expect(shown.contains(.preview(.fourth(frame, label: "Middle half column"), displayUUID: "main")), "tick gave \(shown)")
+        #expect(shown.contains(.preview(.fourth(frame, label: "Left three quarters"), displayUUID: "main")), "tick gave \(shown)")
         #expect(frame.width > area.width / 2, "\(frame)")
     }
 
