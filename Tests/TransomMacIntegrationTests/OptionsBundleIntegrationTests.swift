@@ -42,6 +42,10 @@ import Testing
 
         // Step 2, new window (D-02).
         try await expectNewWindowDocks(1, beside: 0, in: fixture)
+        // Beside the focused tile, not the largest: window 0 has focus from before the launch, and its tile is tall (WR-03).
+        let firstTile = try #require(try await LiveArrange.frame(fixture, 0))
+        let secondTile = try #require(try await LiveArrange.frame(fixture, 1))
+        #expect(abs(firstTile.minX - secondTile.minX) <= 2 && secondTile.minY > firstTile.maxY - 1, "window 1 did not split window 0's tile: \(firstTile), \(secondTile)")
 
         // Step 3, Hold ⌥ (D-08).
         try await expectPlainDragFloats(0, by: { CGPoint(x: $0.width + 16, y: 25) }, in: fixture)
@@ -49,7 +53,7 @@ import Testing
         try await guest.quitApp()
         try await guest.launchApp()
 
-        // Step 4: both still act after a relaunch (D-19). Nothing is focused yet, so window 2 goes below the largest tile, the
+        // Step 4: both still act after a relaunch (D-19). The focused window 0 floats, so window 2 goes below the largest tile, the
         // Desktop, which is the only way it can move and still fit once the Desktop takes its room back.
         try await expectNewWindowDocks(2, beside: 1, in: fixture)
         try await expectPlainDragFloats(2, by: { _ in CGPoint(x: 0, y: -120) }, in: fixture)
@@ -62,9 +66,12 @@ import Testing
         // Step 5, defaults (D-01, D-07): a new window floats where it opened, and a plain drag is a docking drag again.
         _ = try await fixture.send("open standard")
         try await Task.sleep(for: .seconds(3))
-        let opened = openingFrame(of: 3)
+        // Where it opened, moved clear of window 1's tile as any floater is: that tile holds the first column since step 3.
+        let opening = openingFrame(of: 3)
+        let tile = try #require(try await LiveArrange.frame(fixture, 1))
+        let opened = Rect(x: max(opening.x, tile.maxX + 8), y: opening.y, width: opening.width, height: opening.height)
         let floating = try #require(try await LiveArrange.frame(fixture, 3))
-        #expect(LiveArrange.near(floating, opened), "with the keys gone window 3 is at \(floating), opened at \(opened)")
+        #expect(LiveArrange.near(floating, opened), "with the keys gone window 3 is at \(floating), opened at \(opening), window 1 at \(tile)")
         let (start, released) = try await plainDrag(1, by: { CGPoint(x: -($0.width + 16), y: 25) }, in: fixture)
         try await Task.sleep(for: .seconds(2))
         let end = try #require(try await LiveArrange.frame(fixture, 1))
