@@ -133,6 +133,11 @@ nonisolated public enum MenuCopy {
     public static let gapsMenu = "Gaps"
     public static func gapTitle(_ gap: Double) -> String { gap == 0 ? "None" : "\(Int(gap)) pt" }
 
+    public static func newWindowsTitle(_ mode: NewWindowsMode) -> String { "" }
+    public static func newWindowsChoice(_ mode: NewWindowsMode) -> String { "" }
+    public static func newWindowsTooltip(_ mode: NewWindowsMode) -> String { "" }
+    public static func newWindowsAnnouncement(_ mode: NewWindowsMode) -> String { "" }
+
     /// Drag to Dock (UI-SPEC Surface 1): the item's title carries the current value.
     public static func dragToDockTitle(_ mode: DragToDockMode) -> String { "Drag to Dock: \(dragToDockChoice(mode))" }
 
