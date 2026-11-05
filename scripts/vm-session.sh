@@ -42,4 +42,6 @@ guest "pkill -x 'Transom Debug' || true; for i in 1 2 3 4 5; do pgrep -x 'Transo
 export TRANSOM_VM
 rc=0
 "$@" || rc=$?
+# `tart stop` loses what the guest has not written out: a suite's restored defaults and folders came back undone.
+guest sync || true
 exit "$rc"
