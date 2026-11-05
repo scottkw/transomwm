@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: "08.1"
 current_phase_name: Window Behaviour Options
-current_plan: 6
+current_plan: 7
 status: executing
-stopped_at: Completed 08.1-05-PLAN.md
-last_updated: "2026-11-04T23:02:50.210Z"
+stopped_at: Completed 08.1-06-PLAN.md
+last_updated: "2026-11-05T01:05:01.332Z"
 last_activity: 2026-11-04
 last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
-state_head: 824565dc7aeb05da32d2ce16dcdce73f71e965b5
+state_head: 149a338b295ac558309b5ce758d11c1a311bada5
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 105
-  completed_plans: 103
+  completed_plans: 104
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1 — Window Behaviour Options
-Current Plan: 6
+Current Plan: 7
 Total Plans in Phase: 7
 Status: Ready to execute
 Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
@@ -161,6 +161,7 @@ Progress: [████████░░] 80%
 | Phase 08.1 P03 | 18 min | 3 tasks | 20 files |
 | Phase 08.1 P04 | 54 min | 2 tasks | 9 files |
 | Phase 08.1 P05 | 21 min | 3 tasks | 10 files |
+| Phase 08.1 P06 | 94 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -452,6 +453,9 @@ Recent decisions affecting current work:
 - [Phase 08.1]: The no-change beep of a fourth applies only to a window already docked: a floating window at the would-be frame still docks (D-15)
 - [Phase 08.1]: TILE-23 stays unchecked after 08.1-04: 08.1-05 and 08.1-07 declare it too, and the drag route and the real bundle check aren't done
 - [Phase 08.1]: 08.1-05: TILE-22 and TILE-23 stay unchecked: 08.1-07 declares both and runs the two-OS check
+- [Phase 08.1]: autoTileMinimum is 200 x 120 pt (RESEARCH A5)
+- [Phase 08.1]: A window first seen under a sheet doesn't count as new, because the Classifier can't judge it yet: it floats (D-04)
+- [Phase 08.1]: A new window on a Space not showing floats on that Space's desk rather than docking there
 
 ### Quick Tasks Completed
 
@@ -496,8 +500,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-04T23:02:49.131Z
-Stopped at: Completed 08.1-05-PLAN.md
+Last session: 2026-11-05T01:05:00.169Z
+Stopped at: Completed 08.1-06-PLAN.md
 Resume file: None
 
 ## Deferred Verification
