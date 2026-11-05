@@ -184,8 +184,9 @@ public struct WindowTracker: Sendable {
                 }
             }
             // Decided once, at first sight. A lower ID is an old window first listed late; if an ID were ever reused it just floats.
+            // Under a sheet the Classifier can't judge it yet, so it may be a dialog (D-04): it counts as not new, and floats.
             info.openedWhileRunning = old?.openedWhileRunning
-                ?? (!context.initialSweep && observation.idSource != .synthetic && windowID > launchHighWater)
+                ?? (!context.initialSweep && observation.idSource != .synthetic && windowID > launchHighWater && snapshot.sheetAttached != true)
             windows[identity] = info
 
             guard let old else {

@@ -324,6 +324,15 @@ extension WindowTrackerTests {
         #expect(try #require(later(&tracker, observation)).openedWhileRunning == false)
     }
 
+    /// D-04: the Classifier can't judge a window under a sheet, so it may be a dialog.
+    @Test func aWindowFirstSeenUnderASheetIsNotCounted() throws {
+        var tracker = WindowTracker(settleDelay: .zero)
+        sweep(&tracker, seen: [50])
+        var underSheet = snapshot()
+        underSheet.sheetAttached = true
+        #expect(try #require(later(&tracker, window(61, .success(underSheet)))).openedWhileRunning == false)
+    }
+
     @Test func theAnswerStaysAcrossLaterObservations() throws {
         var tracker = WindowTracker(settleDelay: .zero)
         sweep(&tracker, seen: [50], listing: [window(50)])
