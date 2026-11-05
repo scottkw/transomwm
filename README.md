@@ -44,7 +44,7 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Desktop tile | Each layout has a Desktop tile that holds floating windows. New windows open floating there, unless you choose menu ▸ Arrange ▸ New Windows ▸ Tile. You can hide and show the Desktop tile. |
 | Reflow | Closing or minimising a docked window reflows its neighbours to fill the space. A minimised window returns to its tile, and a window that leaves native fullscreen returns to its reserved tile. |
 | Gaps | Choose the gap between tiles from the Gaps menu: None, 4, 8, 12, 16 or 24 pt (default 8). Drag the gap between two windows to resize both. |
-| Green button | Clicking a window's green button toggles it between docked and floating. ⌥-click keeps the normal macOS zoom. |
+| Green button | Clicking a window's green button toggles it between docked and floating. On a floating window, ⌥-click keeps the normal macOS zoom. To fill the screen with a docked window, double-click its title bar or press `⌃⌥⌘M`; this needs zoom on. |
 | Keyboard layout commands | Dock, float, focus or move to a neighbour, swap, grow or shrink a tile, balance, rotate and flip splits, snap floating windows to halves, thirds, quarters, maximised or centred, Arrange All and Float All. Layout edits can be undone. |
 | Split with New Finder Window | Splits the current tile with a new Finder window. |
 | Exclusions | "Don't Arrange" the frontmost app from the menu or a hotkey. Excluded apps are never moved. The list starts empty. |
