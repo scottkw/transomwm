@@ -472,6 +472,106 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(!effects.contains(.beep))
     }
 
+    // MARK: During a drag (WR-01)
+
+    /// Presses `window` and reports it dragged by `dx`, so the session is classified: a size change is a resize.
+    private func press(_ scene: inout Scene, _ window: WindowRef, to frame: Rect) {
+        let grab = Point(x: frame.midX, y: frame.minY + 10)
+        _ = scene.arranger.handle(.pointer(PointerEvent(kind: .down, location: grab, pressWindow: window)), now: scene.start)
+        _ = scene.arranger.handle(.pointer(PointerEvent(kind: .dragged, location: Point(x: grab.x + 100, y: grab.y))), now: scene.start)
+        _ = scene.arranger.handle(.dragFrame(window.identity, frame), now: scene.start)
+    }
+
+    private func letGo(_ scene: inout Scene) {
+        _ = scene.arranger.handle(.pointer(PointerEvent(kind: .up, location: Point(x: 0, y: 0))), now: scene.start)
+    }
+
+    /// The weights of the split holding `window`'s leaf.
+    private func weights(_ scene: Scene, around window: WindowRef) throws -> [Double] {
+        let tree = try #require(scene.desk?.tree)
+        let leaf = try #require(tree.leaf(containing: window))
+        guard case .split(_, _, let weights)? = tree.parent(of: leaf).flatMap(tree.node) else { return [] }
+        return weights
+    }
+
+    /// One edge resize of a, with or without a window opening halfway through.
+    private func resizingA(openingOne: Bool, hiddenDesktop: Bool = false) throws -> Scene {
+        var scene = Scene(width: 1600, height: 600)
+        if hiddenDesktop {
+            _ = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)
+            _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
+        }
+        scene.focus(a)
+        let tile = try scene.tile(of: a)
+        _ = scene.arranger.handle(.event(.frameApplied(a, requested: tile, actual: tile)), now: scene.start)
+        _ = scene.arranger.handle(.event(.windowMoved(a, tile)), now: scene.start)
+        press(&scene, a, to: Rect(x: tile.x, y: tile.y, width: tile.width + 100, height: tile.height))
+        if openingOne {
+            let shape = scene.desk?.tree
+            scene.arrive()
+            #expect(scene.arranger.deskKey(of: n) == nil, "n joined a desk under the drag")
+            #expect(scene.desk?.tree == shape, "the tree changed under the drag")
+        }
+        letGo(&scene)
+        return scene
+    }
+
+    @Test(arguments: [false, true])
+    func aWindowOpeningDuringAResizeFloatsAfterItAndChangesNothing(hiddenDesktop: Bool) throws {
+        let plain = try resizingA(openingOne: false, hiddenDesktop: hiddenDesktop)
+        var scene = try resizingA(openingOne: true, hiddenDesktop: hiddenDesktop)
+
+        #expect(scene.isFloating(n) && !scene.isDocked(n))
+        #expect(scene.floatingFrame(n) == opening)
+        #expect(scene.undoSteps == plain.undoSteps, "the new window took an undo step")
+        #expect(try weights(scene, around: a) == weights(plain, around: a), "the drag's result changed")
+        if hiddenDesktop { #expect(scene.desk?.tree.isDesktopHidden != true, "a floating window needs the Desktop") }
+
+        // Only that gesture: the next window tiles again.
+        let next = ref(21)
+        scene.arrive(opened(next))
+        #expect(scene.isDocked(next))
+    }
+
+    /// One gap drag between a and the Desktop, with or without a window opening halfway through.
+    private func draggingTheGap(openingOne: Bool) throws -> Scene {
+        var scene = Scene(width: 1600, height: 600)
+        scene.focus(a)
+        let tree = try #require(scene.desk?.tree)
+        let resolution = try scene.plan().resolution
+        let handle = try #require(GapHandles.handles(tree: tree, resolution: resolution, gap: 8).first)
+        _ = scene.arranger.handle(.gapDrag(handle, delta: 50, ended: false), now: scene.start)
+        if openingOne {
+            scene.arrive()
+            #expect(scene.arranger.deskKey(of: n) == nil, "n joined a desk under the gap drag")
+        }
+        _ = scene.arranger.handle(.gapDrag(handle, delta: 50, ended: true), now: scene.start)
+        return scene
+    }
+
+    @Test func aWindowOpeningDuringAGapDragFloatsAfterItAndChangesNothing() throws {
+        let plain = try draggingTheGap(openingOne: false)
+        let scene = try draggingTheGap(openingOne: true)
+
+        #expect(scene.isFloating(n) && !scene.isDocked(n))
+        #expect(scene.undoSteps == plain.undoSteps)
+        #expect(try weights(scene, around: a) == weights(plain, around: a), "the gap drag's result changed")
+    }
+
+    /// A window closed before the drag ended leaves nothing behind.
+    @Test func aWindowThatOpensAndClosesDuringADragNeverJoins() throws {
+        var scene = Scene(width: 1600, height: 600)
+        scene.focus(a)
+        let tile = try scene.tile(of: a)
+        press(&scene, a, to: Rect(x: tile.x, y: tile.y, width: tile.width + 100, height: tile.height))
+        scene.arrive()
+        _ = scene.arranger.handle(.event(.windowDestroyed(n)), now: scene.start)
+
+        letGo(&scene)
+
+        #expect(scene.arranger.deskKey(of: n) == nil)
+    }
+
     // MARK: Finder Split (Pitfall 4)
 
     private func finder(_ id: UInt32) -> WindowRef { ref(id, pid: 300, bundleID: Arranger.finderBundleID) }

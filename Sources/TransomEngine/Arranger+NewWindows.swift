@@ -14,7 +14,7 @@ extension Arranger {
     /// floats it. A window that doesn't fit with zoom off stays silent, because nothing the user did was refused.
     mutating func autoTile(_ info: WindowInfo, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         let window = info.window
-        guard newWindows == .tile, pauseReasons.isEmpty, !sessionPaused, !settling,
+        guard newWindows == .tile, !gestureLive, pauseReasons.isEmpty, !sessionPaused, !settling,
             info.openedWhileRunning, info.kind == .dockable, !info.isExcluded, info.state == .present,
             deskKey(of: window) == nil,  // restored, dormant and filled windows already are on a desk (D-05)
             !placeholders.fresh.contains(window.identity),  // a tie may still fill a tile as its title settles

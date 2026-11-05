@@ -219,6 +219,11 @@ public struct Arranger: Sendable {
     private var shownHandles: [String: [GapHandle]] = [:]
     /// The gap being dragged and its points since the press, applied by every replan until mouse-up (G-03-3 H2).
     private var liveGap: (handle: GapHandle, delta: Double)?
+    /// A press or gap drag is under way. A window joining a desk now could show a hidden Desktop or resize it for the
+    /// floater, moving tiles under the drag and changing what it commits, so `admit` waits for the end (WR-01).
+    var gestureLive: Bool { drag != nil || liveGap != nil }
+    /// The windows `admit` held back during the gesture.
+    private var heldAdmits: Set<WindowIdentity> = []
     /// The zoom camera (Arranger+Camera.swift).
     var camera = CameraState()
     /// Tab strips shown and the selection waiting for its read-back (Arranger+Tabs.swift).
@@ -271,6 +276,7 @@ public struct Arranger: Sendable {
     public mutating func handle(_ input: ArrangerInput, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         let before = world, beforeHistory = history, earliest = earliestPlaceholderDeadline, shownBefore = displays
         var effects = process(input, now: now)
+        if !heldAdmits.isEmpty, !gestureLive { effects += admitHeld() }
         if displays != shownBefore { extendPlaceholdersShown(since: shownBefore, now: now) }
         if earliestPlaceholderDeadline != earliest, let wake = nextWake { effects.append(.wake(at: wake)) }
         // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
@@ -988,6 +994,7 @@ public struct Arranger: Sendable {
                 if tabs.pendingReveal?.revealed == from { tabs.pendingReveal?.revealed = to.window }
                 if tabs.pendingReveal?.previous == from { tabs.pendingReveal?.previous = to.window }
                 if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
+                if heldAdmits.remove(from.identity) != nil { heldAdmits.insert(to.window.identity) }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 remapViews(from: from.identity, to: to.window.identity)
                 if placeholders.arriving.remove(from.identity) != nil { placeholders.arriving.insert(to.window.identity) }
@@ -1285,11 +1292,29 @@ public struct Arranger: Sendable {
         guard info.kind == .dockable, !info.isExcluded, info.state == .present, deskKey(of: info.window) == nil,
             let key = home(of: info)
         else { return }
+        guard !gestureLive else {
+            heldAdmits.insert(info.window.identity)
+            return
+        }
         if world[key] == nil { try world.addDesk(key) }
         // D-31: a floating window can't exist while the Desktop is hidden, so a new one shows it again (no undo step).
         if world[key]?.tree.isDesktopHidden == true { try world.reflow(key, showingDesktop()) }
         try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
         wantedFrames[info.window.identity] = info.frame
+    }
+
+    /// The gesture is over: the windows it held back float on their desks, with no auto-tile (WR-01).
+    private mutating func admitHeld() -> [ArrangerEffect] {
+        let held = heldAdmits.sorted()
+        heldAdmits = []
+        var effects: [ArrangerEffect] = []
+        for info in held.compactMap({ windows[$0] }) {
+            do throws(LayoutError) {
+                try admit(info)
+                effects += widen(toShow: info.window, new: true)
+            } catch { effects.append(.fault("could not add \(info.window) after a drag: \(error)")) }
+        }
+        return effects + replan()
     }
 
     /// A docked window, or a floating group's member, whose app was just excluded floats on its desk's Desktop at its
