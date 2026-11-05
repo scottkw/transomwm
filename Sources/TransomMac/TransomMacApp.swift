@@ -74,6 +74,7 @@ public enum TransomMacApp {
             Task { await arrangeController.setDragToDock(mode) }
         }
         newWindows.onChange = { mode in
+            postAnnouncement(MenuCopy.newWindowsAnnouncement(mode))
             Task { await arrangeController.setNewWindows(mode) }
         }
         arrangeController.isReady = { permissionController.state.phase == .ready }
@@ -88,7 +89,7 @@ public enum TransomMacApp {
         conflictController.presentAlert = { [unowned conflictController] in conflictController.showModelessAlert($0) }
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
-            dragToDock: dragToDock, exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController,
+            dragToDock: dragToDock, newWindows: newWindows, exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController,
             showTrackedWindows: { trackedController.show() },
             showSetup: { setupController.show() }
         )

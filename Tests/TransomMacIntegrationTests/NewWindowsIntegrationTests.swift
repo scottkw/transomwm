@@ -63,4 +63,46 @@ import Testing
         }
         #expect(floated, "undo left it at \(String(describing: last)), opened at \(opened)")
     }
+
+    /// D-04: the fixture's panel and its window showing a sheet stay off the tree, with no undo step.
+    @Test(.timeLimit(.minutes(1)))
+    func aPanelAndASheetStayFloatingInTileMode() async throws {
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs) = try await LiveArrange.start(fixture, newWindows: .tile)
+        defer { withExtendedLifetime(arrange) {} }
+        let key = try #require(refs.first.flatMap { arrange.arranger.deskKey(of: $0) })
+        let steps = arrange.arranger.history.depth(for: key)
+
+        let opened = try await open("utility-panel", in: fixture) + (try await open("sheet", in: fixture))
+        try #require(opened.count >= 2, "the fixture opened \(opened)")
+        let ids = Set(opened.map(\.id))
+        // Both reach the Arranger first, or this would pass before they were looked at. A sheet itself is never tracked.
+        let seen = await waitUntil(timeout: .seconds(3)) {
+            arrange.arranger.windows.values.filter { $0.window.pid == fixture.pid && ids.contains($0.window.windowID) }.count == 2
+        }
+        try #require(seen, "the Arranger did not see the panel and the sheet's window: \(opened)")
+        try await Task.sleep(for: .seconds(2))
+
+        #expect(arrange.arranger.world[key]?.tree.windows.isEmpty == true, "docked: \(String(describing: arrange.arranger.world[key]?.tree.windows))")
+        #expect(arrange.arranger.history.depth(for: key) == steps, "an undo step was added")
+    }
+
+    /// D-05: a window present before Transom started is not new, even in Tile mode from the start.
+    @Test(.timeLimit(.minutes(1)))
+    func aWindowFoundAtLaunchIsNotNew() async throws {
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs) = try await LiveArrange.start(fixture, newWindows: .tile)
+        defer { withExtendedLifetime(arrange) {} }
+        let window = try #require(refs.first)
+
+        #expect(arrange.arranger.newWindows == .tile)
+        try await Task.sleep(for: .seconds(1))
+
+        let key = try #require(arrange.arranger.deskKey(of: window))
+        #expect(arrange.arranger.isFloating(window), "the window found at launch did not float")
+        #expect(arrange.arranger.world[key]?.tree.windows.isEmpty == true)
+        #expect(arrange.arranger.history.depth(for: key) == 0)
+    }
 }

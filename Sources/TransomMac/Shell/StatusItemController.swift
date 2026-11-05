@@ -14,6 +14,7 @@ import os
     private let permission: PermissionController
     private let gaps: GapPreference
     private let dragToDock: DragToDockPreference
+    private let newWindows: NewWindowsPreference
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
     private let conflicts: ConflictController
@@ -42,7 +43,7 @@ import os
     /// `showSetup` opens the "Set Up Transom" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
         system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
-        gaps: GapPreference, dragToDock: DragToDockPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        gaps: GapPreference, dragToDock: DragToDockPreference, newWindows: NewWindowsPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.arrange = arrange
@@ -50,6 +51,7 @@ import os
         self.permission = permission
         self.gaps = gaps
         self.dragToDock = dragToDock
+        self.newWindows = newWindows
         self.exclusions = exclusions
         self.freezeTest = freezeTest
         self.conflicts = conflicts
@@ -139,6 +141,7 @@ import os
         menu.addItem(commands.item(for: .floatAll))
         menu.addItem(commands.item(for: .toggleDesktop))
         menu.addItem(gapsMenuItem())
+        menu.addItem(newWindowsMenuItem())
         menu.addItem(dragToDockMenuItem())
     }
 
@@ -218,6 +221,20 @@ import os
 
     @objc private func chooseGap(_ sender: NSMenuItem) {
         _ = gaps.set(GapPreference.allowed[sender.tag])
+    }
+
+    /// New Windows ▸ (D-01, D-19); enabled while paused or not ready, like Gaps ▸.
+    private func newWindowsMenuItem() -> NSMenuItem {
+        CommandMenu.optionMenu(
+            title: MenuCopy.newWindowsTitle(newWindows.value),
+            choices: NewWindowsMode.allCases.map {
+                (MenuCopy.newWindowsChoice($0), MenuCopy.newWindowsTooltip($0), $0 == newWindows.value)
+            },
+            target: self, action: #selector(chooseNewWindows))
+    }
+
+    @objc private func chooseNewWindows(_ sender: NSMenuItem) {
+        newWindows.set(NewWindowsMode.allCases[sender.tag])
     }
 
     /// Drag to Dock ▸ (D-07, D-19); enabled while paused or not ready, like Gaps ▸.

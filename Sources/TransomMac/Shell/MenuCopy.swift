@@ -133,10 +133,29 @@ nonisolated public enum MenuCopy {
     public static let gapsMenu = "Gaps"
     public static func gapTitle(_ gap: Double) -> String { gap == 0 ? "None" : "\(Int(gap)) pt" }
 
-    public static func newWindowsTitle(_ mode: NewWindowsMode) -> String { "" }
-    public static func newWindowsChoice(_ mode: NewWindowsMode) -> String { "" }
-    public static func newWindowsTooltip(_ mode: NewWindowsMode) -> String { "" }
-    public static func newWindowsAnnouncement(_ mode: NewWindowsMode) -> String { "" }
+    /// New Windows (UI-SPEC Surface 1): the item's title carries the current value.
+    public static func newWindowsTitle(_ mode: NewWindowsMode) -> String { "New Windows: \(newWindowsChoice(mode))" }
+
+    public static func newWindowsChoice(_ mode: NewWindowsMode) -> String {
+        switch mode {
+        case .float: "Float"
+        case .tile: "Tile"
+        }
+    }
+
+    public static func newWindowsTooltip(_ mode: NewWindowsMode) -> String {
+        switch mode {
+        case .float: "New windows float on the Desktop tile until you dock them."
+        case .tile: "New windows dock beside the focused tile. Dialogs, panels and excluded apps still float."
+        }
+    }
+
+    public static func newWindowsAnnouncement(_ mode: NewWindowsMode) -> String {
+        switch mode {
+        case .float: "New windows float"
+        case .tile: "New windows tile"
+        }
+    }
 
     /// Drag to Dock (UI-SPEC Surface 1): the item's title carries the current value.
     public static func dragToDockTitle(_ mode: DragToDockMode) -> String { "Drag to Dock: \(dragToDockChoice(mode))" }
