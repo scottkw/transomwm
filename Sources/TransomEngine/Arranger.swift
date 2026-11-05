@@ -1299,8 +1299,10 @@ public struct Arranger: Sendable {
         if world[key] == nil { try world.addDesk(key) }
         // D-31: a floating window can't exist while the Desktop is hidden, so a new one shows it again (no undo step).
         if world[key]?.tree.isDesktopHidden == true { try world.reflow(key, showingDesktop()) }
-        try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: info.frame) }
-        wantedFrames[info.window.identity] = info.frame
+        // A kept wanted frame beats the real one: undoing an auto-tile on a hidden Desktop finds the window parked or in its tile (WR-02).
+        let frame = wantedFrames[info.window.identity] ?? info.frame
+        try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(info.window, frame: frame) }
+        wantedFrames[info.window.identity] = frame
     }
 
     /// The gesture is over: the windows it held back float on their desks, with no auto-tile (WR-01).
