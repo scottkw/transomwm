@@ -53,6 +53,8 @@ public enum ArrangerInput: Sendable {
     case tab(TabAction, ready: Bool)
     /// The answer to `.checkClosePrompt`: whether the window shows a sheet (a save prompt) now.
     case closePrompt(WindowRef, showing: Bool)
+    /// Menu ▸ Arrange ▸ Clear Waiting Tiles (D-24). Not a `Command`: no chord, URL or CLI route.
+    case clearWaitingTiles
 }
 
 /// Why arranging is paused (D-23). Arranging runs only while no reason is set. A lower raw value is a higher priority,
@@ -449,6 +451,8 @@ public struct Arranger: Sendable {
         case .gap(let value):
             gap = value
             return replan()
+        case .clearWaitingTiles:
+            return clearWaitingTiles()
         case .dragToDock(let mode):
             dragToDock = mode
             return []

@@ -102,6 +102,9 @@ extension Arranger {
         placeholders.table.values.count { isPlaceholder($0.ref) }
     }
 
+    /// The tiles held on desks now showing: what Clear Waiting Tiles would close (D-24).
+    public var shownPlaceholderCount: Int { 0 }
+
     /// The desks on screen.
     var shownDesks: Set<DeskKey> { Set(displays.map(Self.key)) }
 
@@ -255,6 +258,8 @@ extension Arranger {
         // The trim is for a pause, whose replan sends nothing: an expired tile goes at once, a filled one at Resume.
         return due.isEmpty ? [] : effects + replan() + showPlaceholders(placeholders.shown.mapValues { $0.filter { isPlaceholder($0.window) } })
     }
+
+    mutating func clearWaitingTiles() -> [ArrangerEffect] { [] }
 
     /// Matches the app's waiting placeholders against its fresh windows, as the launch path does (D-11, HintMatcher), and
     /// moves each match into its tile: an OS fact, no undo step. A tie fills nothing; its windows stay floating and a later

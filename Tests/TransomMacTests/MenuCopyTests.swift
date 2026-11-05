@@ -61,6 +61,10 @@ import Testing
         #expect(MenuCopy.permissionHeader(phase) == expected)
     }
 
+    @Test func theClearItemHasItsTitle() {
+        #expect(MenuCopy.clearWaitingTiles == "Clear Waiting Tiles")
+    }
+
     @Test func permissionHeaderIsAbsentWhenReady() {
         #expect(MenuCopy.permissionHeader(.ready) == nil)
     }
