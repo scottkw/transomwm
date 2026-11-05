@@ -15,7 +15,10 @@ cd "$root"
 # The VM name and SSH key defaults keep their pre-rename names: they are existing host resources, not repo artifacts.
 vm="${TRANSOM_VM:-pane-test}"
 key="${TRANSOM_VM_KEY:-$HOME/.ssh/pane_vm_ed25519}"
-host="${TRANSOM_VM_USER:-admin}@$(tart ip "$vm")"
+ip="$(tart ip "$vm")"
+# `tart ip` can be empty after sleep: only ever ssh with a real address.
+[ -n "$ip" ] || { echo "vm-live-test: tart ip gave no address for $vm" >&2; exit 1; }
+host="${TRANSOM_VM_USER:-admin}@$ip"
 ssh_opts=(-i "$key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
 # One VM user at a time, shared with the UAT re-check plans. TRANSOM_VM_LOCK_HELD: scripts/vm-session.sh holds it for this run.
