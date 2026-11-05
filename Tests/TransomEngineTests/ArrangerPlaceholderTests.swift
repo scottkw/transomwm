@@ -427,6 +427,15 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(announcements(await harness.send(.clearWaitingTiles)) == ["Cleared 1 waiting tile"])
     }
 
+    /// As with expiry, a pause holds the neighbours' writes back but not the tile's going.
+    @Test func clearingWhilePausedStillTakesTheTileAway() async throws {
+        var harness = await launched(try savedTwo())
+        await harness.send(.setPaused(.user, true))
+        let cleared = await harness.send(.clearWaitingTiles)
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(sentTiles(cleared) == [])
+    }
+
     /// With none showing the menu item is greyed, and a click racing a fill says nothing.
     @Test func clearingWithNoneShowingDoesNothing() async throws {
         var harness = await threeDocked()

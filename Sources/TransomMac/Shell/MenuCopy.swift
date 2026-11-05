@@ -25,7 +25,7 @@ nonisolated public enum MenuCopy {
     public static let safetySection = "Safety"
     public static let exclusionsSection = "Exclusions"
     public static let fourthMenu = "Dock to Fourth"
-    public static let clearWaitingTiles = ""
+    public static let clearWaitingTiles = "Clear Waiting Tiles"
 
     /// A command item's title. Toggles have their own functions (`desktopToggle`).
     public static func commandTitle(_ command: Command) -> String {

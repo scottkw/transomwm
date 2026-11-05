@@ -179,6 +179,11 @@ import os
     }
 
     /// A new Drag to Dock choice: the next drag follows it (D-07, D-19).
+    /// Menu ▸ Arrange ▸ Clear Waiting Tiles (D-24).
+    public func clearWaitingTiles() async {
+        await run(arranger.handle(.clearWaitingTiles, now: .now))
+    }
+
     public func setDragToDock(_ mode: DragToDockMode) async {
         await run(arranger.handle(.dragToDock(mode), now: .now))
     }

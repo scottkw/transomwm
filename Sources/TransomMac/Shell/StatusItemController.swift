@@ -140,9 +140,18 @@ import os
         menu.addItem(commands.item(for: .arrangeAll))
         menu.addItem(commands.item(for: .floatAll))
         menu.addItem(commands.item(for: .toggleDesktop))
+        // No action greys it out under auto-enabling, as for Restore macOS Window Settings. Menu only (D-24).
+        let hasWaiting = arrange.arranger.shownPlaceholderCount > 0
+        let clear = NSMenuItem(title: MenuCopy.clearWaitingTiles, action: hasWaiting ? #selector(clearWaitingTiles) : nil, keyEquivalent: "")
+        clear.target = self
+        menu.addItem(clear)
         menu.addItem(gapsMenuItem())
         menu.addItem(newWindowsMenuItem())
         menu.addItem(dragToDockMenuItem())
+    }
+
+    @objc private func clearWaitingTiles() {
+        Task { await arrange.clearWaitingTiles() }
     }
 
     /// The Zoom section (Surface 6), on the pointer's display. Screen Recording is never checked while zoom is off.
