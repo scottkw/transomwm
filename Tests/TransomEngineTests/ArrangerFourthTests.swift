@@ -380,6 +380,42 @@ extension ArrangerFourthTests {
         #expect(frame.width > area.width / 2, "\(frame)")
     }
 
+    /// UI-SPEC Surface 3: released on the zone it already holds, it stays, with nothing refused and nothing to undo (WR-08).
+    @Test func aDockedWindowDroppedOnItsOwnZoneAddsNoUndoStep() async throws {
+        var harness = await Harness.started(frames: [1: frameW])
+        await harness.send(.command(.dockFourth(.first, .horizontal), focused: w))
+        let tile = try fourthFrame(harness.arranger, w, .first, .horizontal)
+        let world = harness.arranger.world, depth = harness.arranger.history.depth(for: mainKey)
+        await harness.send(.event(.frameApplied(w, requested: tile, actual: tile)))
+        await harness.send(.event(.windowMoved(w, tile)))
+
+        _ = await controlDrag(&harness, w, from: tile, to: Point(x: 10, y: 310))
+        let shown = await tick(&harness)
+        #expect(shown.contains(.preview(.fourth(tile, label: "1st column"), displayUUID: "main")), "tick gave \(shown)")
+        let up = await harness.send(pointer(.up, 10, 310, .control))
+
+        #expect(harness.arranger.world == world, "the window got a new leaf")
+        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+        #expect(announcements(up).isEmpty, "\(up)")
+        #expect(!up.contains(.beep))
+        #expect(setFrames(up)[w] == tile, "the window was not put back: \(up)")
+    }
+
+    /// Another zone is a real move: the guard is only for an edit that changes nothing.
+    @Test func aDockedWindowDroppedOnAnotherZoneStillMoves() async throws {
+        var harness = await Harness.started(frames: [1: frameW])
+        await harness.send(.command(.dockFourth(.first, .horizontal), focused: w))
+        let tile = try fourthFrame(harness.arranger, w, .first, .horizontal)
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        _ = await controlDrag(&harness, w, from: tile, to: Point(x: 1300, y: 310))
+        _ = await tick(&harness)
+        let up = await harness.send(pointer(.up, 1300, 310, .control))
+
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+        #expect(announcements(up) == ["Docked to 4th column"])
+    }
+
     @Test func aDockedWindowMovesInOneUndoStep() async throws {
         var (harness, tile) = try await twoDocked()
         _ = await controlDrag(&harness, w, from: tile, to: Point(x: 1300, y: 310))

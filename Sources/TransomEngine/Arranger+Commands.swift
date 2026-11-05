@@ -42,15 +42,19 @@ extension Arranger {
             let frame = group == nil ? loose.frames[window] : edited.tree.leaf(containing: shown).flatMap { loose.resolution.nodeRects[$0] }
             return [.beep, .announce(Self.noRoom)] + (frame.map { [.flashBlocked($0, displayUUID: key.displayUUID)] } ?? [])
         }
-        // A floating window docking is a change even if no frame moves.
-        if collapsed == nil, desk.tree.state(of: shown) != nil, try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames == plan.frames {
-            return [.beep]
-        }
+        if collapsed == nil, try fourthChangesNothing(shown, on: desk, area: area, to: plan) { return [.beep] }
         world = candidate.world
         history = candidate.history
         lastRequested[window.identity] = nil  // settles exactly into the new tile
         let note = accept(collapsed, moving: shown)
         return widen(toShow: window, new: false) + replan() + (note.isEmpty ? [.announce(FourthCopy.docked(slot, axis))] : note)
+    }
+
+    /// `window` is already docked on `desk` and the edit moves no frame. `commit` can't tell, because the new leaf has a new
+    /// ID. A floating window docking is a change even if no frame moves.
+    func fourthChangesNothing(_ window: WindowRef, on desk: Desk, area: Rect, to plan: FramePlan) throws(LayoutError) -> Bool {
+        guard desk.tree.state(of: window) != nil else { return false }
+        return try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames == plan.frames
     }
 
     /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every

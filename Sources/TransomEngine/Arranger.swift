@@ -2004,10 +2004,14 @@ public struct Arranger: Sendable {
         guard let area = display(for: key)?.visibleFrame, let desk = candidate.world[key] else {
             return [.announce(Self.noRoom)] + (try missed(window))
         }
+        let plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums)
         var collapsed: Collapse?
-        if try !Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty {
+        if !plan.unfit.isEmpty {
             guard let collapse = try collapse(desk, area: area) else { return [.announce(Self.noRoom)] + (try missed(window)) }
             collapsed = collapse
+        }
+        if case .fourth = target, collapsed == nil, let before = world[key], try fourthChangesNothing(window, on: before, area: area, to: plan) {
+            return try missed(window)  // its own zone: it goes back to the tile it holds, with no undo step (WR-08)
         }
         world = candidate.world
         history = candidate.history
