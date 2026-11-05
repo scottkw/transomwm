@@ -27,12 +27,12 @@ private func arranger(_ infos: [WindowInfo], zoom: Bool = false) -> Arranger {
     return arranger
 }
 
-/// Docks `windows` left to right before the Desktop tile, flat at the root with equal weights.
-private func dockFlat(_ windows: [WindowRef], in arranger: inout Arranger) throws {
+/// Docks `windows` in order before the Desktop tile, flat at the root with equal weights: left to right, or from the top.
+private func dockFlat(_ windows: [WindowRef], at edge: Edge = .left, in arranger: inout Arranger) throws {
     try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
         for window in windows.reversed() {
             try desk.desktop.remove(window)
-            try desk.tree.insert(window, at: .left, of: desk.tree.root!, ids: &ids)
+            try desk.tree.insert(window, at: edge, of: desk.tree.root!, ids: &ids)
         }
     }
     _ = arranger.handle(.gap(8), now: .now)  // re-plans
@@ -80,9 +80,37 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         #expect(announcements(effects) == ["Docked to 1st column"])
     }
 
-    @Test func theMiddleHalfRowHasItsOwnAnnouncement() {
+    /// D-23: the announcement names what the window gets. Alone beside the Desktop tile, a slot with an empty side grows into it.
+    @Test(arguments: [
+        (FourthSlot.first, false, "1st column", "1st row"),
+        (.second, false, "Left half", "Top half"),
+        (.middle, false, "Left three quarters", "Top three quarters"),
+        (.third, false, "Right half", "Bottom half"),
+        (.fourth, false, "4th column", "4th row"),
+        (.second, true, "2nd column", "2nd row"),
+        (.middle, true, "Middle half column", "Middle half row"),
+        (.third, true, "3rd column", "3rd row"),
+    ])
+    func theAnnouncementNamesTheActualSpan(slot: FourthSlot, besideATile: Bool, column: String, row: String) throws {
+        for (axis, edge, label) in [(Axis.horizontal, Edge.left, column), (.vertical, .top, row)] {
+            var arranger = besideATile ? arranger([info(w), info(a)]) : arranger([info(w)])
+            if besideATile { try dockFlat([a], at: edge, in: &arranger) }
+            #expect(announcements(command(&arranger, slot, axis, focused: w)) == ["Docked to \(label.lowercased())"])
+        }
+    }
+
+    /// The user's case (host check 3): by rows over side-by-side windows the whole layout is one child, on one side.
+    @Test(arguments: [(FourthSlot.second, "top half"), (.middle, "top three quarters"), (.third, "bottom half")])
+    func rowsOverSideBySideWindowsNameTheShareTheWindowGets(slot: FourthSlot, name: String) throws {
+        var arranger = arranger([info(w), info(a)])
+        try dockFlat([a], in: &arranger)
+        #expect(announcements(command(&arranger, slot, .vertical, focused: w)) == ["Docked to \(name)"])
+    }
+
+    @Test func aWindowAloneWithTheDesktopTileHiddenGetsTheWholeDesk() throws {
         var arranger = arranger([info(w)])
-        #expect(announcements(command(&arranger, .middle, .vertical, focused: w)) == ["Docked to middle half row"])
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in try desk.tree.setDesktopHidden(true) }
+        #expect(announcements(command(&arranger, .third, .vertical, focused: w)) == ["Docked to whole desk"])
     }
 
     @Test func undoBringsTheWindowBackToFloatingAtItsFrame() throws {
@@ -340,6 +368,20 @@ private func twoDocked() async throws -> (Harness, Rect) {
 }
 
 extension ArrangerFourthTests {
+    /// D-23: the capsule and the announcement both name what the window gets, and the window gets that.
+    @Test func aRowDragOverSideBySideWindowsSaysTopHalfAndGivesIt() async throws {
+        var (harness, tile) = try await twoDocked()
+        let point = Point(x: 720, y: area.minY + area.height * 0.3125)
+        _ = await controlDrag(&harness, w, from: tile, to: point, [.control, .command])
+        let frame = try fourthFrame(harness.arranger, w, .second, .vertical)
+        #expect(abs(frame.height - (area.height - 24) / 2) <= 1, "\(frame)")  // three 8 pt gaps
+        let shown = await tick(&harness)
+        #expect(shown.contains(.preview(.fourth(frame, label: "Top half"), displayUUID: "main")), "tick gave \(shown)")
+        let up = await harness.send(pointer(.up, point.x, point.y, [.control, .command]))
+        #expect(setFrames(up)[w] == frame)
+        #expect(announcements(up) == ["Docked to top half"])
+    }
+
     @Test func controlDuringADragPreviewsTheColumnAfterTheDwellAndDocksThere() async throws {
         var harness = await Harness.started(frames: [1: frameW])
         let during = await controlDrag(&harness, w, from: frameW, to: Point(x: 10, y: 310))
