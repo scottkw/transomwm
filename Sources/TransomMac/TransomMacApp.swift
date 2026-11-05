@@ -62,15 +62,19 @@ public enum TransomMacApp {
         let layoutStore = LayoutStore(directory: MinimumHintsStore.defaultDirectory)
         let gaps = GapPreference()
         let dragToDock = DragToDockPreference()
+        let newWindows = NewWindowsPreference()
         let arrangeController = ArrangeController(
             system: system, store: layoutStore, exclusions: exclusions, gap: gaps.value, dragToDock: dragToDock.value,
-            zoomEnabled: zoomEnabled)
+            newWindows: newWindows.value, zoomEnabled: zoomEnabled)
         arrangeController.takeover = takeover
         gaps.onChange = { gap in Task { await arrangeController.setGap(gap) } }
         // Choosing the current value fires nothing, so it announces nothing.
         dragToDock.onChange = { mode in
             postAnnouncement(MenuCopy.dragToDockAnnouncement(mode))
             Task { await arrangeController.setDragToDock(mode) }
+        }
+        newWindows.onChange = { mode in
+            Task { await arrangeController.setNewWindows(mode) }
         }
         arrangeController.isReady = { permissionController.state.phase == .ready }
         // The one dispatcher: every hotkey and every command menu item runs exactly this (TILE-09).

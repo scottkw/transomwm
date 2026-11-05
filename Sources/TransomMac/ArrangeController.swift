@@ -138,13 +138,13 @@ import os
 
     public init(
         system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, dragToDock: DragToDockMode = .automatic,
-        zoomEnabled: Bool = false
+        newWindows: NewWindowsMode = .float, zoomEnabled: Bool = false
     ) {
         self.system = system
         self.store = store
         self.exclusions = exclusions
         self.zoomEnabled = zoomEnabled
-        arranger = Arranger(gap: gap, dragToDock: dragToDock)
+        arranger = Arranger(gap: gap, dragToDock: dragToDock, newWindows: newWindows)
         system.releaseFramesBeforeExcluding = { [weak self] bundleIDs in self?.arranger.releaseFrames(forExcluding: bundleIDs) ?? [:] }
         gapPanels.onDrag = { [weak self] handle, delta, ended in
             Task { [weak self] in
@@ -180,6 +180,11 @@ import os
     /// A new Drag to Dock choice: the next drag follows it (D-07, D-19).
     public func setDragToDock(_ mode: DragToDockMode) async {
         await run(arranger.handle(.dragToDock(mode), now: .now))
+    }
+
+    /// A new New Windows choice: the next window follows it, and nothing already floating moves (D-05, D-19).
+    public func setNewWindows(_ mode: NewWindowsMode) async {
+        await run(arranger.handle(.newWindows(mode), now: .now))
     }
 
     /// Queues a toast from outside the Arranger (ConflictController's N7 and N8).

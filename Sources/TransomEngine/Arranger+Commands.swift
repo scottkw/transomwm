@@ -223,7 +223,7 @@ extension Arranger {
     }
 
     /// The largest placed leaf (the Desktop tile included); ties go to the smaller NodeID.
-    private static func largestTile(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
+    static func largestTile(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
         let leaves = resolution.nodeRects.filter { if case .split? = tree.node($0.key) { false } else { true } }
         return leaves.max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
             .map { ($0.key, $0.value) }

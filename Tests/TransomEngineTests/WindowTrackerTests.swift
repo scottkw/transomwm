@@ -282,3 +282,61 @@ private func sweep(_ cgWindows: [CGWindowEntry]) -> ObservationContext {
         #expect(tracker.info(for: identity(own)) != nil)
     }
 }
+
+/// D-05: `.windowCreated` fires at every first sight, so the tracker tells a window that just opened from one it only just noticed.
+extension WindowTrackerTests {
+    private func cg(_ id: UInt32) -> CGWindowEntry {
+        CGWindowEntry(windowID: id, pid: pid, bounds: frame, layer: 0, onScreen: true, alpha: 1)
+    }
+
+    private func sweep(_ tracker: inout WindowTracker, seen: [UInt32], listing: [WindowObservation] = []) {
+        _ = tracker.ingest(AppObservation(pid: pid, bundleID: bundleID, windows: listing), context: ObservationContext(cgWindows: seen.map(cg), initialSweep: true, now: .now))
+    }
+
+    private func later(_ tracker: inout WindowTracker, _ observation: WindowObservation) -> WindowInfo? {
+        _ = tracker.ingest(AppObservation(pid: pid, bundleID: bundleID, windows: [observation]), context: ObservationContext(now: .now))
+        return observation.windowID.flatMap { tracker.info(for: identity($0)) }
+    }
+
+    @Test func aWindowAtTheInitialSweepWasNotOpenedWhileRunning() throws {
+        var tracker = WindowTracker(settleDelay: .zero)
+        sweep(&tracker, seen: [50], listing: [window(50)])
+        #expect(try #require(tracker.info(for: identity(50))).openedWhileRunning == false)
+    }
+
+    @Test func aLaterWindowAboveTheSweepWasOpenedWhileRunning() throws {
+        var tracker = WindowTracker(settleDelay: .zero)
+        sweep(&tracker, seen: [50, 60])
+        #expect(try #require(later(&tracker, window(61))).openedWhileRunning)
+    }
+
+    /// Pitfall 1: AX lists only what's shown, so an old window on another Space is first seen after a Space switch.
+    @Test func aLaterWindowBelowTheSweepIsAnOldOneFirstSeenLate() throws {
+        var tracker = WindowTracker(settleDelay: .zero)
+        sweep(&tracker, seen: [50, 60])
+        #expect(try #require(later(&tracker, window(55))).openedWhileRunning == false)
+    }
+
+    @Test func aLaterWindowWithASyntheticIDIsNotCounted() throws {
+        var tracker = WindowTracker(settleDelay: .zero)
+        sweep(&tracker, seen: [50])
+        let observation = WindowObservation(windowID: 70, idSource: .synthetic, read: .success(snapshot()), title: "Secret Plan.txt")
+        #expect(try #require(later(&tracker, observation)).openedWhileRunning == false)
+    }
+
+    @Test func theAnswerStaysAcrossLaterObservations() throws {
+        var tracker = WindowTracker(settleDelay: .zero)
+        sweep(&tracker, seen: [50], listing: [window(50)])
+        #expect(try #require(later(&tracker, window(61))).openedWhileRunning)
+        // A later ingest of the same window, with a wider sweep raising the mark past it.
+        sweep(&tracker, seen: [99], listing: [window(50), window(61)])
+        #expect(try #require(tracker.info(for: identity(61))).openedWhileRunning)
+        #expect(try #require(tracker.info(for: identity(50))).openedWhileRunning == false)
+    }
+
+    @Test func theHighWaterMarkIgnoresSyntheticEntries() throws {
+        var tracker = WindowTracker(settleDelay: .zero)
+        sweep(&tracker, seen: [50, WindowIdentity.syntheticIDBase | 3])
+        #expect(try #require(later(&tracker, window(51))).openedWhileRunning, "a synthetic entry raised the mark past every real ID")
+    }
+}

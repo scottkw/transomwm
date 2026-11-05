@@ -28,6 +28,8 @@ public enum ArrangerInput: Sendable {
     case gap(Double)
     /// How a title-bar drag docks (D-07), from the shell's stored preference.
     case dragToDock(DragToDockMode)
+    /// What a new window does (D-01), from the shell's stored preference.
+    case newWindows(NewWindowsMode)
     /// A left-button or modifier event from the event tap (TILE-01).
     case pointer(PointerEvent)
     /// The pressed window's CG bounds from the 60 Hz drag poll.
@@ -166,6 +168,8 @@ public struct Arranger: Sendable {
     private var floaterFloors: [WindowIdentity: Size] = [:]
     public var gap: Double
     public internal(set) var dragToDock: DragToDockMode
+    /// Whether a window opened while Transom runs floats or docks (D-01).
+    public internal(set) var newWindows: NewWindowsMode
     /// While any reason is set, facts still change the World but no window command is sent (TILE-08).
     public private(set) var pauseReasons: Set<PauseReason> = []
     /// The last frame requested for each window that is still planned; a frame within 0.5 pt of it is not written
@@ -241,20 +245,26 @@ public struct Arranger: Sendable {
     /// Window identities, the most recently focused first: focus ties go to the earliest (D-11).
     public private(set) var focusOrder: [WindowIdentity] = []
     /// The split ⌃⌥⌘N asked for, waiting for Finder's new window; a newer one replaces it.
-    private var finderExpectation: FinderExpectation?
+    var finderExpectation: FinderExpectation?
 
-    private struct FinderExpectation: Sendable {
+    struct FinderExpectation: Sendable {
         let key: DeskKey
         let target: NodeID
         let edge: Edge
         /// Finder windows already tracked at the press: a change to one of them is never the new window.
         let known: Set<WindowIdentity>
         let deadline: ContinuousClock.Instant
+
+        /// This is the window the press is waiting for.
+        func matches(_ info: WindowInfo, now: ContinuousClock.Instant) -> Bool {
+            info.window.bundleID == Arranger.finderBundleID && !known.contains(info.window.identity) && now < deadline
+        }
     }
 
-    public init(gap: Double = 8, dragToDock: DragToDockMode = .automatic) {
+    public init(gap: Double = 8, dragToDock: DragToDockMode = .automatic, newWindows: NewWindowsMode = .float) {
         self.gap = gap
         self.dragToDock = dragToDock
+        self.newWindows = newWindows
     }
 
     /// Every input that changes the World ends with `.save(.debounced)`, so layout.json follows it (D-16).
@@ -433,6 +443,9 @@ public struct Arranger: Sendable {
             return replan()
         case .dragToDock(let mode):
             dragToDock = mode
+            return []
+        case .newWindows(let mode):
+            newWindows = mode
             return []
         case .pointer(let event):
             return pointer(event, now: now)
@@ -1059,8 +1072,12 @@ public struct Arranger: Sendable {
                 // The pressed window may be crossing displays; where it lands is decided at mouse-up.
                 if drag?.window != info.window { try rehome(info) }
             }
-            // A window that just became dockable, present or known floats on its display's Desktop (D-24).
-            if let subject, let info = windows[subject] { try admit(info) }
+            // A window that just became dockable, present or known floats on its display's Desktop (D-24). A new one may
+            // dock first, after re-matching and before `admit` can show a hidden Desktop (D-05, D-31).
+            if let subject, let info = windows[subject] {
+                if case .windowCreated = event, !filled { faults += autoTile(info, now: now) }
+                try admit(info)
+            }
         } catch {
             return [.fault("ignored an event: \(error)")]
         }
@@ -1295,7 +1312,7 @@ public struct Arranger: Sendable {
 
     /// The desk a window belongs on (D-25): its display's, on the shown Space unless its known Spaces exclude that
     /// one, then on the lowest of them. Nil for a window on no known display.
-    private func home(of info: WindowInfo) -> DeskKey? {
+    func home(of info: WindowInfo) -> DeskKey? {
         guard let display = displays.first(where: { $0.uuid == info.displayUUID }) else { return nil }
         guard let shown = display.currentSpaceID, let spaces = info.spaces, !spaces.contains(shown), let lowest = spaces.min()
         else { return Self.key(display) }
@@ -1513,8 +1530,7 @@ public struct Arranger: Sendable {
     /// Docks the first Finder window created before the deadline that was not tracked at the press, in the split the
     /// press asked for. A dock that would leave any window without room is refused; the window keeps floating (D-26).
     private mutating func takeFinderWindow(_ info: WindowInfo, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
-        guard let expected = finderExpectation, info.window.bundleID == Self.finderBundleID, !expected.known.contains(info.window.identity),
-            now < expected.deadline, let from = deskKey(of: info.window), world[from]?.desktop.contains(info.window) == true,
+        guard let expected = finderExpectation, expected.matches(info, now: now), let from = deskKey(of: info.window), world[from]?.desktop.contains(info.window) == true,
             let area = display(for: expected.key)?.visibleFrame
         else { return [] }
         finderExpectation = nil

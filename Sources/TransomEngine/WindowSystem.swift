@@ -74,12 +74,15 @@ public struct WindowInfo: Equatable, Sendable {
     public var spaces: Set<UInt64>?
     /// The green button's frame as an offset from `frame`'s top-left (`WindowSnapshot.greenButton`); nil when unknown.
     public var greenButton: Rect?
+    /// True when the window opened while Transom was running, set once at first sight (`WindowTracker`, D-05). Session-only,
+    /// never saved: only New Windows: Tile reads it.
+    public var openedWhileRunning: Bool
 
     public init(
         window: WindowRef, frame: Rect, state: WindowState, displayUUID: String?,
         kind: WindowKind = .dockable, idSource: WindowIDSource = .axPrivate, visibleMemberID: UInt32? = nil,
         tabCount: Int = 1, isExcluded: Bool = false, learnedMinimum: Size? = nil, spaces: Set<UInt64>? = nil,
-        greenButton: Rect? = nil, persistableMinimum: Size? = nil
+        greenButton: Rect? = nil, persistableMinimum: Size? = nil, openedWhileRunning: Bool = false
     ) {
         self.window = window
         self.frame = frame
@@ -94,6 +97,7 @@ public struct WindowInfo: Equatable, Sendable {
         self.persistableMinimum = persistableMinimum
         self.spaces = spaces
         self.greenButton = greenButton
+        self.openedWhileRunning = openedWhileRunning
     }
 }
 

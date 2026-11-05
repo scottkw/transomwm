@@ -12,13 +12,13 @@ import Testing
 
     /// A system and an ArrangeController that track only `fixture`, started, with every fixture window on a desk. The tap
     /// is not running yet.
-    static func start(_ fixture: FixtureProcess) async throws -> (ArrangeController, [TransomModel.WindowRef]) {
+    static func start(_ fixture: FixtureProcess, newWindows: NewWindowsMode = .float) async throws -> (ArrangeController, [TransomModel.WindowRef]) {
         // The last test's gap handles are still on screen, in this process, and would take this test's press.
         await last?.setPaused(.user, true)
         let fixturePID = fixture.pid
         let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
         await system.start()
-        let arrange = ArrangeController(system: system)
+        let arrange = ArrangeController(system: system, newWindows: newWindows)
         await arrange.start()
         last = arrange
         var refs: [TransomModel.WindowRef] = []
