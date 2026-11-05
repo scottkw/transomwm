@@ -106,8 +106,10 @@ extension LayoutTree {
             guard takesPart[i] else { return weights[i] }
             return (i < index ? start / before : (1 - end) / after) * weights[i] * room
         }
-        // Nothing else taking part leaves no room to scale into: the window fills the desk once resolved.
-        shares.insert(max((end - start) * room, minWeight), at: index)
+        // Nothing else taking part leaves no room to scale into: the window fills the desk once resolved, and its share of the
+        // stored total keeps it from being a sliver when the others return (WR-07).
+        let basis = room > 0 ? room : weights.reduce(0, +)
+        shares.insert(max((end - start) * basis, minWeight), at: index)
         return (index, shares)
     }
 }

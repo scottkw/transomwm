@@ -203,6 +203,15 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
         #expect(tree.isDesktopHidden == true)
     }
 
+    /// WR-07: filling the desk while it's the only one taking part must not leave the window a sliver when the others return.
+    @Test func withNothingElseTakingPartTheWindowKeepsARealShareForWhenTheOthersReturn() throws {
+        let before = try flat([("A", 0.5), ("D", 0.5)], .horizontal, absent: ["A", "D"])
+        expectChildren(try inserted(before, .second, .horizontal), [("A", 1.0 / 4), ("D", 1.0 / 4), ("W", 1.0 / 2)])
+        // A lone hidden Desktop: the root the window wraps.
+        let lone = try flat([("D", 1)], .horizontal, absent: ["D"])
+        expectChildren(try inserted(lone, .first, .horizontal), [("W", 1.0 / 2), ("D", 1.0 / 2)])
+    }
+
     @Test func aRootAtMaxChildrenThrowsAndChangesNothing() throws {
         var nodes: [NodeID: Node] = [:]
         var states: [WindowIdentity: WindowState] = [:]
