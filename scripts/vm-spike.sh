@@ -21,10 +21,12 @@ key="${TRANSOM_VM_KEY:-$HOME/.ssh/pane_vm_ed25519}"
 host="${TRANSOM_VM_USER:-admin}@$(tart ip "$vm")"
 ssh_opts=(-i "$key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
-# One VM user at a time, shared with vm-live-test.sh and the UAT re-check plans.
+# One VM user at a time, shared with vm-live-test.sh and the UAT re-check plans. TRANSOM_VM_LOCK_HELD: scripts/vm-session.sh holds it for this run.
 mkdir -p .build
-mkdir .build/transom-vm.lock 2>/dev/null || { echo "vm-spike: VM busy (.build/transom-vm.lock exists)" >&2; exit 1; }
-trap 'rmdir .build/transom-vm.lock' EXIT
+if [ -z "${TRANSOM_VM_LOCK_HELD:-}" ]; then
+    mkdir .build/transom-vm.lock 2>/dev/null || { echo "vm-spike: VM busy (.build/transom-vm.lock exists)" >&2; exit 1; }
+    trap 'rmdir .build/transom-vm.lock' EXIT
+fi
 
 scratch=.build/vm
 swift build --scratch-path "$scratch" --product "$product" >&2
