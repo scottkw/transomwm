@@ -59,6 +59,7 @@ import os
     /// The one pending debounced write: a newer request replaces it, so it lands 0.5 s after the latest.
     private let saveTimer = WakeTimer()
     private var fedCompleteInventory = false
+    private var seededFocus = false
 
     /// The exclusion list Don't Arrange toggles; nil in tests that never dispatch it.
     private let exclusions: ExclusionStore?
@@ -249,6 +250,7 @@ import os
             Task { await self?.displaysSettled() }
         }
         if zoomEnabled { await run(arranger.handle(.zoomEnabled(true), now: .now)) }
+        await seedFocus()
         onInventory?(inventory)
         Task { [weak self, system] in
             for await event in system.events {
@@ -300,9 +302,19 @@ import os
                     await self.run(self.arranger.handle(.inventory(inventory), now: .now))
                     await self.settleIfLaunchArrangementChanged()
                 }
+                await self.seedFocus()
                 self.onInventory?(inventory)
             }
         }
+    }
+
+    /// `.windowFocused` fires on a change, so the window focused when Transom started needs one of its own (D-02, WR-03). Once,
+    /// after the saved layout is re-attached: until then the Arranger ignores events.
+    private func seedFocus() async {
+        guard !seededFocus, fedCompleteInventory, !arranger.awaitsRestore else { return }
+        seededFocus = true
+        guard let window = commandContext().focused else { return }
+        await run(arranger.handle(.event(.windowFocused(window)), now: .now))
     }
 
     /// Whether the event tap is running: drags are detected only while it is (the Debug line).

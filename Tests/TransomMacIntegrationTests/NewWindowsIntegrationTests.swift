@@ -64,6 +64,35 @@ import Testing
         #expect(floated, "undo left it at \(String(describing: last)), opened at \(opened)")
     }
 
+    /// D-02, WR-03: focus events fire on a change, so the window focused before Transom started needs a first entry of its own.
+    @Test(.timeLimit(.minutes(1)))
+    func theWindowFocusedAtLaunchCountsAsTheFocusedTile() async throws {
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        try await Task.sleep(for: .milliseconds(300))  // the fixture activates itself
+        let (arrange, refs) = try await LiveArrange.start(fixture, newWindows: .tile)
+        defer { withExtendedLifetime(arrange) {} }
+        let window = try #require(refs.first)
+        #expect(arrange.arranger.focusOrder.first == window.identity, "focus order at launch: \(arrange.arranger.focusOrder)")
+
+        await arrange.dispatch(.dock, focused: window)
+        let new = try #require(try await open("standard", in: fixture).first, "the fixture opened nothing")
+        func ref() -> TransomModel.WindowRef? {
+            arrange.arranger.windows.values.first { $0.window.pid == fixture.pid && $0.window.windowID == new.id }?.window
+        }
+        let docked = await waitUntil(timeout: .seconds(3)) { ref().map { !arrange.arranger.isFloating($0) && arrange.arranger.deskKey(of: $0) != nil } ?? false }
+        try #require(docked, "the new window never docked")
+        let tree = try #require(arrange.arranger.deskKey(of: window).flatMap { arrange.arranger.world[$0]?.tree })
+        let leaf = try #require(tree.leaf(containing: window))
+        let newRef = try #require(ref())
+        let newLeaf = try #require(tree.leaf(containing: newRef))
+        guard case .split(_, let children, _)? = tree.parent(of: leaf).flatMap(tree.node) else {
+            Issue.record("the docked window has no parent split")
+            return
+        }
+        #expect(children == [leaf, newLeaf], "the new window did not split the focused tile: \(children)")
+    }
+
     /// D-04: the fixture's panel and its window showing a sheet stay off the tree, with no undo step.
     @Test(.timeLimit(.minutes(1)))
     func aPanelAndASheetStayFloatingInTileMode() async throws {
