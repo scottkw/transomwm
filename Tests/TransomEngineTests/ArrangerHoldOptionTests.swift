@@ -342,6 +342,18 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         #expect(harness.arranger.dragOptionStrip == .off)
     }
 
+    /// WR-04: a session switch loses the mouse-up, and nothing else ends the session until the next press.
+    @Test func aSessionSwitchEndsTheDragAndTheStrip() async throws {
+        var (harness, _) = try await docked()
+        _ = await drag(&harness, f, from: smallF, by: -60)
+        #expect(harness.arranger.dragOptionStrip == .always)
+
+        await harness.send(.event(.sessionPaused(true)))
+
+        #expect(harness.arranger.drag == nil)
+        #expect(harness.arranger.dragOptionStrip == .off)
+    }
+
     @Test func aMoveSessionAfterALostMouseUpAsksForTheStripAgain() async throws {
         var (harness, _) = try await docked()
         _ = await drag(&harness, f, from: smallF, by: -60)

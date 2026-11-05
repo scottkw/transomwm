@@ -1038,6 +1038,8 @@ public struct Arranger: Sendable {
                 forget(window)
             case .sessionPaused(let paused):
                 sessionPaused = paused
+                // The switch loses the mouse-up, and the strip would stay on until the next press (WR-04).
+                if paused { hidden += abandonDrag() }
             case .spaceChanged(let uuid, let spaceID):
                 // Only the shown Space's desk is planned; the one left keeps its layout untouched (D-25).
                 if let i = displays.firstIndex(where: { $0.uuid == uuid }), let spaceID { displays[i].currentSpaceID = spaceID }  // WR-01

@@ -196,7 +196,8 @@ nonisolated final class InputTap: @unchecked Sendable {
             }
             box.continuation.yield(TapEvent(type: type, location: location, flags: event.flags, windowUnderPointer: window, clickState: clickState))
             // After the copy above: Transom still reads ⌥, macOS's own ⌥ tiling doesn't (D-07a).
-            if DragOptionRule.strips(type: type, flags: event.flags, state: box.dragOption.withLock { $0 }) {
+            let strip = box.dragOption.withLock { $0 }
+            if DragOptionRule.strips(type: type, flags: event.flags, state: strip, leftButtonDown: CGEventSource.buttonState(.combinedSessionState, button: .left)) {
                 event.flags.remove(.maskAlternate)
             }
             return Unmanaged.passUnretained(event)
