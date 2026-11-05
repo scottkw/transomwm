@@ -96,6 +96,9 @@ import Testing
             let (leafA, leafC) = (try #require(tree.leaf(containing: a)), try #require(tree.leaf(containing: c), "C did not dock"))
             try #require(tree.parent(of: leafA) == tree.parent(of: leafC), "C did not split beside A: \(tree)")
 
+            // B moves up across A and C: the tie goes to the most recently focused (D-11), so make that A.
+            await arrange.dispatch(.focus(.left), focused: c)
+            try #require(await waitUntil(timeout: .seconds(3)) { arrange.arranger.focusOrder.first == a.identity }, "A never took focus: \(arrange.arranger.focusOrder)")
             await arrange.dispatch(.moveOrSnap(.top), focused: b)
             let moved = try lowestView([a, b], arrange, key)
             #expect(moved != .home && moved != column, "A and B's lowest common node should be a new, smaller one, not \(moved)")
