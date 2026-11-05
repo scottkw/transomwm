@@ -74,7 +74,7 @@ The status menu has four sections. Arrange holds the layout commands and the Gap
 
 ### URL commands
 
-Transom registers the `transom://` URL scheme. Each one runs at most once per second, and any other URL is rejected.
+Transom registers the `transom://` URL scheme. Each one runs at most once per second, the dock URLs share that second, and any other URL is rejected.
 
 ```sh
 open transom://restore          # Restore All Windows

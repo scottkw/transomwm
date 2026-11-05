@@ -17,8 +17,15 @@ import TransomEngine
         self.scheme = scheme
     }
 
+    /// A CLI request.
     func admit(_ url: URL, at now: ContinuousClock.Instant) -> Result {
         guard let scheme, let command = TransomURL.parse(url, scheme: scheme) else { return .rejected }
         return limiter.admit(command, at: now) ? .command(command) : .rateLimited
+    }
+
+    /// A URL open, where the dock commands also share one second (`TransomURLRateLimiter.admitOpenedURL`).
+    func admitOpened(_ url: URL, at now: ContinuousClock.Instant) -> Result {
+        guard let scheme, let command = TransomURL.parse(url, scheme: scheme) else { return .rejected }
+        return limiter.admitOpenedURL(command, at: now) ? .command(command) : .rateLimited
     }
 }

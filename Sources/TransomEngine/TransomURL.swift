@@ -95,12 +95,24 @@ public enum TransomURL {
 public struct TransomURLRateLimiter: Sendable {
     public static let interval: Duration = .seconds(1)
     private var lastAdmitted: [Command: ContinuousClock.Instant] = [:]
+    private var lastDockURL: ContinuousClock.Instant?
 
     public init() {}
 
     public mutating func admit(_ command: Command, at now: ContinuousClock.Instant) -> Bool {
         if let last = lastAdmitted[command], now - last < Self.interval { return false }
         lastAdmitted[command] = now
+        return true
+    }
+
+    /// `admit` for an opened URL. Any app or web page can open one, and with one second each the ten dock commands would allow
+    /// ten layout edits a second, emptying the undo history in five, so they share one second here. The CLI stays on `admit`,
+    /// so a script can dock several windows quickly.
+    public mutating func admitOpenedURL(_ command: Command, at now: ContinuousClock.Instant) -> Bool {
+        guard case .dockFourth = command else { return admit(command, at: now) }
+        if let lastDockURL, now - lastDockURL < Self.interval { return false }
+        guard admit(command, at: now) else { return false }
+        lastDockURL = now
         return true
     }
 }

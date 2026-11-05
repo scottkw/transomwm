@@ -42,7 +42,7 @@ import os
     /// item use. A rejected one is logged without its contents and shows nothing (Pitfall 21).
     public func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
-            switch gate.admit(url, at: .now) {
+            switch gate.admitOpened(url, at: .now) {
             case .rejected: logger.notice("rejected a URL")
             case .rateLimited: logger.info("rate-limited a URL command")
             case .command(let command): open(command)

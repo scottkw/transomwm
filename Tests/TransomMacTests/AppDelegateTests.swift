@@ -27,6 +27,16 @@ import Testing
         #expect(opened == [.restoreAll, .finderSplit])
     }
 
+    /// WR-09: anything can open a URL, so cycling through the ten dock URLs still gets one edit a second, and the 50-step
+    /// undo history survives a page that does it.
+    @Test func theDockURLsShareOneSecond() throws {
+        var opened: [Command] = []
+        let delegate = AppDelegate(restore: {}, writeCleanExit: {}, open: { opened.append($0) }, gate: CommandGate(scheme: "transom"))
+        let urls = try ["transom://dock-column-1", "transom://dock-column-2", "transom://dock-row-middle", "transom://restore"].map { try #require(URL(string: $0)) }
+        delegate.application(NSApplication.shared, open: urls)
+        #expect(opened == [.dockFourth(.first, .horizontal), .restoreAll])
+    }
+
     @Test func withNoRegisteredSchemeEveryURLIsRejected() throws {
         var opened: [Command] = []
         let delegate = AppDelegate(restore: {}, writeCleanExit: {}, open: { opened.append($0) }, gate: CommandGate(scheme: nil))

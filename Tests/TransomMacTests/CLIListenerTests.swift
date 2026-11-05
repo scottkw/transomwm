@@ -86,6 +86,16 @@ import Testing
         #expect(gate.admit(try #require(URL(string: "transom://view/3?x=1")), at: now) == .rejected)
     }
 
+    /// WR-09: a script can dock several windows quickly, and what the dock URLs share is theirs alone.
+    @Test func theCLIKeepsAPerCommandLimitOnDocking() throws {
+        let gate = CommandGate(scheme: "transom")
+        let one = try #require(URL(string: "transom://dock-column-1")), two = try #require(URL(string: "transom://dock-column-2"))
+        let now = ContinuousClock.now
+        #expect(gate.admit(one, at: now) == .command(.dockFourth(.first, .horizontal)))
+        #expect(gate.admit(two, at: now + .milliseconds(10)) == .command(.dockFourth(.second, .horizontal)))
+        #expect(gate.admit(one, at: now + .milliseconds(20)) == .rateLimited)
+    }
+
     /// D-07: the refusal's reason crosses the port and the tool prints it.
     @Test func aRefusalReachesStderrWithExitOne() async throws {
         let port = uniquePort()

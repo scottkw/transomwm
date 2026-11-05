@@ -65,7 +65,29 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse(string) == nil)
     }
 
-    /// T-08.1-12: each fourth has its own one-per-second limit.
+    /// WR-09: on the URL route the fourths share a second, on top of each command's own, and other commands are untouched.
+    @Test func openedDockURLsShareOneSecond() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockFourth(.first, .horizontal), .zero), (.dockFourth(.second, .vertical), .milliseconds(10)), (.restoreAll, .milliseconds(20)),
+            (.dockFourth(.middle, .horizontal), .seconds(1)),
+        ]
+        #expect(attempts.map { limiter.admitOpenedURL($0.0, at: start + $0.1) } == [true, false, true, true])
+    }
+
+    /// D-07: one limiter for both routes. The CLI's use of a command uses up its second for URLs too, but not the family's.
+    @Test func theCLIUsesUpACommandsSecondButNotTheFamilys() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let cli = limiter.admit(.dockFourth(.first, .horizontal), at: start)
+        let sameByURL = limiter.admitOpenedURL(.dockFourth(.first, .horizontal), at: start + .milliseconds(10))
+        let otherByURL = limiter.admitOpenedURL(.dockFourth(.second, .horizontal), at: start + .milliseconds(20))
+        let cliAfterURL = limiter.admit(.dockFourth(.third, .horizontal), at: start + .milliseconds(30))
+        #expect([cli, sameByURL, otherByURL, cliAfterURL] == [true, false, true, true])
+    }
+
+    /// T-08.1-12: on the CLI route each fourth has its own one-per-second limit.
     @Test func eachFourthIsLimitedSeparately() {
         var limiter = TransomURLRateLimiter()
         let start = ContinuousClock.now
