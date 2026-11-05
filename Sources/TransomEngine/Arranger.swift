@@ -224,6 +224,8 @@ public struct Arranger: Sendable {
     var gestureLive: Bool { drag != nil || liveGap != nil }
     /// The windows `admit` held back during the gesture.
     private var heldAdmits: Set<WindowIdentity> = []
+    /// Auto-tiled windows with no known minimum that have not yet taken a tile (`settleAutoTile`, WR-05).
+    var awaitingFit: Set<WindowIdentity> = []
     /// The zoom camera (Arranger+Camera.swift).
     var camera = CameraState()
     /// Tab strips shown and the selection waiting for its read-back (Arranger+Tabs.swift).
@@ -995,6 +997,7 @@ public struct Arranger: Sendable {
                 if tabs.pendingReveal?.previous == from { tabs.pendingReveal?.previous = to.window }
                 if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 if heldAdmits.remove(from.identity) != nil { heldAdmits.insert(to.window.identity) }
+                if awaitingFit.remove(from.identity) != nil { awaitingFit.insert(to.window.identity) }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
                 remapViews(from: from.identity, to: to.window.identity)
                 if placeholders.arriving.remove(from.identity) != nil { placeholders.arriving.insert(to.window.identity) }
@@ -1005,9 +1008,11 @@ public struct Arranger: Sendable {
             case .frameApplied(let window, let requested, let actual):
                 lastApplied[window.identity] = actual
                 placeholders.arriving.remove(window.identity)
+                let t = MinimumSizeLearner.tolerance
+                if actual.width <= requested.width + t, actual.height <= requested.height + t { awaitingFit.remove(window.identity) }
                 if let shown = revealed(window, actual: actual, now: now) { return shown }
                 if isFloating(window) {
-                    let t = MinimumSizeLearner.tolerance, old = floaterFloors[window.identity] ?? Size(width: 0, height: 0)
+                    let old = floaterFloors[window.identity] ?? Size(width: 0, height: 0)
                     let floor = Size(
                         width: actual.width > requested.width + t ? max(old.width, actual.width) : old.width,
                         height: actual.height > requested.height + t ? max(old.height, actual.height) : old.height)
@@ -1077,6 +1082,7 @@ public struct Arranger: Sendable {
             _ = try LifecycleSync.handle(event, world: &world, history: &history)
             if let leaving { dissolved = self.dissolved(leaving.group, losing: leaving.window) }
             if case .windowChanged(let info) = event {
+                faults += try settleAutoTile(info)
                 try release(info)
                 // The pressed window may be crossing displays; where it lands is decided at mouse-up.
                 if drag?.window != info.window { try rehome(info) }
@@ -1163,6 +1169,7 @@ public struct Arranger: Sendable {
         parkRequested.remove(window.identity)
         homeFrames[window.identity] = nil
         wantedFrames[window.identity] = nil
+        awaitingFit.remove(window.identity)
         undockedWanted[window.identity] = nil
         floaterFloors[window.identity] = nil
         camera.collapsible.remove(window.identity)

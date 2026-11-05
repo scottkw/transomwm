@@ -435,6 +435,90 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(!effects.contains(.beep))
     }
 
+    // MARK: A minimum learned after docking (WR-05)
+
+    /// macOS gives no minimum up front, so the first window of an app docks. Then the app refuses the tile.
+    private func learnedAfterDocking(zoom: Bool) -> (scene: Scene, effects: [ArrangerEffect]) {
+        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
+        if zoom { _ = scene.arranger.handle(.zoomEnabled(true), now: scene.start) }
+        scene.focus(a)
+        scene.arrive()
+        #expect(scene.isDocked(n), "precondition: with no minimum known n docks")
+        var learned = opened(n, minimum: Size(width: 1450, height: 100))
+        learned.frame = Rect(x: 800, y: 33, width: 1450, height: 584)
+        let effects = scene.arranger.handle(.event(.windowChanged(learned)), now: scene.start + .seconds(2))
+        return (scene, effects)
+    }
+
+    @Test func aMinimumLearnedAfterDockingFloatsItSilentlyWhereItOpenedWithZoomOff() {
+        let (scene, effects) = learnedAfterDocking(zoom: false)
+
+        #expect(scene.isFloating(n) && !scene.isDocked(n))
+        #expect(scene.floatingFrame(n) == opening)
+        #expect(scene.isDocked(a))
+        #expect(!effects.contains(.beep))
+        #expect(!effects.contains { if case .announce = $0 { true } else { false } }, "\(effects)")
+        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
+    }
+
+    @Test func aMinimumLearnedAfterDockingCollapsesItWithZoomOn() {
+        let (scene, effects) = learnedAfterDocking(zoom: true)
+
+        #expect(scene.isDocked(n) && !scene.isFloating(n))
+        #expect(scene.arranger.camera.collapsible.contains(n.identity))
+        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
+        let others = scene.arranger.camera.collapsible.subtracting([n.identity]).count
+        #expect(effects.contains(.announce(CollapseCopy.dockedAnnouncement(dragged: true, others: others))), "\(effects)")
+    }
+
+    /// Only until it has taken a tile: after that, losing room is the ordinary case and gets the ordinary notice.
+    @Test func afterATileThatFitsLostRoomIsTheOrdinaryCase() throws {
+        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
+        scene.focus(a)
+        scene.arrive()
+        let tile = try scene.tile(of: n)
+        _ = scene.arranger.handle(.event(.frameApplied(n, requested: tile, actual: tile)), now: scene.start + .seconds(1))
+
+        var learned = opened(n, minimum: Size(width: 1450, height: 100))
+        learned.frame = tile
+        let effects = scene.arranger.handle(.event(.windowChanged(learned)), now: scene.start + .seconds(2))
+
+        #expect(scene.isFloating(n))
+        #expect(effects.contains(.notice(.lostRoom([n]))), "\(effects)")
+    }
+
+    /// A refused write is no answer yet; the learned minimum that follows it is.
+    @Test func aRefusedWriteKeepsItWaitingForTheMinimum() throws {
+        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
+        scene.focus(a)
+        scene.arrive()
+        let tile = try scene.tile(of: n)
+        let refused = Rect(x: tile.x, y: tile.y, width: tile.width + 200, height: tile.height)
+        _ = scene.arranger.handle(.event(.frameApplied(n, requested: tile, actual: refused)), now: scene.start + .seconds(1))
+
+        var learned = opened(n, minimum: Size(width: 1450, height: 100))
+        learned.frame = refused
+        let effects = scene.arranger.handle(.event(.windowChanged(learned)), now: scene.start + .seconds(2))
+
+        #expect(scene.isFloating(n))
+        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
+    }
+
+    /// With a Desktop hidden, `admit` shows it again, as for one that can't dock at all (D-31).
+    @Test func aMinimumLearnedAfterDockingOnAHiddenDesktopShowsIt() throws {
+        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 1000, height: 100)])
+        scene.focus(a)
+        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
+        scene.arrive()
+        #expect(scene.isDocked(n) && scene.desk?.tree.isDesktopHidden == true, "precondition")
+
+        let effects = scene.arranger.handle(.event(.windowChanged(opened(n, minimum: Size(width: 650, height: 100)))), now: scene.start + .seconds(2))
+
+        #expect(scene.isFloating(n) && scene.floatingFrame(n) == opening)
+        #expect(scene.desk?.tree.isDesktopHidden != true)
+        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
+    }
+
     // MARK: A hidden Desktop (D-31)
 
     @Test func docksWithoutShowingAHiddenDesktopAndUndoShowsIt() throws {

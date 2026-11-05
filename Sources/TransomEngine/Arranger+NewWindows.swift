@@ -50,9 +50,26 @@ extension Arranger {
             world = candidate
             history = candidateHistory
             wantedFrames[window.identity] = info.frame  // Float returns it to where it opened, as `admit` records
+            if info.learnedMinimum == nil { awaitingFit.insert(window.identity) }
             return accept(collapsed, moving: window)
         } catch {
             return [.fault("left the new window \(window) floating: \(error)")]
         }
+    }
+
+    /// D-06 for a window whose minimum was not known when it docked: macOS has no way to ask, so `autoTile`'s check passed, the
+    /// app refused the tile, and the learner says so about a second later. With zoom on it collapses. With zoom off it leaves
+    /// the tree, and the `admit` that follows floats it where it opened, with no notice: nothing the user did was refused.
+    /// shortcut: it shows in the tile for that second and its undo step stays, undoing nothing visible; curing both needs a probe before docking.
+    mutating func settleAutoTile(_ info: WindowInfo) throws(LayoutError) -> [ArrangerEffect] {
+        let window = info.window
+        guard awaitingFit.contains(window.identity), info.learnedMinimum != nil, let key = deskKey(of: window), let desk = world[key],
+            desk.tree.state(of: window) != nil, let area = display(for: key)?.visibleFrame,
+            try !Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).unfit.isEmpty
+        else { return [] }
+        awaitingFit.remove(window.identity)
+        if let collapsed = try collapse(desk, area: area) { return accept(collapsed, moving: window) }
+        try world.reflow(key) { desk, _ throws(LayoutError) in try desk.tree.remove(window) }
+        return []
     }
 }
