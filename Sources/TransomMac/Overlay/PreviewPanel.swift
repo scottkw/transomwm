@@ -179,6 +179,8 @@ private final class PreviewLabelView: NSView {
 
     /// One panel per display, covering its full frame (`Displays` gives top-left frames).
     private func rebuildPanels() {
+        // The Arranger sends guides only when their bands change, so a rebuild mid-drag keeps them (WR-06).
+        let guideRects = fourthGuides.mapValues(\.rects).filter { !$0.value.isEmpty }
         for overlay in overlays.values { overlay.panel.orderOut(nil) }
         overlays = [:]
         marquees = [:]
@@ -221,6 +223,12 @@ private final class PreviewLabelView: NSView {
             overlays[display.uuid] = Overlay(uuid: display.uuid, panel: panel, view: view, root: root, frame: frame)
             marquees[display.uuid] = marquee
             fourthGuides[display.uuid] = guides
+            if let rects = guideRects[display.uuid], let overlay = overlays[display.uuid] {
+                guides.rects = rects
+                guides.container.opacity = 1
+                draw(guides, in: overlay)
+                orderFront(overlay)
+            }
         }
     }
 

@@ -14,6 +14,27 @@ import Testing
     /// Connects to the window server first, as ZoomSettleIntegrationTests does.
     init() { _ = NSApplication.shared }
 
+    /// WR-06, UI-SPEC Surface 3: the Arranger sends guides only when their bands change, so a rebuild of the panels mid-drag
+    /// has to keep them "until ⌃ is released or the drag ends".
+    @Test(.timeLimit(.minutes(1)))
+    func theGuidesSurviveAPanelRebuild() async throws {
+        let presenter = PreviewPresenter()
+        let display = try #require(Displays.current().first)
+        let bands = FourthZones.bands(in: display.visibleFrame, axis: .horizontal)
+        presenter.showFourthGuides(bands, on: display.uuid)
+        #expect(presenter.fourthGuideRects(on: display.uuid) == bands)
+
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(300))
+
+        #expect(presenter.fourthGuideRects(on: display.uuid) == bands, "the rebuild dropped the guides")
+        #expect(presenter.isPanelVisible(on: display.uuid), "the rebuilt panel is not ordered in")
+
+        presenter.showFourthGuides([], on: display.uuid)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!presenter.isPanelVisible(on: display.uuid), "the panel outlived its guides")
+    }
+
     @Test(.timeLimit(.minutes(1)))
     func theCommandDocksAFloatingWindowAsTheFirstColumn() async throws {
         let fixture = try await FixtureProcess.launch(["standard"])
