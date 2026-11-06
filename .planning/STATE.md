@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 16
+current_plan: 17
 status: executing
-stopped_at: Completed 08.1.1-15-PLAN.md
-last_updated: "2026-11-06T17:32:15.410Z"
+stopped_at: Completed 08.1.1-16-PLAN.md
+last_updated: "2026-11-06T17:39:18.427Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 86df151c65838b230076023eed92ba9344423573
+state_head: 76e7db0d7f4a2b997308785a97b10ca5ac52373b
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 120
+  completed_plans: 121
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 16
+Current Plan: 17
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -179,6 +179,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P13 | 25min | 2 tasks | 10 files |
 | Phase 08.1.1 P14 | 15min | 2 tasks | 15 files |
 | Phase 08.1.1 P15 | 6min | 3 tasks | 7 files |
+| Phase 08.1.1 P16 | 15min | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -507,6 +508,7 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-14: Resolution.desktopRect stays in TransomModel for 08.1.1-16; the engine no longer reads it
 - [Phase 08.1.1]: 08.1.1-15: FourthTests' share table re-derived on docked tiles only; an empty desk makes the window the root for every slot (D-04)
 - [Phase 08.1.1]: 08.1.1-15: hidden-Desktop tests deleted, not converted (FourthTests aHiddenDesktopKeeps..., TabGroupModelTests theLastDockedLeafLeavingShowsAHiddenDesktop); a Desktop child standing for another participating tile becomes a docked tile with the same weight
+- [Phase 08.1.1]: 08.1.1-16: Node has no Desktop case; a schema-4 file naming a Desktop node is set aside as corrupt, schema <= 3 still migrates through LegacyNode
 
 ### Quick Tasks Completed
 
@@ -552,8 +554,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T17:32:14.609Z
-Stopped at: Completed 08.1.1-15-PLAN.md
+Last session: 2026-11-06T17:39:17.630Z
+Stopped at: Completed 08.1.1-16-PLAN.md
 Resume file: None
 
 ## Deferred Verification
