@@ -11,7 +11,6 @@ public enum TransomURL {
         "zoom-out": .camera(.zoomOutAll), "step-out": .camera(.stepOut), "step-in": .camera(.stepIn), "back": .camera(.back),
         "forward": .camera(.forward), "pan-left": .camera(.pan(.left)), "pan-right": .camera(.pan(.right)),
         "pan-up": .camera(.pan(.top)), "pan-down": .camera(.pan(.bottom)), "frame-window": .camera(.frameWindow),
-        "frame-desktop": .camera(.frameDesktop),
         // Phase 6: toggles the overview, like its hotkey (06 UI-SPEC Surface 4).
         "overview": .camera(.overview),
         // Phase 7: the tab commands (07 UI-SPEC Surface 7).
@@ -39,7 +38,6 @@ public enum TransomURL {
         ("Zoom", "pan-up", "", "Move the view up"),
         ("Zoom", "pan-down", "", "Move the view down"),
         ("Zoom", "frame-window", "", "Frame the focused window, or go back"),
-        ("Zoom", "frame-desktop", "", "Frame the Desktop tile, or go back"),
         ("Zoom", "overview", "", "Open or close the overview"),
         ("Arrange", "split-finder", "", "Split with a new Finder window"),
         ("Arrange", "restore", "", "Restore all windows"),

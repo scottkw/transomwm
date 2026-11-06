@@ -77,7 +77,6 @@ nonisolated public enum MenuCopy {
         case .forward: "Forward"
         case .pan(let edge): direction(edge)  // the Move View submenu's items
         case .frameWindow: "Frame Focused Window"
-        case .frameDesktop: "Frame Desktop"
         case .overview: "Show Overview"
         case .view(let slot): "Go to View \(slot.number)"
         case .saveView(let slot): "Save View \(slot.number)"
@@ -145,7 +144,7 @@ nonisolated public enum MenuCopy {
 
     public static func newWindowsTooltip(_ mode: NewWindowsMode) -> String {
         switch mode {
-        case .float: "New windows float on the Desktop tile until you dock them."
+        case .float: "New windows float until you dock them."
         case .tile: "New windows dock beside the focused tile. Dialogs, panels and excluded apps still float."
         }
     }

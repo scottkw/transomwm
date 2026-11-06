@@ -16,7 +16,7 @@ import Testing
         #expect(CLICommandLine.parse(arguments) == .send(path))
     }
 
-    @Test(arguments: ["foo", "VIEW", "zoom-out/3", "transom://view/3", "", "dock-column-5", "toggle-desktop"])
+    @Test(arguments: ["foo", "VIEW", "zoom-out/3", "transom://view/3", "", "dock-column-5", "toggle-desktop", "frame-desktop"])
     func unknownCommands(_ command: String) {
         #expect(CLICommandLine.parse([command]) == .usage("transom: unknown command \"\(command)\". Run \"transom help\" to see every command."))
     }

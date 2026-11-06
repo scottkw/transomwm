@@ -5,7 +5,7 @@ import TransomModel
 public enum Navigator {
     /// Why a camera command can't act, with its UI-SPEC Surface 1 announcement.
     public enum Refusal: Error, Equatable, Sendable {
-        case alreadyHome, nothingToZoomIn, noEarlierView, noLaterView, noArea(Edge), noDockedWindow, desktopHidden, paused, notReady
+        case alreadyHome, nothingToZoomIn, noEarlierView, noLaterView, noArea(Edge), noDockedWindow, paused, notReady
         case fullScreen
 
         public var announcement: String {
@@ -19,7 +19,6 @@ public enum Navigator {
             case .noArea(.top): "No area above"
             case .noArea(.bottom): "No area below"
             case .noDockedWindow: "No docked window to frame"
-            case .desktopHidden: "The Desktop tile is hidden"
             case .paused: "Arranging is paused"
             case .notReady: "Transom needs Accessibility access"
             case .fullScreen: "Zoom isn't available in full screen"
@@ -232,11 +231,6 @@ extension Arranger {
         return resolvedView(for: Self.key(display)) == .node(leaf)
     }
 
-    /// Whether that display's committed view frames the Desktop tile (Frame Desktop's checkmark).
-    public func isFramingDesktop(displayUUID uuid: String) -> Bool {
-        displays.first { $0.uuid == uuid }.map { resolvedView(for: Self.key($0)) == .node(.desktop) } ?? false
-    }
-
     typealias CameraStep = (target: ViewTarget, kind: PendingMove.Kind)
 
     /// Where `command` takes the camera from the current view (the pending target while a move is pending).
@@ -297,9 +291,6 @@ extension Arranger {
                 desk.tree.state(of: focused) == .present, let leaf = desk.tree.leaf(containing: focused)
             else { return .failure(.noDockedWindow) }
             return toggle(Navigator.target(leaf, in: desk.tree))
-        case .frameDesktop:
-            guard desk.tree.isDesktopHidden == false else { return .failure(.desktopHidden) }
-            return toggle(Navigator.target(.desktop, in: desk.tree))
         case .overview:
             return .failure(.notReady)  // never a camera step: `camera` faults first and the shell decides availability
         case .view, .saveView:

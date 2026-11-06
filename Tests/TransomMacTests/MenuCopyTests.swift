@@ -126,7 +126,6 @@ import Testing
         #expect(MenuCopy.commandTitle(.camera(.forward)) == "Forward")
         #expect(Edge.allCases.map { MenuCopy.commandTitle(.camera(.pan($0))) } == ["Left", "Right", "Up", "Down"])
         #expect(MenuCopy.commandTitle(.camera(.frameWindow)) == "Frame Focused Window")
-        #expect(MenuCopy.commandTitle(.camera(.frameDesktop)) == "Frame Desktop")
     }
 
     @Test func exclusionCopyQuotesTheAppName() {
@@ -151,7 +150,7 @@ import Testing
         #expect(MenuCopy.newWindowsTitle(.tile) == "New Windows: Tile")
         #expect(MenuCopy.newWindowsChoice(.float) == "Float")
         #expect(MenuCopy.newWindowsChoice(.tile) == "Tile")
-        #expect(MenuCopy.newWindowsTooltip(.float) == "New windows float on the Desktop tile until you dock them.")
+        #expect(MenuCopy.newWindowsTooltip(.float) == "New windows float until you dock them.")
         #expect(MenuCopy.newWindowsTooltip(.tile) == "New windows dock beside the focused tile. Dialogs, panels and excluded apps still float.")
         #expect(MenuCopy.newWindowsAnnouncement(.float) == "New windows float")
         #expect(MenuCopy.newWindowsAnnouncement(.tile) == "New windows tile")

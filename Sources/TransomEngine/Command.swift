@@ -48,8 +48,8 @@ public enum CameraCommand: Hashable, Sendable {
     case zoomOutAll, stepOut, stepIn, back, forward
     /// Move View: the node across that edge of the view at the same depth (ZOOM-09).
     case pan(Edge)
-    /// Toggles: frame the focused docked window's leaf or the Desktop tile, or go back when already framed (ZOOM-10, 11).
-    case frameWindow, frameDesktop
+    /// Toggles: frame the focused docked window's leaf, or go back when already framed (ZOOM-10).
+    case frameWindow
     /// Show or dismiss the overview on every display (OVER-01, D-01). The shell handles it; it never reaches the Arranger.
     case overview
     /// Go to the saved view in that slot (⌥1–9, D-01): the smallest node holding its windows still there (D-02).

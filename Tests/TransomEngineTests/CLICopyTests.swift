@@ -26,7 +26,6 @@ import Testing
               pan-up               Move the view up
               pan-down             Move the view down
               frame-window         Frame the focused window, or go back
-              frame-desktop        Frame the Desktop tile, or go back
               overview             Open or close the overview
 
             Arrange

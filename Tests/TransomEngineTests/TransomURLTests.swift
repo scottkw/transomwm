@@ -16,16 +16,17 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse("transom-debug://restore", scheme: "transom-debug") == .restoreAll)
     }
 
-    /// Hide/Show Desktop Tile was removed (8.1.1 D-09): its old URL is unknown and runs nothing.
-    @Test func theRemovedDesktopToggleIsUnknown() {
+    /// Hide/Show Desktop Tile and Frame Desktop were removed (8.1.1 D-09, D-13): their old URLs are unknown and run nothing.
+    @Test func theRemovedDesktopCommandsAreUnknown() {
         #expect(parse("transom://toggle-desktop") == nil)
+        #expect(parse("transom://frame-desktop") == nil)
     }
 
     /// 04 UI-SPEC Hotkeys and URLs: every navigation action has a URL.
     @Test(arguments: [
         ("zoom-out", CameraCommand.zoomOutAll), ("step-out", .stepOut), ("step-in", .stepIn), ("back", .back), ("forward", .forward),
         ("pan-left", .pan(.left)), ("pan-right", .pan(.right)), ("pan-up", .pan(.top)), ("pan-down", .pan(.bottom)),
-        ("frame-window", .frameWindow), ("frame-desktop", .frameDesktop), ("overview", .overview),
+        ("frame-window", .frameWindow), ("overview", .overview),
     ])
     func theZoomCommandsParse(host: String, command: CameraCommand) {
         #expect(parse("transom://\(host)") == .camera(command))
