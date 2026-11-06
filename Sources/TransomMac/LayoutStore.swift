@@ -173,12 +173,22 @@ public enum LayoutStoreError: Error, Equatable {
         if version < LayoutFile.schemaVersion {
             for (index, home) in contents.homeFrames.enumerated() {
                 let window = WindowRef(identity: home.window)
-                do throws(LayoutError) {
-                    if contents.world.desks.values.contains(where: { $0.desktop.contains(window) }) {
-                        try contents.world.recordFloatingFrame(home.frame, for: window)
+                // A hidden tab would move its whole group, as bringBackParked skips it.
+                func isShownFloater(_ world: World) -> Bool {
+                    world.desks.values.contains { desk in
+                        desk.desktop.contains(window)
+                            && desk.desktop.group(containing: window).map { $0.members[$0.selected] == window } ?? true
                     }
-                    for i in contents.layoutSets.indices where contents.layoutSets[i].world.desks.values.contains(where: { $0.desktop.contains(window) }) {
-                        try contents.layoutSets[i].world.recordFloatingFrame(home.frame, for: window)
+                }
+                do throws(LayoutError) {
+                    // The old sweep cleared home frames on every shown Desktop, so an entry for a window anywhere in
+                    // `world` is in `world`'s coordinates; only one absent from it can belong to a stored set.
+                    if contents.world.desks.values.contains(where: { $0.contains(window) }) {
+                        if isShownFloater(contents.world) { try contents.world.recordFloatingFrame(home.frame, for: window) }
+                    } else {
+                        for i in contents.layoutSets.indices where isShownFloater(contents.layoutSets[i].world) {
+                            try contents.layoutSets[i].world.recordFloatingFrame(home.frame, for: window)
+                        }
                     }
                 } catch {
                     throw .invalidEntry("home frame \(index): \(error)")

@@ -517,6 +517,25 @@ extension LayoutStoreTests {
     }
 }
 
+/// 8.1.1 WR-01 (iteration 2): a home frame belongs to the World that parked the window, so a layout set where the same
+/// window floats elsewhere keeps its own frame there.
+extension LayoutStoreTests {
+    @Test func aHomeFrameFromTheCurrentWorldLeavesAStoredLayoutSetsFrameAlone() throws {
+        let dir = Directory()
+        // FileZilla (window 4) also floats in the stored layout set, at 100,100 500×400.
+        try dir.write(LayoutFileV3Fixture.json.replacingOccurrences(of: #""windowID" : 5"#, with: #""windowID" : 4"#))
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        let contents = try #require(store.contents)
+        let fileZilla = WindowRef(identity: WindowIdentity(windowID: 4, pid: 300, bundleID: "com.example.editor"))
+        let desk = try #require(contents.world[DeskKey(displayUUID: LayoutFileV3Fixture.display, spaceID: 3)])
+        #expect(desk.desktop.frame(of: fileZilla) == Rect(x: 200, y: 150, width: 600, height: 400))
+        let set = try #require(contents.layoutSets.first?.world.desks.values.first)
+        #expect(set.desktop.frame(of: fileZilla) == Rect(x: 100, y: 100, width: 500, height: 400))
+    }
+}
+
 /// 8.1.1 D-15: the migration's one log line holds counts only, and none for a current file.
 extension LayoutStoreTests {
     @Test func theMigrationLineCountsDesktopTilesAndParkedWindows() throws {
