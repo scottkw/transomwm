@@ -767,6 +767,25 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         #expect(desk.tree.leaf(containing: a).flatMap(desk.tree.node) == .tabs(windows: [a, f], selected: 1))
     }
 
+    /// WR-02 (iteration 2): the dragged docked window's own tile is not in front of anything, so a floater over that
+    /// tile still takes the group although the dragged window was focused last.
+    @Test func aDockedWindowDraggedOntoAFloaterOverItsOwnTileGroups() async throws {
+        var harness = await floaters()
+        await harness.send(.command(.dock, focused: a))
+        let ra = try #require(try docked(harness).frames[a])
+        await harness.fake.userMove(5, to: Rect(x: ra.midX - 150, y: ra.midY - 100, width: 300, height: 200))
+        _ = await harness.refresh()
+        await harness.send(.event(.windowFocused(t)))
+        await harness.send(.event(.windowFocused(a)))
+        let target = try #require(harness.arranger.world[mainKey]?.desktop.frame(of: t))
+        _ = await drag(&harness, a, from: ra, to: centre(target))
+        harness.now += .milliseconds(400)
+        await harness.send(.tick)
+        await harness.send(pointer(.up, target.midX, target.midY))
+        let group = try #require(floatingGroups(harness).first, "a did not group with t")
+        #expect(group.members == [t, a])
+    }
+
     /// UI-SPEC discretion 3: the rest of a front floater's area gives the docked tile's regions beneath.
     @Test func aFrontFloatersEdgeGivesTheDockedTilesEdgeRegionBeneath() async throws {
         var harness = await floaters()
