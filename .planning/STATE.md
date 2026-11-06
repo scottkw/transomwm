@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 14
+current_plan: 15
 status: executing
-stopped_at: Completed 08.1.1-13-PLAN.md
-last_updated: "2026-11-06T17:22:20.890Z"
+stopped_at: Completed 08.1.1-14-PLAN.md
+last_updated: "2026-11-06T17:26:27.799Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: "0b35ab05e326ac4730de9512bf269c696c2d66b7"
+state_head: e9613517528d5803b11a4bf06f8e39284ee6ddeb
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 118
+  completed_plans: 119
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 14
+Current Plan: 15
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -177,6 +177,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P11 | 11min | 2 tasks | 15 files |
 | Phase 08.1.1 P12 | 12min | 2 tasks | 8 files |
 | Phase 08.1.1 P13 | 25min | 2 tasks | 10 files |
+| Phase 08.1.1 P14 | 15min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -501,6 +502,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-12: ViewsIntegrationTests seeds [(A / B) | D] so the saved column is not the whole desk
 - [Phase 08.1.1]: 08.1.1-13: focusNeighbour's .desktop? arm folded into the .split?/nil arm (exhaustive, no default); 08.1.1-16 deletes it with the case
 - [Phase 08.1.1]: 08.1.1-13: a saved view naming only floating windows resolves home at runtime with N15, not N17; no layout.json rewrite (RESEARCH OQ3, pinned by aViewOfOnlyFloatingWindowsGoesHome)
+- [Phase 08.1.1]: 08.1.1-14: Arranger.wantedFrames stays (Float, Float Group, Move Out, Snap read it); only the Planner's unread wanted: parameter was deleted
+- [Phase 08.1.1]: 08.1.1-14: Resolution.desktopRect stays in TransomModel for 08.1.1-16; the engine no longer reads it
 
 ### Quick Tasks Completed
 
@@ -546,8 +549,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T17:22:20.120Z
-Stopped at: Completed 08.1.1-13-PLAN.md
+Last session: 2026-11-06T17:26:27.015Z
+Stopped at: Completed 08.1.1-14-PLAN.md
 Resume file: None
 
 ## Deferred Verification
