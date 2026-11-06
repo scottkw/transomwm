@@ -9,8 +9,8 @@ extension Arranger {
     /// Under this on either axis a window is too small to tile (D-04).
     static let autoTileMinimum = Size(width: 200, height: 120)
 
-    /// New Windows: Tile (D-02, D-03): docks a new window beside the focused docked tile, or the largest tile, along that
-    /// tile's longer side; on an empty desk the window becomes the first tile and fills the visible frame (8.1.1 D-08). One
+    /// New Windows: Tile (D-02, D-03): fills the largest empty area (8.1.1 D-16, E6), else docks a new window beside the
+    /// focused docked tile, or the largest tile, along that tile's longer side; on an empty desk the window becomes the first tile and fills the visible frame (8.1.1 D-08). One
     /// undo step (D-06). Anything else returns no effects and leaves the window to `admit`, which
     /// floats it. A window that doesn't fit with zoom off stays silent, because nothing the user did was refused.
     mutating func autoTile(_ info: WindowInfo, now: ContinuousClock.Instant) -> [ArrangerEffect] {
@@ -32,7 +32,9 @@ extension Arranger {
             let focused = focusOrder.first { $0 != window.identity }.flatMap { windows[$0]?.window }
             let tile = focused.flatMap { desk.tree.leaf(containing: $0) }.flatMap { leaf in resolution.nodeRects[leaf].map { (leaf, $0) } }
             let drop: DropTarget
-            if let (target, rect) = tile ?? Self.largestTile(resolution, in: desk.tree) {
+            if let (spacer, _) = Self.largestEmptyArea(resolution, in: desk.tree) {
+                drop = .fill(spacer)
+            } else if let (target, rect) = tile ?? Self.largestTile(resolution, in: desk.tree) {
                 drop = .tile(target, .edge(rect.width >= rect.height ? .right : .bottom))
             } else {
                 // Nothing placed: no tree, or every docked window minimized, hidden or full screen. Either way it fills the frame.

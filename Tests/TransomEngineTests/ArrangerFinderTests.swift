@@ -61,6 +61,30 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
 
 /// D-14, TILE-17: ⌃⌥⌘N splits the current tile along its longer side with the first new Finder window.
 @Suite struct ArrangerFinderTests {
+    /// 8.1.1 D-16, E6: on [a .5 | empty .5] with a floating window focused, the new Finder window fills the empty half;
+    /// with a focused it splits a (an explicit split, today's insert rule) and an empty area stays at the right.
+    @Test(arguments: [false, true])
+    func withNoDockedWindowFocusedTheFinderWindowFillsTheEmptyHalf(aFocused: Bool) throws {
+        var scene = Scene(width: 1600, height: 600)
+        _ = scene.arranger.handle(.command(.dockFourth(.firstHalf, .horizontal), focused: a), now: scene.start)
+        // Inner (8, 33, 1584, 584), halves (1584 - 8) / 2 = 788 wide.
+        let left = Rect(x: 8, y: 33, width: 788, height: 584), right = Rect(x: 804, y: 33, width: 788, height: 584)
+        try #require(try scene.tile(of: a) == left, "precondition: a is not the left half")
+
+        _ = scene.arranger.handle(.command(.finderSplit, focused: aFocused ? a : f), now: scene.start)
+        scene.arrive(n)
+
+        #expect(scene.isDocked(n), "the new Finder window did not dock")
+        if aFocused {
+            // Today's insert beside a: n goes right of a (siblings share by weight), and the empty area stays at the right.
+            let tile = try scene.tile(of: n), docked = try scene.tile(of: a)
+            #expect(docked.maxX < tile.minX && tile.maxX < right.maxX, "n did not split a: \(docked) | \(tile)")
+        } else {
+            #expect(try scene.tile(of: n) == right)
+            #expect(try scene.tile(of: a) == left)
+        }
+    }
+
     @Test func aWideTileSplitsToTheRightWithTheFirstNewFinderWindow() throws {
         var scene = Scene(width: 1600, height: 600)
         let before = try scene.tile(of: a)

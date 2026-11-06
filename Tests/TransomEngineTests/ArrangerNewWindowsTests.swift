@@ -149,6 +149,39 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(arranger.world[key]?.tree.windows == [n])
     }
 
+    // MARK: Empty areas (8.1.1 D-16, E6)
+
+    /// [a .5 | empty .5] with a focused: the new window fills the empty half, and a is not split.
+    @Test func aTiledNewWindowFillsTheEmptyHalfBeforeSplittingTheFocusedTile() throws {
+        var scene = Scene(width: 1600, height: 600, docked: false)
+        _ = scene.arranger.handle(.command(.dockFourth(.firstHalf, .horizontal), focused: a), now: scene.start)
+        scene.focus(a)
+        let steps = scene.undoSteps
+
+        scene.arrive()
+
+        // Inner (8, 33, 1584, 584), halves (1584 - 8) / 2 = 788 wide.
+        #expect(try scene.tile(of: a) == Rect(x: 8, y: 33, width: 788, height: 584))
+        #expect(try scene.tile(of: n) == Rect(x: 804, y: 33, width: 788, height: 584))
+        #expect(scene.undoSteps == steps + 1)
+    }
+
+    /// [empty .25 | a .25 | empty .5]: the new window takes the larger empty area, the right half.
+    @Test func aTiledNewWindowFillsTheLargestEmptyArea() throws {
+        var scene = Scene(width: 1600, height: 600, docked: false)
+        _ = scene.arranger.handle(.command(.dockFourth(.second, .horizontal), focused: a), now: scene.start)
+        scene.focus(a)
+        let before = try scene.tile(of: a)
+        let tree = try #require(scene.desk?.tree)
+        let largest = try #require(Arranger.largestEmptyArea(try scene.plan().resolution, in: tree))
+        #expect(largest.1.minX > before.maxX, "precondition: the right half is not the largest empty area")
+
+        scene.arrive()
+
+        #expect(try scene.tile(of: n) == largest.1)
+        #expect(try scene.tile(of: a) == before)
+    }
+
     // MARK: An empty desk (8.1.1 D-08)
 
     /// New Windows: Tile on a desk restored with no tree at all, so this holds before and after new desks lose their

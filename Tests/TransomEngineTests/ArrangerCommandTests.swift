@@ -297,6 +297,27 @@ extension ArrangerCommandTests {
         #expect(shape(undone.tree) == "empty" && Set(undone.desktop.windows.map(\.window)) == [a, b, c])
     }
 
+    /// 8.1.1 D-16, E6: on [a .5 | empty .5], b (higher) fills the empty half, then c splits the largest tile on its
+    /// longer side: a and b are equal tall tiles, so a (the smaller NodeID, made before the empty area) goes over c.
+    @Test func arrangeAllFillsTheEmptyAreaFirst() throws {
+        let size = (width: 300.0, height: 200.0)
+        var arranger = try arranger(frames: [
+            a: somewhere, b: Rect(x: 500, y: 100, width: size.width, height: size.height),
+            c: Rect(x: 100, y: 600, width: size.width, height: size.height),
+        ]) { desk, ids throws(LayoutError) in
+            try desk.tree.insertFourth(.panel(a), states: [a.identity: .present], slot: .firstHalf, axis: .horizontal, ids: &ids)
+        }
+        try #require(shape(try #require(arranger.world[key]).tree) == "H[a,_]")
+        let steps = depth(arranger)
+
+        let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        #expect(shape(desk.tree) == "H[V[a,c],b]", "\(effects)")
+        #expect(desk.desktop.windows.isEmpty)
+        #expect(depth(arranger) == steps + 1, "Arrange All was not one undo step")
+    }
+
     /// On an empty desk the first window in screen order becomes the root; the rest dock beside the largest tile.
     @Test func arrangeAllOnAnEmptyDeskStartsTheLayoutWithTheFirstWindow() throws {
         let size = (width: 300.0, height: 200.0)

@@ -118,7 +118,8 @@ extension Arranger {
     }
 
     /// Docks every eligible floating window of the target desk in screen order (top to bottom, then left to right),
-    /// each on the longer side of the largest tile (on an empty desk the first becomes the root), as one undo step
+    /// each into the largest empty area (8.1.1 D-16, E6), else on the longer side of the largest tile (on an empty desk
+    /// the first becomes the root), as one undo step
     /// (TILE-16, D-13). A window whose dry run leaves
     /// any window without room stays floating, and N5 counts them; when none docks: beep, and the first one's
     /// blocked frame flashes.
@@ -148,7 +149,9 @@ extension Arranger {
                     (node, states) = (.panel(window), [window.identity: .present])
                 }
                 let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
-                if let (target, rect) = Self.largestTile(resolution, in: trial.tree) {
+                if let (spacer, _) = Self.largestEmptyArea(resolution, in: trial.tree) {
+                    try trial.tree.applyDrop(.fill(spacer), leaf: node, states: states, ids: &trialIDs)  // E6: empty space first
+                } else if let (target, rect) = Self.largestTile(resolution, in: trial.tree) {
                     do {
                         try trial.tree.insertLeaf(node, states: states, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
                     } catch {
@@ -224,10 +227,19 @@ extension Arranger {
         return replan() + [.notice(.floatedAll(count: shown.count))]
     }
 
-    /// The largest placed leaf; ties go to the smaller NodeID.
+    /// The largest placed leaf holding a window; ties go to the smaller NodeID. An empty area is no tile (8.1.1 D-16, E7).
     static func largestTile(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
-        let leaves = resolution.nodeRects.filter { if case .split? = tree.node($0.key) { false } else { true } }
-        return leaves.max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
+        largest(resolution) { switch tree.node($0) { case .split?, .spacer?: false; default: true } }
+    }
+
+    /// The largest empty area; ties go to the smaller NodeID (8.1.1 D-16, E6).
+    static func largestEmptyArea(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
+        largest(resolution) { tree.node($0) == .spacer }
+    }
+
+    private static func largest(_ resolution: Resolution, where keep: (NodeID) -> Bool) -> (NodeID, Rect)? {
+        resolution.nodeRects.filter { keep($0.key) }
+            .max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
             .map { ($0.key, $0.value) }
     }
 

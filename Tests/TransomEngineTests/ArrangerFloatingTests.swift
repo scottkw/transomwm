@@ -333,4 +333,32 @@ private func freshArranger(_ windows: [WindowInfo], newWindows: NewWindowsMode =
         #expect(!restored.contains { if case .fault = $0 { true } else { false } }, "\(restored)")
         #expect(restoring.world[key]?.desktop.contains(ref(3)) == true)
     }
+
+    /// 8.1.1 D-16, E6: Dock Where It Is over an empty area fills it: [a .5 | empty .5] with f centred over the right half
+    /// gives [a .5 | f .5] in one undo step, and a doesn't move. Over a, today's edge rule splits a and the empty area stays.
+    @Test(arguments: [true, false])
+    func dockWhereItIsOverAnEmptyAreaFillsIt(overTheEmptyHalf: Bool) async throws {
+        // The halves of the visible frame (0, 25, 1440, 875), gap 8: (8, 33, 708, 859) and (724, 33, 708, 859).
+        let left = Rect(x: 8, y: 33, width: 708, height: 859), right = Rect(x: 724, y: 33, width: 708, height: 859)
+        let centred = overTheEmptyHalf ? Rect(x: 928, y: 362, width: 300, height: 200) : Rect(x: 212, y: 362, width: 300, height: 200)
+        var harness = await Harness.started(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: centred])
+        await harness.send(.command(.dockFourth(.firstHalf, .horizontal), focused: a))
+        let steps = harness.arranger.history.depth(for: key)
+
+        let effects = await harness.send(.command(.dock, focused: f))
+
+        let desk = try #require(harness.arranger.world[key])
+        #expect(desk.tree.state(of: f) == .present)
+        #expect(harness.arranger.history.depth(for: key) == steps + 1)
+        let plan = try Planner.plan(desk: desk, area: Rect(x: 0, y: 25, width: 1440, height: 875), gap: 8, mins: [:])
+        if overTheEmptyHalf {
+            #expect(setFrames(effects)[f] == right)
+            #expect(setFrames(effects)[a] == nil, "a moved")
+            #expect(Arranger.largestEmptyArea(plan.resolution, in: desk.tree) == nil)
+        } else {
+            #expect(plan.frames[a] != left, "a was not split")
+            #expect(Arranger.largestEmptyArea(plan.resolution, in: desk.tree)?.1 == right)
+        }
+    }
+
 }
