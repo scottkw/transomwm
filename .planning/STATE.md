@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 15
+current_plan: 16
 status: executing
-stopped_at: Completed 08.1.1-14-PLAN.md
-last_updated: "2026-11-06T17:26:27.799Z"
+stopped_at: Completed 08.1.1-15-PLAN.md
+last_updated: "2026-11-06T17:32:15.410Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: e9613517528d5803b11a4bf06f8e39284ee6ddeb
+state_head: 86df151c65838b230076023eed92ba9344423573
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 119
+  completed_plans: 120
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 15
+Current Plan: 16
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -178,6 +178,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P12 | 12min | 2 tasks | 8 files |
 | Phase 08.1.1 P13 | 25min | 2 tasks | 10 files |
 | Phase 08.1.1 P14 | 15min | 2 tasks | 15 files |
+| Phase 08.1.1 P15 | 6min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -504,6 +505,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-13: a saved view naming only floating windows resolves home at runtime with N15, not N17; no layout.json rewrite (RESEARCH OQ3, pinned by aViewOfOnlyFloatingWindowsGoesHome)
 - [Phase 08.1.1]: 08.1.1-14: Arranger.wantedFrames stays (Float, Float Group, Move Out, Snap read it); only the Planner's unread wanted: parameter was deleted
 - [Phase 08.1.1]: 08.1.1-14: Resolution.desktopRect stays in TransomModel for 08.1.1-16; the engine no longer reads it
+- [Phase 08.1.1]: 08.1.1-15: FourthTests' share table re-derived on docked tiles only; an empty desk makes the window the root for every slot (D-04)
+- [Phase 08.1.1]: 08.1.1-15: hidden-Desktop tests deleted, not converted (FourthTests aHiddenDesktopKeeps..., TabGroupModelTests theLastDockedLeafLeavingShowsAHiddenDesktop); a Desktop child standing for another participating tile becomes a docked tile with the same weight
 
 ### Quick Tasks Completed
 
@@ -549,8 +552,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T17:26:27.015Z
-Stopped at: Completed 08.1.1-14-PLAN.md
+Last session: 2026-11-06T17:32:14.609Z
+Stopped at: Completed 08.1.1-15-PLAN.md
 Resume file: None
 
 ## Deferred Verification
