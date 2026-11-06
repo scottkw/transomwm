@@ -430,7 +430,7 @@ private func shape(_ tree: LayoutTree, _ id: NodeID? = nil) -> String {
 /// The tree with `name` docked to `corner`.
 private func cornered(_ tree: LayoutTree, _ corner: DockCorner, _ name: String = "W") throws -> LayoutTree {
     var tree = tree
-    var ids = IDSource(next: 100 + UInt64(tree.nodes.count) * 10)
+    var ids = IDSource(next: max(100, (tree.nodes.keys.map(\.raw).max() ?? 0) + 1))
     let w = makeWindow(names[name]!)
     try tree.insertCorner(.panel(w), states: [w.identity: .present], corner: corner, ids: &ids)
     return tree
@@ -446,5 +446,54 @@ extension FourthTests {
     ])
     func onAnEmptyDeskACornerTakesOnlyItsQuarter(corner: DockCorner, expected: String) throws {
         #expect(shape(try cornered(LayoutTree(), corner)) == expected)
+    }
+
+    /// A docked child spanning exactly the corner's half takes the window inside it; otherwise empty space is used first.
+    @Test func aSecondCornerBesideTheFirstUsesItsEmptyHalf() throws {
+        let first = try cornered(LayoutTree(), .topLeft)
+        #expect(shape(try cornered(first, .topRight, "X")) == "((W:0.500|X:0.500):0.500/_:0.500)")
+        #expect(shape(try cornered(first, .bottomLeft, "X")) == "((W:0.500|_:0.500):0.500/(X:0.500|_:0.500):0.500)")
+    }
+
+    /// E2 through 08.1.1-21's margin rule: two left corners then Right Half keep both quarters at full size.
+    @Test func twoLeftCornersThenRightHalfKeepTheirSize() throws {
+        var tree = try cornered(try cornered(LayoutTree(), .topLeft), .bottomLeft, "X")
+        var ids = IDSource(next: 500)
+        let y = makeWindow(names["Y"]!)
+        try tree.insertFourth(.panel(y), states: [y.identity: .present], slot: .secondHalf, axis: .horizontal, ids: &ids)
+        #expect(shape(tree) == "((W:0.500/X:0.500):0.500|Y:0.500)")
+    }
+
+    /// The root's own axis goes first, and rows for a leaf root (C6, C7); a child spanning exactly the half takes the
+    /// window (C7), and with none the others move aside and shrink (E2).
+    @Test(arguments: [
+        ([("A", 1.0)], Axis.vertical, DockCorner.topLeft, "((W:0.500|_:0.500):0.500/A:0.500)"),
+        ([("A", 0.5), ("B", 0.5)], .horizontal, .topLeft, "((W:0.500/A:0.500):0.500|B:0.500)"),
+        ([("A", 1.0 / 3), ("B", 2.0 / 3)], .horizontal, .topLeft, "((W:0.500/_:0.500):0.500|A:0.167|B:0.333)"),
+        ([("A", 0.5), ("B", 0.5)], .vertical, .bottomRight, "(A:0.500/(B:0.500|W:0.500):0.500)"),
+    ])
+    func aCornerBesideDockedWindows(children: [(String, Double)], axis: Axis, corner: DockCorner, expected: String) throws {
+        #expect(shape(try cornered(try flat(children, axis), corner)) == expected)
+    }
+
+    /// E4: a window moved between corners leaves its old quarter empty (the Arranger vacates it first).
+    @Test func movingBetweenCornersLeavesTheOldQuarterEmpty() throws {
+        let w = makeWindow(names["W"]!)
+        var alone = try cornered(LayoutTree(), .topLeft)
+        _ = try alone.vacate(try #require(alone.leaf(containing: w)))
+        #expect(shape(try cornered(alone, .topRight)) == "((_:0.500|W:0.500):0.500/_:0.500)")
+
+        var pair = try cornered(try cornered(LayoutTree(), .topLeft, "X"), .topRight)
+        _ = try pair.vacate(try #require(pair.leaf(containing: w)))
+        #expect(shape(try cornered(pair, .bottomLeft)) == "((X:0.500|_:0.500):0.500/(W:0.500|_:0.500):0.500)")
+    }
+
+    @Test func aFailedCornerChangesNothing() throws {
+        let tree = try cornered(LayoutTree(), .topLeft)
+        var copy = tree
+        var ids = IDSource(next: 900)
+        let w = makeWindow(names["W"]!)
+        #expect(throws: LayoutError.self) { try copy.insertCorner(.panel(w), states: [w.identity: .present], corner: .bottomRight, ids: &ids) }
+        #expect(copy == tree)
     }
 }

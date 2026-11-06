@@ -1267,3 +1267,115 @@ extension ArrangerFourthTests {
         #expect(undone.tree.root == nil && undone.desktop.frame(of: w) == frameW)
     }
 }
+
+/// The corner table (8.1.1 D-17, E1-E4): the docking rules of halves and thirds, for every corner.
+extension ArrangerFourthTests {
+    @Test(arguments: DockCorner.allCases)
+    func aFloatingWindowDocksIntoItsCornerInOneUndoStep(corner: DockCorner) throws {
+        let frameA = Rect(x: 700, y: 400, width: 150, height: 120)
+        var arranger = try desktopFree([info(w), info(a, frameA)])
+        let depth = arranger.history.depth(for: mainKey)
+
+        let effects = arranger.handle(.command(.dockCorner(corner), focused: w), now: .now)
+
+        #expect(try planned(arranger) == [w: try quarterFrames()[corner]!])
+        #expect(arranger.world[mainKey]?.desktop.frame(of: a) == frameA, "D-05: floating windows don't move")
+        #expect(announcements(effects) == [FourthCopy.docked(FourthCopy.label(corner))])
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+        _ = arranger.handle(.command(.undo, focused: w), now: .now)
+        #expect(arranger.world[mainKey]?.tree.root == nil)
+    }
+
+    /// E4: W's right half is left empty; A keeps its half unless the corner is inside it (C7).
+    @Test(arguments: DockCorner.allCases)
+    func aDockedWindowMovesToItsCornerAndLeavesItsPlaceEmpty(corner: DockCorner) throws {
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a, w])
+        let reference = try planned(arranger)
+        let depth = arranger.history.depth(for: mainKey)
+
+        _ = arranger.handle(.command(.dockCorner(corner), focused: w), now: .now)
+
+        let frames = try planned(arranger)
+        #expect(frames[w] == (try quarterFrames()[corner]))
+        if corner.columns == .secondHalf { #expect(frames[a] == reference[a]) }
+        #expect(arranger.world[mainKey]?.tree.nodes.values.contains(.spacer) == true, "W's old place is not empty")
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+        _ = arranger.handle(.command(.undo, focused: w), now: .now)
+        #expect(try rootOrder(arranger) == [a, w])
+    }
+
+    @Test(arguments: DockCorner.allCases)
+    func aTabGroupMemberMovesItsWholeGroupToTheCorner(corner: DockCorner) throws {
+        var arranger = try desktopFree([info(w), info(a), info(b)], docked: [a, b])
+        let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in
+            try desk.desktop.remove(w)
+            try desk.tree.group(w, into: leaf)
+        }
+        _ = arranger.handle(.gap(8), now: .now)
+        guard case .tabs(let members, let selected)? = arranger.world[mainKey]?.tree.node(leaf) else {
+            Issue.record("no group")
+            return
+        }
+        let depth = arranger.history.depth(for: mainKey)
+
+        _ = arranger.handle(.command(.dockCorner(corner), focused: members[(selected + 1) % members.count]), now: .now)
+
+        let tree = try #require(arranger.world[mainKey]?.tree)
+        let moved = try #require(tree.leaf(containing: w))
+        #expect(tree.leaf(containing: a) == moved, "the group came apart")
+        guard case .tabs(let after, _)? = tree.node(moved) else {
+            Issue.record("not a group: \(tree)")
+            return
+        }
+        #expect(Set(after) == Set(members))
+        let rect = try Planner.plan(desk: try #require(arranger.world[mainKey]), area: area, gap: 8, mins: [:]).resolution.nodeRects[moved]
+        #expect(rect == (try quarterFrames()[corner]))
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test(arguments: DockCorner.allCases)
+    func withZoomOffNoRoomForACornerIsRefusedWithTheBlockedFlash(corner: DockCorner) throws {
+        var arranger = try desktopFree([info(w, minimum: huge)])
+        let world = arranger.world, depth = arranger.history.depth(for: mainKey)
+        let frame = try wouldBeFrame(arranger) { desk, ids in
+            try desk.desktop.remove(w)
+            try desk.tree.insertCorner(.panel(w), states: [w.identity: .present], corner: corner, ids: &ids)
+        }
+
+        let effects = arranger.handle(.command(.dockCorner(corner), focused: w), now: .now)
+
+        #expect(effects == [.beep, .announce("Not enough room to dock here"), .flashBlocked(frame, displayUUID: "main")])
+        #expect(arranger.world == world)
+        #expect(arranger.history.depth(for: mainKey) == depth)
+    }
+
+    @Test(arguments: DockCorner.allCases)
+    func withZoomOnNoRoomForACornerCollapsesAndSaysSo(corner: DockCorner) throws {
+        var arranger = try desktopFree([info(w, minimum: huge)], zoom: true)
+        let depth = arranger.history.depth(for: mainKey)
+
+        let effects = arranger.handle(.command(.dockCorner(corner), focused: w), now: .now)
+
+        #expect(announcements(effects) == [CollapseCopy.dockedAnnouncement(dragged: true, others: 0)])
+        #expect(arranger.camera.collapsible == [w.identity])
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test(arguments: DockCorner.allCases)
+    func aWindowAlreadyInItsCornerOnlyBeeps(corner: DockCorner) throws {
+        var arranger = try desktopFree([info(w)])
+        _ = arranger.handle(.command(.dockCorner(corner), focused: w), now: .now)
+        let world = arranger.world, depth = arranger.history.depth(for: mainKey)
+
+        #expect(arranger.handle(.command(.dockCorner(corner), focused: w), now: .now) == [.beep])
+
+        #expect(arranger.world == world)
+        #expect(arranger.history.depth(for: mainKey) == depth)
+    }
+
+    @Test func aCornerWithNoFocusedWindowBeeps() {
+        var arranger = arranger([info(w)])
+        #expect(arranger.handle(.command(.dockCorner(.topLeft), focused: nil), now: .now) == [.beep])
+    }
+}
