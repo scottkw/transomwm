@@ -42,11 +42,9 @@ public struct Desk: Codable, Equatable, Sendable {
         }
     }
 
-    /// Tree and Desktop layer are each valid, the tree holds the Desktop tile (D-24), and no window is
-    /// both docked and floating.
+    /// Tree and floating layer are each valid, and no window is both docked and floating.
     public func validate() throws(LayoutError) {
         try tree.validate()
-        guard tree.isDesktopHidden != nil else { throw .invariantViolated("desk has no Desktop tile \(NodeID.desktop)") }
         try desktop.validate()
         if let both = desktop.windows.first(where: { tree.state(of: $0.window) != nil }) {
             throw .duplicateWindow(both.window)
@@ -84,7 +82,7 @@ extension LayoutTree {
 
 /// All desks, keyed by display (and optionally Space), plus the ID source their node IDs come from.
 public struct World: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public private(set) var ids: IDSource
     public private(set) var desks: [DeskKey: Desk]
@@ -301,15 +299,32 @@ public struct World: Codable, Equatable, Sendable {
         let desk: Desk
     }
 
+    /// Schema 1 (layout.json schema 3 and older): each desk's tree drops its Desktop tile (8.1.1 D-02).
+    private struct LegacyDeskRecord: Decodable {
+        let key: DeskKey
+        let desk: LegacyDesk
+    }
+
+    private struct LegacyDesk: Decodable {
+        let tree: LegacyLayoutTree
+        let desktop: DesktopLayer
+    }
+
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let version = try container.decode(Int.self, forKey: .schemaVersion)
-        guard version == Self.currentSchemaVersion else {
+        let ids = try container.decode(IDSource.self, forKey: .ids)
+        let records: [DeskRecord]
+        switch version {
+        case Self.currentSchemaVersion: records = try container.decode([DeskRecord].self, forKey: .desks)
+        case 1:
+            records = try container.decode([LegacyDeskRecord].self, forKey: .desks).map {
+                DeskRecord(key: $0.key, desk: Desk(tree: $0.desk.tree.tree, desktop: $0.desk.desktop))
+            }
+        default:
             throw DecodingError.dataCorruptedError(
                 forKey: .schemaVersion, in: container, debugDescription: "unsupported schema version \(version)")
         }
-        let ids = try container.decode(IDSource.self, forKey: .ids)
-        let records = try container.decode([DeskRecord].self, forKey: .desks)
         let world: World
         do throws(LayoutError) {
             var desks: [DeskKey: Desk] = [:]

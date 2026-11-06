@@ -126,8 +126,9 @@ public enum LayoutStoreError: Error, Equatable {
             switch version {
             // Every user's file at the upgrade: migrated in memory, saved as the current schema (RESEARCH Pitfall 1).
             case 1: contents = try decoder.decode(LayoutFileV1.self, from: data).migrated()
-            // Schema 2 has schema 3's shape with empty titles; the next save writes schema 3.
-            case 2, LayoutFile.schemaVersion:
+            // Schemas 2 and 3 have schema 4's shape; their Worlds drop the Desktop tile on decode (World schema 1).
+            // The next save writes schema 4.
+            case 2, 3, LayoutFile.schemaVersion:
                 contents = try decoder.decode(LayoutFile.self, from: data)
                 contents.schemaVersion = LayoutFile.schemaVersion
             default: throw LayoutStoreError.corrupt("unknown schemaVersion \(version)")

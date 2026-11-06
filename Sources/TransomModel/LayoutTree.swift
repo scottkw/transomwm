@@ -197,9 +197,15 @@ public struct LayoutTree: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
+        try self.init(from: decoder, legacy: false)
+    }
+
+    /// `legacy`: the nodes are World schema 1's (`LegacyNode`), migrated off the Desktop tile.
+    fileprivate init(from decoder: any Decoder, legacy: Bool) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let root = try container.decodeIfPresent(NodeID.self, forKey: .root)
-        let nodes = try container.decode([NodeID: Node].self, forKey: .nodes)
+        let nodes = legacy ? [:] : try container.decode([NodeID: Node].self, forKey: .nodes)
+        let legacyNodes = legacy ? try container.decode([NodeID: LegacyNode].self, forKey: .nodes) : [:]
         let records = try container.decode([StateRecord].self, forKey: .states)
         let tree: LayoutTree
         do throws(LayoutError) {
@@ -209,7 +215,9 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                     throw .invariantViolated("duplicate state record for window \(record.window.windowID) pid \(record.window.pid)")
                 }
             }
-            tree = try LayoutTree(root: root, nodes: nodes, states: states)
+            tree = legacy
+                ? try LayoutTree(legacyRoot: root, nodes: legacyNodes, states: states)
+                : try LayoutTree(root: root, nodes: nodes, states: states)
         } catch {
             throw DecodingError.dataCorrupted(.init(
                 codingPath: decoder.codingPath, debugDescription: "invalid layout tree", underlyingError: error))
@@ -223,5 +231,54 @@ public struct LayoutTree: Codable, Equatable, Sendable {
         try container.encode(nodes, forKey: .nodes)
         let records = states.sorted { $0.key < $1.key }.map { StateRecord(window: $0.key, state: $0.value) }
         try container.encode(records, forKey: .states)
+    }
+}
+
+/// Decode-only: the node shape of World schema 1 (layout.json schema 3 and older, Phases 3–8.1), which had the Desktop
+/// tile. Its case names and labels are `Node`'s, so the synthesized decoder reads the same JSON keys.
+enum LegacyNode: Decodable {
+    case split(axis: Axis, children: [NodeID], weights: [Double])
+    case panel(WindowRef)
+    case tabs(windows: [WindowRef], selected: Int)
+    case desktop(hidden: Bool)
+}
+
+/// Decode-only: a World schema 1 tree, migrated off its Desktop tile as it decodes.
+struct LegacyLayoutTree: Decodable {
+    let tree: LayoutTree
+
+    init(from decoder: any Decoder) throws {
+        tree = try LayoutTree(from: decoder, legacy: true)
+    }
+}
+
+extension LayoutTree {
+    /// A World schema 1 tree without its Desktop tile (8.1.1 D-02). The tile is first swapped for a stand-in panel so
+    /// the whole legacy shape goes through `validate()` (a hostile file is rejected, never repaired), and then the
+    /// stand-in leaves through `removeLeaf`, as a closed window does: its share goes back to its siblings by weight, a
+    /// one-child split collapses, and a tile that was alone leaves `root == nil`. The stand-in is no window and never
+    /// outlives this init. A Desktop tile anywhere but NodeID 0 is rejected.
+    init(legacyRoot root: NodeID?, nodes legacy: [NodeID: LegacyNode], states: [WindowIdentity: WindowState]) throws(LayoutError) {
+        let standIn = WindowRef(identity: WindowIdentity(windowID: 0, pid: -1, bundleID: ""))
+        let desktop = NodeID(raw: 0)
+        var nodes: [NodeID: Node] = [:]
+        var states = states
+        var hasDesktop = false
+        for (id, node) in legacy {
+            switch node {
+            case let .split(axis, children, weights): nodes[id] = .split(axis: axis, children: children, weights: weights)
+            case let .panel(window): nodes[id] = .panel(window)
+            case let .tabs(windows, selected): nodes[id] = .tabs(windows: windows, selected: selected)
+            case .desktop:
+                guard id == desktop else { throw .invariantViolated("node \(id) is a Desktop tile; only \(desktop) may be") }
+                guard states[standIn.identity] == nil else { throw .duplicateWindow(standIn) }
+                nodes[id] = .panel(standIn)
+                states[standIn.identity] = .present
+                hasDesktop = true
+            }
+        }
+        var tree = try LayoutTree(root: root, nodes: nodes, states: states)
+        if hasDesktop { _ = try tree.removeLeaf(desktop) }
+        self = tree
     }
 }
