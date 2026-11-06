@@ -168,7 +168,6 @@ private let frameB = Rect(x: 730, y: 400, width: 150, height: 120)
 private let smallF = Rect(x: 1250, y: 700, width: 150, height: 100)
 private let mainDisplay = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: area, currentSpaceID: nil)
 private let noRoom = "Not enough room to dock here"
-private let showDesktop = "Show the Desktop Tile to float windows"
 
 private func centre(_ rect: Rect) -> Point { Point(x: rect.midX, y: rect.midY) }
 
@@ -314,21 +313,6 @@ extension ArrangerDragTests {
         #expect(harness.arranger.world[mainKey]?.tree.state(of: b) != nil, "the undo did not dock b again")
         await harness.send(.command(.float, focused: b))
         #expect(await harness.frame(b) == frameB)
-    }
-
-    @Test func shiftWithTheDesktopHiddenShowsTheLabelledSnapBackAndAnnounces() async throws {
-        var (harness, _) = try await docked()
-        await harness.send(.command(.toggleDesktop, focused: a))
-        let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
-        let ra = try #require(plan.frames[a])
-        let point = Point(x: ra.midX, y: ra.midY + 100)
-        _ = await drag(&harness, a, from: ra, to: point, [.shift])
-        harness.now += .milliseconds(150)
-        #expect(previews(await harness.send(.tick)) == [.snapBack(ra, label: showDesktop)])
-        let up = await harness.send(pointer(.up, point.x, point.y, [.shift]))
-        #expect(up.contains(.announce(showDesktop)))
-        #expect(setFrames(up)[a] == ra)
-        #expect(harness.arranger.world[mainKey]?.tree.state(of: a) == .present)
     }
 
     @Test func shiftWithAWindowTooBigForTheDesktopShowsBlockedOverTheDesktop() throws {

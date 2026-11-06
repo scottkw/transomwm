@@ -67,9 +67,6 @@ private func started() -> Arranger {
         let dock = arranger.handle(.command(.dock, focused: b), now: .now)
         #expect(setFrames(dock)[b] != nil)
         #expect(!commands(dock).contains { $0.window == a }, "the excluded window was clamped")
-        let hide = arranger.handle(.command(.toggleDesktop, focused: b), now: .now)
-        #expect(!commands(hide).contains { $0.window == a }, "the excluded window was parked")
-        _ = arranger.handle(.command(.toggleDesktop, focused: b), now: .now)
 
         _ = arranger.handle(.event(.windowChanged(info(a, frame: wide))), now: .now)
         let desk = try #require(arranger.world[key])

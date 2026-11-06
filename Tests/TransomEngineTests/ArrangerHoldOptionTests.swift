@@ -504,25 +504,6 @@ extension ArrangerHoldOptionTests {
 
     // MARK: The plain drag's refusals
 
-    @Test func withTheDesktopHiddenAPlainDragSnapsBackAndSaysWhy() async throws {
-        var (harness, _) = try await docked()
-        await harness.send(.command(.toggleDesktop, focused: a))
-        let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
-        let rb = try #require(plan.frames[b])
-        let text = "Show the Desktop Tile to float windows"
-        _ = await drag(&harness, b, from: rb, by: 0, 60)
-        harness.now += .milliseconds(150)
-        #expect(previews(await harness.send(.tick)) == [.snapBack(rb, label: text)])
-        let depth = harness.arranger.history.depth(for: mainKey)
-
-        let released = await up(&harness, from: rb, by: 0, 60)
-
-        #expect(announced(released) == [text])
-        #expect(setFrames(released)[b] == rb)
-        #expect(harness.arranger.world[mainKey]?.tree.state(of: b) == .present)
-        #expect(harness.arranger.history.depth(for: mainKey) == depth)
-    }
-
     @Test func aPlainDragOfAWindowTooBigForTheDesktopIsBlockedAndSnapsBack() throws {
         // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
         var tree = LayoutTree.withDesktop()

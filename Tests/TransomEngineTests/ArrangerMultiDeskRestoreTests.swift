@@ -462,8 +462,8 @@ extension Harness {
         #expect(harness.arranger.world[deskA1]?.desktop.contains(ref(11)) == false)
     }
 
-    /// CR-02, D-17: after a crash, a floating window parked on a hidden Space's desk (its Desktop hidden) comes back on
-    /// screen at its home frame once that Space is shown, although it was dormant at the recovery restore.
+    /// CR-02, D-17: after a crash, a floating window left parked on a hidden Space's desk comes back on screen at its
+    /// saved frame once that Space is shown, although it was dormant at the recovery restore.
     @Test func aParkedDormantFloaterComesBackOnScreenAfterACrash() async throws {
         var first = Harness()
         await first.fake.setDisplays([displayA])
@@ -480,11 +480,12 @@ extension Harness {
         _ = await first.switchDisplay("A", to: 2)
         await first.send(.command(.dock, focused: ref(4)))
         let home = try #require(await first.frame(ref(3)))
-        await first.send(.command(.toggleDesktop, focused: ref(4)))
-        try #require(await first.fake.parked.contains(ref(3).identity))
         _ = await first.switchDisplay("A", to: 1)
         let saved = first.arranger.world
-        try #require(saved[deskA2]?.tree.isDesktopHidden == true && saved[deskA2]?.desktop.contains(ref(3)) == true)
+        try #require(saved[deskA2]?.desktop.contains(ref(3)) == true)
+        // The crash leaves window 3 at the park rect, unseen by the session that died.
+        await first.fake.update(3) { $0.frame = displayA.parkedFrame(size: home.size, among: [displayA]) }
+        try #require(Recovery.isStranded(try #require(await first.frame(ref(3))), displays: [displayA]))
 
         var harness = await relaunched(with: Array(await first.fake.windows.values), displays: [displayA], showing: ["A": 1])
         await harness.send(.launch(.recovery))

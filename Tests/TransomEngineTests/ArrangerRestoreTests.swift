@@ -486,34 +486,6 @@ extension ArrangerRestoreTests {
         #expect(restored.world[key]?.desktop.contains(c) == true)
     }
 
-    /// The human check's case: a hidden Desktop with a parked floating window. The parked window comes back at its home
-    /// frame and the Desktop tile shows again, so the next plan does not park it again.
-    @Test func aRecoveryLaunchUnparksAWindowParkedByAHiddenDesktop() async throws {
-        var source = await twoDocked(frames: [
-            1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120),
-            3: Rect(x: 1000, y: 600, width: 150, height: 120),
-        ])
-        let home = Rect(x: 1000, y: 600, width: 150, height: 120)
-        await source.send(.command(.toggleDesktop, focused: a))
-        try #require(source.arranger.world[key]?.tree.isDesktopHidden == true)
-        let parked = try #require(await source.frame(c))
-        try #require(Recovery.isStranded(parked, displays: [DisplayInfo(uuid: "main", frame: visibleFrame, visibleFrame: visibleFrame, currentSpaceID: nil)]))
-        let snapshot = source.arranger.snapshot
-        try #require(snapshot.homeFrames[c.identity] == home)
-
-        var restored = Arranger()
-        _ = restored.handle(.launch(.recovery), now: .now)
-        _ = restored.handle(.restore(snapshot.world, homeFrames: snapshot.homeFrames), now: .now)
-        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
-        let sent = performs(effects)
-        try #require(!sent.isEmpty)
-        #expect(sent[0] == [.setFrame(c, home)])
-        #expect(!sent.joined().contains(.park(c, displayUUID: "main")), "the parked window was parked again")
-        #expect(restored.world[key]?.tree.isDesktopHidden != true)
-        #expect(restored.world[key]?.desktop.frame(of: c) == home)
-        #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
-    }
-
     /// WR-05: a layout.json that was rejected or is from a newer Transom says nothing about the last session, so stranded
     /// windows are rescued as after a crash; with no layout restored, no recovery notice is shown.
     @Test func anUnreadableLayoutLaunchRescuesStrandedWindowsWithNoNotice() async throws {
@@ -561,59 +533,12 @@ extension ArrangerRestoreTests {
 extension ArrangerRestoreTests {
     private static let home = Rect(x: 1000, y: 600, width: 150, height: 120)
 
-    /// [a | b | Desktop] with c floating at `home`, the Desktop hidden so c is parked.
-    private func parkedC() async throws -> Harness {
-        var harness = await twoDocked(frames: [
-            1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Self.home,
-        ])
-        await harness.send(.command(.toggleDesktop, focused: a))
-        try #require(harness.arranger.world[key]?.tree.isDesktopHidden == true)
-        let parked = try #require(await harness.frame(c))
-        try #require(!inside(parked, visibleFrame), "c was not parked: \(parked)")
-        return harness
-    }
-
     /// Pushes b far off screen while paused, so nothing puts it back.
     private func strandB(_ harness: inout Harness) async throws {
         let tileB = try #require(await harness.frame(b))
         await harness.fake.userMove(2, to: Rect(x: 10000, y: 100, width: tileB.width, height: tileB.height))
         _ = await harness.refresh()
         try #require(harness.arranger.windows[b.identity]?.frame.x == 10000)
-    }
-
-    @Test func restoreAllShowsTheHiddenDesktopAndMovesAnOffScreenWindowEvenWhilePaused() async throws {
-        var harness = try await parkedC()
-        await harness.send(.command(.togglePause, focused: nil))
-        try await strandB(&harness)
-        let depth = harness.arranger.history.depth(for: key)
-
-        let effects = await harness.send(.command(.restoreAll, focused: nil))
-        let frames = setFrames(effects)
-        #expect(frames[c] == Self.home, "the parked window did not go back to its home frame")
-        #expect(frames[b].map { inside($0, visibleFrame) } == true, "b is not back on screen: \(String(describing: frames[b]))")
-        #expect(notices(effects) == [.restored(count: 2)])
-        #expect(harness.arranger.world[key]?.tree.isDesktopHidden != true)
-        #expect(harness.arranger.world[key]?.desktop.frame(of: c) == Self.home)
-        #expect(harness.arranger.history.depth(for: key) == depth + 1, "showing the Desktop is the undoable part")
-        #expect(harness.arranger.pauseReasons == [.user], "Restore All does not resume arranging")
-        #expect(await harness.frame(c) == Self.home)
-    }
-
-    /// WR-06: Restore All while paused shows the Desktop, so its home frames are spent there and then; a quit after the
-    /// user moves the window leaves it where it is instead of sending it back to the stale home.
-    @Test func restoreAllWhilePausedSpendsTheHomeFramesSoAQuitLeavesMovedWindowsAlone() async throws {
-        var harness = try await parkedC()
-        await harness.send(.command(.togglePause, focused: nil))
-        await harness.send(.command(.restoreAll, focused: nil))
-        let moved = Rect(x: 400, y: 500, width: 150, height: 120)
-        await harness.fake.userMove(3, to: moved)
-        _ = await harness.refresh()
-
-        #expect(harness.arranger.homeFrames.isEmpty, "home frames survived the shown Desktop: \(harness.arranger.homeFrames)")
-        let plan = Recovery.terminationPlan(
-            windows: Array(harness.arranger.windows.values), homeFrames: harness.arranger.homeFrames,
-            displays: harness.arranger.displays, docked: [a.identity, b.identity])
-        #expect(plan[c] == nil, "the quit sends c back to its stale home: \(String(describing: plan[c]))")
     }
 
     @Test func restoreAllWithNoHiddenDesktopAddsNoUndoStep() async throws {
@@ -625,16 +550,6 @@ extension ArrangerRestoreTests {
         #expect(setFrames(effects).keys.sorted { $0.identity < $1.identity } == [b])
         #expect(notices(effects) == [.restored(count: 1)])
         #expect(harness.arranger.history.depth(for: key) == depth)
-    }
-
-    @Test func restoreAllWhileArrangingPutsTheShownDesktopsWindowsHome() async throws {
-        var harness = try await parkedC()
-        let depth = harness.arranger.history.depth(for: key)
-        let effects = await harness.send(.command(.restoreAll, focused: nil))
-        #expect(performs(effects).first?.first == .setFrame(c, Self.home), "the rescue goes before the layout")
-        #expect(notices(effects) == [.restored(count: 1)])
-        #expect(harness.arranger.history.depth(for: key) == depth + 1)
-        #expect(await harness.frame(c) == Self.home)
     }
 
     @Test func restoreAllWithNothingStrandedOnlySaysSo() async throws {

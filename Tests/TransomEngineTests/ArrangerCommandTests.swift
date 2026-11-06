@@ -335,17 +335,6 @@ extension ArrangerCommandTests {
         #expect(shape(try #require(arranger.world[key]).tree) == "H[a,V[b,c],D]")
     }
 
-    @Test func floatAllShowsAHiddenDesktopInTheSameStep() throws {
-        var arranger = try arranger(frames: [a: somewhere, b: somewhere], row)
-        _ = arranger.handle(.command(.toggleDesktop, focused: nil), now: .now)
-        #expect(arranger.world[key]?.tree.isDesktopHidden == true)
-        let history = depth(arranger)
-        _ = arranger.handle(.command(.floatAll, focused: nil), now: .now)
-        #expect(arranger.world[key]?.tree.isDesktopHidden == false)
-        #expect(arranger.world[key]?.desktop.windows.count == 2)
-        #expect(depth(arranger) == history + 1)
-    }
-
     @Test func floatAllWithNothingDockedBeeps() throws {
         var arranger = try arranger(frames: [f: somewhere])
         #expect(arranger.handle(.command(.floatAll, focused: nil), now: .now) == [.beep])
