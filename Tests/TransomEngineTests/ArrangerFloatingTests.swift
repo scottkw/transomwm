@@ -65,8 +65,72 @@ func dragOnAnEmptyDesk(
 /// The lone tile's frame on the empty desk's visible frame, inset by the 8 pt gap: the whole-visible-frame dock (D-08).
 let wholeVisibleTile = Rect(x: 8, y: 33, width: 1424, height: 859)
 
+/// An Arranger with no restore, fed the main display (visible frame 0,25 1440x875) and `windows`: any desk is one
+/// Transom created itself.
+private func freshArranger(_ windows: [WindowInfo], newWindows: NewWindowsMode = .float) -> (Arranger, [ArrangerEffect]) {
+    let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
+    let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visible, currentSpaceID: nil)
+    var arranger = Arranger(newWindows: newWindows)
+    let effects = arranger.handle(.inventory(WindowInventory(displays: [display], windows: windows, initialRefreshComplete: true)), now: .now)
+    return (arranger, effects)
+}
+
 /// D-05, D-06, D-14: floating windows are plain macOS windows; Transom never frames, clamps, parks or raises them.
 @Suite struct ArrangerFloatingTests {
+    /// 8.1.1 D-01: a desk Transom creates has no tree, so the first docked window is the root and fills the visible frame.
+    @Test func aNewDeskHasNoTreeAndTheFirstDockFillsTheVisibleFrame() throws {
+        var (arranger, _) = freshArranger([WindowInfo(window: f, frame: overA, state: .present, displayUUID: "main")])
+        try #require(arranger.world[key]?.desktop.contains(f) == true, "precondition: f is not floating on a new desk")
+        #expect(arranger.world[key]?.tree.root == nil)
+
+        let effects = arranger.handle(.command(.dock, focused: f), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        #expect(desk.tree.leaf(containing: f) == desk.tree.root)
+        #expect(desk.tree.nodes.count == 1)
+        #expect(setFrames(effects)[f] == wholeVisibleTile)
+    }
+
+    /// 8.1.1 D-07: with nothing docked Transom draws nothing: no gap handle, tab strip, placeholder, collapsed block,
+    /// fourth guide or notice.
+    @Test func anEmptyDeskDrawsNothing() throws {
+        let floaters = [f, ref(3)].enumerated().map { i, window in
+            WindowInfo(window: window, frame: Rect(x: 100 + 400 * Double(i), y: 100, width: 300, height: 200), state: .present, displayUUID: "main")
+        }
+        var (arranger, inventory) = freshArranger(floaters)
+        try #require(arranger.world[key]?.tree.root == nil, "precondition: the new desk has a tree")
+        let effects = inventory + arranger.handle(.gap(8), now: .now)  // re-plans
+
+        let drawn = effects.filter { effect in
+            switch effect {
+            case .gapHandles(let items, _): !items.isEmpty
+            case .tabStrips(let items, _): !items.isEmpty
+            case .placeholders(let items, _): !items.isEmpty
+            case .collapsedBlocks(let items, _): !items.isEmpty
+            case .fourthGuides(let items, _): !items.isEmpty
+            case .notice: true
+            default: false
+            }
+        }
+        #expect(drawn.isEmpty, "\(drawn)")
+    }
+
+    /// 8.1.1 D-08 on a desk Transom created (not a restored empty one): New Windows: Tile makes the window the root.
+    @Test func aTiledNewWindowOnAFreshDeskFillsTheVisibleFrame() throws {
+        let start = ContinuousClock.now
+        var (arranger, _) = freshArranger([], newWindows: .tile)
+        let n = ref(20)
+        let info = WindowInfo(
+            window: n, frame: Rect(x: 600, y: 200, width: 400, height: 300), state: .present, displayUUID: "main", openedWhileRunning: true)
+
+        let effects = arranger.handle(.event(.windowCreated(info)), now: start + .milliseconds(400))
+
+        let desk = try #require(arranger.world[key])
+        #expect(desk.tree.leaf(containing: n) == desk.tree.root)
+        #expect(desk.tree.nodes.count == 1)
+        #expect(setFrames(effects)[n] == wholeVisibleTile)
+    }
+
     @Test func aFloatingWindowOverADockedTileIsNeverMoved() async throws {
         var harness = await docked()
         let tile = try #require(await harness.frame(a))

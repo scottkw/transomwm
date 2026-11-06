@@ -29,16 +29,28 @@ func makeWindow(_ id: UInt32, title: String = "") -> WindowRef {
         #expect(resolution.windowRects[b] == Rect(x: 505, y: 10, width: 485, height: 480))
         #expect(resolution.unfit.isEmpty)
 
-        // A desk holds the same pair beside its Desktop tile (D-24).
-        var desk = Desk()
-        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
-        try desk.tree.insert(b, at: .right, of: #require(desk.tree.leaf(containing: a)), ids: &ids)
+        // A desk holds the same pair and nothing else (8.1.1 D-01).
+        let desk = Desk(tree: tree)
         let world = try World(ids: ids, desks: [DeskKey(displayUUID: "D1", spaceID: nil): desk])
         let data = try world.encoded()
         #expect(String(decoding: data, as: UTF8.self).contains("\"schemaVersion\":2"))
         let decoded = try World.decode(from: data)
         #expect(decoded == world)
         #expect(try decoded.encoded() == data)
+    }
+
+    /// 8.1.1 D-01: a new desk has no tree, and one window docked as the root gets the whole inner area.
+    @Test func aNewDeskIsEmptyAndItsFirstWindowGetsTheWholeInnerArea() throws {
+        var desk = Desk()
+        #expect(desk.tree.root == nil)
+        #expect(desk.tree.nodes.isEmpty)
+        #expect(desk.tree.states.isEmpty)
+        try desk.validate()
+
+        var ids = IDSource()
+        try desk.tree.applyDrop(.emptyLayout, window: a, ids: &ids)
+        let rects = try resolve(desk.tree, in: Rect(x: 0, y: 25, width: 1440, height: 875), mins: [:], gap: 8).windowRects
+        #expect(rects == [a: Rect(x: 8, y: 33, width: 1424, height: 859)])
     }
 
     @Test(arguments: Edge.allCases)
