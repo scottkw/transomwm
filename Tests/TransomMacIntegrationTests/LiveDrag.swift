@@ -13,18 +13,23 @@ import Testing
     /// A system and an ArrangeController that track only `fixture`, started, with every fixture window on a desk. The tap
     /// is not running yet.
     static func start(_ fixture: FixtureProcess, newWindows: NewWindowsMode = .float) async throws -> (ArrangeController, [TransomModel.WindowRef]) {
+        try await start([fixture], newWindows: newWindows)
+    }
+
+    /// The same for several fixture apps under one filter; the refs come in fixture order.
+    static func start(_ fixtures: [FixtureProcess], newWindows: NewWindowsMode = .float) async throws -> (ArrangeController, [TransomModel.WindowRef]) {
         // The last test's gap handles are still on screen, in this process, and would take this test's press.
         await last?.setPaused(.user, true)
-        let fixturePID = fixture.pid
-        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        let pids = Set(fixtures.map(\.pid))
+        let system = AXWindowSystem(appFilter: { pid, _ in pids.contains(pid) })
         await system.start()
         let arrange = ArrangeController(system: system, newWindows: newWindows)
         await arrange.start()
         last = arrange
         var refs: [TransomModel.WindowRef] = []
-        for window in fixture.windows {
+        for (pid, window) in fixtures.flatMap({ fixture in fixture.windows.map { (fixture.pid, $0) } }) {
             func find() -> TransomModel.WindowRef? {
-                arrange.arranger.windows.values.first { $0.window.pid == fixturePID && $0.window.windowID == window.id }?.window
+                arrange.arranger.windows.values.first { $0.window.pid == pid && $0.window.windowID == window.id }?.window
             }
             _ = await waitUntil(timeout: .seconds(3)) { find().map { arrange.arranger.deskKey(of: $0) != nil } ?? false }
             let ref = try #require(find(), "window \(window.id) never reached the Arranger")
