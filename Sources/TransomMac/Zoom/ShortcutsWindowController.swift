@@ -25,6 +25,7 @@ enum ShortcutsModel {
         ]),
         (MenuCopy.fourthMenu, [
             .dock, .dockLeftHalf, .dockRightHalf, .dockTopHalf, .dockBottomHalf,
+            .dockTopLeft, .dockTopRight, .dockBottomLeft, .dockBottomRight,
             .dockLeftThird, .dockCenterThird, .dockRightThird, .dockTopThird, .dockMiddleThird, .dockBottomThird,
             .dockColumn1, .dockColumn2, .dockColumn3, .dockColumn4, .dockColumnMiddle, .dockRow1, .dockRow2, .dockRow3, .dockRow4, .dockRowMiddle,
         ]),

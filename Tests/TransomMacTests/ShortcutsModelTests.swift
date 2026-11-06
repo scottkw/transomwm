@@ -3,20 +3,20 @@ import TransomEngine
 @testable import TransomMac
 import Testing
 
-/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 84 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows,
-/// 08 Surface 3 the Saved Views rows, 08.1 Surface 4 the fourths, 08.1.1 Surface 4 the Dock Window section), in the Surface 8
+/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 88 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows,
+/// 08 Surface 3 the Saved Views rows, 08.1 Surface 4 the fourths, 08.1.1 Surface 4 the Dock Window section, 8.1.1 D-17 its corners), in the Surface 8
 /// sections and titles.
 @Suite @MainActor struct ShortcutsModelTests {
     @Test func theSectionsFollowSurface8() {
         #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Saved Views", "Arrange", "Dock Window", "Split", "Snap Floating Window", "Tabs", "Safety", "Exclusions"])
     }
 
-    @Test func the84RowsBindTheHotkeyNamesOnceEach() {
+    @Test func the88RowsBindTheHotkeyNamesOnceEach() {
         let names = ShortcutsModel.sections.flatMap(\.rows).map(\.name)
         #expect(ShortcutsModel.sections.count == 9)
-        #expect(ShortcutsModel.sections.map(\.rows.count) == [11, 18, 13, 21, 6, 9, 3, 2, 1])
-        #expect(names.count == 84)
-        #expect(Set(names).count == 84)
+        #expect(ShortcutsModel.sections.map(\.rows.count) == [11, 18, 13, 25, 6, 9, 3, 2, 1])
+        #expect(names.count == 88)
+        #expect(Set(names).count == 88)
         #expect(Set(names) == Set(Hotkeys.entries.map(\.name)))
     }
 
@@ -34,6 +34,7 @@ import Testing
             ],
             [
                 "Dock Window Where It Is", "Dock to Left Half", "Dock to Right Half", "Dock to Top Half", "Dock to Bottom Half",
+                "Dock to Top Left Quarter", "Dock to Top Right Quarter", "Dock to Bottom Left Quarter", "Dock to Bottom Right Quarter",
                 "Dock to Left Third", "Dock to Center Third", "Dock to Right Third", "Dock to Top Third", "Dock to Middle Third",
                 "Dock to Bottom Third",
                 "Dock to 1st Column", "Dock to 2nd Column", "Dock to 3rd Column", "Dock to 4th Column", "Dock to Middle Half Column",
@@ -61,7 +62,7 @@ import Testing
                 == "This shortcut is already used by \u{201C}Show Overview\u{201D} in Transom.")
     }
 
-    /// 08.1.1 UI-SPEC Surface 4: directly after Arrange, with no footer, in menu order: where it is, halves, thirds, fourths.
+    /// 08.1.1 UI-SPEC Surface 4: directly after Arrange, with no footer, in menu order: where it is, halves, corners (8.1.1 D-17), thirds, fourths.
     @Test func theDockWindowSectionFollowsArrange() {
         let titles = ShortcutsModel.sections.map(\.title)
         #expect(titles.firstIndex(of: "Dock Window") == titles.firstIndex(of: "Arrange").map { $0 + 1 })
