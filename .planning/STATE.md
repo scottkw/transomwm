@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 12
+current_plan: 13
 status: executing
-stopped_at: "Completed 08.1.1-11-PLAN.md (named skip ended: plain swift test green)"
-last_updated: "2026-11-06T17:04:52.987Z"
+stopped_at: Completed 08.1.1-12-PLAN.md
+last_updated: "2026-11-06T17:17:12.195Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 0e203b41fd709a017bb1075651e60ace9ae12492
+state_head: 98c168a5fdd61f33b9adaa1b1b695a1552c884d8
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 116
+  completed_plans: 117
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 12
+Current Plan: 13
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -175,6 +175,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P09 | 7min | 2 tasks | 15 files |
 | Phase 08.1.1 P10 | 13min | 2 tasks | 13 files |
 | Phase 08.1.1 P11 | 11min | 2 tasks | 15 files |
+| Phase 08.1.1 P12 | 12min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -494,6 +495,9 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-10: SKIP_A passes; the branch is still in a named-skip state with SKIP_B failing. 08.1.1-11 must run next; nothing ships or merges before it ends with a green swift test
 - [Phase 08.1.1]: 08.1.1-11: Desktop-centre drags re-aimed at the dragged window's own tile centre, Desktop-band drags at the visible frame's bottom edge band; the Hold ⌥ precedence table's outcomes are unchanged and all pass
 - [Phase 08.1.1]: 08.1.1-11: the named skip is over; plain swift test is green in all four targets (244/472/118/1248), no product code changed
+- [Phase 08.1.1]: 08.1.1-12: live fourths tests keep their labels and weights by docking a second fixture window first (one docked tile, D-04)
+- [Phase 08.1.1]: 08.1.1-12: the too-big live test learns both minimums beside each other; window 0 floats on screen at its own frame (D-05), window 1 spans the visible frame
+- [Phase 08.1.1]: 08.1.1-12: ViewsIntegrationTests seeds [(A / B) | D] so the saved column is not the whole desk
 
 ### Quick Tasks Completed
 
@@ -539,8 +543,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T17:04:47.441Z
-Stopped at: Completed 08.1.1-11-PLAN.md (named skip ended: plain swift test green)
+Last session: 2026-11-06T17:17:11.393Z
+Stopped at: Completed 08.1.1-12-PLAN.md
 Resume file: None
 
 ## Deferred Verification
