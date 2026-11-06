@@ -39,13 +39,13 @@ import Testing
         try #require(Displays.current().first).visibleFrame
     }
 
-    /// Two fixture windows docked side by side: [0 | 1 | Desktop]. Returns the controller, the refs and both tile frames.
+    /// Two fixture windows docked side by side: [0 | 1]. Returns the controller, the refs and both tile frames.
     static func dockedPair(_ fixture: FixtureProcess) async throws -> (ArrangeController, [TransomModel.WindowRef], Rect, Rect) {
         let (arrange, refs) = try await start(fixture)
         try #require(refs.count == 2)
         let visible = try visibleFrame()
         // Dock acts where a drop at the window's centre lands (D-12): see ArrangeIntegrationTests' dockedPair.
-        let placed = [(visible.minX + visible.width * 0.15, visible.midY), (visible.midX + visible.width * 0.1, visible.midY)]
+        let placed = [(visible.minX + visible.width * 0.15, visible.midY), (visible.minX + visible.width * 0.85, visible.midY)]
         for (index, centre) in placed.enumerated() {
             let size = try #require(fixture.windows.first { $0.index == index }).frame.size
             let x = (centre.0 - size.width / 2).rounded(), y = (centre.1 - size.height / 2).rounded()

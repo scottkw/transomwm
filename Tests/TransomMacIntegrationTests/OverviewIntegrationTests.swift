@@ -102,13 +102,12 @@ import Testing
         }
         let display = try #require(Displays.current().first)
         let key = try #require(arrange.arranger.deskKey(of: refs[0]))
-        // Docked as in ZoomSettleIntegrationTests: small, each from the Desktop tile's right edge band.
+        // Docked as in ZoomSettleIntegrationTests: small, each at the right edge band of the rightmost tile.
         for index in refs.indices { _ = try await fixture.send("resize \(index) 120 120") }
         for (index, ref) in refs.enumerated() {
             try await Task.sleep(for: .milliseconds(500))
-            let desk = try #require(arrange.arranger.world[key])
-            let desktop = try #require(try Planner.plan(desk: desk, area: display.visibleFrame, gap: 8, mins: [:]).desktopRect)
-            let x = (desktop.minX + desktop.width * 0.8 - 60).rounded(), y = (desktop.midY - 60).rounded()
+            let area = display.visibleFrame
+            let x = (area.minX + area.width * 0.9 - 60).rounded(), y = (area.midY - 60).rounded()
             _ = try await fixture.send("move \(index) \(Int(x)) \(Int(y))")
             let moved = await waitUntil(timeout: .seconds(2)) {
                 arrange.arranger.windows[ref.identity].map { abs($0.frame.x - x) <= 1 && abs($0.frame.y - y) <= 1 } ?? false

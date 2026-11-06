@@ -45,7 +45,7 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
     abs(a.x - b.x) <= 2 && abs(a.y - b.y) <= 2 && abs(a.width - b.width) <= 2 && abs(a.height - b.height) <= 2
 }
 
-/// Two fixture windows docked side by side: [0 | 1 | Desktop]. Returns the controller, the refs and both tile frames.
+/// Two fixture windows docked side by side: [0 | 1]. Returns the controller, the refs and both tile frames.
 @MainActor private func dockedPair(
     _ fixture: FixtureProcess, store: LayoutStore? = nil
 ) async throws -> (ArrangeController, [TransomModel.WindowRef], Rect, Rect) {
@@ -53,9 +53,9 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
     try #require(refs.count == 2)
     let visible = try mainVisibleFrame()
     // Dock acts where a drop at the window's centre lands (D-12), so place both centres at mid-height: window 0
-    // in the left part of the screen, window 1 just right of the middle, in the Desktop tile's left edge band
-    // once window 0 has docked. Then window 1 docks beside window 0 on any display size.
-    let placed = [(visible.minX + visible.width * 0.15, visible.midY), (visible.midX + visible.width * 0.1, visible.midY)]
+    // in the left part of the screen, window 1 in the right edge band of window 0's tile, which fills the visible
+    // frame once window 0 has docked. Then window 1 docks beside window 0 on any display size.
+    let placed = [(visible.minX + visible.width * 0.15, visible.midY), (visible.minX + visible.width * 0.85, visible.midY)]
     for (index, centre) in placed.enumerated() {
         let size = try #require(fixture.windows.first { $0.index == index }).frame.size
         let x = (centre.0 - size.width / 2).rounded(), y = (centre.1 - size.height / 2).rounded()
@@ -130,7 +130,7 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         #expect(await waitFor(fixture, 1, timeout: .seconds(3)) { near($0, b) } != nil, "window 1 did not shrink back to \(b)")
     }
 
-    /// TILE-13 live: ⌃⌥⌘⇧← on the right-hand window of [0 | 1 | Desktop] moves it into window 0's tile area.
+    /// TILE-13 live: ⌃⌥⌘⇧← on the right-hand window of [0 | 1] moves it into window 0's tile area.
     @Test(.timeLimit(.minutes(1)))
     func moveLeftPutsTheRightWindowWhereTheLeftOneWas() async throws {
         let fixture = try await FixtureProcess.launch(["standard", "standard"])
@@ -147,16 +147,17 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         #expect(moved, "window 1 is not in \(a)'s x-range clear of window 0 (fixture frames \(frames))")
     }
 
-    /// D-26 live: window 0's real minimum is learned only after it docks, and with window 1's it leaves no room for
-    /// both tiles beside the Desktop tile. Window 0 floats to the Desktop tile and no longer overlaps window 1.
+    /// D-26 live: window 0's real minimum is learned only once it shares the desk, and with window 1's it leaves no room
+    /// for both tiles. Window 0, the larger minimum, floats on screen at its own frame (08.1.1 D-05) and window 1 takes
+    /// the whole visible frame.
     @Test(.timeLimit(.minutes(1)))
-    func aDockedWindowThatTurnsOutTooBigFloatsToTheDesktop() async throws {
+    func aDockedWindowThatTurnsOutTooBigFloatsOnScreen() async throws {
         let visible = try mainVisibleFrame()
-        // The Arranger's inner width (8 pt gaps at the area edges). [0 | 1 | Desktop] needs min0 + min1 + 17; with
-        // window 0 floating, [1 | Desktop] needs min1 + min0 + 8. A sum of inner - 14 fails the first and passes
-        // the second, with 2 pt to spare either way.
+        // The Arranger's inner width (8 pt gaps at the area edges); each half of [0 | 1] is (inner - 8) / 2. min0 refuses
+        // its half and, once min0 is learned, min1 refuses what is left beside it, each by more than the learner's 32 pt
+        // margin. min0 + min1 + 8 > inner, so with both learned window 0, the larger, is unfit.
         let inner = (visible.maxX.rounded(.down) - 8) - (visible.minX.rounded(.up) + 8)
-        let min0 = Int(inner * 0.55), min1 = Int(inner) - 14 - min0
+        let min0 = Int(inner * 0.6), min1 = Int(inner * 0.45)
         let fixture = try await FixtureProcess.launch(["minsize:\(min0)x150", "minsize:\(min1)x150"])
         defer { fixture.terminate() }
         let (arrange, refs) = try await arranging(fixture)
@@ -164,47 +165,32 @@ private func grew(_ before: Rect) -> @Sendable (Rect) -> Bool {
         let height = 300.0, top = (visible.midY - height / 2).rounded()
 
         // Both start wider than their minimums, so a refused tile write moves them toward it: that is how a
-        // minimum is learned (02-15). Window 0's centre is in the left half, so it docks on the left.
+        // minimum is learned (02-15). The whole frame, not just x: a write is learned from only if the tracker saw the
+        // window at its size first.
         _ = try await fixture.send("resize 0 \(min0 + 40) \(Int(height))")
         _ = try await fixture.send("resize 1 \(min1 + 40) \(Int(height))")
         let start0 = Rect(x: visible.minX + 40, y: top, width: Double(min0 + 40), height: height)
+        let start1 = Rect(x: (visible.maxX - 40 - Double(min1 + 40)).rounded(), y: top, width: Double(min1 + 40), height: height)
         _ = try await fixture.send("move 0 \(Int(start0.x)) \(Int(start0.y))")
-        // The whole frame, not just x: a write is learned from only if the tracker saw the window at its size first.
-        try #require(await seen(arrange, refs[0], start0), "the Arranger never saw window 0 at \(start0)")
-        await arrange.dispatch(.dock, focused: refs[0])
-        let learned = await waitUntil(timeout: .seconds(4)) { arrange.arranger.windows[refs[0].identity]?.learnedMinimum != nil }
-        let tracked0 = arrange.arranger.windows[refs[0].identity]?.frame
-        try #require(learned, "window 0's minimum was never learned (tracked \(String(describing: tracked0)), minimum \(min0))")
-
-        // Window 1's centre in the Desktop tile's right edge band, so Dock puts it beside that tile, in the same row.
-        // Not the tile's middle: there fx = 0.5 ties with the top/bottom bands and a 1 pt area change picks a column.
-        let key = try #require(arrange.arranger.deskKey(of: refs[0]))
-        let desk = try #require(arrange.arranger.world[key])
-        let mins = Dictionary(uniqueKeysWithValues: arrange.arranger.windows.values.compactMap { info in
-            info.learnedMinimum.map { (info.window, $0) }
-        })
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: mins).desktopRect)
-        // Window 1 overlaps window 0's grown tile, so Transom clamps it into the Desktop tile first.
-        let clamped = await waitUntil(timeout: .seconds(2)) {
-            arrange.arranger.windows[refs[1].identity].map { $0.frame.minX >= desktop.minX - 1 && $0.frame.maxX <= desktop.maxX + 1 } ?? false
-        }
-        try #require(clamped, "Transom never clamped window 1 into the Desktop tile \(desktop)")
-        let size1 = try #require(arrange.arranger.windows[refs[1].identity]).frame.size
-        let start1 = Rect(x: (desktop.minX + desktop.width * 0.8 - size1.width / 2).rounded(), y: top, width: size1.width, height: size1.height)
         _ = try await fixture.send("move 1 \(Int(start1.x)) \(Int(start1.y))")
+        try #require(await seen(arrange, refs[0], start0), "the Arranger never saw window 0 at \(start0)")
         try #require(await seen(arrange, refs[1], start1), "the Arranger never saw window 1 at \(start1)")
-        await arrange.dispatch(.dock, focused: refs[1])
+
+        await arrange.dispatch(.dock, focused: refs[0])  // the empty desk's root
+        await arrange.dispatch(.dockFourth(.secondHalf, .horizontal), focused: refs[1])  // the right half beside it
+        let key = try #require(arrange.arranger.deskKey(of: refs[0]))
         try #require(arrange.arranger.world[key]?.tree.state(of: refs[1]) == .present, "window 1 did not dock")
 
         var frames: [Rect] = []
-        let floated = await waitUntil(timeout: .seconds(5)) {
-            guard let desk = arrange.arranger.world[key], desk.desktop.contains(refs[0]), desk.tree.state(of: refs[1]) == .present,
+        let floated = await waitUntil(timeout: .seconds(10)) {
+            guard let desk = arrange.arranger.world[key], desk.desktop.contains(refs[0]), desk.tree.windows == [refs[1]],
                 let f0 = try? await listedFrame(fixture, 0), let f1 = try? await listedFrame(fixture, 1)
             else { return false }
             frames = [f0, f1]
-            return !f0.overlaps(f1)
+            return inside(f0, visible) && f1.width >= inner - 2
         }
-        #expect(floated, "window 0 did not float clear of window 1 within 5 s (fixture frames \(frames))")
+        let learned = refs.map { arrange.arranger.windows[$0.identity]?.learnedMinimum }
+        #expect(floated, "window 0 did not float on screen beside a full-width window 1 within 10 s (fixture frames \(frames), learned \(learned))")
     }
 
     /// SAFE-06 live: a fresh window system and controller on the same layout.json, with the fixture still running,
