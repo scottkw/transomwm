@@ -665,4 +665,19 @@ extension LayoutStoreTests {
         #expect(try store.save(contents))
         #expect(try dir.text().contains("\"schemaVersion\" : 5"))
     }
+
+    /// Review WR-02 (8.1.1 D-20): with no backup of the schema-4 file, the one-way upgrade must not overwrite it.
+    @Test func aFailedBackupBeforeMigratingDisablesSaving() throws {
+        let schema4 = try Self.edited("\"schemaVersion\" : 5", "\"schemaVersion\" : 4")
+        let dir = Directory()
+        try dir.write(schema4)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.url.path)  // the copy fails
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.url.path) }
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(store.savingDisabled)
+        #expect(try store.save(try #require(store.contents)) == false)
+        #expect(try dir.text() == schema4)
+    }
 }

@@ -47,10 +47,11 @@ public enum LayoutStoreError: Error, Equatable {
             if let line = Self.migrationLine(fromSchema: version, contents: decoded) {
                 Self.logger.info("\(line, privacy: .public)")
             }
-            if version != LayoutFile.schemaVersion {
-                // The next save overwrites it one way, so a downgrade can restore this copy by hand (WR-04, 8.1.1 D-20); a
-                // failure is logged.
-                backUp("schema-\(version)")
+            // The next save overwrites it one way, so a downgrade can restore this copy by hand (WR-04, 8.1.1 D-20). With no
+            // copy, the file stays untouched: an older Transom refuses the upgraded one.
+            if version != LayoutFile.schemaVersion, !backUp("schema-\(version)") {
+                savingDisabled = true
+                Self.logger.error("could not back up a schema \(version) \(Self.fileName, privacy: .public); not saving layouts this session so it stays readable")
             }
         } catch {
             loadError = error
