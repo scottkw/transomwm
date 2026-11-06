@@ -304,7 +304,7 @@ extension ArrangerLifecycleTests {
 /// TILE-20, WIN-07: a minimised or fullscreen docked window lends its space and comes back to the same tile;
 /// nothing is written while the session is paused.
 extension ArrangerLifecycleTests {
-    /// [w1 | w2 | Desktop], with both docked windows' frames.
+    /// [w1 | w2] across the visible frame, with both docked windows' frames.
     private func twoDocked() async throws -> (Harness, Rect, Rect) {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))

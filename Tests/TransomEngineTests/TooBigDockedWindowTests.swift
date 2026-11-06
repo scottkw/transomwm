@@ -24,16 +24,17 @@ private func advance(_ harness: inout Harness, by duration: Duration) async {
     await harness.fake.advance(by: duration)
 }
 
-/// G-03-6 through the fake: a opens 40 pt above its 627 pt minimum, so its refused tile write moves it; b opens at
-/// its 783 pt minimum (Reminders' Welcome window), so no write moves it. 627 + 783 cannot share the 1424 pt row with
-/// the Desktop tile, so b floats. Returns the harness and b's first tile.
+/// G-03-6 through the fake: a opens 40 pt above its 750 pt minimum, so its refused write of half the row (708 pt, more
+/// than the learner's 32 pt margin under it) moves it; b opens at its 783 pt minimum (Reminders' Welcome window), so
+/// no write moves it. 750 + 783 + the gap cannot share the 1424 pt row, so b, the wider, floats. Returns the harness
+/// and b's first tile.
 /// `height` is b's frame and minimum height: 887 is 28 pt over the 859 pt tile height, like Reminders' 692 in 664.
-/// b's centre stays level with the Desktop tile's middle, so Dock puts it in the row beside a.
+/// b's centre is right of the row's middle and about level with it, so Dock puts it in the row right of a.
 private func dockedBesideAWindowAtItsMinimum(height: Double = 300) async throws -> (Harness, Rect) {
     var harness = await Harness.started(frames: [
-        1: Rect(x: 40, y: 312, width: 667, height: 300), 2: Rect(x: 600, y: max(33, 462 - height / 2), width: 783, height: height),
+        1: Rect(x: 40, y: 312, width: 790, height: 300), 2: Rect(x: 600, y: max(33, 462 - height / 2), width: 783, height: height),
     ])
-    await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 627, height: 150) }
+    await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 750, height: 150) }
     await harness.fake.update(2) { $0.hiddenMinimum = Size(width: 783, height: height) }
     await harness.send(.command(.dock, focused: a))
     let tile = try #require(setFrames(await harness.send(.command(.dock, focused: b)))[b])

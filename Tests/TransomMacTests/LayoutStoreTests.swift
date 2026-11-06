@@ -10,13 +10,13 @@ private func ref(_ id: UInt32, title: String = "") -> WindowRef {
     WindowRef(identity: WindowIdentity(windowID: id, pid: 300, bundleID: "com.example.editor"), titleHint: title)
 }
 
-/// [1 | Desktop] with 2 floating; both windows carry a title.
+/// 1 docked, filling the desk, with 2 floating; both windows carry a title.
 private func sampleFile() throws -> LayoutFile {
     var world = World()
     try world.addDesk(key)
     var history = UndoHistory()
     try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(ref(1, title: "Secret plan.txt"), at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Secret plan.txt"), ids: &ids)
         try desk.desktop.add(ref(2, title: "Bank statement"), frame: Rect(x: 900, y: 300, width: 400, height: 300))
     }
     return LayoutFile(
@@ -93,7 +93,7 @@ private func sampleFile() throws -> LayoutFile {
         var world = World()
         try world.addDesk(key)
         try world.reflow(key) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(1, title: String(repeating: "x", count: 8192)), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: String(repeating: "x", count: 8192)), ids: &ids)
         }
         let huge = LayoutFile(world: world, homeFrames: [:], session: SessionRecord(cleanExit: false, launchedAt: .now))
         #expect(throws: LayoutStoreError.self) { try store.save(huge) }
@@ -286,7 +286,7 @@ extension LayoutStoreTests {
         try world.addDesk(key)
         var history = UndoHistory()
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(1), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1), ids: &ids)
             guard let leaf = desk.tree.leaf(containing: ref(1)) else { throw .windowNotFound(ref(1)) }
             try desk.tree.group(ref(2), into: leaf)
             try desk.tree.group(ref(3), into: leaf)

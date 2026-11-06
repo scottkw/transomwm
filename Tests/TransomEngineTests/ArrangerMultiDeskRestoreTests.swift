@@ -18,7 +18,7 @@ private let visibleB = Rect(x: 1440, y: 25, width: 1920, height: 1055)
 private let displayA = DisplayInfo(uuid: "A", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visibleA, currentSpaceID: 1)
 private let displayB = DisplayInfo(uuid: "B", frame: Rect(x: 1440, y: 0, width: 1920, height: 1080), visibleFrame: visibleB, currentSpaceID: 3)
 
-/// Two windows per desk, both docked: [first | second | Desktop].
+/// Two windows per desk, both docked: [first | second] across the visible frame.
 private struct DeskPlan {
     let key: DeskKey
     let ids: [UInt32]
@@ -32,11 +32,12 @@ private let plans = [
     DeskPlan(key: DeskKey(displayUUID: "B", spaceID: 4), ids: [7, 8], visible: visibleB),
 ]
 
-/// The first window on the left of its display; the second small and inside the right half, as in ArrangerLifecycleTests.
+/// The first window on the left of its display; the second small, centred three quarters across, so Dock Where It Is
+/// docks it on the right edge of the first, which fills the display (ArrangerDisplaySettleTests).
 private func startFrame(_ index: Int, on visible: Rect) -> Rect {
     index == 0
         ? Rect(x: visible.minX + 40, y: 80, width: 320, height: 232)
-        : Rect(x: visible.minX + 730, y: 400, width: 150, height: 120)
+        : Rect(x: visible.minX + visible.width * 0.75 - 75, y: 400, width: 150, height: 120)
 }
 
 /// A real relaunch (G-03-8): a NEW window system, whose tracker knows nothing, over the same running windows. Each

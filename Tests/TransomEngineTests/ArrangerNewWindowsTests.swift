@@ -19,8 +19,8 @@ private func found(_ window: WindowRef, _ frame: Rect, minimum: Size? = nil) -> 
     WindowInfo(window: window, frame: frame, state: .present, displayUUID: "main", learnedMinimum: minimum)
 }
 
-/// One display whose visible area is `width` x `height`, with New Windows: Tile, a docked on the left of the Desktop and
-/// f floating clear of it on the right.
+/// One display whose visible area is `width` x `height`, with New Windows: Tile, a docked alone, filling it (D-08), and
+/// f floating over it on the right.
 private struct Scene {
     var arranger: Arranger
     let start = ContinuousClock.now
@@ -32,7 +32,6 @@ private struct Scene {
         self.minimums = minimums
         area = Rect(x: 0, y: 25, width: width, height: height)
         let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: width, height: height + 25), visibleFrame: area, currentSpaceID: nil)
-        // a's centre is near the left edge halfway down, so its dock lands on the Desktop's left edge.
         let frameA = Rect(x: 40, y: area.midY - 116, width: 320, height: 232)
         let frameF = Rect(x: area.maxX - 200, y: 60, width: 150, height: 120)
         let inventory = WindowInventory(
@@ -86,7 +85,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     }
 
     @Test func aTallFocusedTileGetsTheNewWindowBelow() throws {
-        var scene = Scene(width: 1000, height: 900)
+        var scene = Scene(width: 900, height: 1000)
         scene.focus(a)
         let before = try scene.tile(of: a)
         #expect(before.height > before.width, "precondition: a's tile is not tall: \(before)")
@@ -110,37 +109,32 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(left.width < before.width && right.minX > left.maxX - 1, "n did not land beside a: \(left) | \(right)")
     }
 
+    /// a, the only tile, is the largest; wide, so n lands on its right.
     @Test func aFloatingFocusSplitsTheLargestTile() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 1000, height: 100)])
+        var scene = Scene(width: 1600, height: 600)
         scene.focus(f)
-        let desktop = try #require(try scene.plan().desktopRect)
-        #expect(try scene.tile(of: a).width > desktop.width, "precondition: a's tile is not the largest")
 
         scene.arrive()
 
-        let after = try #require(try scene.plan().desktopRect)
         let left = try scene.tile(of: a), tile = try scene.tile(of: n)
-        #expect(tile.minX > left.maxX - 1 && tile.maxX < after.minX + 1, "n is not beside a: \(left) | \(tile) | \(after)")
+        #expect(tile.minX > left.maxX - 1 && near(tile.maxX, scene.area.maxX - 8), "n is not beside a: \(left) | \(tile)")
     }
 
     @Test func noFocusAtAllSplitsTheLargestTile() throws {
         var scene = Scene(width: 1600, height: 600)
         scene.arrive()
-        let after = try #require(try scene.plan().desktopRect)
-        let tile = try scene.tile(of: n)
-        #expect(tile.minX > after.maxX - 1 && near(tile.height, after.height), "\(after) | \(tile)")
+        let left = try scene.tile(of: a), tile = try scene.tile(of: n)
+        #expect(tile.minX > left.maxX - 1 && near(tile.height, left.height), "\(left) | \(tile)")
     }
 
-    @Test func withNothingDockedItIsTheFirstTileBesideTheDesktop() throws {
+    @Test func withNothingDockedItIsTheFirstTileFillingTheVisibleFrame() throws {
         var scene = Scene(width: 1600, height: 600, docked: false)
         scene.focus(a)  // floating, so not a docked tile
 
         scene.arrive()
 
-        let desktop = try #require(try scene.plan().desktopRect)
-        let tile = try scene.tile(of: n)
         #expect(scene.desk?.tree.windows == [n])
-        #expect(tile.minX > desktop.maxX - 1 && near(tile.height, desktop.height), "\(desktop) | \(tile)")
+        #expect(try scene.tile(of: n) == Rect(x: 8, y: 33, width: 1584, height: 584))
     }
 
     @Test func aDeskThatDoesNotExistYetIsCreated() throws {
@@ -158,7 +152,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     // MARK: An empty desk (8.1.1 D-08)
 
     /// New Windows: Tile on a desk restored with no tree at all, so this holds before and after new desks lose their
-    /// Desktop tile (08.1.1-09); f floats on it.
+    /// Desktop tile (08.1.1-09); f floats.
     private func emptyDesk(zoom: Bool = false) throws -> (arranger: Arranger, area: Rect, start: ContinuousClock.Instant) {
         var arranger = Arranger(newWindows: .tile)
         let start = ContinuousClock.now
@@ -440,7 +434,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         var layout = World()
         try layout.addDesk(key)
         try layout.reflow(key) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(saved, at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: saved, ids: &ids)
         }
         let live = [saved, other].map { CGWindowEntry(windowID: $0.windowID, pid: $0.pid, bounds: opening, layer: 0, onScreen: false, alpha: 1) }
         _ = arranger.handle(.restore(layout, homeFrames: [:]), now: start)
@@ -465,7 +459,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     // MARK: No room (D-06)
 
     @Test func noRoomWithZoomOffFloatsSilently() throws {
-        // As in ArrangerFinderTests: docked beside a, n's minimum can't fit, and floating it can't size the Desktop either.
+        // As in ArrangerFinderTests: docked beside a, n's minimum can't fit.
         var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
         scene.focus(a)
         let steps = scene.undoSteps
@@ -622,9 +616,10 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(scene.isDocked(next))
     }
 
-    /// One gap drag between a and the Desktop, with or without a window opening halfway through.
+    /// One gap drag between a and f, docked on its right, with or without a window opening halfway through.
     private func draggingTheGap(openingOne: Bool) throws -> Scene {
         var scene = Scene(width: 1600, height: 600)
+        _ = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)
         scene.focus(a)
         let tree = try #require(scene.desk?.tree)
         let resolution = try scene.plan().resolution
@@ -667,15 +662,15 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
 
     @Test func finderSplitsWindowGoesWhereThePressAsked() throws {
         var scene = Scene(width: 1600, height: 600)
+        _ = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)  // [a | f]
         _ = scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)
-        scene.focus(f)  // the ordinary rule would split the largest tile, not a's
+        scene.focus(f)  // the ordinary rule would split f's tile, the focused one, not a's
         let steps = scene.undoSteps
 
         let effects = scene.arrive(opened(finder(10)))
 
-        let desktop = try #require(try scene.plan().desktopRect)
-        let left = try scene.tile(of: a), tile = try scene.tile(of: finder(10))
-        #expect(tile.minX > left.maxX - 1 && tile.maxX < desktop.minX + 1, "\(left) | \(tile) | \(desktop)")
+        let left = try scene.tile(of: a), tile = try scene.tile(of: finder(10)), right = try scene.tile(of: f)
+        #expect(tile.minX > left.maxX - 1 && tile.maxX < right.minX + 1, "\(left) | \(tile) | \(right)")
         #expect(scene.undoSteps == steps + 1)
         #expect(!effects.contains(.beep))
     }

@@ -25,7 +25,7 @@ private func notices(_ effects: [ArrangerEffect]) -> [Notice] {
     effects.compactMap { if case .notice(let notice) = $0 { notice } else { nil } }
 }
 
-/// [a | b | Desktop] on the 1440 pt display (inner width 1424 with the 8 pt gap).
+/// [a | b] on the 1440 pt display (inner width 1424 with the 8 pt gap).
 private func twoDocked() async -> Harness {
     var harness = await Harness.started()
     await harness.send(.command(.dock, focused: a))
@@ -43,9 +43,9 @@ private func twoDocked() async -> Harness {
         let fits = await harness.send(.event(.windowChanged(try learned(harness, b, width: 610))))
         #expect(notices(fits).isEmpty)
         #expect(harness.arranger.world[key]?.tree.state(of: b) == .present)
-        // 800 + 610 + Desktop 1 + two gaps > 1424, so a floats; b, alone with the Desktop, fits.
+        // 820 + 610 + one gap > 1424, so a floats; b, alone, fits.
         let before = try #require(await harness.frame(a))
-        let effects = await harness.send(.event(.windowChanged(try learned(harness, a, width: 800))))
+        let effects = await harness.send(.event(.windowChanged(try learned(harness, a, width: 820))))
 
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.tree.state(of: a) == nil && desk.desktop.contains(a))
@@ -85,21 +85,24 @@ private func twoDocked() async -> Harness {
 
 extension ArrangerReflowTests {
     /// The live scenario through the fake: the minimums come from refused writes (02-15), not from the test.
-    /// 783 + 627 cannot share the 1424 pt row with the Desktop tile (+ 17), so the 783 pt window floats on screen at
-    /// its own width; it may overlap its neighbour (D-05).
+    /// 800 + 660 + the gap cannot share the 1424 pt row, so the 800 pt window floats on screen at its own width; it may
+    /// overlap its neighbour (D-05). Alone, a fills the row and refuses nothing: its minimum is learned beside b.
     @Test func minimumsLearnedFromRefusedWritesFloatTheWiderWindowOnScreen() async throws {
         var harness = await Harness.started(frames: [
             1: Rect(x: 40, y: 312, width: 823, height: 300), 2: Rect(x: 900, y: 312, width: 667, height: 300),
         ])
-        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 783, height: 150) }
-        await harness.fake.update(2) { $0.hiddenMinimum = Size(width: 627, height: 150) }
+        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 800, height: 150) }
+        await harness.fake.update(2) { $0.hiddenMinimum = Size(width: 660, height: 150) }
         await harness.send(.command(.dock, focused: a))
-        await harness.fake.advance(by: .seconds(1.1))
-        _ = await harness.refresh()
-        #expect(harness.arranger.windows[a.identity]?.learnedMinimum?.width == 783)
-
         await harness.send(.command(.dock, focused: b))
         #expect(harness.arranger.world[key]?.tree.state(of: b) == .present)
+        // Halves of 708: a refuses its half.
+        await harness.fake.advance(by: .seconds(1.1))
+        _ = await harness.refresh()
+        #expect(harness.arranger.windows[a.identity]?.learnedMinimum?.width == 800)
+        #expect(harness.arranger.world[key]?.tree.state(of: a) == .present, "a floated before b's minimum was known")
+
+        // a's 800 leaves b 616: b refuses that by more than the learner's 32 pt margin.
         await harness.fake.advance(by: .seconds(1.1))
         let effects = await harness.refresh()
         let desk = try #require(harness.arranger.world[key])
@@ -107,7 +110,7 @@ extension ArrangerReflowTests {
         #expect(notices(effects) == [.lostRoom([a])])
         let floated = try #require(await harness.frame(a))
         #expect(inside(floated, visible))
-        #expect(floated.width == 783, "the floated window was written below its minimum")
+        #expect(floated.width == 800, "the floated window was written below its minimum")
     }
 }
 
@@ -127,7 +130,7 @@ private func moved(_ rect: Rect, by dx: Double, _ dy: Double) -> Rect {
 }
 
 /// The echo rule (03-01 discretion) and TILE-07: Transom's own writes are not moves; a docked window its app moved
-/// goes back to its tile at most once per second; a floating window stays where it was left unless that is on a tile.
+/// goes back to its tile at most once per second; a floating window stays where it was left, over a tile too (D-05).
 extension ArrangerReflowTests {
     @Test func transomsOwnWriteComingBackWithin2PointsIsNotAMove() async throws {
         var harness = await twoDocked()
@@ -161,7 +164,7 @@ extension ArrangerReflowTests {
         #expect(await harness.frame(a) == tile)
     }
 
-    @Test func aFloatingWindowMovedInsideTheDesktopIsRecordedWhereItWasLeft() async throws {
+    @Test func aFloatingWindowMovedOverATileIsRecordedWhereItWasLeft() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: a))
         let depth = harness.arranger.history.depth(for: key)
@@ -176,15 +179,17 @@ extension ArrangerReflowTests {
     @Test func aRefusedWriteReadBackIsAnEchoNotAMoveToUndo() async throws {
         var harness = await Harness.started()
         await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 900, height: 100) }
+        await harness.send(.command(.dock, focused: b))  // b fills the row, so a docks beside it in a 708 pt half
+        let performed = await harness.fake.performed.count
         let effects = await harness.send(.command(.dock, focused: a))
-        #expect(setFrameCount(effects) == 1)
+        #expect(setFrameCount(effects) == 2)
         let actual = try #require(await harness.frame(a))
         #expect(actual.width == 900)
-        // The frameApplied and windowResized the write caused were fed by `send`: nothing was written again.
-        #expect(await harness.fake.performed.count == 1)
+        // The frameApplied and windowResized the writes caused were fed by `send`: nothing was written again.
+        #expect(await harness.fake.performed.count == performed + 2)
         let again = await harness.send(.event(.windowResized(a, actual)))
         #expect(again.isEmpty)
-        #expect(await harness.fake.performed.count == 1)
+        #expect(await harness.fake.performed.count == performed + 2)
     }
 
     @Test func aNarrowerDisplayThatLeavesADockedWindowNoRoomFloatsItWithOneNotice() async throws {

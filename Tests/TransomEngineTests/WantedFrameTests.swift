@@ -15,10 +15,10 @@ private func ref(_ id: UInt32) -> WindowRef {
     WindowRef(identity: WindowIdentity(windowID: id, pid: pid, bundleID: bundleID))
 }
 
-private let docked = ref(10)
+private let docked = ref(10), below = ref(11)
 private let finder = ref(1), safari = ref(2), textEdit = ref(3)
 private let floaters = [finder, safari, textEdit]
-/// Inside the Desktop rect docking 10 at the top leaves (y 381...701).
+/// Over the docked tiles: D-05, Transom never moves them.
 private let start: [UInt32: Rect] = [
     1: Rect(x: 40, y: 390, width: 460, height: 300),
     2: Rect(x: 420, y: 400, width: 574, height: 290),
@@ -27,23 +27,25 @@ private let start: [UInt32: Rect] = [
 /// The apps' real minimums, which Transom does not know: each refuses to get smaller.
 private let hidden: [UInt32: Size] = [1: Size(width: 460, height: 252), 2: Size(width: 574, height: 224), 3: Size(width: 143, height: 70)]
 
-/// Window 10 docked at the top, the three floaters below it on the Desktop.
+/// Window 10 docked at the top and 11 below it, filling the visible frame, the three floaters over them.
 private func vmDesk() async -> Harness {
     var harness = Harness()
     harness.arranger = Arranger(gap: gap)
     await harness.fake.setDisplays([vm])
     await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
     await harness.fake.open(.standard(id: 10, pid: pid, frame: Rect(x: 12, y: 49, width: 1000, height: 200)))
+    await harness.fake.open(.standard(id: 11, pid: pid, frame: Rect(x: 12, y: 600, width: 1000, height: 100)))
     for (id, frame) in start.sorted(by: { $0.key < $1.key }) { await harness.fake.open(.standard(id: id, pid: pid, frame: frame)) }
     for (id, minimum) in hidden { await harness.fake.update(id) { $0.hiddenMinimum = minimum } }
     await harness.fake.refreshAll()
     _ = await harness.inbox.take()
     await harness.send(.inventory(await harness.fake.inventory()))
     await harness.send(.command(.dock, focused: docked))
+    await harness.send(.command(.dock, focused: below))  // its centre is near the bottom of 10's tile: V[10, 11]
     return harness
 }
 
-/// The handle between the docked tile and the Desktop.
+/// The handle between the two docked tiles.
 private func rootHandle(_ harness: Harness) throws -> GapHandle {
     let desk = try #require(harness.arranger.world[key])
     let plan = try Planner.plan(desk: desk, area: visible, gap: gap, mins: harness.arranger.minimums)

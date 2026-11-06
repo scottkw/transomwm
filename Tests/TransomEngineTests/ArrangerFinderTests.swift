@@ -17,8 +17,8 @@ private func info(_ window: WindowRef, _ frame: Rect, minimum: Size? = nil) -> W
 
 private let a = ref(1), f = ref(2), e = finderRef(10), n = finderRef(11)
 
-/// One display whose visible area is `width` x `height`, with a docked on the left of the Desktop and f, plus any
-/// `others`, floating clear of it on the right.
+/// One display whose visible area is `width` x `height`, with a docked alone, filling it (D-08), and f, plus any
+/// `others`, floating over it on the right.
 private struct Scene {
     var arranger = Arranger()
     let start = ContinuousClock.now
@@ -27,7 +27,6 @@ private struct Scene {
     init(width: Double, height: Double, others: [WindowRef] = [], minimums: [WindowRef: Size] = [:]) {
         area = Rect(x: 0, y: 25, width: width, height: height)
         let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: width, height: height + 25), visibleFrame: area, currentSpaceID: nil)
-        // a's centre is near the left edge halfway down, so its dock lands on the Desktop's left edge.
         let frameA = Rect(x: 40, y: area.midY - 116, width: 320, height: 232)
         let floating = ([f] + others).enumerated().map { i, window in
             info(window, Rect(x: area.maxX - 200, y: 60 + 130 * Double(i), width: 150, height: 120), minimum: minimums[window])
@@ -75,12 +74,12 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(scene.isDocked(n), "the new Finder window did not dock")
         let left = try scene.tile(of: a), right = try scene.tile(of: n)
         #expect(right.minX > left.maxX - 1 && near(right.minY, left.minY) && near(right.height, left.height), "\(left) | \(right)")
-        // A right-edge drop into a horizontal split joins it (D-20), so a and n share the row with the Desktop.
-        #expect(near(left.minX, before.minX) && right.maxX < scene.area.maxX - 100, "\(left) | \(right) in \(scene.area)")
+        // a and n share a's old tile, which was the whole visible frame.
+        #expect(near(left.minX, before.minX) && near(right.maxX, before.maxX), "\(left) | \(right) in \(before)")
     }
 
     @Test func aTallTileSplitsBelow() throws {
-        var scene = Scene(width: 1000, height: 900)
+        var scene = Scene(width: 900, height: 1000)
         let before = try scene.tile(of: a)
         #expect(before.height > before.width, "precondition: a's tile is not tall: \(before)")
 
@@ -107,7 +106,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(scene.isDocked(n), "the new Finder window did not dock after the others")
     }
 
-    // MARK: No window, a second press, no room, and the Desktop target
+    // MARK: No window, a second press, no room, and the largest tile
 
     @Test func withNoNewFinderWindowByTheDeadlineN9ShowsAndTheLayoutIsUnchanged() throws {
         var scene = Scene(width: 1600, height: 600)
@@ -139,16 +138,15 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         let m = finderRef(12)
         scene.arrive(m, after: .milliseconds(500))
 
-        // The second press targets the largest tile (the Desktop here), so n docks to its right.
-        let desktop = try #require(try scene.plan().desktopRect)
-        let tile = try scene.tile(of: n)
-        #expect(tile.minX > desktop.maxX - 1 && near(tile.maxX, scene.area.maxX - 8), "\(tile) beside Desktop \(desktop)")
+        // The second press targets the largest tile (a, the only one, and wide), so n docks to its right.
+        let ra = try scene.tile(of: a), tile = try scene.tile(of: n)
+        #expect(tile.minX > ra.maxX - 1 && near(tile.maxX, scene.area.maxX - 8), "\(tile) beside a \(ra)")
         #expect(scene.isFloating(m) && !scene.isDocked(m), "a second Finder window was taken")
     }
 
     @Test func aFinderWindowThatWouldLeaveAWindowWithoutRoomFloatsWithABeep() {
-        // Docked beside a, n needs 200 + 1450 + a 1x1 Desktop + gaps > 1600, with or without f's 700 pt minimum.
-        // Floating, n's minimum is too big to size the Desktop beside a, so a keeps its tile (G-03-6).
+        // Docked beside a, n needs 200 + 1450 + gaps > 1600; f floats, so its 700 pt minimum takes no room. a keeps its
+        // tile (G-03-6).
         var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
         #expect(scene.isDocked(a), "precondition: a did not dock")
         scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)

@@ -18,7 +18,7 @@ private func performs(_ effects: [ArrangerEffect]) -> Int {
     effects.filter { if case .perform = $0 { true } else { false } }.count
 }
 
-/// [a | b | Desktop].
+/// [a | b] across the visible frame.
 private func twoDocked() async -> Harness {
     var harness = await Harness.started()
     await harness.send(.command(.dock, focused: a))

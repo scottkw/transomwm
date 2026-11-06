@@ -14,7 +14,7 @@ private func ref(_ id: UInt32) -> WindowRef {
 
 private let a = ref(1), b = ref(2), c = ref(3), d = ref(4)
 
-/// [a | b | Desktop] on the 1440 pt display.
+/// [a | b] on the 1440 pt display.
 private func twoDocked(frames: [UInt32: Rect]? = nil) async -> Harness {
     var harness = if let frames { await Harness.started(frames: frames) } else { await Harness.started() }
     await harness.send(.command(.dock, focused: a))
@@ -33,7 +33,7 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 /// SAFE-06, D-16, D-17: the layout saved by the last session comes back by window identity, and only by identity.
 @Suite struct ArrangerRestoreTests {
     @Test func reattachKeepsOnlyWindowsTrackedUnderTheSameRealID() async throws {
-        // Saved: [a | b | Desktop], c floating.
+        // Saved: [a | b], c floating.
         let harness = await twoDocked(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Rect(x: 1000, y: 600, width: 150, height: 120)])
         let saved = harness.arranger.world
         try #require(saved[key].map { Set($0.tree.windows) } == [a, b] && saved[key]?.desktop.contains(c) == true)
@@ -119,7 +119,7 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         var saved = World()
         try saved.addDesk(key)
         try saved.reflow(key) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(one, at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: one, ids: &ids)
             guard let leaf = desk.tree.leaf(containing: one) else { throw .windowNotFound(one) }
             try desk.tree.insert(two, at: .right, of: leaf, ids: &ids)
         }
@@ -273,7 +273,7 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
     @Test func reattachKeepsAnUntrackedWindowTheCGListStillHasUnderItsIDAndPid() async throws {
-        // Saved: [a | b | Desktop], c floating. Only a is tracked.
+        // Saved: [a | b], c floating. Only a is tracked.
         let harness = await twoDocked(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Rect(x: 1000, y: 600, width: 150, height: 120)])
         let saved = harness.arranger.world
         let frame = Rect(x: 10, y: 40, width: 200, height: 200)
@@ -418,7 +418,7 @@ private let visibleFrame = Rect(x: 0, y: 25, width: 1440, height: 875)
 
 /// SAFE-02, D-17: the launch after a crash brings stranded windows on screen first, then re-applies the layout.
 extension ArrangerRestoreTests {
-    /// [a | b | Desktop] saved, then a pushed to x = 10000; a fresh Arranger on a recovery launch.
+    /// [a | b] saved, then a pushed to x = 10000; a fresh Arranger on a recovery launch.
     private func recovering(_ mode: LaunchMode = .recovery) async throws -> (Arranger, [ArrangerEffect], tileA: Rect, saved: World) {
         let source = await twoDocked()
         let saved = source.arranger.snapshot.world
@@ -603,14 +603,14 @@ extension ArrangerRestoreTests {
     }
 
     @Test func aFloaterMovedWhileTransomWasNotRunningKeepsWhereTheUserPutIt() async throws {
-        // Saved: [a | Desktop], b floating at its saved frame S (frame2), with a different wanted frame W.
+        // Saved: [a], b floating at its saved frame S (frame2), with a different wanted frame W.
         var source = await Harness.started()
         await source.send(.command(.dock, focused: a))
         let snapshot = source.arranger.snapshot
         let saved = try #require(snapshot.world[key]?.desktop.frame(of: b))
         let wanted = Rect(x: 760, y: 300, width: 150, height: 120)
         try #require(wanted != saved)
-        // While Transom is not running, the user moves b on screen, clear of a's tile.
+        // While Transom is not running, the user moves b on screen, over a's tile.
         let moved = Rect(x: 1000, y: 500, width: 150, height: 120)
         await source.fake.userMove(2, to: moved)
         await source.fake.refreshAll()

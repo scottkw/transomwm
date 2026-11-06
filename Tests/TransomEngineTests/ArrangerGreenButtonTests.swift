@@ -103,7 +103,7 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         await harness.send(.command(.dock, focused: w1))
         let tile = try #require(await harness.frame(w1))
         let zoomed = Rect(x: 1000, y: 100, width: 400, height: 700)
-        #expect(!zoomed.overlaps(tile))
+        #expect(zoomed.overlaps(tile), "w1 does not fill the visible frame")  // D-05: a floater over a tile is never clamped
         await harness.send(pointer(.down, greenButton(of: frame2), [.option], press: w2))
         await harness.send(pointer(.up, greenButton(of: frame2), [.option]))
         await harness.fake.update(2) { $0.frame = zoomed }
@@ -128,16 +128,15 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         #expect(harness.arranger.drag == nil)
     }
 
-    /// Quick 261027-gqo: a floater on exactly the Desktop tile has its centre in the Desktop's centre zone.
-    /// A plain click still docks it (no beep), and the exact-centre tie picks the Desktop's left edge.
-    @Test func aPlainClickOnAFloaterOverTheWholeDesktopTileDocksIt() async throws {
+    /// Quick 261027-gqo: a floater on exactly a docked tile has its centre in that tile's centre zone.
+    /// A plain click still docks it (no beep), and the exact-centre tie picks the tile's left edge.
+    @Test func aPlainClickOnAFloaterOverAWholeDockedTileDocksIt() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))
-        let before = try #require(harness.arranger.world[key])
-        let desktop = try #require(try Planner.plan(desk: before, area: visible, gap: 8, mins: [:]).desktopRect)
-        await harness.fake.userMove(2, to: desktop)  // D-05: Transom no longer clamps a zoom there, so the user puts it there
+        let tile = try #require(await harness.frame(w1))
+        await harness.fake.userMove(2, to: tile)  // D-05: Transom never clamps a floater there, so the user puts it there
         _ = await harness.refresh()
-        #expect(await harness.frame(w2) == desktop, "the setup does not fill the Desktop tile")
+        #expect(await harness.frame(w2) == tile, "the setup does not cover w1's tile")
         let depth = harness.arranger.history.depth(for: key)
         let effects = await harness.send(.greenButton(w2))
         #expect(!effects.contains(.beep), "the green click beeped: \(effects)")
@@ -145,8 +144,8 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         let after = try #require(harness.arranger.world[key])
         #expect(after.desktop.contains(w2) == false)
         #expect(harness.arranger.history.depth(for: key) == depth + 1)
-        let newDesktop = try #require(try Planner.plan(desk: after, area: visible, gap: 8, mins: [:]).desktopRect)
-        #expect(docked.maxX <= newDesktop.minX, "w2 did not dock left of the Desktop: \(docked) vs \(newDesktop)")
+        let w1Tile = try #require(try Planner.plan(desk: after, area: visible, gap: 8, mins: [:]).frames[w1])
+        #expect(docked.maxX <= w1Tile.minX, "w2 did not dock left of w1: \(docked) vs \(w1Tile)")
     }
 
     @Test func afterAnOptionZoomADockedWindowGoesBackIntoItsTile() async throws {
