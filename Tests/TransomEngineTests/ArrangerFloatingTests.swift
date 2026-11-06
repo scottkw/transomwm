@@ -121,4 +121,30 @@ private func touches(_ window: WindowRef, _ harness: Harness) async -> [WindowCo
         #expect(await touches(f, harness).isEmpty)
         #expect(await harness.frame(f) == overA)
     }
+
+    /// D-26 with D-05: a docked window whose app grows past the screen floats at its own frame clamped into the visible
+    /// frame, in one pass and one notice; its neighbours stay docked.
+    @Test func aWindowThatLosesItsRoomFloatsOnScreenInOnePass() async throws {
+        let b = ref(3), c = ref(4)
+        let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
+        var harness = await Harness.started(frames: [
+            1: Rect(x: 40, y: 80, width: 320, height: 232), 3: Rect(x: 600, y: 500, width: 300, height: 200),
+            4: Rect(x: 1000, y: 500, width: 300, height: 200),
+        ])
+        for window in [a, b, c] { await harness.send(.command(.dock, focused: window)) }
+        var info = try #require(harness.arranger.windows[a.identity])
+        info.frame = Rect(x: 900, y: 100, width: 1000, height: 300)  // past the right edge
+        info.learnedMinimum = Size(width: 1430, height: 100)  // wider than the 1424 pt inner area
+
+        let effects = await harness.send(.event(.windowChanged(info)))
+
+        let clamped = Rect(x: 440, y: 100, width: 1000, height: 300)
+        #expect(Planner.clamp(info.frame, into: visible) == clamped)
+        let desk = try #require(harness.arranger.world[key])
+        #expect(desk.desktop.frame(of: a) == clamped)
+        #expect(desk.tree.state(of: b) == .present && desk.tree.state(of: c) == .present)
+        let notices = effects.compactMap { effect -> Notice? in if case .notice(let notice) = effect { notice } else { nil } }
+        #expect(notices == [.lostRoom([a])])
+        #expect(setFrames(effects)[a] == clamped)
+    }
 }

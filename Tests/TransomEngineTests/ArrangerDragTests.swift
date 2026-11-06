@@ -270,7 +270,8 @@ extension ArrangerDragTests {
         #expect(setFrames(up)[f] == nil)
     }
 
-    @Test func aFloatingWindowWhoseReleaseFrameCrossesATileGetsTheClampGhost() async throws {
+    /// D-05: the release keeps the frame even across a tile; the clamp ghost still shows until 08.1.1-08 retires it.
+    @Test func aFloatingWindowWhoseReleaseFrameCrossesATileStaysWhereItIsReleased() async throws {
         var (harness, plan) = try await docked()
         let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
         let point = centre(rb)
@@ -279,8 +280,8 @@ extension ArrangerDragTests {
         let clamped = Planner.clamp(released(smallF, at: point), into: desktop)
         #expect(previews(await harness.send(.tick)) == [.clamp(clamped)])
         let up = await harness.send(pointer(.up, point.x, point.y))
-        #expect(harness.arranger.world[mainKey]?.desktop.frame(of: f) == clamped)
-        #expect(setFrames(up)[f] == clamped)
+        #expect(harness.arranger.world[mainKey]?.desktop.frame(of: f) == released(smallF, at: point))
+        #expect(setFrames(up)[f] == nil)
     }
 
     @Test func shiftUndocksADockedWindowAtItsReleaseFrame() async throws {

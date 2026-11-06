@@ -33,32 +33,30 @@ private func twoDocked() async -> Harness {
     return harness
 }
 
-/// D-26, TILE-03: a docked window that loses its room after docking floats to the Desktop with no undo step and a
-/// notice, instead of overlapping its neighbours.
+/// D-26, TILE-03: a docked window that loses its room after docking floats, on screen at its own frame, with no undo
+/// step and a notice.
 @Suite struct ArrangerReflowTests {
-    @Test func aDockedWindowThatLosesItsRoomFloatsToTheDesktopWithANotice() async throws {
+    @Test func aDockedWindowThatLosesItsRoomFloatsAtItsFrameWithANotice() async throws {
         var harness = await twoDocked()
         let depth = harness.arranger.history.depth(for: key)
         // b's 610 pt minimum still fits beside a.
         let fits = await harness.send(.event(.windowChanged(try learned(harness, b, width: 610))))
         #expect(notices(fits).isEmpty)
         #expect(harness.arranger.world[key]?.tree.state(of: b) == .present)
-        // 800 + 610 + Desktop 1 + two gaps > 1424; beside a Desktop tile holding a, b still fits (610 + 800 + 8).
+        // 800 + 610 + Desktop 1 + two gaps > 1424, so a floats; b, alone with the Desktop, fits.
         let before = try #require(await harness.frame(a))
         let effects = await harness.send(.event(.windowChanged(try learned(harness, a, width: 800))))
 
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.tree.state(of: a) == nil && desk.desktop.contains(a))
         #expect(desk.tree.state(of: b) == .present)
-        let mins = [a: Size(width: 800, height: 100), b: Size(width: 610, height: 100)]
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: mins).desktopRect)
-        #expect(desk.desktop.frame(of: a) == Planner.clamp(before, into: desktop))
+        // a's tile was on screen, so the clamp keeps it: a floats where it was, never moved (D-05).
+        #expect(desk.desktop.frame(of: a) == Planner.clamp(before, into: visible))
+        #expect(desk.desktop.frame(of: a) == before)
         #expect(harness.arranger.history.depth(for: key) == depth, "a lost-room float added an undo step")
         #expect(notices(effects) == [.lostRoom([a])])
-        let frames = setFrames(effects)
-        let floated = try #require(frames[a]), docked = try #require(frames[b])
-        #expect(!floated.overlaps(docked))
-        #expect(await harness.frame(a) == floated)
+        #expect(setFrames(effects)[a] == nil)
+        #expect(await harness.frame(a) == before)
     }
 
     @Test func windowsLosingRoomInOneReplanGiveOneNotice() async throws {
@@ -87,9 +85,9 @@ private func twoDocked() async -> Harness {
 
 extension ArrangerReflowTests {
     /// The live scenario through the fake: the minimums come from refused writes (02-15), not from the test.
-    /// 783 + 627 cannot share the 1424 pt row with the Desktop tile (+ 17), but 627 fits beside a Desktop tile
-    /// holding the 783 pt window (+ 8).
-    @Test func minimumsLearnedFromRefusedWritesFloatTheWiderWindowClearOfItsNeighbour() async throws {
+    /// 783 + 627 cannot share the 1424 pt row with the Desktop tile (+ 17), so the 783 pt window floats on screen at
+    /// its own width; it may overlap its neighbour (D-05).
+    @Test func minimumsLearnedFromRefusedWritesFloatTheWiderWindowOnScreen() async throws {
         var harness = await Harness.started(frames: [
             1: Rect(x: 40, y: 312, width: 823, height: 300), 2: Rect(x: 900, y: 312, width: 667, height: 300),
         ])
@@ -107,8 +105,8 @@ extension ArrangerReflowTests {
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.desktop.contains(a) && desk.tree.state(of: b) == .present)
         #expect(notices(effects) == [.lostRoom([a])])
-        let floated = try #require(await harness.frame(a)), docked = try #require(await harness.frame(b))
-        #expect(!floated.overlaps(docked))
+        let floated = try #require(await harness.frame(a))
+        #expect(inside(floated, visible))
         #expect(floated.width == 783, "the floated window was written below its minimum")
     }
 }

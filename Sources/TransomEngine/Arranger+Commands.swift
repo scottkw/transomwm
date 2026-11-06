@@ -57,8 +57,8 @@ extension Arranger {
         return try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames == plan.frames
     }
 
-    /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every
-    /// hidden Desktop tile holding windows shown, one undo step per desk shown. Runs while paused; N6 counts the windows
+    /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen, each
+    /// rescued floater recorded at its rescue frame (a frame fact, no undo step). Runs while paused; N6 counts the windows
     /// moved, camera-parked ones included. Collapsed windows come back too and float with N1, as with zoom off (CR-01).
     /// Tab groups dissolve first (D-07), their hidden members floating beside the group and counted in N6.
     mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
@@ -69,7 +69,7 @@ extension Arranger {
             ? [] : [.info("restore all: dissolved \(dissolved.groups) groups, \(dissolved.windows.count) windows brought back")]
         // The dissolved members float at their cascade frames; the rescue would move them elsewhere.
         let moves = rescueStranded(desks: world, sparing: Set(dissolved.windows.map(\.identity)))
-        try showParkedDesktops(keeping: moves, undoable: true)
+        for case .setFrame(let window, let frame) in moves where isFloating(window) { try world.recordFloatingFrame(frame, for: window) }
         let count = moves.count + dissolved.windows.count
         return dissolved.faults + (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + log + [.notice(.restored(count: count))]
     }

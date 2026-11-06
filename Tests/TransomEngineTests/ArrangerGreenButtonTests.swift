@@ -114,7 +114,8 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         #expect(await harness.frame(w2) == zoomed)
     }
 
-    @Test func afterAnOptionZoomAcrossATileAFloatingWindowIsClampedIntoTheDesktop() async throws {
+    /// D-05: a floater zoomed across a docked tile keeps the app's frame; Transom never clamps it.
+    @Test func afterAnOptionZoomAcrossATileAFloatingWindowKeepsItsFrame() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))
         await harness.send(pointer(.down, greenButton(of: frame2), [.option], press: w2))
@@ -122,24 +123,21 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         await harness.fake.update(2) { $0.frame = visible }
         _ = await harness.refresh()
         let effects = await harness.send(pointer(.up, greenButton(of: frame2), [.option]))
-        let desk = try #require(harness.arranger.world[key])
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        let clamped = try #require(setFrames(effects)[w2], "the zoom across a tile was kept: \(effects)")
-        #expect(inside(clamped, desktop))
+        #expect(setFrames(effects)[w2] == nil, "the zoom across a tile was answered: \(effects)")
+        #expect(harness.arranger.world[key]?.desktop.frame(of: w2) == visible)
+        #expect(await harness.frame(w2) == visible)
         #expect(harness.arranger.drag == nil)
     }
 
-    /// Quick 261027-gqo: a floater clamped to exactly the Desktop tile has its centre in the Desktop's centre zone.
+    /// Quick 261027-gqo: a floater on exactly the Desktop tile has its centre in the Desktop's centre zone.
     /// A plain click still docks it (no beep), and the exact-centre tie picks the Desktop's left edge.
-    @Test func aPlainClickOnAFloaterZoomedToTheWholeDesktopTileDocksIt() async throws {
+    @Test func aPlainClickOnAFloaterOverTheWholeDesktopTileDocksIt() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))
-        await harness.send(pointer(.down, greenButton(of: frame2), [.option], press: w2))
-        await harness.fake.update(2) { $0.frame = visible }
-        _ = await harness.refresh()
-        await harness.send(pointer(.up, greenButton(of: frame2), [.option]))
         let before = try #require(harness.arranger.world[key])
         let desktop = try #require(try Planner.plan(desk: before, area: visible, gap: 8, mins: [:]).desktopRect)
+        await harness.fake.userMove(2, to: desktop)  // D-05: Transom no longer clamps a zoom there, so the user puts it there
+        _ = await harness.refresh()
         #expect(await harness.frame(w2) == desktop, "the setup does not fill the Desktop tile")
         let depth = harness.arranger.history.depth(for: key)
         let effects = await harness.send(.greenButton(w2))

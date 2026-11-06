@@ -203,10 +203,11 @@ extension ArrangerCommandTests {
         #expect(depth(arranger) == 2)
     }
 
-    /// a and the Desktop (sized by f's minimum) at their minimums leave b nothing to grow into.
+    /// c at its 800 pt minimum height leaves b, above it in the column, nothing to grow into. (A floater no longer
+    /// sizes the Desktop tile, D-05, so the limit comes from a docked sibling.)
     @Test func growAtASizeLimitBeepsAndPushesNoUndoStep() throws {
-        let mins = [a: Size(width: 600, height: 100), f: Size(width: 600, height: 100)]
-        var arranger = try arranger(frames: [a: somewhere, b: somewhere, f: Rect(x: 900, y: 300, width: 600, height: 200)], minimums: mins, row)
+        let mins = [c: Size(width: 100, height: 800)]
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], minimums: mins, columns)
         let world = arranger.world, history = arranger.history
         #expect(arranger.handle(.command(.growTile, focused: b), now: .now) == [.beep])
         #expect(arranger.world == world && arranger.history == history)

@@ -6,6 +6,7 @@ import Testing
 private let pid: Int32 = 900
 private let bundleID = "com.example.arranger"
 private let key = DeskKey(displayUUID: "main", spaceID: nil)
+private let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
 
 private func ref(_ id: UInt32) -> WindowRef {
     WindowRef(identity: WindowIdentity(windowID: id, pid: pid, bundleID: bundleID))
@@ -25,7 +26,7 @@ private func advance(_ harness: inout Harness, by duration: Duration) async {
 
 /// G-03-6 through the fake: a opens 40 pt above its 627 pt minimum, so its refused tile write moves it; b opens at
 /// its 783 pt minimum (Reminders' Welcome window), so no write moves it. 627 + 783 cannot share the 1424 pt row with
-/// the Desktop tile, but b fits on a Desktop tile beside a. Returns the harness and b's first tile.
+/// the Desktop tile, so b floats. Returns the harness and b's first tile.
 /// `height` is b's frame and minimum height: 887 is 28 pt over the 859 pt tile height, like Reminders' 692 in 664.
 /// b's centre stays level with the Desktop tile's middle, so Dock puts it in the row beside a.
 private func dockedBesideAWindowAtItsMinimum(height: Double = 300) async throws -> (Harness, Rect) {
@@ -40,7 +41,7 @@ private func dockedBesideAWindowAtItsMinimum(height: Double = 300) async throws 
     return (harness, tile)
 }
 
-/// D-26, TILE-01: a docked window that cannot fit its tile floats to the Desktop instead of overlapping its neighbour.
+/// D-26, TILE-01: a docked window that cannot fit its tile floats, on screen at its own frame.
 @Suite struct TooBigDockedWindowTests {
     @Test func aDockedWindowAlreadyAtAMinimumWiderThanItsTileIsRetriedOnceThenFloats() async throws {
         var (harness, tile) = try await dockedBesideAWindowAtItsMinimum()
@@ -56,8 +57,8 @@ private func dockedBesideAWindowAtItsMinimum(height: Double = 300) async throws 
         #expect(notices(effects) == [.lostRoom([b])])
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.desktop.contains(b) && desk.tree.state(of: a) == .present)
-        let floated = try #require(await harness.frame(b)), docked = try #require(await harness.frame(a))
-        #expect(!floated.overlaps(docked))
+        // D-05: it floats on screen at its own frame, even over a's tile.
+        #expect(inside(try #require(await harness.frame(b)), visible))
     }
 
     /// Reminders-like: width refused by hundreds of points, height by 28 pt. Only the width is learned; it still floats.
@@ -72,8 +73,9 @@ private func dockedBesideAWindowAtItsMinimum(height: Double = 300) async throws 
         #expect(notices(effects) == [.lostRoom([b])])
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.desktop.contains(b) && desk.tree.state(of: a) == .present)
-        let floated = try #require(await harness.frame(b)), docked = try #require(await harness.frame(a))
-        #expect(!floated.overlaps(docked))
+        // D-05: clamped into the visible frame, its 887 pt height refused down to the 875 pt screen: only its top is pinned.
+        let floated = try #require(await harness.frame(b))
+        #expect(floated.minX >= visible.minX && floated.maxX <= visible.maxX && floated.minY >= visible.minY)
     }
 
     /// The under-32 pt decision: a docked window refusing only its height by 28 pt is never retried or learned.

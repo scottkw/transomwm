@@ -153,8 +153,9 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         #expect(desk.desktop.contains(b))
     }
 
-    /// UI-SPEC Surface 2: the neighbour reflows into what the window left, and the release frame crosses it.
-    @Test func aPlainDragThatWouldCrossATileClampsAndAnnounces() async throws {
+    /// UI-SPEC Surface 2: the neighbour reflows into what the window left, and the release frame crosses it. D-05: the
+    /// window floats at its release frame; the clamp ghost still shows until 08.1.1-08 retires it.
+    @Test func aPlainDragThatWouldCrossATileFloatsAtItsReleaseFrameAndAnnounces() async throws {
         var (harness, plan) = try await docked()
         let rb = try #require(plan.frames[b])
         _ = await drag(&harness, b, from: rb, by: 20)
@@ -166,10 +167,8 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         }
         let released = await up(&harness, from: rb, by: 20)
         let desk = try #require(harness.arranger.world[mainKey])
-        let desktop = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
-        let frame = try #require(desk.desktop.frame(of: b))
         #expect(desk.tree.state(of: b) == nil)
-        #expect(frame.minX >= desktop.minX && frame.maxX <= desktop.maxX, "\(frame) is outside \(desktop)")
+        #expect(desk.desktop.frame(of: b) == shifted(rb, 20))
         #expect(announced(released) == [FourthCopy.floating])
     }
 
