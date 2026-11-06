@@ -360,6 +360,24 @@ extension ArrangerDragTests {
         #expect(arranger.world[mainKey]?.desktop.frame(of: a) == released(infoA.frame, at: point))
     }
 
+    /// D-08, UI-SPEC Surface 2 row 6: on an empty desk the pointer 10 pt from the left edge previews the whole visible
+    /// frame, and the release docks the window as the first tile in one undo step.
+    @Test func anEmptyDeskDocksFromItsEdgeBandAsTheWholeVisibleFrame() throws {
+        let run = try dragOnAnEmptyDesk(to: Point(x: 10, y: 460))
+        #expect(previews(run.tick) == [.dock(wholeVisibleTile)], "tick gave \(run.tick)")
+        let desk = try #require(run.arranger.world[mainKey])
+        #expect(desk.tree.root == desk.tree.leaf(containing: f) && desk.tree.root != nil)
+        #expect(setFrames(run.up)[f] == wholeVisibleTile)
+        #expect(run.arranger.history.depth(for: mainKey) == run.steps + 1)
+    }
+
+    /// UI-SPEC planner note 1 (corrected by RESEARCH): the keyboard Dock still docks anywhere on an empty desk.
+    @Test func theKeyboardDockTargetOnAnEmptyDeskIsTheWholeLayoutEvenInTheMiddle() throws {
+        let desk = Desk(tree: LayoutTree())
+        let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: [:])
+        #expect(Planner.dockTarget(at: Point(x: 720, y: 460), desk: desk, area: area, resolution: plan.resolution) == .emptyLayout)
+    }
+
     @Test func shiftPressedAfterADockPreviewWithdrawsItAndRestartsTheDwell() async throws {
         var harness = await Harness.started(frames: [2: floatingFrame])
         _ = await dragFloating(&harness, to: 10, 310)

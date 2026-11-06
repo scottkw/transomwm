@@ -1746,8 +1746,21 @@ public struct Arranger: Sendable {
         var groupTarget: GroupTarget?
         if let display, let plan = dragPlan(Self.key(display)) {
             let key = Self.key(display)
-            target = DropZones.target(at: point, in: display.visibleFrame, tree: (world[key] ?? Desk()).tree, resolution: plan.resolution)
-            let overDesktop = if case .tile(.desktop, _)? = target { true } else { target == nil }
+            let v = display.visibleFrame
+            target = DropZones.target(at: point, in: v, tree: (world[key] ?? Desk()).tree, resolution: plan.resolution)
+            // An empty desk docks only from its edge band; elsewhere the drag is a plain move (UI-SPEC discretion 2). The
+            // keyboard Dock keeps `.emptyLayout` everywhere (`Planner.dockTarget`).
+            if target == .emptyLayout, min(point.x - v.minX, v.maxX - point.x, point.y - v.minY, v.maxY - point.y) >= DropZones.displayEdgeBand {
+                target = nil
+            }
+            // A floating window's centre groups after the group dwell (D-02), ahead of the docked tile beneath (UI-SPEC
+            // discretion 3); the rest of its area gives the tile's regions.
+            if !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window),
+                floating != torn.map({ .floatingGroup($0.desk, $0.node) })
+            {
+                target = nil
+                groupTarget = floating
+            }
             switch target {
             case .tile(let id, _)? where docked && key == ownKey && id == ownDesk.tree.leaf(containing: window): target = nil
             case .tile(let id, .center)?:
@@ -1755,14 +1768,6 @@ public struct Arranger: Sendable {
                 target = nil
                 groupTarget = !whole && GroupKey(desk: key, node: id) != torn && groupable(id, on: key) ? .tile(key, id) : nil
             default: break
-            }
-            // On the Desktop tile a floating window's centre groups after the group dwell (D-02); the tile's own centre
-            // stays a plain floating move.
-            if overDesktop, !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window),
-                floating != torn.map({ .floatingGroup($0.desk, $0.node) })
-            {
-                target = nil
-                groupTarget = floating
             }
         }
         return Hover(displayUUID: display?.uuid, target: target, groupTarget: groupTarget)

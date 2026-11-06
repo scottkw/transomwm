@@ -655,6 +655,11 @@ private func groupFOntoT(_ harness: inout Harness) async -> [ArrangerEffect] {
     return await harness.send(pointer(.up, tFrame.midX, tFrame.midY))
 }
 
+/// The plan of the main desk as it is now.
+private func docked(_ harness: Harness) throws -> FramePlan {
+    try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
+}
+
 private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
     harness.arranger.world[mainKey]?.desktop.groups ?? []
 }
@@ -706,16 +711,71 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         #expect(parks(up) == [.park(f, displayUUID: "main", size: Size(width: content.width, height: content.height))])
     }
 
-    @Test func theDesktopTilesOwnCentreFormsNothing() async throws {
+    /// UI-SPEC discretion 3: a docked tile's centre with no floater over it still groups with the tile.
+    @Test func aDockedTilesCentreUnderNoFloaterStillGroupsWithTheTile() async throws {
         var harness = await floaters()
-        let empty = Point(x: 380, y: 650)  // in the Desktop tile's centre zone, clear of every floater
-        _ = await drag(&harness, f, from: smallF, to: empty)
+        await harness.send(.command(.dock, focused: a))
+        await harness.fake.userMove(5, to: Rect(x: 1000, y: 650, width: 300, height: 200))
+        _ = await harness.refresh()
+        let ra = try #require(try docked(harness).frames[a])
+        let point = Point(x: ra.minX + 0.3 * ra.width, y: ra.midY)  // a's centre zone, clear of every floater
+        _ = await drag(&harness, f, from: smallF, to: point)
+        harness.now += .milliseconds(400)
+        #expect(groupPreviews(await harness.send(.tick)).count == 1)
+        await harness.send(pointer(.up, point.x, point.y))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.leaf(containing: a).flatMap(desk.tree.node) == .tabs(windows: [a, f], selected: 1))
+        #expect(floatingGroups(harness).isEmpty)
+    }
+
+    /// UI-SPEC discretion 3, RESEARCH A1: a floater's centre in front of a docked tile wins the group dwell over the
+    /// tile's own centre beneath.
+    @Test func aFrontFloatersCentreGroupsAheadOfTheDockedTileBeneath() async throws {
+        var harness = await floaters()
+        await harness.send(.command(.dock, focused: a))
+        let ra = try #require(try docked(harness).frames[a])
+        await harness.fake.userMove(5, to: Rect(x: ra.midX - 150, y: ra.midY - 100, width: 300, height: 200))
+        _ = await harness.refresh()
+        let target = try #require(harness.arranger.world[mainKey]?.desktop.frame(of: t))
+        _ = await drag(&harness, f, from: smallF, to: centre(target))
+        harness.now += .milliseconds(400)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.group(frame: target, strip: TabBand.strip(of: target), label: "Group as tabs")], "tick gave \(tick)")
+        await harness.send(pointer(.up, target.midX, target.midY))
+        let group = try #require(floatingGroups(harness).first, "f did not group with t")
+        #expect(group.members == [t, f])
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.leaf(containing: a).flatMap(desk.tree.node) == .panel(a), "f grouped with the tile beneath")
+    }
+
+    /// UI-SPEC discretion 3: the rest of a front floater's area gives the docked tile's regions beneath.
+    @Test func aFrontFloatersEdgeGivesTheDockedTilesEdgeRegionBeneath() async throws {
+        var harness = await floaters()
+        await harness.send(.command(.dock, focused: a))
+        let ra = try #require(try docked(harness).frames[a])
+        await harness.fake.userMove(5, to: Rect(x: ra.minX + 20, y: ra.midY - 100, width: 400, height: 200))
+        _ = await harness.refresh()
+        let point = Point(x: ra.minX + 40, y: ra.midY)  // t's left edge band and a's left edge region
+        _ = await drag(&harness, f, from: smallF, to: point)
+        harness.now += DragSession.dwell
+        let tick = await harness.send(.tick)
+        #expect(previews(tick).contains { if case .dock = $0 { true } else { false } }, "tick gave \(tick)")
+        await harness.send(pointer(.up, point.x, point.y))
+        #expect(harness.arranger.world[mainKey]?.tree.windows == [f, a])
+        #expect(floatingGroups(harness).isEmpty)
+    }
+
+    /// UI-SPEC Surface 5: the selected member of a group drags the whole group, and groups never merge.
+    @Test func aWholeGroupOverAFloatersCentreNeverGroups() async throws {
+        var harness = await floaters()
+        _ = await groupFOntoT(&harness)
+        let content = TabBand.content(of: tFrame)
+        _ = await drag(&harness, f, from: content, to: centre(gFrame))
         harness.now += .milliseconds(400)
         #expect(groupPreviews(await harness.send(.tick)).isEmpty)
-        let depth = harness.arranger.history.depth(for: mainKey)
-        await harness.send(pointer(.up, empty.x, empty.y))
-        #expect(floatingGroups(harness).isEmpty)
-        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+        await harness.send(pointer(.up, gFrame.midX, gFrame.midY))
+        #expect(harness.arranger.tabGroup(holding: f)?.members == [t, f])
+        #expect(harness.arranger.tabGroup(holding: g) == nil, "the groups merged")
     }
 
     @Test func aFloatersEdgeBandFormsNothing() async throws {
@@ -744,9 +804,7 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         await harness.send(.command(.dock, focused: a))
         let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
         let ra = try #require(plan.frames[a])
-        // D-05 leaves t over a's tile; until 08.1.1-08 only a floater over the Desktop region is a group target.
-        await harness.fake.userMove(5, to: Rect(x: 850, y: 200, width: 500, height: 400))
-        _ = await harness.refresh()
+        // t is in front of a's own tile: the floater's centre wins (UI-SPEC discretion 3).
         let target = try #require(harness.arranger.world[mainKey]?.desktop.frame(of: t))
         _ = await drag(&harness, a, from: ra, to: centre(target))
         harness.now += .milliseconds(400)

@@ -133,8 +133,8 @@ public enum FourthCopy {
     public static func docked(_ label: String) -> String { "Docked to \(label.lowercased())" }
 }
 
-/// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain
-/// floating window (the middle 50% of its frame) or a floating group (the middle 50% of its content rect).
+/// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or a floating window's centre (the
+/// middle 50% of its frame) or a floating group's (of its content rect), ahead of any docked tile beneath.
 enum GroupTarget: Equatable, Sendable {
     case tile(DeskKey, NodeID)
     case floating(DeskKey, WindowRef)

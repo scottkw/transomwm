@@ -32,6 +32,39 @@ private func touches(_ window: WindowRef, _ harness: Harness) async -> [WindowCo
     }
 }
 
+/// UI-SPEC discretion 2: f floating at `overA` on an explicitly empty desk, dragged by its title bar until the pointer is
+/// at `point` (with `modifiers` held, in `mode`) and held past the dwell, then released. Returns the Arranger after the
+/// release, the tick's and the release's effects, f's release frame and the undo depth before the release.
+func dragOnAnEmptyDesk(
+    to point: Point, _ modifiers: Modifiers = [], mode: DragToDockMode = .automatic
+) throws -> (arranger: Arranger, tick: [ArrangerEffect], up: [ArrangerEffect], released: Rect, steps: Int) {
+    let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
+    let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visible, currentSpaceID: nil)
+    let start = ContinuousClock.now
+    var arranger = Arranger()
+    _ = arranger.handle(.restore(try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]), homeFrames: [:]), now: start)
+    let info = WindowInfo(window: f, frame: overA, state: .present, displayUUID: "main")
+    _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: [info], initialRefreshComplete: true)), now: start)
+    _ = arranger.handle(.dragToDock(mode), now: start)
+    func pointer(_ kind: PointerEvent.Kind, _ p: Point, press: WindowRef? = nil) -> ArrangerInput {
+        .pointer(PointerEvent(kind: kind, location: p, modifiers: modifiers, pressWindow: press))
+    }
+    let grab = Point(x: overA.midX, y: overA.minY + 10)
+    let released = Rect(x: overA.x + point.x - grab.x, y: overA.y + point.y - grab.y, width: overA.width, height: overA.height)
+    _ = arranger.handle(pointer(.down, grab, press: f), now: start)
+    _ = arranger.handle(pointer(.dragged, Point(x: grab.x + 10, y: grab.y)), now: start)
+    _ = arranger.handle(.dragFrame(f.identity, Rect(x: overA.x + 10, y: overA.y, width: overA.width, height: overA.height)), now: start)
+    _ = arranger.handle(pointer(.dragged, point), now: start)
+    _ = arranger.handle(.dragFrame(f.identity, released), now: start)
+    let tick = arranger.handle(.tick, now: start + DragSession.dwell)
+    let steps = arranger.history.depth(for: key)
+    let up = arranger.handle(pointer(.up, point), now: start + .milliseconds(200))
+    return (arranger, tick, up, released, steps)
+}
+
+/// The lone tile's frame on the empty desk's visible frame, inset by the 8 pt gap: the whole-visible-frame dock (D-08).
+let wholeVisibleTile = Rect(x: 8, y: 33, width: 1424, height: 859)
+
 /// D-05, D-06, D-14: floating windows are plain macOS windows; Transom never frames, clamps, parks or raises them.
 @Suite struct ArrangerFloatingTests {
     @Test func aFloatingWindowOverADockedTileIsNeverMoved() async throws {
@@ -169,6 +202,18 @@ private func touches(_ window: WindowRef, _ harness: Harness) async -> [WindowCo
         #expect(arranger.history.depth(for: key) == steps + 1)
         #expect(!effects.contains(.beep))
         #expect(!effects.contains { if case .announce = $0 { true } else { false } }, "\(effects)")
+    }
+
+    /// RESEARCH Pitfall 4, UI-SPEC discretion 2: on an empty desk a drag with the pointer 100 pt from every edge shows
+    /// nothing and the window stays where it was released, floating, with no undo step.
+    @Test func anEmptyDeskMiddleDragIsAPlainMove() throws {
+        let run = try dragOnAnEmptyDesk(to: Point(x: 720, y: 460))
+        #expect(!run.tick.contains { if case .preview(.some, _) = $0 { true } else { false } }, "tick gave \(run.tick)")
+        let desk = try #require(run.arranger.world[key])
+        #expect(desk.tree.root == nil)
+        #expect(desk.desktop.frame(of: f) == run.released)
+        #expect(run.arranger.history.depth(for: key) == run.steps)
+        #expect(setFrames(run.up)[f] == nil)
     }
 
     /// RESEARCH Pitfall 3: a desk with no Desktop node, holding one docked tab group [b, c] filling the screen (c selected)

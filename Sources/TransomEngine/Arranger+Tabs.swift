@@ -235,13 +235,15 @@ extension Arranger {
     }
 }
 
-/// Floating tab groups (D-02, TABS-05): made on the Desktop tile, kept as a sidecar on `DesktopLayer`.
+/// Floating tab groups (D-02, TABS-05), kept as a sidecar on `DesktopLayer`.
 extension Arranger {
     /// The floating centre under `point` on `key`'s desk (RESEARCH Pattern 3): the topmost floating window under the
-    /// pointer, never `dragged` or a hidden member, if `point` is in the middle 50% of its frame. A group's selected
-    /// member stands for its group (its frame is the content rect). An excluded or never-dock window there groups nothing.
+    /// pointer, never `dragged` or a hidden member, if `point` is in the middle 50% of its frame, which wins over the
+    /// docked tile beneath (UI-SPEC discretion 3; RESEARCH A1: a floater under the pointer is taken to be in front). A
+    /// group's selected member stands for its group (its frame is the content rect). An excluded or never-dock window
+    /// there groups nothing.
     func floatingGroupTarget(at point: Point, on key: DeskKey, dragging dragged: WindowRef) -> GroupTarget? {
-        guard let desk = world[key], desk.tree.isDesktopHidden != true else { return nil }
+        guard let desk = world[key] else { return nil }
         let layer = desk.desktop
         guard let top = layer.windows.reversed().first(where: { floating in
             guard floating.window != dragged, floating.state == .present else { return false }

@@ -502,6 +502,24 @@ extension ArrangerHoldOptionTests {
 
     // MARK: The plain drag's refusals
 
+    /// UI-SPEC Surface 2 rows 5-6 in Hold ⌥ mode: with ⌥ held an empty desk docks from its edge band only; without ⌥ the
+    /// band is a plain move.
+    @Test func onAnEmptyDeskOptionDocksFromTheEdgeBandOnly() throws {
+        let band = Point(x: 10, y: 460), middle = Point(x: 720, y: 460)
+        let held = try dragOnAnEmptyDesk(to: band, [.option], mode: .holdOption)
+        #expect(previews(held.tick) == [.dock(wholeVisibleTile)], "tick gave \(held.tick)")
+        #expect(held.arranger.world[mainKey]?.tree.root != nil, "⌥ in the band did not dock")
+        #expect(held.arranger.history.depth(for: mainKey) == held.steps + 1)
+        for (point, modifiers): (Point, Modifiers) in [(middle, .option), (band, Modifiers())] {
+            let run = try dragOnAnEmptyDesk(to: point, modifiers, mode: .holdOption)
+            #expect(previews(run.tick).isEmpty, "\(modifiers) at \(point) gave \(run.tick)")
+            #expect(run.arranger.world[mainKey]?.tree.root == nil)
+            #expect(run.arranger.world[mainKey]?.desktop.frame(of: f) == run.released)
+            #expect(run.arranger.history.depth(for: mainKey) == run.steps)
+            #expect(announced(run.up).isEmpty)
+        }
+    }
+
     /// UI-SPEC Surface 2 row 4 (row gone): a pull-out never lacks room, whatever the window's minimum.
     @Test func aPlainDragOfAWindowTooBigForAnyRoomStillFloatsAtItsReleaseFrame() throws {
         var tree = LayoutTree.withDesktop()
