@@ -4,16 +4,16 @@ current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
 current_plan: 18
 status: verifying
-stopped_at: Completed 08.1.1-23-PLAN.md
-last_updated: "2026-11-06T22:12:30.959Z"
+stopped_at: Completed 08.1.1-24-PLAN.md
+last_updated: "2026-11-06T22:16:31.188Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: ff5fbe3e1519cddbb5fb725983561b6c7f63ed8b
+state_head: dc26a7d06d9484275ba13f7f2d71ee56c2ec3cfb
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 132
-  completed_plans: 128
+  completed_plans: 129
   percent: 82
 ---
 
@@ -187,6 +187,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P21 | 24min | 3 tasks | 7 files |
 | Phase 08.1.1 P22 | 8min | 3 tasks | 15 files |
 | Phase 08.1.1 P23 | 8min | 3 tasks | 15 files |
+| Phase 08.1.1 P24 | 9min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -529,6 +530,7 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-22: The Finder split with a docked window focused keeps today's insert (siblings share weight, an empty area in that split shrinks too)
 - [Phase 08.1.1]: 08.1.1-23: insertFourth's body became insertShare(within:) over any node; a corner is insertShare inside a docked child spanning its half, else insertFourth along the first axis then the window leaf split with an empty area
 - [Phase 08.1.1]: 08.1.1-23: Arranger.dockFourth takes a DropTarget (.fourth or .corner); corners have no drag band
+- [Phase 08.1.1]: 08.1.1-24: corner default chords are ⇧⌃⌥⌘- = [ ] (Top Left, Top Right, Bottom Left, Bottom Right), rebindable, enabled with zoom off; fourthNames includes .dockCorner (8.1.1 D-17)
 
 ### Quick Tasks Completed
 
@@ -574,8 +576,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T22:12:29.983Z
-Stopped at: Completed 08.1.1-23-PLAN.md
+Last session: 2026-11-06T22:16:30.158Z
+Stopped at: Completed 08.1.1-24-PLAN.md
 Resume file: None
 
 ## Deferred Verification
