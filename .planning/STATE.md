@@ -4,16 +4,16 @@ current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
 current_plan: 18
 status: verifying
-stopped_at: Completed 08.1.1-20-PLAN.md
-last_updated: "2026-11-06T21:36:49.405Z"
+stopped_at: Completed 08.1.1-21-PLAN.md
+last_updated: "2026-11-06T21:51:55.751Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 7b649f794eec3d8405c0e32f572b78755daf20d4
+state_head: aecd0f08181551a71353e0b0ba05af79ef20a8f7
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 132
-  completed_plans: 125
+  completed_plans: 126
   percent: 82
 ---
 
@@ -184,6 +184,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P18 | 62min | 3 tasks | 8 files |
 | Phase 08.1.1 P19 | 17 min | 3 tasks | 4 files |
 | Phase 08.1.1 P20 | 9min | 3 tasks | 21 files |
+| Phase 08.1.1 P21 | 24min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -518,6 +519,9 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-18: Hold ⌥ live tests dock into a docked window's tile, not the empty desk's edge band, where macOS 27 draws its own edge-tiling guide (RESEARCH E1)
 - [Phase 08.1.1]: 08.1.1-19: In the VMs the real app shows its SAFE-04 conflict alert centred at each launch (edge tiling stays on for HoldOption); intended, not a regression. OptionsBundle step 5 grabs window 1 at 7/8 of its width rather than dismissing the alert, so no conflictNotNow is written in the guest
 - [Phase 08.1.1]: 08.1.1-20: D-20 option-a built: Node.spacer empty-area leaf, layout.json schema 5 (schema 4 backs up then saves as 5). Windowless splits are rejected/reduced through the adjacent-spacer rule alone. fill(_:with:states:) takes no ids: plan 22 calls it without ids:
+- [Phase 08.1.1]: 08.1.1-21: insertFourth rebuilds the root split from pieces (fresh NodeIDs for empty pieces); every position is exact (E1), empty first (E2), nothing grows (E3)
+- [Phase 08.1.1]: 08.1.1-21: margins(of:axis:)/trimMargins work on any node, so 08.1.1-23's corners can reuse them on a child
+- [Phase 08.1.1]: 08.1.1-21: E4 vacates a panel leaf or a whole docked group moved to a position on the same desk; a lone tab moved without its group still leaves the group
 
 ### Quick Tasks Completed
 
@@ -563,8 +567,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T21:36:48.414Z
-Stopped at: Completed 08.1.1-20-PLAN.md
+Last session: 2026-11-06T21:51:54.774Z
+Stopped at: Completed 08.1.1-21-PLAN.md
 Resume file: None
 
 ## Deferred Verification

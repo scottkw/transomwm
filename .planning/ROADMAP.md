@@ -467,7 +467,7 @@ Plans:
   3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
   4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
 **Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT. User request (2026-11-05): the menu-bar menu should offer every supported docking configuration with its hotkey. Dock to Fourth (10 items with hotkeys) exists; discuss adding halves and thirds as docking commands (today they snap floating windows only), and making the menu easier to find.
-**Plans:** 20/27 plans executed
+**Plans:** 21/27 plans executed
 
 Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 - [x] 08.1.1-01-PLAN.md — Migration: schema 1–3 layout.json loses its Desktop tile (legacy decode, World 2, layout.json 4), parked windows come back, requirement amendments
@@ -490,7 +490,7 @@ Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 - [x] 08.1.1-18-PLAN.md — The migration and every touched live suite on real windows in both VMs; new chords vs macOS; host UAT checklist
 - [x] 08.1.1-19-PLAN.md — Gap closure: OptionsBundleIntegrationTests re-derived for the empty desk and run in both VMs; LayoutFile schema-4 doc and the rematch log label say floating
 - [x] 08.1.1-20-PLAN.md — Gap closure (UAT, D-16): decision gate, then an invisible empty area in the layout (`Node.spacer`), layout.json schema 5, vacate/fill and the leave rule
-- [ ] 08.1.1-21-PLAN.md — Gap closure (D-16): halves, thirds and fourths take exactly their part; empty space first, nothing grows, a moved window leaves its place empty; position labels only
+- [x] 08.1.1-21-PLAN.md — Gap closure (D-16): halves, thirds and fourths take exactly their part; empty space first, nothing grows, a moved window leaves its place empty; position labels only
 - [ ] 08.1.1-22-PLAN.md — Gap closure (D-16): empty areas in drags (edge band fills), Dock Where It Is, Tile, Arrange All and Finder split fill them first; focus and zoom skip them
 - [ ] 08.1.1-23-PLAN.md — Gap closure (D-17): corner quarters in the model and engine, by URL and CLI
 - [ ] 08.1.1-24-PLAN.md — Gap closure (D-17): corner hotkeys ⇧⌃⌥⌘ - = [ ], the Corners menu section and Shortcuts rows
