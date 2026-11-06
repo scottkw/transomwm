@@ -1747,7 +1747,8 @@ public struct Arranger: Sendable {
             }
             // A floating window's centre groups after the group dwell (D-02), ahead of the docked tile beneath (UI-SPEC
             // discretion 3); the rest of its area gives the tile's regions.
-            if !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window),
+            let beneath: NodeID? = if case .tile(let id, _)? = target { id } else { nil }
+            if !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window, over: beneath),
                 floating != torn.map({ .floatingGroup($0.desk, $0.node) })
             {
                 target = nil
