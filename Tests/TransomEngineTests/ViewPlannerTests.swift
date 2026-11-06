@@ -84,7 +84,6 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
             #expect(view.frames == phase3.frames)
             #expect(view.parks == phase3.parks)
             #expect(view.unfit == phase3.unfit)
-            #expect(view.desktopRect == phase3.desktopRect)
             #expect(view.resolution == phase3.resolution && view.homeResolution == phase3.resolution)
             #expect(view.collapsed.isEmpty)
         }
@@ -101,7 +100,6 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
         #expect(top.minX == inner.minX && top.width == inner.width && top.minY == inner.minY)
         #expect(bottom.width == inner.width && bottom.maxY == inner.maxY && bottom.minY == top.maxY + 8)
         #expect(plan.parks == [a])
-        #expect(plan.desktopRect == nil)
         #expect(plan.homeResolution == home.resolution)
     }
 

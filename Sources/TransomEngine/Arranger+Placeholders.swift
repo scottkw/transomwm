@@ -156,7 +156,7 @@ extension Arranger {
     public func homePlaceholders(on displayUUID: String) -> [PlaceholderTile] {
         guard !placeholders.table.isEmpty, let display = displays.first(where: { $0.uuid == displayUUID }), let desk = world[Self.key(display)],
             let plan = try? ViewPlanner.plan(
-                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames, collapsible: camera.collapsible)
+                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, collapsible: camera.collapsible)
         else { return [] }
         return placeholderTiles(frames: plan.frames, collapsed: plan.collapsed, resolution: plan.resolution)
     }

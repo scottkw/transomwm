@@ -10,16 +10,15 @@ public struct FramePlan: Equatable, Sendable {
     /// The size each park is written at; a park with none keeps the window's own size.
     public var parkSizes: [WindowRef: Size] = [:]
     public var unfit: Set<WindowRef>
-    public var desktopRect: Rect?
     public var resolution: Resolution
 }
 
 /// Pure layout of one desk: no state, no AppKit.
 public enum Planner {
     /// Lays `desk`'s docked windows out in `area` (the display's visibleFrame). Floating windows take no room and get
-    /// no frame (D-05). `wanted` is unread; 08.1.1-14 removes it with its callers.
+    /// no frame (D-05).
     public static func plan(
-        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:]
+        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size]
     ) throws(LayoutError) -> FramePlan {
         let resolution = try resolve(desk.tree, in: area, mins: mins, gap: gap)
         var parks: [WindowRef] = []
@@ -37,8 +36,7 @@ public enum Planner {
             }
         }
         return FramePlan(
-            frames: resolution.windowRects, parks: parks, parkSizes: parkSizes, unfit: resolution.unfit, desktopRect: resolution.desktopRect,
-            resolution: resolution)
+            frames: resolution.windowRects, parks: parks, parkSizes: parkSizes, unfit: resolution.unfit, resolution: resolution)
     }
 
     static func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {

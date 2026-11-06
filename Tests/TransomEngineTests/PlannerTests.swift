@@ -28,7 +28,6 @@ private func desk(_ docked: [WindowRef] = [a], floating: [(WindowRef, Rect)] = [
         let expected = try resolve(desk.tree, in: area, mins: [:], gap: 8)
         let left = try #require(plan.frames[a]), right = try #require(plan.frames[b])
         #expect(left == expected.windowRects[a] && right == expected.windowRects[b])
-        #expect(plan.desktopRect == nil)
         #expect(!left.overlaps(right))
         // Inner area: 8 pt in from each edge; one 8 pt gap between the two tiles.
         #expect(left.minX == 8 && right.maxX == 1432)
@@ -50,8 +49,7 @@ private func desk(_ docked: [WindowRef] = [a], floating: [(WindowRef, Rect)] = [
             (offEdge, Rect(x: 1300, y: 100, width: 300, height: 200)), (huge, Rect(x: 100, y: 40, width: 800, height: 600)),
         ])
         let plan = try Planner.plan(
-            desk: desk, area: area, gap: 8, mins: [huge: Size(width: 2000, height: 1000)],
-            wanted: [clear.identity: Rect(x: 0, y: 25, width: 400, height: 400)])
+            desk: desk, area: area, gap: 8, mins: [huge: Size(width: 2000, height: 1000)])
         #expect(plan.frames.keys.sorted { $0.identity < $1.identity } == [a])
         #expect(plan.parks.isEmpty)
         // No floater sizes anything: the docked tile is laid out as if the floating layer were empty.

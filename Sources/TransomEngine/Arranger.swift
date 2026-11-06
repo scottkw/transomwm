@@ -2142,7 +2142,7 @@ public struct Arranger: Sendable {
                 // With zoom on every view, home included, is planned with the collapse pass (ZOOM-13).
                 if camera.enabled, let desk = world[key] {
                     let viewPlan = try ViewPlanner.plan(
-                        desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                        desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: learnedMinimums,
                         collapsible: camera.collapsible)
                     (plan.frames, plan.parks, plan.parkSizes, plan.resolution) = (viewPlan.frames, viewPlan.parks, viewPlan.parkSizes, viewPlan.resolution)
                     collapsed = viewPlan.collapsed
@@ -2151,7 +2151,7 @@ public struct Arranger: Sendable {
                     }
                         .sorted { $0.window.identity < $1.window.identity }
                     let home = view == .home ? viewPlan : try ViewPlanner.plan(
-                        desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                        desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums,
                         collapsible: camera.collapsible)
                     fitAtHome.formUnion(home.frames.keys.map(\.identity))
                 }

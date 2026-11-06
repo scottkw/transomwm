@@ -144,7 +144,7 @@ extension Arranger {
         for (key, desk) in world.desks where resolvedView(for: key) != .home {
             guard let display = displays.first(where: { $0.uuid == key.displayUUID }),
                 let plan = try? ViewPlanner.plan(
-                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums,
                     collapsible: camera.collapsible)
             else { continue }
             for window in desk.tree.windows { tiles[window.identity] = plan.frames[window] }
@@ -158,7 +158,7 @@ extension Arranger {
         guard let display = displays.first(where: { $0.uuid == displayUUID }), resolvedView(for: Self.key(display)) != .home,
             let desk = world[Self.key(display)],
             let plan = try? ViewPlanner.plan(
-                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums,
                 collapsible: camera.collapsible)
         else { return nil }
         return (plan.frames, plan.collapsed)
@@ -305,8 +305,8 @@ extension Arranger {
         from current: ViewTarget, to target: ViewTarget, display: DisplayInfo, desk: Desk
     ) throws(LayoutError) -> (tiles: [TileMove], strips: [StripMove], placeholders: [TileMove]) {
         let area = display.visibleFrame, mins = learnedMinimums
-        let start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
-        let end = try ViewPlanner.plan(desk: desk, view: target, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
+        let start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, collapsible: camera.collapsible)
+        let end = try ViewPlanner.plan(desk: desk, view: target, area: area, gap: gap, mins: mins, collapsible: camera.collapsible)
         let before = Self.shown(start, desk), after = Self.shown(end, desk)
         let fromMap = Self.cameraMap(viewRect: Self.viewRect(current, start, area), onto: area)
         let toMap = Self.cameraMap(viewRect: Self.viewRect(target, end, area), onto: area)

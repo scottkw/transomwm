@@ -210,7 +210,7 @@ extension Arranger {
     public func shownLeafRects(displayUUID uuid: String) throws(LayoutError) -> [NodeID: Rect] {
         guard let display = displays.first(where: { $0.uuid == uuid }), let desk = world[Self.key(display)] else { return [:] }
         let plan = try ViewPlanner.plan(
-            desk: desk, view: resolvedView(for: Self.key(display)), area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames,
+            desk: desk, view: resolvedView(for: Self.key(display)), area: display.visibleFrame, gap: gap, mins: minimums,
             collapsible: camera.collapsible)
         return plan.resolution.nodeRects.filter { if case .split? = desk.tree.node($0.key) { false } else { true } }
     }
@@ -265,7 +265,7 @@ extension Arranger {
         case .stepIn:
             let resolution = withoutWaiting(
                 try ViewPlanner.plan(
-                    desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames, collapsible: camera.collapsible
+                    desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: minimums, collapsible: camera.collapsible
                 ).resolution, tree: desk.tree)
             let focusedLeaf = focused.flatMap { deskKey(of: $0) == key ? leafNode(of: $0) : nil }
             let child = Navigator.stepIn(view: view, tree: desk.tree, resolution: resolution, focusedLeaf: focusedLeaf, pointer: pointer)
@@ -277,7 +277,7 @@ extension Arranger {
         case .pan(let edge):
             guard case .node(let viewed) = view else { return .failure(.noArea(edge)) }
             let home = withoutWaiting(
-                try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames).resolution, tree: desk.tree, keeping: viewed)
+                try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums).resolution, tree: desk.tree, keeping: viewed)
             let recency = history.back.reversed().compactMap { entry -> NodeID? in
                 if entry.desk == key, case .node(let id) = entry.target { id } else { nil }
             }

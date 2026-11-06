@@ -372,7 +372,7 @@ extension Arranger {
         for (key, desk) in world.desks {
             guard let display = displays.first(where: { $0.uuid == key.displayUUID }),
                 let plan = try? ViewPlanner.plan(
-                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums,
                     collapsible: camera.collapsible)
             else { continue }
             for case let (id, .tabs(members, selected)) in desk.tree.nodes where plan.collapsed[members[selected]] == nil {
