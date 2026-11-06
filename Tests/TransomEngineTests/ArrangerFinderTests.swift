@@ -139,7 +139,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         let m = finderRef(12)
         scene.arrive(m, after: .milliseconds(500))
 
-        // The second press targets the Desktop tile, so n docks to its right, at the area's right edge.
+        // The second press targets the largest tile (the Desktop here), so n docks to its right.
         let desktop = try #require(try scene.plan().desktopRect)
         let tile = try scene.tile(of: n)
         #expect(tile.minX > desktop.maxX - 1 && near(tile.maxX, scene.area.maxX - 8), "\(tile) beside Desktop \(desktop)")
@@ -162,23 +162,63 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(scene.arranger.history.depth(for: key) == depth)
     }
 
-    @Test func aFloatingFocusedWindowSplitsTheDesktopTile() throws {
-        var scene = Scene(width: 1600, height: 600)
-        let desktop = try #require(try scene.plan().desktopRect)
-        #expect(desktop.width >= desktop.height, "precondition: the Desktop tile is not wide: \(desktop)")
-        scene.arranger.handle(.command(.finderSplit, focused: f), now: scene.start)
-        scene.arrive(n)
-        let tile = try scene.tile(of: n)
-        let after = try #require(try scene.plan().desktopRect)
-        #expect(tile.minX > after.maxX - 1 && near(tile.minY, after.minY) && near(tile.height, after.height), "\(after) | \(tile)")
+    /// UI-SPEC discretion 6: with no focused docked window the largest tile splits; a is made the largest.
+    @Test(arguments: [f, nil] as [WindowRef?])
+    func withNoFocusedDockedWindowTheLargestTileSplits(focused: WindowRef?) throws {
+        let mins = [a: Size(width: 1000, height: 100)]
+        var scene = Scene(width: 1600, height: 600, minimums: mins)
+        let desk = try #require(scene.desk), leafA = try #require(desk.tree.leaf(containing: a))
+        let rects = try Planner.plan(desk: desk, area: scene.area, gap: 8, mins: mins).resolution.nodeRects
+        let before = try #require(rects[leafA])
+        let others = rects.filter { id, _ in
+            if id == leafA { return false }
+            if case .split? = desk.tree.node(id) { return false }
+            return true
+        }
+        try #require(others.values.allSatisfy { $0.width * $0.height < before.width * before.height }, "precondition: a's tile is not the largest")
+
+        scene.arranger.handle(.command(.finderSplit, focused: focused), now: scene.start)
+        let effects = scene.arrive(n)
+
+        let left = try scene.tile(of: a), tile = try scene.tile(of: n)
+        #expect(tile.minX > left.maxX - 1 && near(tile.minY, left.minY) && near(tile.height, left.height), "\(left) | \(tile)")
+        #expect(!effects.contains(.beep))
     }
 
-    @Test func withNoFocusedWindowTheMainDisplaysDesktopTileIsSplit() throws {
-        var scene = Scene(width: 1600, height: 600)
-        scene.arranger.handle(.command(.finderSplit, focused: nil), now: scene.start)
-        scene.arrive(n)
-        let tile = try scene.tile(of: n)
-        let after = try #require(try scene.plan().desktopRect)
-        #expect(tile.minX > after.maxX - 1 && near(tile.height, after.height), "\(after) | \(tile)")
+    /// UI-SPEC discretion 6: on an empty desk the new Finder window becomes the first tile, filling the visible frame.
+    @Test func onAnEmptyDeskTheFinderWindowFillsTheVisibleFrame() throws {
+        var arranger = Arranger()
+        let start = ContinuousClock.now
+        let area = Rect(x: 0, y: 25, width: 1600, height: 600)
+        let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1600, height: 625), visibleFrame: area, currentSpaceID: nil)
+        _ = arranger.handle(.restore(try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]), homeFrames: [:]), now: start)
+        _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: [info(f, Rect(x: 1400, y: 60, width: 150, height: 120))], initialRefreshComplete: true)), now: start)
+
+        let pressed = arranger.handle(.command(.finderSplit, focused: f), now: start)
+        let effects = arranger.handle(.event(.windowCreated(info(n, Rect(x: 600, y: 200, width: 400, height: 300)))), now: start + .milliseconds(400))
+
+        #expect(pressed.contains(.openFinderWindow) && !pressed.contains(.beep))
+        let desk = try #require(arranger.world[key])
+        let root = try #require(desk.tree.root)
+        #expect(desk.tree.leaf(containing: n) == root)
+        #expect(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).resolution.nodeRects[root] == Rect(x: 8, y: 33, width: 1584, height: 584))
+        #expect(!effects.contains(.beep))
+    }
+
+    /// A display with no desk yet: the desk is made when the Finder window arrives, and the window docks there.
+    @Test func onADisplayWithNoDeskYetTheFinderWindowDocks() throws {
+        var arranger = Arranger()
+        let start = ContinuousClock.now
+        let area = Rect(x: 0, y: 25, width: 1600, height: 600)
+        let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1600, height: 625), visibleFrame: area, currentSpaceID: nil)
+        _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: [], initialRefreshComplete: true)), now: start)
+        try #require(arranger.world[key] == nil, "precondition: the desk exists")
+
+        let pressed = arranger.handle(.command(.finderSplit, focused: nil), now: start)
+        let effects = arranger.handle(.event(.windowCreated(info(n, Rect(x: 600, y: 200, width: 400, height: 300)))), now: start + .milliseconds(400))
+
+        #expect(pressed.contains(.openFinderWindow) && !pressed.contains(.beep))
+        #expect(arranger.world[key]?.tree.leaf(containing: n) != nil)
+        #expect(!effects.contains(.beep))
     }
 }

@@ -19,14 +19,15 @@ private let somewhere = Rect(x: 200, y: 200, width: 400, height: 300)
 
 /// An Arranger whose main desk holds the layout `build` makes, re-attached from a saved World (so the shape does
 /// not depend on where Dock would put each window). Every window in `frames` is tracked; those `build` does not
-/// dock float on the Desktop at their frame. Then focused, in order: `focus`.
+/// dock float on the Desktop at their frame. Then focused, in order: `focus`. `empty` starts from a desk with no tree,
+/// so a test holds before and after new desks lose their Desktop tile (08.1.1-09).
 private func arranger(
-    frames: [WindowRef: Rect], minimums: [WindowRef: Size] = [:], focus: [WindowRef] = [], extra: [WindowInfo] = [],
+    frames: [WindowRef: Rect], minimums: [WindowRef: Size] = [:], focus: [WindowRef] = [], extra: [WindowInfo] = [], empty: Bool = false,
     _ build: (inout Desk, inout IDSource) throws(LayoutError) -> Void = { _, _ in }
 ) throws -> Arranger {
-    var world = World()
+    var world = empty ? try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]) : World()
     var history = UndoHistory()
-    try world.addDesk(key)
+    if !empty { try world.addDesk(key) }
     try world.edit(key, history: &history, build)
     var arranger = Arranger(gap: gap)
     _ = arranger.handle(.restore(world, homeFrames: [:]), now: .now)
@@ -280,6 +281,30 @@ extension ArrangerCommandTests {
         _ = arranger.handle(.command(.undo, focused: nil), now: .now)
         let undone = try #require(arranger.world[key])
         #expect(shape(undone.tree) == "D" && Set(undone.desktop.windows.map(\.window)) == [a, b, c])
+    }
+
+    /// On an empty desk the first window in screen order becomes the root; the rest dock beside the largest tile.
+    @Test func arrangeAllOnAnEmptyDeskStartsTheLayoutWithTheFirstWindow() throws {
+        let size = (width: 300.0, height: 200.0)
+        let frames = [
+            a: Rect(x: 100, y: 100, width: size.width, height: size.height), b: Rect(x: 500, y: 100, width: size.width, height: size.height),
+            c: Rect(x: 100, y: 600, width: size.width, height: size.height),
+        ]
+        var arranger = try arranger(frames: frames, empty: true)
+        try #require(arranger.world[key]?.tree.root == nil, "precondition: the desk is not empty")
+
+        let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        // a fills the frame; b goes right of it; then a (the smaller NodeID of two equal tall tiles) over c.
+        #expect(shape(desk.tree) == "H[V[a,c],b]", "\(effects)")
+        #expect(desk.desktop.windows.isEmpty)
+        #expect(!effects.contains(.beep) && notices(effects).isEmpty)
+        #expect(depth(arranger) == 1)
+        _ = arranger.handle(.command(.undo, focused: nil), now: .now)
+        let undone = try #require(arranger.world[key])
+        #expect(undone.tree.root == nil)
+        for window in [a, b, c] { #expect(undone.desktop.frame(of: window) == frames[window]) }
     }
 
     /// V[a, Desktop], a at least 500 wide and 600 tall. b (at least 1000 wide) fits on the Desktop but not beside a,

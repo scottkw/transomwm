@@ -119,7 +119,8 @@ extension Arranger {
     }
 
     /// Docks every eligible floating window of the target desk in screen order (top to bottom, then left to right),
-    /// each on the longer side of the largest tile, as one undo step (TILE-16, D-13). A window whose dry run leaves
+    /// each on the longer side of the largest tile (on an empty desk the first becomes the root), as one undo step
+    /// (TILE-16, D-13). A window whose dry run leaves
     /// any window without room stays floating, and N5 counts them; when none docks: beep, and the first one's
     /// blocked frame flashes.
     mutating func arrangeAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
@@ -147,16 +148,20 @@ extension Arranger {
                     try trial.desktop.remove(window)
                     (node, states) = (.panel(window), [window.identity: .present])
                 }
-                let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
-                guard let (target, rect) = Self.largestTile(resolution, in: trial.tree) else {
-                    skipped += 1
-                    continue
-                }
-                do {
-                    try trial.tree.insertLeaf(node, states: states, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
-                } catch {
-                    skipped += 1  // a full split
-                    continue
+                if trial.tree.root == nil {
+                    try trial.tree.applyDrop(.emptyLayout, leaf: node, states: states, ids: &trialIDs)
+                } else {
+                    let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
+                    guard let (target, rect) = Self.largestTile(resolution, in: trial.tree) else {
+                        skipped += 1
+                        continue
+                    }
+                    do {
+                        try trial.tree.insertLeaf(node, states: states, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
+                    } catch {
+                        skipped += 1  // a full split
+                        continue
+                    }
                 }
                 if try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).unfit.isEmpty {
                     desk = trial

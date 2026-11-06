@@ -255,7 +255,8 @@ public struct Arranger: Sendable {
 
     struct FinderExpectation: Sendable {
         let key: DeskKey
-        let target: NodeID
+        /// The tile to split; nil docks at the layout edge, the root on an empty desk.
+        let target: NodeID?
         let edge: Edge
         /// Finder windows already tracked at the press: a change to one of them is never the new window.
         let known: Set<WindowIdentity>
@@ -1497,19 +1498,19 @@ public struct Arranger: Sendable {
 
     /// Waits for a new Finder window to split the current tile along its longer side: width >= height splits to the
     /// right, otherwise below (D-14, TILE-17). The current tile is the focused docked window's; with a floating focused
-    /// window, or none, it is the Desktop tile of that desk (or of the main display's visible desk).
+    /// window, or none, the largest tile of that desk (or of the main display's visible desk); on an empty desk the new
+    /// window fills the visible frame.
     private mutating func finderSplit(_ focused: WindowRef?, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = targetKey(focused), let area = display(for: key)?.visibleFrame else { return [.beep] }
-        let target = focused.flatMap { world[key]?.tree.leaf(containing: $0) } ?? .desktop
-        let rect: Rect?
+        var tile: (NodeID, Rect)?
         if let desk = world[key] {
-            rect = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution.nodeRects[target]
-        } else {
-            rect = area  // no desk there yet: it is all Desktop
+            let resolution = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution
+            let focusedLeaf = focused.flatMap { desk.tree.leaf(containing: $0) }
+            tile = focusedLeaf.flatMap { leaf in resolution.nodeRects[leaf].map { (leaf, $0) } } ?? Self.largestTile(resolution, in: desk.tree)
         }
-        guard let rect else { return [.beep] }  // a hidden Desktop has no tile to split
+        let rect = tile?.1 ?? area
         finderExpectation = FinderExpectation(
-            key: key, target: target, edge: rect.width >= rect.height ? .right : .bottom,
+            key: key, target: tile?.0, edge: rect.width >= rect.height ? .right : .bottom,
             known: Set(windows.keys.filter { $0.bundleID == Self.finderBundleID }), deadline: now + Self.finderWait)
         return [.openFinderWindow] + (nextWake.map { [.wake(at: $0)] } ?? [])
     }
@@ -1521,7 +1522,7 @@ public struct Arranger: Sendable {
             let area = display(for: expected.key)?.visibleFrame
         else { return [] }
         finderExpectation = nil
-        let drop = DropTarget.tile(expected.target, .edge(expected.edge))
+        let drop = expected.target.map { DropTarget.tile($0, .edge(expected.edge)) } ?? .layoutEdge(expected.edge)
         var candidate = world, candidateHistory = history
         // Finder may open the window on another display: it leaves that Desktop first (an OS fact, no undo step).
         if from != expected.key {
