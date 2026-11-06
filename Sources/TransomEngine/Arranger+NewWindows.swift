@@ -34,10 +34,9 @@ extension Arranger {
             let drop: DropTarget
             if let (target, rect) = tile ?? Self.largestTile(resolution, in: desk.tree) {
                 drop = .tile(target, .edge(rect.width >= rect.height ? .right : .bottom))
-            } else if desk.tree.root == nil {
-                drop = .emptyLayout
             } else {
-                return []
+                // Nothing placed: no tree, or every docked window minimized, hidden or full screen. Either way it fills the frame.
+                drop = .layoutEdge(.right)
             }
             // The undo step's snapshot holds it floating where it opened.
             try candidate.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(window, frame: info.frame) }

@@ -147,20 +147,17 @@ extension Arranger {
                     try trial.desktop.remove(window)
                     (node, states) = (.panel(window), [window.identity: .present])
                 }
-                if trial.tree.root == nil {
-                    try trial.tree.applyDrop(.emptyLayout, leaf: node, states: states, ids: &trialIDs)
-                } else {
-                    let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
-                    guard let (target, rect) = Self.largestTile(resolution, in: trial.tree) else {
-                        skipped += 1
-                        continue
-                    }
+                let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
+                if let (target, rect) = Self.largestTile(resolution, in: trial.tree) {
                     do {
                         try trial.tree.insertLeaf(node, states: states, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
                     } catch {
                         skipped += 1  // a full split
                         continue
                     }
+                } else {
+                    // Nothing placed: no tree, or every docked window minimized, hidden or full screen. It fills the frame.
+                    try trial.tree.applyDrop(.layoutEdge(.right), leaf: node, states: states, ids: &trialIDs)
                 }
                 if try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).unfit.isEmpty {
                     desk = trial

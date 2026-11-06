@@ -212,6 +212,35 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(!effects.contains { if case .announce = $0 { true } else { false } }, "\(effects)")
     }
 
+    // MARK: A desk that looks empty: its only docked window is minimized (CR-01)
+
+    private func minimizedDesk() -> Scene {
+        var scene = Scene(width: 1600, height: 600)
+        _ = scene.arranger.handle(.event(.windowStateChanged(a, .absent)), now: scene.start)
+        return scene
+    }
+    private let wholeFrame = Rect(x: 8, y: 33, width: 1584, height: 584)
+
+    @Test func withTheOnlyDockedWindowMinimizedATiledNewWindowFillsTheVisibleFrame() throws {
+        var scene = minimizedDesk()
+        scene.arrive()
+        #expect(try scene.tile(of: n) == wholeFrame)
+    }
+
+    @Test func withTheOnlyDockedWindowMinimizedDockFillsTheVisibleFrame() throws {
+        var scene = minimizedDesk()
+        let effects = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)
+        #expect(!effects.contains(.beep))
+        #expect(try scene.tile(of: f) == wholeFrame)
+    }
+
+    @Test func withTheOnlyDockedWindowMinimizedArrangeAllFillsTheVisibleFrame() throws {
+        var scene = minimizedDesk()
+        let effects = scene.arranger.handle(.command(.arrangeAll, focused: f), now: scene.start)
+        #expect(!effects.contains(.beep))
+        #expect(try scene.tile(of: f) == wholeFrame)
+    }
+
     // MARK: One undo step (D-06)
 
     @Test func itIsOneUndoStepAndUndoFloatsItWhereItOpened() throws {

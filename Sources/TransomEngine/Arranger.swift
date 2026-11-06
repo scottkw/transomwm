@@ -1370,7 +1370,9 @@ public struct Arranger: Sendable {
         // Where the window is, or is about to be when Transom has just clamped it.
         guard let content = current.frames[shown] ?? desk.desktop.frame(of: shown) else { return [.beep] }
         let frame = group == nil ? content : TabBand.frame(ofContent: content)
+        // A tree with nothing placed (every docked window minimized, hidden or full screen) looks empty: dock to fill the frame.
         guard let target = Planner.dockTarget(at: Point(x: frame.midX, y: frame.midY), desk: desk, area: area, resolution: current.resolution)
+            ?? (current.resolution.nodeRects.isEmpty ? .layoutEdge(.right) : nil)
         else { return [.beep] }
         if case .tile(_, .center) = target { return [.beep] }  // dockTarget never gives a centre: keyboard commands never group
         var candidate = world, candidateHistory = history
