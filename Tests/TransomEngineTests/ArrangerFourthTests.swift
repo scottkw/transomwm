@@ -27,12 +27,12 @@ private func arranger(_ infos: [WindowInfo], zoom: Bool = false) -> Arranger {
     return arranger
 }
 
-/// Docks `windows` in order before the Desktop tile, flat at the root with equal weights: left to right, or from the top.
+/// Docks `windows` in order at the layout's `edge`, flat at the root with equal weights: left to right, or from the top.
 private func dockFlat(_ windows: [WindowRef], at edge: Edge = .left, in arranger: inout Arranger) throws {
     try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
         for window in windows.reversed() {
             try desk.desktop.remove(window)
-            try desk.tree.insert(window, at: edge, of: desk.tree.root!, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(edge), window: window, ids: &ids)
         }
     }
     _ = arranger.handle(.gap(8), now: .now)  // re-plans
@@ -68,33 +68,42 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
 
 /// TILE-23, D-15, D-16: the fourth commands on the focused window.
 @Suite struct ArrangerFourthTests {
+    /// Beside one docked tile, the 1st column is a quarter and the tile gets the rest (8.1.1 D-04).
     @Test func aFloatingWindowDocksAsTheFirstColumnInOneUndoStep() throws {
-        var arranger = arranger([info(w)])
+        var arranger = arranger([info(w), info(a)])
+        try dockFlat([a], in: &arranger)
         let depth = arranger.history.depth(for: mainKey)
 
         let effects = command(&arranger, .first, .horizontal, focused: w)
 
         expectWeights(try rootWeights(arranger), [0.25, 0.75])
-        #expect(try rootOrder(arranger) == [w, nil])
+        #expect(try rootOrder(arranger) == [w, a])
         #expect(arranger.history.depth(for: mainKey) == depth + 1)
         #expect(announcements(effects) == ["Docked to 1st column"])
     }
 
-    /// D-23: the announcement names what the window gets. Alone beside the Desktop tile, a slot with an empty side grows into it.
+    /// D-23: the announcement names what the window gets. Only docked tiles count (8.1.1 D-04): on an empty desk every slot
+    /// is the whole desk, and beside one tile a slot with an empty side grows into it.
     @Test(arguments: [
-        (FourthSlot.first, false, "1st column", "1st row"),
-        (.second, false, "Left half", "Top half"),
-        (.middle, false, "Left three quarters", "Top three quarters"),
-        (.third, false, "Right half", "Bottom half"),
-        (.fourth, false, "4th column", "4th row"),
-        (.second, true, "2nd column", "2nd row"),
-        (.middle, true, "Middle half column", "Middle half row"),
-        (.third, true, "3rd column", "3rd row"),
+        (FourthSlot.first, 0, "Whole desk", "Whole desk"),
+        (.second, 0, "Whole desk", "Whole desk"),
+        (.middle, 0, "Whole desk", "Whole desk"),
+        (.third, 0, "Whole desk", "Whole desk"),
+        (.fourth, 0, "Whole desk", "Whole desk"),
+        (.first, 1, "1st column", "1st row"),
+        (.second, 1, "Left half", "Top half"),
+        (.middle, 1, "Left three quarters", "Top three quarters"),
+        (.third, 1, "Right half", "Bottom half"),
+        (.fourth, 1, "4th column", "4th row"),
+        (.second, 2, "2nd column", "2nd row"),
+        (.middle, 2, "Middle half column", "Middle half row"),
+        (.third, 2, "3rd column", "3rd row"),
     ])
-    func theAnnouncementNamesTheActualSpan(slot: FourthSlot, besideATile: Bool, column: String, row: String) throws {
+    func theAnnouncementNamesTheActualSpan(slot: FourthSlot, docked: Int, column: String, row: String) throws {
+        let tiles = Array([a, b].prefix(docked))
         for (axis, edge, label) in [(Axis.horizontal, Edge.left, column), (.vertical, .top, row)] {
-            var arranger = besideATile ? arranger([info(w), info(a)]) : arranger([info(w)])
-            if besideATile { try dockFlat([a], at: edge, in: &arranger) }
+            var arranger = arranger([info(w)] + tiles.map { info($0) })
+            try dockFlat(tiles, at: edge, in: &arranger)
             #expect(announcements(command(&arranger, slot, axis, focused: w)) == ["Docked to \(label.lowercased())"])
         }
     }
@@ -102,8 +111,8 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
     /// The user's case (host check 3): by rows over side-by-side windows the whole layout is one child, on one side.
     @Test(arguments: [(FourthSlot.second, "top half"), (.middle, "top three quarters"), (.third, "bottom half")])
     func rowsOverSideBySideWindowsNameTheShareTheWindowGets(slot: FourthSlot, name: String) throws {
-        var arranger = arranger([info(w), info(a)])
-        try dockFlat([a], in: &arranger)
+        var arranger = arranger([info(w), info(a), info(b)])
+        try dockFlat([a, b], in: &arranger)
         #expect(announcements(command(&arranger, slot, .vertical, focused: w)) == ["Docked to \(name)"])
     }
 
@@ -144,7 +153,6 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
     @Test func aWindowWithNothingElseTakingPartGetsTheWholeDesk() throws {
         var arranger = arranger([info(w), info(a)])
         try dockFlat([a], in: &arranger)
-        try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in try desk.tree.setDesktopHidden(true) }
         try arranger.world.apply(.absent, for: a, on: mainKey, history: &arranger.history)
         #expect(announcements(command(&arranger, .third, .vertical, focused: w)) == ["Docked to whole desk"])
     }
@@ -161,15 +169,15 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
     }
 
     @Test func aDockedWindowMovesAndTheOthersShareWhatIsLeft() throws {
-        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
-        try dockFlat([w, a], in: &arranger)
+        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120)), info(b, Rect(x: 200, y: 200, width: 150, height: 120))])
+        try dockFlat([w, a, b], in: &arranger)
         expectWeights(try rootWeights(arranger), [1.0 / 3, 1.0 / 3, 1.0 / 3])
         let depth = arranger.history.depth(for: mainKey)
 
         _ = command(&arranger, .fourth, .horizontal, focused: w)
 
         expectWeights(try rootWeights(arranger), [3.0 / 8, 3.0 / 8, 1.0 / 4])
-        #expect(try rootOrder(arranger) == [a, nil, w])
+        #expect(try rootOrder(arranger) == [a, b, w])
         #expect(arranger.history.depth(for: mainKey) == depth + 1)
     }
 
@@ -213,8 +221,8 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
     }
 
     @Test func aDockedGroupMovesWholeForAnyFocusedMember() throws {
-        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
-        try dockFlat([a], in: &arranger)
+        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120)), info(b, Rect(x: 200, y: 200, width: 150, height: 120))])
+        try dockFlat([a, b], in: &arranger)
         let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
         try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in
             try desk.desktop.remove(w)
@@ -242,7 +250,8 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
     }
 
     @Test func aFloatingGroupDocksWhole() throws {
-        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
+        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120)), info(b, Rect(x: 200, y: 200, width: 150, height: 120))])
+        try dockFlat([b], in: &arranger)
         try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
             try desk.desktop.group(id: try ids.make(), target: a, adding: w)
         }
@@ -330,8 +339,8 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
 
     /// A row with the root running the other way wraps it, in one step; the weights then edit like any other split.
     @Test func aRowWrapsTheRootInOneUndoStepAndNothingRemembersTheFourth() throws {
-        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
-        try dockFlat([a], in: &arranger)
+        var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120)), info(b, Rect(x: 200, y: 200, width: 150, height: 120))])
+        try dockFlat([a, b], in: &arranger)
         let depth = arranger.history.depth(for: mainKey)
 
         _ = command(&arranger, .first, .vertical, focused: w)
@@ -560,6 +569,13 @@ private func fourthFrame(_ arranger: Arranger, _ window: WindowRef, _ slot: Four
     return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[window])
 }
 
+/// a docked by the keyboard, alone, and w floating at `frameW`: only docked tiles count (8.1.1 D-04), so a fourth needs one.
+private func besideATile() async -> Harness {
+    var harness = await Harness.started(frames: [1: frameW, 2: Rect(x: 700, y: 400, width: 150, height: 120)])
+    await harness.send(.command(.dock, focused: a))
+    return harness
+}
+
 /// w and a docked by the keyboard, with w's tile.
 private func twoDocked() async throws -> (Harness, Rect) {
     var harness = await Harness.started(frames: [1: frameW, 2: Rect(x: 700, y: 400, width: 150, height: 120)])
@@ -585,7 +601,7 @@ extension ArrangerFourthTests {
     }
 
     @Test func controlDuringADragPreviewsTheColumnAfterTheDwellAndDocksThere() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         let during = await controlDrag(&harness, w, from: frameW, to: Point(x: 10, y: 310))
         #expect(previews(during).isEmpty, "a preview before the dwell: \(during)")
 
@@ -603,7 +619,7 @@ extension ArrangerFourthTests {
     }
 
     @Test func controlCommandPicksARow() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 700, y: 30), [.control, .command])
 
         let shown = await tick(&harness)
@@ -614,7 +630,7 @@ extension ArrangerFourthTests {
 
     /// The window grows into the side with no tile (D-14), and the capsule names that result, not the zone (D-23).
     @Test func theMiddleBandShowsTheResultNotTheZone() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 720, y: 310))
 
         let shown = await tick(&harness)
@@ -626,7 +642,7 @@ extension ArrangerFourthTests {
 
     /// UI-SPEC Surface 3: released on the zone it already holds, it stays, with nothing refused and nothing to undo (WR-08).
     @Test func aDockedWindowDroppedOnItsOwnZoneAddsNoUndoStep() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         await harness.send(.command(.dockFourth(.first, .horizontal), focused: w))
         let tile = try fourthFrame(harness.arranger, w, .first, .horizontal)
         let world = harness.arranger.world, depth = harness.arranger.history.depth(for: mainKey)
@@ -647,7 +663,7 @@ extension ArrangerFourthTests {
 
     /// Another zone is a real move: the guard is only for an edit that changes nothing.
     @Test func aDockedWindowDroppedOnAnotherZoneStillMoves() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         await harness.send(.command(.dockFourth(.first, .horizontal), focused: w))
         let tile = try fourthFrame(harness.arranger, w, .first, .horizontal)
         let depth = harness.arranger.history.depth(for: mainKey)
@@ -816,10 +832,10 @@ private func tabAnnouncements(_ effects: [ArrangerEffect]) -> [TabAnnouncement] 
 
 private let noRoom = "Not enough room to dock here"
 
-/// [a, w] grouped in one leaf, w selected, beside the Desktop tile. Returns the leaf and the group's content rect.
+/// [a, w] grouped in one leaf, w selected, beside docked b. Returns the leaf and the group's content rect.
 private func dockedGroup(at now: ContinuousClock.Instant) throws -> (Arranger, NodeID, content: Rect) {
-    var bare = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))])
-    try dockFlat([a], in: &bare)
+    var bare = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120)), info(b, Rect(x: 200, y: 200, width: 150, height: 120))])
+    try dockFlat([a, b], in: &bare)
     let leaf = try #require(bare.world[mainKey]?.tree.leaf(containing: a))
     try bare.world.edit(mainKey, history: &bare.history) { desk, _ throws(LayoutError) in
         try desk.desktop.remove(w)
@@ -846,7 +862,7 @@ private func tear(
 extension ArrangerFourthTests {
     /// RESEARCH Finding 2: a real press with ⌃ down never moves a window, so this serves apps that move their own.
     @Test func controlHeldAtThePressIsIgnoredUntilPressedAgain() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         let grab = Point(x: frameW.midX, y: frameW.minY + 10)
         var effects = await harness.send(pointer(.down, grab.x, grab.y, .control, press: w))
         effects += await harness.send(pointer(.dragged, grab.x + 10, grab.y, .control))
@@ -889,7 +905,7 @@ extension ArrangerFourthTests {
         (DragToDockMode.holdOption, Modifiers([.control, .command, .option]), "1st row"),
     ] as [(DragToDockMode, Modifiers, String)])
     func optionWithControlChangesNothingInEitherMode(mode: DragToDockMode, modifiers: Modifiers, label: String) async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         await harness.send(.dragToDock(mode))
         _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 10, y: 30), modifiers)
         #expect(fourthLabels(await tick(&harness)) == [label])
@@ -1064,7 +1080,8 @@ extension ArrangerFourthTests {
         let candidate = try #require(try bare.dropping(w, on: sideKey, at: .fourth(.first, .horizontal)).world[sideKey])
         let frame = try #require(try Planner.plan(desk: candidate, area: side.visibleFrame, gap: 8, mins: [:]).frames[w])
         let shown = bare.handle(.tick, now: start + .milliseconds(310))
-        #expect(shown.contains(.preview(.fourth(frame, label: "1st column"), displayUUID: "side")), "got \(shown)")
+        // The side desk is empty, so the 1st column is the whole desk (8.1.1 D-04).
+        #expect(shown.contains(.preview(.fourth(frame, label: "Whole desk"), displayUUID: "side")), "got \(shown)")
         let depth = bare.history.depth(for: sideKey), mainDepth = bare.history.depth(for: mainKey)
 
         _ = bare.handle(pointer(.up, 1500, 310, .control), now: start + .milliseconds(320))
@@ -1091,13 +1108,13 @@ extension ArrangerFourthTests {
     }
 
     @Test func aPointerAboveTheVisibleFramePicksTheNearestZone() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 700, y: 5), [.control, .command])
         #expect(fourthLabels(await tick(&harness)) == ["1st row"])
     }
 
     @Test func aDockedWindowReleasedOnTheZoneItHoldsKeepsItsFrame() async throws {
-        var harness = await Harness.started(frames: [1: frameW])
+        var harness = await besideATile()
         await harness.send(.command(.dockFourth(.fourth, .horizontal), focused: w))
         let tile = try #require(await harness.frame(w))
         _ = await controlDrag(&harness, w, from: tile, to: Point(x: 1300, y: 310))

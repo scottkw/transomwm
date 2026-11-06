@@ -12,25 +12,23 @@ private func ref(_ id: UInt32) -> WindowRef {
 
 private let a = ref(1), b = ref(2), c = ref(3), f = ref(4)
 
-/// H[a, V[b, c], Desktop], plus the given floating windows.
-private func threeDocked(floating: [(WindowRef, Rect)] = [], desktopHidden: Bool = false) throws -> Desk {
+/// H[a, V[b, c]], plus the given floating windows.
+private func threeDocked(floating: [(WindowRef, Rect)] = []) throws -> Desk {
     var desk = Desk()
     var ids = IDSource()
-    try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
     try desk.tree.insert(b, at: .right, of: try #require(desk.tree.leaf(containing: a)), ids: &ids)
     try desk.tree.insert(c, at: .bottom, of: try #require(desk.tree.leaf(containing: b)), ids: &ids)
     for (window, frame) in floating { try desk.desktop.add(window, frame: frame) }
-    if desktopHidden { try desk.tree.setDesktopHidden(true) }
     return desk
 }
 
-/// H[a, b, Desktop] with the Desktop hidden or shown, nothing floating.
-private func twoDocked(desktopHidden: Bool) throws -> Desk {
+/// H[a, b], nothing floating.
+private func twoDocked() throws -> Desk {
     var desk = Desk()
     var ids = IDSource()
-    try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
-    try desk.tree.insert(b, at: .right, of: try #require(desk.tree.leaf(containing: a)), ids: &ids)
-    if desktopHidden { try desk.tree.setDesktopHidden(true) }
+    try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.right), window: b, ids: &ids)
     return desk
 }
 
@@ -54,12 +52,15 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
         #expect(subtree.nodes[id] == desk.tree.nodes[id])
     }
 
-    @Test func theSubtreeAtTheDesktopIsAValidDesktopRootedTree() throws {
-        let subtree = try threeDocked().tree.subtree(at: .desktop)
+    @Test func theSubtreeAtALeafIsAValidLeafRootedTree() throws {
+        let tree = try threeDocked().tree
+        let leaf = try #require(tree.leaf(containing: a))
 
-        #expect(subtree.root == .desktop)
-        #expect(subtree.nodes == [.desktop: .desktop(hidden: false)])
-        #expect(subtree.states.isEmpty)
+        let subtree = try tree.subtree(at: leaf)
+
+        #expect(subtree.root == leaf)
+        #expect(subtree.nodes == [leaf: .panel(a)])
+        #expect(subtree.states == [a.identity: .present])
         try subtree.validate()
     }
 
@@ -74,7 +75,7 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
     @Test func homeViewEqualsThePhase3Plan() throws {
         let desks = [
             try threeDocked(),
-            try threeDocked(floating: [(f, Rect(x: 1200, y: 100, width: 300, height: 200))], desktopHidden: true),
+            try threeDocked(floating: [(f, Rect(x: 1200, y: 100, width: 300, height: 200))]),
             try threeDocked(floating: [(f, Rect(x: 20, y: 100, width: 300, height: 200))]),
         ]
         for desk in desks {
@@ -113,15 +114,15 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
         #expect(leafA.frames == [a: inner])
         #expect(leafA.parks == [b, c], "parks are sorted by identity")
 
-        let desktop = try ViewPlanner.plan(desk: desk, view: .node(.desktop), area: area, gap: 8, mins: [:])
-        #expect(desktop.frames.isEmpty)
-        #expect(desktop.parks == [a, b, c])
+        let split = try ViewPlanner.plan(desk: desk, view: .node(try split(of: b, in: desk)), area: area, gap: 8, mins: [:])
+        #expect(Set(split.frames.keys) == [b, c])
+        #expect(split.parks == [a])
     }
 
-    /// a's 1000 pt minimum cannot sit beside b's 500 pt one: a collapses into its weighted share, b keeps its minimum.
+    /// a's 1000 pt minimum cannot sit beside b's 800 pt one: a collapses into what b leaves, b keeps its minimum.
     @Test func aCollapsibleWindowThatDoesNotFitGetsItsShareAndIsParked() throws {
-        let desk = try twoDocked(desktopHidden: false)
-        let mins = [a: Size(width: 1000, height: 100), b: Size(width: 500, height: 100)]
+        let desk = try twoDocked()
+        let mins = [a: Size(width: 1000, height: 100), b: Size(width: 800, height: 100)]
         #expect(try Planner.plan(desk: desk, area: area, gap: 8, mins: mins).unfit == [a])
 
         let plan = try ViewPlanner.plan(desk: desk, view: .home, area: area, gap: 8, mins: mins, collapsible: [a.identity])
@@ -129,18 +130,19 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
         let block = try #require(plan.collapsed[a])
         let second = try resolve(desk.tree, in: area, mins: [a: Size(width: 1, height: 1), b: mins[b]!], gap: 8)
         #expect(block == second.windowRects[a])
-        // Half of the 908 pt b leaves, which resolve floors to 453 (thirds in doubles land just under 454).
-        #expect(block.minX == inner.minX && block.width == 453 && block.height == inner.height)
+        // The 1424 pt inner width, less the 8 pt gap and b's 800: a gets the 616 pt left.
+        #expect(block.minX == inner.minX && block.width == 616 && block.height == inner.height)
         #expect(plan.parks == [a])
         #expect(plan.frames[a] == nil)
-        #expect(plan.frames[b]?.width == 500)
+        #expect(plan.frames[b]?.width == 800)
         #expect(plan.unfit.isEmpty)
     }
 
-    /// A 30 pt wide area has room for one 1 pt tile beside the Desktop, not two: b (the larger leaf) is hidden collapsed.
+    /// A 20 pt wide area has 4 pt inside its outer gaps: room for one 1 pt tile, not two with a gap: b (the larger leaf) is
+    /// hidden collapsed.
     @Test func aCollapsibleWindowStillUnfitAt1x1IsHiddenCollapsed() throws {
-        let desk = try twoDocked(desktopHidden: false)
-        let narrow = Rect(x: 0, y: 0, width: 30, height: 200)
+        let desk = try twoDocked()
+        let narrow = Rect(x: 0, y: 0, width: 20, height: 200)
         let mins = [a: Size(width: 100, height: 1), b: Size(width: 100, height: 1)]
 
         let plan = try ViewPlanner.plan(desk: desk, view: .home, area: narrow, gap: 8, mins: mins, collapsible: [a.identity, b.identity])
@@ -153,7 +155,7 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
     }
 
     @Test func unfitWindowsOutsideTheSetStayUnfit() throws {
-        let desk = try twoDocked(desktopHidden: false)
+        let desk = try twoDocked()
         let mins = [a: Size(width: 1000, height: 100), b: Size(width: 500, height: 100)]
 
         let plan = try ViewPlanner.plan(desk: desk, view: .home, area: area, gap: 8, mins: mins, collapsible: [b.identity])
@@ -163,9 +165,9 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
         #expect(plan.parks.isEmpty)
     }
 
-    /// With the Desktop hidden, a and b share 1416 pt: 708 each, exactly their minimums.
+    /// a and b share 1416 pt: 708 each, exactly their minimums.
     @Test func aTileExactlyAtTheMinimumIsNotCollapsed() throws {
-        let desk = try twoDocked(desktopHidden: true)
+        let desk = try twoDocked()
         let mins = [a: Size(width: 708, height: inner.height), b: Size(width: 708, height: inner.height)]
 
         let plan = try ViewPlanner.plan(desk: desk, view: .home, area: area, gap: 8, mins: mins, collapsible: [a.identity])
@@ -176,7 +178,7 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
     }
 
     @Test func onePointSmallerIsCollapsed() throws {
-        let desk = try twoDocked(desktopHidden: true)
+        let desk = try twoDocked()
         for minimum in [Size(width: 709, height: inner.height), Size(width: 708, height: inner.height + 1)] {
             let mins = [a: minimum, b: Size(width: 708, height: inner.height)]
 
