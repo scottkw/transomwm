@@ -14,6 +14,8 @@ public enum DropTarget: Equatable, Sendable {
     case emptyLayout
     /// A share of the whole desk along an axis (D-14).
     case fourth(FourthSlot, Axis)
+    /// A corner quarter of the whole desk (8.1.1 D-17).
+    case corner(DockCorner)
     /// An empty area (8.1.1 D-16): the drop takes its place.
     case fill(NodeID)
 }
@@ -73,6 +75,7 @@ extension LayoutTree {
             if let root { try insert(window, at: edge, of: root, ids: &ids) } else { try insertRoot(window, ids: &ids) }
         case let .fourth(slot, axis):
             try insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)
+        case let .corner(corner): try insertCorner(.panel(window), states: [window.identity: .present], corner: corner, ids: &ids)
         case let .fill(id): try fill(id, with: .panel(window), states: [window.identity: .present])
         }
     }
@@ -91,6 +94,7 @@ extension LayoutTree {
         case let .layoutEdge(edge):
             if let root { try insertLeaf(node, states: states, at: edge, of: root, ids: &ids) } else { try insertRootLeaf(node, states: states, ids: &ids) }
         case let .fourth(slot, axis): try insertFourth(node, states: states, slot: slot, axis: axis, ids: &ids)
+        case let .corner(corner): try insertCorner(node, states: states, corner: corner, ids: &ids)
         case let .fill(id): try fill(id, with: node, states: states)
         }
     }

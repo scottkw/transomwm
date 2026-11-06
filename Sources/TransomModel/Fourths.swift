@@ -51,6 +51,29 @@ public enum FourthZones {
     }
 }
 
+/// A corner quarter (8.1.1 D-17): a row half and a column half at once.
+public enum DockCorner: String, CaseIterable, Hashable, Sendable {
+    case topLeft, topRight, bottomLeft, bottomRight
+
+    /// The row half, along `.vertical`.
+    public var rows: FourthSlot {
+        switch self {
+        case .topLeft, .topRight: .firstHalf
+        case .bottomLeft, .bottomRight: .secondHalf
+        }
+    }
+
+    /// The column half, along `.horizontal`.
+    public var columns: FourthSlot {
+        switch self {
+        case .topLeft, .bottomLeft: .firstHalf
+        case .topRight, .bottomRight: .secondHalf
+        }
+    }
+
+    func slot(along axis: Axis) -> FourthSlot { axis == .vertical ? rows : columns }
+}
+
 /// One part of a desk's length along an axis, for `insertFourth`. Tiles and empty areas are measured as fractions of the
 /// length the children taking part share; a child not taking part keeps its stored weight.
 enum FourthPiece: Equatable {
@@ -68,6 +91,55 @@ extension LayoutTree {
     public mutating func insertFourth(
         _ node: Node, states: [WindowIdentity: WindowState], slot: FourthSlot, axis: Axis, ids: inout IDSource
     ) throws(LayoutError) {
+        try insertShare(node, states: states, span: slot.span, axis: axis, within: root, ids: &ids)
+    }
+
+    /// `node` takes exactly `corner`'s quarter of the whole desk (8.1.1 D-17, D-16). The first axis is the root's split
+    /// axis, or rows for a leaf or an empty root, so an existing root keeps its shape. A docked child of the root that
+    /// spans exactly the corner's half along that axis takes the window inside it, along the other axis. Otherwise a
+    /// window-and-empty-area pair takes that half like any other position (E1-E3). The caller has already taken the
+    /// window off the desk. All-or-nothing.
+    public mutating func insertCorner(
+        _ node: Node, states: [WindowIdentity: WindowState], corner: DockCorner, ids: inout IDSource
+    ) throws(LayoutError) {
+        var first = Axis.vertical
+        if let root, case let .split(axis, children, weights)? = nodes[root] {
+            first = axis
+            let span = corner.slot(along: axis).span
+            let room = zip(children, weights).reduce(0) { takesPart($1.0) ? $0 + $1.1 : $0 }
+            var position = 0.0
+            for (child, weight) in zip(children, weights) where takesPart(child) {
+                let start = position
+                position += weight / room
+                if nodes[child] != .spacer, abs(start - span.start) < 1e-9, abs(position - span.end) < 1e-9 {
+                    let second: Axis = axis == .vertical ? .horizontal : .vertical
+                    return try insertShare(node, states: states, span: corner.slot(along: second).span, axis: second, within: child, ids: &ids)
+                }
+            }
+        }
+        let second: Axis = first == .vertical ? .horizontal : .vertical
+        var next = self
+        var nextIDs = ids
+        try next.insertFourth(node, states: states, slot: corner.slot(along: first), axis: first, ids: &nextIDs)
+        guard let leaf = next.nodes.first(where: { $0.value == node })?.key else { throw .invariantViolated("corner window \(node) not placed") }
+        let window = try nextIDs.make()
+        let empty = try nextIDs.make()
+        guard next.nodes[window] == nil, next.nodes[empty] == nil else { throw .invariantViolated("ID source issued an ID already in the tree") }
+        next.nodes[window] = node
+        next.nodes[empty] = .spacer
+        let pair = corner.slot(along: second) == .firstHalf ? [window, empty] : [empty, window]
+        next.nodes[leaf] = .split(axis: second, children: pair, weights: [0.5, 0.5])
+        next.normalize()
+        try next.validate()
+        self = next
+        ids = nextIDs
+    }
+
+    /// `insertFourth` inside `base` (nil for an empty tree): `node` takes exactly `span` of `base`'s length along `axis`.
+    mutating func insertShare(
+        _ node: Node, states: [WindowIdentity: WindowState], span: (start: Double, end: Double), axis: Axis, within base: NodeID?,
+        ids: inout IDSource
+    ) throws(LayoutError) {
         try checkNewLeaf(node)
         var next = self
         var nextIDs = ids
@@ -80,7 +152,7 @@ extension LayoutTree {
         var pieces: [FourthPiece] = []
         var basis = 1.0
         var rootID: NodeID?
-        if let root {
+        if let root = base {
             if case let .split(rootAxis, children, weights)? = nodes[root], rootAxis == axis {
                 rootID = root
                 let room = zip(children, weights).reduce(0) { takesPart($1.0) ? $0 + $1.1 : $0 }
@@ -112,7 +184,7 @@ extension LayoutTree {
         }
         var children: [NodeID] = []
         var weights: [Double] = []
-        for piece in Self.fourthPieces(pieces, span: slot.span) {
+        for piece in Self.fourthPieces(pieces, span: span) {
             switch piece {
             case let .tile(id, length):
                 children.append(id)
@@ -136,11 +208,15 @@ extension LayoutTree {
         if let rootID { id = rootID } else { id = try make() }
         let sum = weights.reduce(0, +)
         next.nodes[id] = .split(axis: axis, children: children, weights: weights.map { $0 / sum })
-        next.root = id
+        if base == root {
+            next.root = id
+        } else if let base, id != base, let parent = parent(of: base), case let .split(parentAxis, siblings, parentWeights)? = next.nodes[parent] {
+            next.nodes[parent] = .split(axis: parentAxis, children: siblings.map { $0 == base ? id : $0 }, weights: parentWeights)
+        }
         next.states.merge(states) { $1 }
         next.normalize()
-        if let root = next.root, case let .split(_, children, _)? = next.nodes[root], children.count > Self.maxChildren {
-            throw .splitFull(root, limit: Self.maxChildren)
+        if case let .split(_, children, _)? = next.nodes[id], children.count > Self.maxChildren {
+            throw .splitFull(id, limit: Self.maxChildren)
         }
         try next.validate()
         self = next

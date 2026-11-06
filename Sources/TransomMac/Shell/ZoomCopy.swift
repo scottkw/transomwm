@@ -71,6 +71,7 @@ nonisolated public enum ZoomCopy {
         case .togglePause: "Pause or Resume Arranging"
         case .dock: "Dock Window Where It Is"
         case .dockFourth(let slot, let axis): "Dock to \(MenuCopy.fourthTitle(slot, axis))"
+        case .dockCorner(let corner): "Dock to \(MenuCopy.cornerTitle(corner)) Quarter"
         default: MenuCopy.commandTitle(command)
         }
     }

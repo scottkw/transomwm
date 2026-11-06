@@ -4,7 +4,7 @@ import Testing
 
 private func n(_ raw: UInt64) -> NodeID { NodeID(raw: raw) }
 
-private let names: [String: UInt32] = ["W": 9, "A": 1, "B": 2, "C": 3]
+private let names: [String: UInt32] = ["W": 9, "A": 1, "B": 2, "C": 3, "X": 10, "Y": 11]
 
 /// A flat tree along `axis` with the named docked children and stored weights. A single child is a leaf root, and "_" is an
 /// empty area (8.1.1 D-16). A name in `absent` takes no part: its window is not present.
@@ -410,5 +410,41 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
         }
         #expect(axis == .horizontal ? bands[0].minX == Self.visible.minX : bands[0].minY == Self.visible.minY)
         #expect(axis == .horizontal ? bands[4].maxX == Self.visible.maxX : bands[4].maxY == Self.visible.maxY)
+    }
+}
+
+/// The whole tree, nested: "(a:w|b:w)" for columns, "(a:w/b:w)" for rows, "_" an empty area, weights to three places.
+private func shape(_ tree: LayoutTree, _ id: NodeID? = nil) -> String {
+    guard let id = id ?? tree.root else { return "empty" }
+    switch tree.node(id) {
+    case let .panel(window)?: return names.first { $0.value == window.windowID }?.key ?? "?"
+    case .tabs?: return "tabs"
+    case .spacer?: return "_"
+    case let .split(axis, children, weights)?:
+        let parts = zip(children, weights).map { "\(shape(tree, $0)):\(String(format: "%.3f", $1))" }
+        return "(" + parts.joined(separator: axis == .horizontal ? "|" : "/") + ")"
+    case nil: return "?"
+    }
+}
+
+/// The tree with `name` docked to `corner`.
+private func cornered(_ tree: LayoutTree, _ corner: DockCorner, _ name: String = "W") throws -> LayoutTree {
+    var tree = tree
+    var ids = IDSource(next: 100 + UInt64(tree.nodes.count) * 10)
+    let w = makeWindow(names[name]!)
+    try tree.insertCorner(.panel(w), states: [w.identity: .present], corner: corner, ids: &ids)
+    return tree
+}
+
+/// Corner quarters (8.1.1 D-17): a row half and a column half at once, exactly that quarter (D-16, E1).
+extension FourthTests {
+    @Test(arguments: [
+        (DockCorner.topLeft, "((W:0.500|_:0.500):0.500/_:0.500)"),
+        (.topRight, "((_:0.500|W:0.500):0.500/_:0.500)"),
+        (.bottomLeft, "(_:0.500/(W:0.500|_:0.500):0.500)"),
+        (.bottomRight, "(_:0.500/(_:0.500|W:0.500):0.500)"),
+    ])
+    func onAnEmptyDeskACornerTakesOnlyItsQuarter(corner: DockCorner, expected: String) throws {
+        #expect(shape(try cornered(LayoutTree(), corner)) == expected)
     }
 }

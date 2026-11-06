@@ -25,15 +25,16 @@ extension Arranger {
         }
     }
 
-    /// Docks `window`, or moves it if docked, to a share of the whole desk (D-14, D-15): one undo step. A group member
+    /// Docks `window`, or moves it if docked, to a share of the whole desk (D-14, D-15) or a corner quarter (8.1.1 D-17),
+    /// `target` being a `.fourth` or a `.corner`: one undo step. A group member
     /// moves its whole group. Without room it collapses with zoom on, and with zoom off it is refused and changes
     /// nothing (D-16). A docked window already there only beeps; `commit` can't tell, because it compares rects by node
     /// and the new leaf has a new ID.
-    mutating func dockFourth(_ window: WindowRef, slot: FourthSlot, axis: Axis) throws(LayoutError) -> [ArrangerEffect] {
+    mutating func dockFourth(_ window: WindowRef, at target: DropTarget) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
         let group = tabGroup(holding: window)
         let shown = group.map { $0.members[$0.selected] } ?? window
-        let candidate = try dropping(window, on: key, at: .fourth(slot, axis), moving: group)
+        let candidate = try dropping(window, on: key, at: target, moving: group)
         guard let edited = candidate.world[key], let label = candidate.fourthLabel else { return [.beep] }
         let plan = try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums)
         let collapsed = plan.unfit.isEmpty ? nil : try collapse(edited, area: area)

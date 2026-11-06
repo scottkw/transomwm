@@ -18,6 +18,8 @@ public enum Command: Hashable, Sendable {
     case moveOrSnap(Edge)
     /// Dock the focused window, or move it if docked, to a share of the whole desk (TILE-23, D-14, D-15).
     case dockFourth(FourthSlot, Axis)
+    /// Dock the focused window, or move it if docked, to a corner quarter of the whole desk (8.1.1 D-17).
+    case dockCorner(DockCorner)
     /// Swap the focused docked window with the docked window focused before it on the same desk (TILE-11).
     case swapPrevious
     /// Grow or shrink the focused tile by a tenth of its split's length (TILE-13).

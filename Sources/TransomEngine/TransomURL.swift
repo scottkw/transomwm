@@ -2,7 +2,7 @@ import Foundation
 
 /// The `transom://` URL scheme of Phase 3 (SAFE-03, TILE-17, Pitfall 21, T-03-40): two parameterless commands, plus the 11 camera commands of Phase 4,
 /// Show Overview (Phase 6), the three tab commands (Phase 7), `view/{n}` and `save-view/{n}` (Phase 8, D-06), the ten fourths (Phase 8.1, D-17)
-/// and the ten halves and thirds (Phase 8.1.1, D-10): 36 parameterless commands in all.
+/// the ten halves and thirds (Phase 8.1.1, D-10) and the four corner quarters (Phase 8.1.1, D-17): 40 parameterless commands in all.
 /// Anything from any app or web page can open one, so the parser is a strict whitelist and nothing from the URL but the
 /// chosen command goes anywhere.
 public enum TransomURL {
@@ -30,6 +30,9 @@ public enum TransomURL {
         "dock-right-third": .dockFourth(.lastThird, .horizontal),
         "dock-top-third": .dockFourth(.firstThird, .vertical), "dock-middle-third": .dockFourth(.middleThird, .vertical),
         "dock-bottom-third": .dockFourth(.lastThird, .vertical),
+        // Phase 8.1.1: corner quarters (D-17).
+        "dock-top-left": .dockCorner(.topLeft), "dock-top-right": .dockCorner(.topRight),
+        "dock-bottom-left": .dockCorner(.bottomLeft), "dock-bottom-right": .dockCorner(.bottomRight),
     ]
 
     /// One line of `transom help` per command, in help order; `help` itself has no URL.

@@ -88,6 +88,8 @@ import Testing
         #expect(ZoomCopy.shortcutTitle(.dock) == "Dock Window Where It Is")
         #expect(ZoomCopy.shortcutTitle(.dockFourth(.firstHalf, .horizontal)) == "Dock to Left Half")
         #expect(ZoomCopy.shortcutTitle(.dockFourth(.middleThird, .vertical)) == "Dock to Middle Third")
+        #expect(ZoomCopy.shortcutTitle(.dockCorner(.topLeft)) == "Dock to Top Left Quarter")
+        #expect(DockCorner.allCases.map(MenuCopy.cornerTitle) == ["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
         #expect(ZoomCopy.shortcutTitle(.dockFourth(.middleThird, .horizontal)) == "Dock to Center Third")
     }
 

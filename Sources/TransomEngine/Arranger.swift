@@ -375,7 +375,8 @@ public struct Arranger: Sendable {
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
                 case (.finderSplit, _): return try finderSplit(focused, now: now)
                 case (.moveOrSnap(let edge), let window?): return try moveOrSnap(window, toward: edge)
-                case (.dockFourth(let slot, let axis), let window?): return try dockFourth(window, slot: slot, axis: axis)
+                case (.dockFourth(let slot, let axis), let window?): return try dockFourth(window, at: .fourth(slot, axis))
+                case (.dockCorner(let corner), let window?): return try dockFourth(window, at: .corner(corner))
                 case (.swapPrevious, let window?): return try swapPrevious(window)
                 case (.growTile, let window?): return try resize(window, by: Self.resizeStep)
                 case (.shrinkTile, let window?): return try resize(window, by: -Self.resizeStep)
@@ -390,7 +391,7 @@ public struct Arranger: Sendable {
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
                 case (.camera, _): return [.fault("camera command without a display")]  // answered above
                 case (.tabs, _): return [.fault("tab command reached the command switch")]  // answered above
-                case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.dockFourth, nil), (.swapPrevious, nil), (.growTile, nil),
+                case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.dockFourth, nil), (.dockCorner, nil), (.swapPrevious, nil), (.growTile, nil),
                     (.shrinkTile, nil), (.balanceSplit, nil), (.rotateSplit, nil), (.flipSplit, nil), (.snap, nil):
                     return [.beep]
                 }
@@ -907,7 +908,7 @@ public struct Arranger: Sendable {
             return targetKey(focused).map { history.depth(for: $0) > 0 } ?? false
         case .focus:
             return trackable && focused.flatMap(deskKey(of:)) != nil
-        case .moveOrSnap, .dockFourth:
+        case .moveOrSnap, .dockFourth, .dockCorner:
             // Docked or floating alike; the menu shows the pair's matching item (`isFloating`).
             guard trackable, let focused, let key = deskKey(of: focused) else { return false }
             return world[key]?.state(of: focused) == .present
@@ -1838,6 +1839,7 @@ public struct Arranger: Sendable {
         var candidate = world, candidateHistory = history
         var fourthLabel: String?
         if case .fourth(let slot, let axis) = target { fourthLabel = FourthCopy.label(slot, axis) }
+        if case .corner(let corner) = target { fourthLabel = FourthCopy.label(corner) }
         let group = group ?? movingGroup(window)
         var taken: (node: Node, states: [WindowIdentity: WindowState])?
         if let from = deskKey(of: window), from != key {
@@ -1850,7 +1852,10 @@ public struct Arranger: Sendable {
             if candidate[key] == nil { try candidate.addDesk(key) }
         }
         // Rule E4 (8.1.1 D-16): a window docked on this desk and moved to a position leaves its old place empty.
-        let vacates = if case .fourth = target { true } else { false }
+        let vacates = switch target {
+        case .fourth, .corner: true
+        case .tile, .layoutEdge, .emptyLayout, .fill: false
+        }
         try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
             if let group {
                 let moved: (node: Node, states: [WindowIdentity: WindowState])

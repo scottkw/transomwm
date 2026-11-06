@@ -39,6 +39,7 @@ nonisolated public enum MenuCopy {
         case .undo: "Undo Layout Change"
         case .focus(let edge), .moveOrSnap(let edge): direction(edge)
         case .dockFourth(let slot, let axis): fourthTitle(slot, axis)
+        case .dockCorner(let corner): cornerTitle(corner)
         case .swapPrevious: "Swap with Previous Window"
         case .growTile: "Grow Tile"
         case .shrinkTile: "Shrink Tile"
@@ -56,6 +57,16 @@ nonisolated public enum MenuCopy {
         case .tabs(.next): TabCopy.nextTab
         case .tabs(.previous): TabCopy.previousTab
         case .tabs(.moveOut): TabCopy.moveOut
+        }
+    }
+
+    /// A Dock Window corner item (8.1.1 D-17).
+    public static func cornerTitle(_ corner: DockCorner) -> String {
+        switch corner {
+        case .topLeft: "Top Left"
+        case .topRight: "Top Right"
+        case .bottomLeft: "Bottom Left"
+        case .bottomRight: "Bottom Right"
         }
     }
 

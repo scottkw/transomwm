@@ -1234,3 +1234,36 @@ extension ArrangerFourthTests {
         #expect(announcements(up).isEmpty, "\(up)")
     }
 }
+
+/// The four quarters' frames, from a desk built by hand as rows [(a .5 | b .5) .5 / (c .5 | d .5) .5] (8.1.1 D-17).
+private func quarterFrames() throws -> [DockCorner: Rect] {
+    let corners: [DockCorner] = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+    let refs = corners.indices.map { window(UInt32(40 + $0)) }
+    var nodes: [NodeID: Node] = [:]
+    for (i, ref) in refs.enumerated() { nodes[NodeID(raw: UInt64(10 + i))] = .panel(ref) }
+    nodes[NodeID(raw: 2)] = .split(axis: .horizontal, children: [NodeID(raw: 10), NodeID(raw: 11)], weights: [0.5, 0.5])
+    nodes[NodeID(raw: 3)] = .split(axis: .horizontal, children: [NodeID(raw: 12), NodeID(raw: 13)], weights: [0.5, 0.5])
+    nodes[NodeID(raw: 1)] = .split(axis: .vertical, children: [NodeID(raw: 2), NodeID(raw: 3)], weights: [0.5, 0.5])
+    let tree = try LayoutTree(root: NodeID(raw: 1), nodes: nodes, states: Dictionary(uniqueKeysWithValues: refs.map { ($0.identity, .present) }))
+    let frames = try Planner.plan(desk: Desk(tree: tree), area: area, gap: 8, mins: [:]).frames
+    return Dictionary(uniqueKeysWithValues: zip(corners, refs).map { ($0, frames[$1]!) })
+}
+
+/// Corner quarters (8.1.1 D-17): each is exactly that quarter of the visible frame (D-16).
+extension ArrangerFourthTests {
+    /// UAT round 2 issue 3: on an empty desk Top Left docks the window into the top-left quarter and nothing else.
+    @Test func aTopLeftCornerOnAnEmptyDeskTakesOnlyThatQuarter() throws {
+        var arranger = try desktopFree([info(w)])
+        let depth = arranger.history.depth(for: mainKey)
+
+        let effects = arranger.handle(.command(.dockCorner(.topLeft), focused: w), now: .now)
+
+        #expect(try planned(arranger) == [w: try quarterFrames()[.topLeft]!], "the other three quarters hold no window")
+        #expect(announcements(effects) == ["Docked to top left quarter"])
+        #expect(DockCorner.allCases.map(FourthCopy.label) == ["Top left quarter", "Top right quarter", "Bottom left quarter", "Bottom right quarter"])
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+        _ = arranger.handle(.command(.undo, focused: w), now: .now)
+        let undone = try #require(arranger.world[mainKey])
+        #expect(undone.tree.root == nil && undone.desktop.frame(of: w) == frameW)
+    }
+}

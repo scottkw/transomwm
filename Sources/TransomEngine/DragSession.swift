@@ -114,6 +114,16 @@ public enum FourthCopy {
         }
     }
 
+    /// A corner quarter's name (8.1.1 D-17): "Top left quarter".
+    public static func label(_ corner: DockCorner) -> String {
+        switch corner {
+        case .topLeft: "Top left quarter"
+        case .topRight: "Top right quarter"
+        case .bottomLeft: "Bottom left quarter"
+        case .bottomRight: "Bottom right quarter"
+        }
+    }
+
     /// The announcement of a docked fourth: "Docked to 1st column", "Docked to top half" (UI-SPEC Surface 3).
     public static func docked(_ label: String) -> String { "Docked to \(label.lowercased())" }
 }
