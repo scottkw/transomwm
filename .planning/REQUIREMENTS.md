@@ -54,10 +54,10 @@
 - [x] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
 - [x] **TILE-21**: User can choose whether new windows tile automatically or float until docked (default: float). With nothing docked, a tiled new window fills the screen
 - [x] **TILE-22**: User can choose whether a drag shows the docking regions automatically or only while a key is held (default: automatic). In hold-a-key mode, a plain drag pulls a docked window out to floating and just moves a floating one
-- [ ] **TILE-23**: User can dock a window to the 1st, 2nd, 3rd or 4th fourth, or to the middle half, as columns or rows, by keyboard or by dragging; windows already docked shrink to fit
+- [x] **TILE-23**: User can dock a window to the 1st, 2nd, 3rd or 4th fourth, or to the middle half, as columns or rows, by keyboard or by dragging; windows already docked shrink to fit
 - [x] **TILE-24**: Docked windows share the whole visible frame. Floating windows sit over them in normal macOS stacking; Transom never hides, parks, raises or clamps a floating window
-- [ ] **TILE-25**: User can dock the focused window to a half or a third of the screen, as a column or a row, by hotkey, menu, URL and CLI; windows already docked shrink to fit
-- [ ] **TILE-26**: The menu bar menu lists every docking position (where it is, halves, thirds, fourths) with its hotkey in one Dock Window submenu
+- [x] **TILE-25**: User can dock the focused window to a half or a third of the screen, as a column or a row, by hotkey, menu, URL and CLI; windows already docked shrink to fit
+- [x] **TILE-26**: The menu bar menu lists every docking position (where it is, halves, thirds, fourths) with its hotkey in one Dock Window submenu
 
 ### Safety & Recovery
 
@@ -200,10 +200,10 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-20 | Phase 3 | Complete |
 | TILE-21 | Phase 8.1.1 | Complete |
 | TILE-22 | Phase 8.1 | Complete |
-| TILE-23 | Phase 8.1.1 | Pending |
+| TILE-23 | Phase 8.1.1 | Complete |
 | TILE-24 | Phase 8.1.1 | Complete |
-| TILE-25 | Phase 8.1.1 | Pending |
-| TILE-26 | Phase 8.1.1 | Pending |
+| TILE-25 | Phase 8.1.1 | Complete |
+| TILE-26 | Phase 8.1.1 | Complete |
 | SAFE-01 | Phase 3 | Complete |
 | SAFE-02 | Phase 3 | Complete |
 | SAFE-03 | Phase 3 | Complete |
