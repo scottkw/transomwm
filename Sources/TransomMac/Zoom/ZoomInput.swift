@@ -83,7 +83,7 @@ import os
     private func titleBars(_ arranger: Arranger) -> [UInt32: CGRect] {
         var bars: [UInt32: CGRect] = [:]
         for info in arranger.windows.values where info.kind == .dockable && !info.isExcluded && info.state == .present {
-            guard let button = info.greenButton, let leaf = arranger.leafNode(of: info.window), leaf != .desktop else { continue }
+            guard let button = info.greenButton, let leaf = arranger.leafNode(of: info.window) else { continue }
             bars[info.visibleMemberID ?? info.window.windowID] = CGRect(
                 x: info.frame.x, y: info.frame.y, width: info.frame.width, height: button.y + button.height)
         }
@@ -149,7 +149,7 @@ import os
                 blocks.append((tile.window, Self.cgRect(tile.end)))
                 continue
             }
-            guard let info = arranger.windows[tile.window.identity], let leaf = arranger.leafNode(of: tile.window), leaf != .desktop else { continue }
+            guard let info = arranger.windows[tile.window.identity], let leaf = arranger.leafNode(of: tile.window) else { continue }
             tiles[info.visibleMemberID ?? tile.window.windowID] = Self.cgRect(tile.end)
         }
         endPick(reason: "new pick")
@@ -167,7 +167,7 @@ import os
         hover()
     }
 
-    /// The hover ring follows the tile under the pointer; none over the Desktop tile, gaps, the menu bar or the Dock.
+    /// The hover ring follows the tile under the pointer; none over gaps, the menu bar or the Dock.
     private func hover() {
         guard var current = pick, let controller else { return }
         let point = controller.pointerDisplay().point
@@ -211,7 +211,7 @@ import os
     }
 
     func zoom(toLeafOf window: TransomModel.WindowRef, displayUUID uuid: String) async {
-        guard let controller, let leaf = controller.arranger.leafNode(of: window), leaf != .desktop,
+        guard let controller, let leaf = controller.arranger.leafNode(of: window),
             let tree = controller.arranger.deskKey(of: window).flatMap({ controller.arranger.world[$0]?.tree })
         else { return }
         await controller.zoom(to: Navigator.target(leaf, in: tree), displayUUID: uuid, focus: window)

@@ -1452,15 +1452,13 @@ public struct Arranger: Sendable {
     }
 
     /// Focuses the nearest tile across `edge` of the window's tile, or of its frame when it floats (D-11, TILE-09).
-    /// Ties go to the most recently focused; the Desktop tile stands for its floating windows there. A Desktop
-    /// neighbour focuses its most recently focused present floating window. No neighbour, or an empty Desktop: beep.
+    /// Ties go to the most recently focused. Only docked tiles are targets, never a floating window (8.1.1 UI-SPEC
+    /// Surface 2). No neighbour: beep.
     private func focusNeighbour(of window: WindowRef, toward edge: Edge) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
         let resolution = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).resolution
         let leaf = desk.tree.leaf(containing: window)
         guard let rect = leaf.flatMap({ resolution.nodeRects[$0] }) ?? desk.desktop.frame(of: window) else { return [.beep] }
-        // A hidden tab never takes focus this way (UI-SPEC Surface 3); its group's selected member stands for it.
-        let floating = desk.desktop.windows.filter { $0.state == .present && !isHiddenTab($0.window) && placeholders.table[$0.window.identity] == nil }.map(\.window)
         guard let id = Neighbours.neighbour(
             of: rect, excluding: leaf, toward: edge, tree: desk.tree, resolution: withoutWaiting(resolution, tree: desk.tree), gap: gap, recency: recency(on: desk))
         else { return [.beep] }
@@ -1468,20 +1466,14 @@ public struct Arranger: Sendable {
         switch desk.tree.node(id) {
         case .panel(let panel)?: target = panel
         case .tabs(let tabs, let selected)?: target = tabs[selected]  // LayoutTree.validate keeps selected in range
-        case .desktop?:
-            // Never-focused floating windows come after every focused one, in Desktop order.
-            target = floating.min { (focusOrder.firstIndex(of: $0.identity) ?? .max) < (focusOrder.firstIndex(of: $1.identity) ?? .max) }
-        case .split?, nil: target = nil
+        case .split?, .desktop?, nil: target = nil
         }
         return target.map { [.perform([.focus($0)])] } ?? [.beep]
     }
 
-    /// The desk's leaves, the most recently focused first: the Desktop tile stands for its present floating windows.
+    /// The desk's docked leaves, the most recently focused first; a floating window has none.
     func recency(on desk: Desk) -> [NodeID] {
-        focusOrder.compactMap { id -> NodeID? in
-            if desk.desktop.windows.contains(where: { $0.state == .present && $0.window.identity == id }) { return .desktop }
-            return desk.tree.windows.first { $0.identity == id }.flatMap(desk.tree.leaf(containing:))
-        }
+        focusOrder.compactMap { id in desk.tree.windows.first { $0.identity == id }.flatMap(desk.tree.leaf(containing:)) }
     }
 
     /// Waits for a new Finder window to split the current tile along its longer side: width >= height splits to the

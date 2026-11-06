@@ -317,6 +317,15 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
         #expect(harness.arranger.view(on: "main") == .home)
     }
 
+    /// 8.1.1 UI-SPEC Surface 2: a floating window has no leaf, so no zoom, hover ring or green button reaches it.
+    @Test func leafNodeIsForDockedWindowsOnly() async throws {
+        var harness = try await nested()
+        #expect(harness.arranger.leafNode(of: b) == (try leaf(b, harness)))
+        await harness.send(.command(.float, focused: c))
+        #expect(harness.arranger.isFloating(c))
+        #expect(harness.arranger.leafNode(of: c) == nil)
+    }
+
     @Test func frameWindowRefusesFloatingExcludedOrNoFocus() async throws {
         var harness = try await nested()
         expectRefused(await harness.camera(.frameWindow), "No docked window to frame", command: "frameWindow")

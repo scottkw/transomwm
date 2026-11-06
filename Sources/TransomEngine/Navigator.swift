@@ -206,8 +206,7 @@ extension Arranger {
         return true
     }
 
-    /// Every leaf of that display's committed view with its on-screen rect: collapsed tiles and the Desktop tile included,
-    /// splits never. The band preview's `tiles` (04-06); empty for a display with no desk.
+    /// Every leaf of that display's committed view with its on-screen rect: collapsed tiles included, splits never. The band preview's `tiles` (04-06); empty for a display with no desk.
     public func shownLeafRects(displayUUID uuid: String) throws(LayoutError) -> [NodeID: Rect] {
         guard let display = displays.first(where: { $0.uuid == uuid }), let desk = world[Self.key(display)] else { return [:] }
         let plan = try ViewPlanner.plan(
@@ -216,11 +215,9 @@ extension Arranger {
         return plan.resolution.nodeRects.filter { if case .split? = desk.tree.node($0.key) { false } else { true } }
     }
 
-    /// The docked window's leaf, or the Desktop tile for a present floater on a shown Desktop.
+    /// The docked window's leaf; nil for a floating window (8.1.1 UI-SPEC Surface 2).
     public func leafNode(of window: WindowRef) -> NodeID? {
-        guard let desk = deskKey(of: window).flatMap({ world[$0] }) else { return nil }
-        if let leaf = desk.tree.leaf(containing: window) { return leaf }
-        return desk.tree.isDesktopHidden == false && desk.desktop.windows.contains { $0.window == window && $0.state == .present } ? .desktop : nil
+        deskKey(of: window).flatMap { world[$0]?.tree.leaf(containing: window) }
     }
 
     /// Whether that display's committed view frames the focused docked window (Frame Focused Window's checkmark).
