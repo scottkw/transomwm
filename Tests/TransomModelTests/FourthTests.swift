@@ -38,7 +38,6 @@ private func rootChildren(_ tree: LayoutTree) -> [(String, Double)] {
     guard let root = tree.root, case let .split(_, children, weights)? = tree.node(root) else { return [] }
     return zip(children, weights).map { id, weight -> (String, Double) in
         switch tree.node(id) {
-        case .desktop?: ("D", weight)
         case let .panel(window)?: (names.first { $0.value == window.windowID }?.key ?? "?", weight)
         case .tabs?: ("tabs", weight)
         case .split?, nil: ("(…)", weight)

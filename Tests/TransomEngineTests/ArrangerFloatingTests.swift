@@ -301,7 +301,6 @@ private func freshArranger(_ windows: [WindowInfo], newWindows: NewWindowsMode =
         }
         _ = arranger.handle(.gap(8), now: .now)  // re-plans
         let desk = try #require(arranger.world[key])
-        try #require(!desk.tree.nodes.values.contains { if case .desktop = $0 { true } else { false } }, "precondition: the desk has a Desktop tile")
         let leaf = try #require(desk.tree.root)
         let frame = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).resolution.nodeRects[leaf])
         return (arranger, GroupKey(desk: key, node: leaf), frame)

@@ -74,7 +74,7 @@ extension LayoutTree {
         switch nodes[leaf] {
         case .panel?: nodes[leaf] = .panel(to)
         case let .tabs(windows, selected)?: nodes[leaf] = .tabs(windows: windows.map { $0 == from ? to : $0 }, selected: selected)
-        case .split?, .desktop?, nil: throw .notALeaf(leaf) // leaf(containing:) only returns panels and tab groups
+        case .split?, nil: throw .notALeaf(leaf) // leaf(containing:) only returns panels and tab groups
         }
         states[from.identity] = nil
         states[to.identity] = state
@@ -96,9 +96,9 @@ public struct World: Codable, Equatable, Sendable {
     /// The load path (`init(from:)` uses it). Besides `validate()`, requires `ids` to have half its range
     /// left, which no real session approaches, so a hostile file cannot load with an ID source about to
     /// run out. Edits are not held to this bound: they stop only where `IDSource.make()` throws. Also
-    /// requires `ids.next >= 1`, so the source can never mint the reserved `NodeID.desktop`.
+    /// requires `ids.next >= 1`: IDs start at 1, and a legacy file's Desktop tile was NodeID 0.
     public init(ids: IDSource, desks: [DeskKey: Desk]) throws(LayoutError) {
-        guard ids.next >= 1 else { throw .invariantViolated("ID source 0 would mint the Desktop tile's \(NodeID.desktop)") }
+        guard ids.next >= 1 else { throw .invariantViolated("ID source 0 is reserved") }
         guard ids.next <= UInt64.max / 2 else {
             throw .invariantViolated("ID source \(ids.next) is too close to exhaustion")
         }
@@ -146,7 +146,7 @@ public struct World: Codable, Equatable, Sendable {
                 switch node {
                 case .panel(let window): desk.tree.nodes[id] = .panel(titled(window))
                 case .tabs(let windows, let selected): desk.tree.nodes[id] = .tabs(windows: windows.map(titled), selected: selected)
-                case .split, .desktop: break
+                case .split: break
                 }
             }
             desk.desktop.mapWindows(titled)

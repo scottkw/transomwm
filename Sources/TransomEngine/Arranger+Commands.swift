@@ -216,7 +216,7 @@ extension Arranger {
                     let group = FloatingTabGroup(id: try ids.make(), members: members, selected: selected, frame: Planner.clamp(tile, into: area))
                     try desk.desktop.addGroup(group, states: states)
                     shown.append(members[selected])
-                case .split, .desktop: throw .notALeaf(leaf)
+                case .split: throw .notALeaf(leaf)
                 }
             }
         }

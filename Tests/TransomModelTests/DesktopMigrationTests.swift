@@ -55,7 +55,7 @@ private func expectInvalidLayout(_ data: Data, _ name: String) {
         ], windows: [1, 2]))
         #expect(t.root == NodeID(raw: 3))
         #expect(t.node(NodeID(raw: 3)) == .split(axis: .horizontal, children: [NodeID(raw: 1), NodeID(raw: 2)], weights: [0.5, 0.5]))
-        #expect(t.nodes[.desktop] == nil)
+        #expect(t.nodes[NodeID(raw: 0)] == nil)
         #expect(t.states == [window(1).identity: .present, window(2).identity: .present])
     }
 
@@ -132,7 +132,7 @@ private func expectInvalidLayout(_ data: Data, _ name: String) {
         let desk = try #require(try World.decode(from: Data(legacy.utf8))[key])
         let before = try #require(world[key])
         #expect(desk.desktop == before.desktop)
-        #expect(desk.tree.nodes[.desktop] == nil)
+        #expect(desk.tree.nodes[NodeID(raw: 0)] == nil)
         #expect(desk.tree.windows == [window(1)])
     }
 
@@ -170,10 +170,14 @@ private func expectInvalidLayout(_ data: Data, _ name: String) {
         expectInvalidLayout(data, name)
     }
 
-    @Test func schema2DecodesStrictlyWithoutTheLegacyPath() throws {
-        // Node still has the Desktop case until 08.1.1-16; schema 2 keeps what it holds rather than migrating it.
-        let t = try tree(legacyWorld(root: 3, nodes: [1: panelJSON(1), 3: splitJSON([1, 0], [0.5, 0.5]), 0: desktopJSON()], windows: [1], version: 2))
-        #expect(t.node(.desktop) != nil)
+    @Test func schema2DecodesStrictlyWithoutTheLegacyPath() {
+        // Node has no Desktop case (08.1.1-16) and schema 2 never migrates, so a Desktop node there does not parse.
+        do {
+            _ = try World.decode(from: legacyWorld(root: 3, nodes: [1: panelJSON(1), 3: splitJSON([1, 0], [0.5, 0.5]), 0: desktopJSON()], windows: [1], version: 2))
+            Issue.record("a schema 2 Desktop node decoded")
+        } catch {
+            guard case .corrupt = error else { Issue.record("expected corrupt, got \(error)"); return }
+        }
     }
 
     @Test func schema3IsNewer() {

@@ -19,7 +19,6 @@ extension LayoutTree {
             case let .split(_, children, _): stack.append(contentsOf: children)
             case let .panel(window): keptStates[window.identity] = states[window.identity]
             case let .tabs(windows, _): for window in windows { keptStates[window.identity] = states[window.identity] }
-            case .desktop: break
             }
         }
         return try LayoutTree(root: id, nodes: kept, states: keptStates)

@@ -15,7 +15,7 @@ private func tree(root: UInt64, _ nodes: [UInt64: Node], states overrides: [Wind
         switch node {
         case let .panel(window): states[window.identity] = .present
         case let .tabs(windows, _): for window in windows { states[window.identity] = .present }
-        case .split, .desktop: break
+        case .split: break
         }
     }
     for (window, state) in overrides { states[window.identity] = state }

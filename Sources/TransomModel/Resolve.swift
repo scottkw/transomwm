@@ -21,9 +21,6 @@ public struct Resolution: Equatable, Sendable {
         self.unfit = unfit
         self.hiddenTabs = hiddenTabs
     }
-
-    /// The Desktop tile's rect; nil when the tree has none or it is hidden.
-    public var desktopRect: Rect? { nodeRects[.desktop] }
 }
 
 /// Lays the tree out in `area` with one `gap` between tiles and around the outer edge (D-12).
@@ -75,7 +72,7 @@ public func resolve(
         switch node {
         case let .panel(window): (windows, selected) = ([window], window)
         case let .tabs(tabs, index): (windows, selected) = (tabs, tabs[index])
-        case .split, .desktop: continue
+        case .split: continue
         }
         for window in windows where tree.state(of: window) == .present {
             let min = mins[window] ?? Size(width: 1, height: 1)
@@ -139,8 +136,6 @@ private struct Solver {
             guard active.contains(windows[selected]) else { return nil }
             let sizes = windows.compactMap { minimum[$0] }
             return Size(width: sizes.map(\.width).max()!, height: sizes.map(\.height).max()! + TabBand.height)
-        case let .desktop(hidden):
-            return hidden ? nil : desktopMinimum
         case let .split(axis, children, _):
             var sizes: [Size] = []
             for child in children { if let size = try aggregate(child) { sizes.append(size) } }
@@ -164,8 +159,6 @@ private struct Solver {
             for window in windows where window != windows[selected] && tree.state(of: window) == .present {
                 result.hiddenTabs[window] = content
             }
-        case .desktop:
-            break  // its rect is the nodeRects entry recorded above
         case let .split(axis, children, weights):
             var parts: [(id: NodeID, weight: Double, min: Double)] = []
             let horizontal = axis == .horizontal

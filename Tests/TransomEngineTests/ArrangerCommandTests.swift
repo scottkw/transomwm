@@ -47,7 +47,6 @@ private func shape(_ tree: LayoutTree) -> String {
             (axis == .horizontal ? "H[" : "V[") + children.map(describe).joined(separator: ",") + "]"
         case .panel(let window)?: names[window] ?? "?"
         case .tabs(let windows, _)?: "T[" + windows.map { names[$0] ?? "?" }.joined(separator: ",") + "]"
-        case .desktop?: "D"
         case nil: "nil"
         }
     }

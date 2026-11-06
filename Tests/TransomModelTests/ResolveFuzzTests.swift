@@ -27,7 +27,6 @@ private func need(_ tree: LayoutTree, _ id: NodeID, _ windows: Set<WindowRef>, _
     switch tree.nodes[id]! {
     case let .panel(window): leafWindows = [window]
     case let .tabs(tabs, _): leafWindows = tabs
-    case .desktop: return nil  // the fuzzed trees are raw trees and hold no Desktop tile
     case let .split(axis, children, _):
         let sizes = children.compactMap { need(tree, $0, windows, mins, gap) }
         if sizes.isEmpty { return nil }

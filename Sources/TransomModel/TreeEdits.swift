@@ -82,8 +82,6 @@ extension LayoutTree {
     /// Removes `window` (D-05). A panel's share goes back to its siblings in proportion to their
     /// weights; a tab group left with one window becomes a panel under the same NodeID.
     /// Throws only `windowNotFound`: a confirmed `.closed` must always be able to drop the slot.
-    /// The Desktop tile is an ordinary leaf here, so the last docked window going collapses the tree back
-    /// to the Desktop alone, and a hidden Desktop is shown again (D-24).
     public mutating func remove(_ window: WindowRef) throws(LayoutError) {
         guard let leaf = leaf(containing: window) else { throw .windowNotFound(window) }
         guard case .tabs(let windows, let selected)? = nodes[leaf] else {
@@ -104,8 +102,7 @@ extension LayoutTree {
     }
 
     /// Takes the whole leaf `id` (a panel or a tab group) out of the tree, as `remove` does a panel's: its share goes back
-    /// to its siblings and a hidden Desktop is shown again when no docked window is left. Returns the leaf and its
-    /// members' states, for `insertLeaf` or a floating group.
+    /// to its siblings. Returns the leaf and its members' states, for `insertLeaf` or a floating group.
     public mutating func removeLeaf(_ id: NodeID) throws(LayoutError) -> (node: Node, states: [WindowIdentity: WindowState]) {
         guard let node = nodes[id] else { throw .nodeNotFound(id) }
         let members: [WindowRef]
@@ -113,7 +110,6 @@ extension LayoutTree {
         case let .panel(window): members = [window]
         case let .tabs(windows, _): members = windows
         case .split: throw .notALeaf(id)
-        case .desktop: throw .desktopTile(id)
         }
         var next = self
         var states: [WindowIdentity: WindowState] = [:]
@@ -128,7 +124,6 @@ extension LayoutTree {
             next.root = nil
         }
         next.normalize()
-        if next.windows.isEmpty, next.isDesktopHidden == true { next.nodes[.desktop] = .desktop(hidden: false) }
         self = next
         assertValid()
         return (node, states)
@@ -144,20 +139,9 @@ extension LayoutTree {
         case let .panel(existing): next.nodes[target] = .tabs(windows: [existing, window], selected: 1)
         case let .tabs(windows, _): next.nodes[target] = .tabs(windows: windows + [window], selected: windows.count)
         case .split: throw .notALeaf(target)
-        case .desktop: throw .desktopTile(target)
         }
         next.states[window.identity] = .present
         self = next
-        assertValid()
-    }
-
-    /// Hides or shows the Desktop tile (TILE-15, D-24). Hidden, it gets no rect and the docked tiles share
-    /// its space; its stored weight is kept, so showing it brings back exactly the rects it had. Hiding is
-    /// refused while no window is docked.
-    public mutating func setDesktopHidden(_ hidden: Bool) throws(LayoutError) {
-        guard isDesktopHidden != nil else { throw .nodeNotFound(.desktop) }
-        guard !hidden || !windows.isEmpty else { throw .nothingDocked }
-        nodes[.desktop] = .desktop(hidden: hidden)
         assertValid()
     }
 
@@ -241,7 +225,7 @@ extension LayoutTree {
         switch node {
         case let .panel(window): members = [window]
         case let .tabs(windows, _): members = windows
-        case .split, .desktop: throw .invariantViolated("only a panel or a tab group is inserted as a leaf")
+        case .split: throw .invariantViolated("only a panel or a tab group is inserted as a leaf")
         }
         if let duplicate = members.first(where: { states[$0.identity] != nil }) { throw .duplicateWindow(duplicate) }
     }

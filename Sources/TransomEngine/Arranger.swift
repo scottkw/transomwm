@@ -216,8 +216,8 @@ public struct Arranger: Sendable {
     private var shownHandles: [String: [GapHandle]] = [:]
     /// The gap being dragged and its points since the press, applied by every replan until mouse-up (G-03-3 H2).
     private var liveGap: (handle: GapHandle, delta: Double)?
-    /// A press or gap drag is under way. A window joining a desk now could show a hidden Desktop or resize it for the
-    /// floater, moving tiles under the drag and changing what it commits, so `admit` waits for the end (WR-01).
+    /// A press or gap drag is under way. A window joining a desk now could move tiles under the drag and change what
+    /// it commits, so `admit` waits for the end (WR-01).
     var gestureLive: Bool { drag != nil || liveGap != nil }
     /// The windows `admit` held back during the gesture.
     private var heldAdmits: Set<WindowIdentity> = []
@@ -969,7 +969,7 @@ public struct Arranger: Sendable {
                 windows[info.window.identity] = info
                 subject = info.window.identity
                 if case .windowCreated = event { noteCreated(info, now: now) }
-                // Before `admit`, so a returning window never shows a hidden Desktop on its way to its tile (D-31).
+                // Before `admit`, so a returning window goes straight to its tile (D-31).
                 if placeholders.fresh.contains(info.window.identity) {
                     faults += fillPlaceholders(of: info.window.bundleID)
                     filled = !placeholders.fresh.contains(info.window.identity)
@@ -1068,8 +1068,8 @@ public struct Arranger: Sendable {
                 // The pressed window may be crossing displays; where it lands is decided at mouse-up.
                 if drag?.window != info.window { try rehome(info) }
             }
-            // A window that just became dockable, present or known floats on its display's Desktop (D-24). A new one may
-            // dock first, after re-matching and before `admit` can show a hidden Desktop (D-05, D-31).
+            // A window that just became dockable, present or known floats on its display's Desktop layer (D-24). A new one
+            // may dock first, after re-matching and before `admit` (D-05, D-31).
             if let subject, let info = windows[subject] {
                 if case .windowCreated = event, !filled { faults += autoTile(info, now: now) }
                 try admit(info)
@@ -1464,7 +1464,7 @@ public struct Arranger: Sendable {
         switch desk.tree.node(id) {
         case .panel(let panel)?: target = panel
         case .tabs(let tabs, let selected)?: target = tabs[selected]  // LayoutTree.validate keeps selected in range
-        case .split?, .desktop?, nil: target = nil
+        case .split?, nil: target = nil
         }
         return target.map { [.perform([.focus($0)])] } ?? [.beep]
     }
@@ -2112,8 +2112,8 @@ public struct Arranger: Sendable {
     }
 
     /// Plans every desk shown on a display and writes only the frames that changed by more than 0.5 pt. Docked
-    /// windows left without room float first, and are named in one notice (D-26). A hidden Desktop's floating windows
-    /// are parked once each, first in the perform, and only after an immediate save holding their home frames (D-16).
+    /// windows left without room float first, and are named in one notice (D-26). Windows the plan parks are parked
+    /// once each, first in the perform, and only after an immediate save holding their home frames (D-16).
     mutating func planShown() -> [ArrangerEffect] {
         guard !sessionPaused, pauseReasons.isEmpty, !settling else { return [] }
         var parks: [WindowCommand] = []

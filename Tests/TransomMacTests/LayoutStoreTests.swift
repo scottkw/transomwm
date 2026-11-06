@@ -474,7 +474,7 @@ extension LayoutStoreTests {
         let desk = try #require(contents.world[DeskKey(displayUUID: LayoutFileV3Fixture.display, spaceID: 3)])
         let root = try #require(desk.tree.root)
         #expect(desk.tree.node(root) == .split(axis: .horizontal, children: [NodeID(raw: 1), NodeID(raw: 2)], weights: [0.5, 0.5]))
-        #expect(desk.tree.nodes[.desktop] == nil)
+        #expect(desk.tree.nodes[NodeID(raw: 0)] == nil)
         #expect(desk.tree.windows == [a, b])
         #expect(desk.desktop.frame(of: window(3, "Calendar")) == Rect(x: 900, y: 300, width: 400, height: 300))
         #expect(desk.desktop.frame(of: window(4, "FileZilla")) == Rect(x: 1439, y: 899, width: 600, height: 400))

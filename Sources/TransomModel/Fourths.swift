@@ -88,12 +88,11 @@ extension LayoutTree {
         if case let .split(rootAxis, children, weights)? = nodes[root], rootAxis == axis { (children, weights) } else { ([root], [1]) }
     }
 
-    /// Mirrors `Solver.aggregate`: whether a node gets any space when resolved.
+    /// Mirrors `Solver.aggregate`: whether a node gets any space when resolved. Only docked tiles count (D-04).
     func takesPart(_ id: NodeID) -> Bool {
         switch nodes[id] {
         case let .panel(window)?: state(of: window) == .present
         case let .tabs(windows, selected)?: state(of: windows[selected]) == .present
-        case let .desktop(hidden)?: !hidden
         case let .split(_, children, _)?: children.contains(where: takesPart)
         case nil: false
         }
