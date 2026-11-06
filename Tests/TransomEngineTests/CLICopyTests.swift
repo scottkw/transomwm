@@ -32,7 +32,17 @@ import Testing
               split-finder         Split with a new Finder window
               restore              Restore all windows
 
-            Fourths
+            Dock
+              dock-left-half       Dock the focused window to the left half
+              dock-right-half      Dock the focused window to the right half
+              dock-top-half        Dock the focused window to the top half
+              dock-bottom-half     Dock the focused window to the bottom half
+              dock-left-third      Dock the focused window to the left third
+              dock-center-third    Dock the focused window to the center third
+              dock-right-third     Dock the focused window to the right third
+              dock-top-third       Dock the focused window to the top third
+              dock-middle-third    Dock the focused window to the middle third
+              dock-bottom-third    Dock the focused window to the bottom third
               dock-column-1        Dock the focused window as the 1st of 4 columns
               dock-column-2        Dock the focused window as the 2nd of 4 columns
               dock-column-3        Dock the focused window as the 3rd of 4 columns
@@ -68,6 +78,7 @@ import Testing
         let listed = TransomURL.helpLines.map(\.command)
         #expect(listed.count == allowed.count)
         #expect(Set(listed) == allowed)
+        #expect(TransomURL.commands.count == 36, "08.1.1 UI-SPEC Surface 4: 36 parameterless commands")
     }
 
     @Test func asciiStraightensTheAppsTypography() {

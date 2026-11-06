@@ -64,6 +64,32 @@ import Testing
         #expect(settled, "the window never reached \(planned)")
     }
 
+    /// 08.1.1 D-10: a half takes the fourth path on a real window. No weight check: until 08.1.1-09 a Desktop tile still
+    /// shares the desk, so only the window's place at the left edge holds before and after.
+    @Test(.timeLimit(.minutes(1)))
+    func aHalfCommandDocksAFloatingWindowAtTheLeftEdge() async throws {
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs) = try await LiveArrange.start(fixture)
+        defer { withExtendedLifetime(arrange) {} }
+        let ref = try #require(refs.first)
+
+        await arrange.dispatch(.dockFourth(.firstHalf, .horizontal), focused: ref)
+
+        let key = try #require(arrange.arranger.deskKey(of: ref))
+        let desk = try #require(arrange.arranger.world[key])
+        #expect(desk.tree.state(of: ref) != nil, "the window is not docked")
+        let visible = try LiveArrange.visibleFrame()
+        let frames = try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames
+        let planned = try #require(frames[ref])
+        #expect(frames.values.allSatisfy { planned.minX <= $0.minX }, "not the leftmost: \(frames)")
+        let settled = await waitUntil(timeout: .seconds(3)) {
+            guard let now = try? await LiveArrange.frame(fixture, 0) else { return false }
+            return LiveArrange.near(now, planned)
+        }
+        #expect(settled, "the window never reached \(planned)")
+    }
+
     /// ⌃ pressed during a real title-bar drag docks to the column under the pointer (D-18).
     @Test(
         .timeLimit(.minutes(1)),

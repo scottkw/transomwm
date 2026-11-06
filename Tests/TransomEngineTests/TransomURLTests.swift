@@ -70,6 +70,35 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse(string) == nil)
     }
 
+    /// 08.1.1 UI-SPEC Surface 4: the ten halves and thirds.
+    @Test(arguments: [
+        ("dock-left-half", FourthSlot.firstHalf, Axis.horizontal), ("dock-right-half", .secondHalf, .horizontal),
+        ("dock-top-half", .firstHalf, .vertical), ("dock-bottom-half", .secondHalf, .vertical),
+        ("dock-left-third", .firstThird, .horizontal), ("dock-center-third", .middleThird, .horizontal), ("dock-right-third", .lastThird, .horizontal),
+        ("dock-top-third", .firstThird, .vertical), ("dock-middle-third", .middleThird, .vertical), ("dock-bottom-third", .lastThird, .vertical),
+    ])
+    func theHalfAndThirdCommandsParse(host: String, slot: FourthSlot, axis: Axis) {
+        #expect(parse("transom://\(host)") == .dockFourth(slot, axis))
+        #expect(parse("transom://\(host)/") == .dockFourth(slot, axis))
+    }
+
+    @Test(arguments: ["transom:///dock-left-half/", "transom://DOCK-LEFT-HALF", "transom://dock-half/left", "transom://dock-left-half/1",
+        "transom://dock-left-half?x=1", "transom://dock-center-third#f", "transom://dock-middle-half"])
+    func malformedHalfAndThirdURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
+    /// T-08.1.1-07: an opened half URL and an opened fourth URL share the one dock second.
+    @Test func anOpenedHalfURLSharesTheDockSecondWithAFourth() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockFourth(.firstHalf, .horizontal), .zero), (.dockFourth(.first, .vertical), .milliseconds(10)),
+            (.dockFourth(.middleThird, .vertical), .milliseconds(20)), (.dockFourth(.second, .horizontal), .seconds(1)),
+        ]
+        #expect(attempts.map { limiter.admitOpenedURL($0.0, at: start + $0.1) } == [true, false, false, true])
+    }
+
     /// WR-09: on the URL route the fourths share a second, on top of each command's own, and other commands are untouched.
     @Test func openedDockURLsShareOneSecond() {
         var limiter = TransomURLRateLimiter()

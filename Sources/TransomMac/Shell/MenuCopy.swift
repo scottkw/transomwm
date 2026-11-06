@@ -55,15 +55,21 @@ nonisolated public enum MenuCopy {
         }
     }
 
-    /// A Dock to Fourth item (UI-SPEC Surface 4).
+    /// A Dock Window position item (08.1 UI-SPEC Surface 4, 08.1.1 UI-SPEC Surface 4).
     public static func fourthTitle(_ slot: FourthSlot, _ axis: Axis) -> String {
         let line = axis == .horizontal ? "Column" : "Row"
+        let (lead, middle, trail) = axis == .horizontal ? ("Left", "Center", "Right") : ("Top", "Middle", "Bottom")
         return switch slot {
         case .first: "1st \(line)"
         case .second: "2nd \(line)"
         case .third: "3rd \(line)"
         case .fourth: "4th \(line)"
         case .middle: "Middle Half \(line)"
+        case .firstHalf: "\(lead) Half"
+        case .secondHalf: "\(trail) Half"
+        case .firstThird: "\(lead) Third"
+        case .middleThird: "\(middle) Third"
+        case .lastThird: "\(trail) Third"
         }
     }
 

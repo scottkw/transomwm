@@ -120,6 +120,14 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         (0, 0.75, .middle, "Left three quarters", "Top three quarters"),
         (0.25, 1, .middle, "Right three quarters", "Bottom three quarters"),
         (0, 1, .first, "Whole desk", "Whole desk"),
+        (0, 0.5, .firstHalf, "Left half", "Top half"),
+        (0.5, 1, .secondHalf, "Right half", "Bottom half"),
+        (0, FourthSlot.oneThird, .firstThird, "Left third", "Top third"),
+        (FourthSlot.oneThird, FourthSlot.twoThirds, .middleThird, "Center third", "Middle third"),
+        (FourthSlot.twoThirds, 1, .lastThird, "Right third", "Bottom third"),
+        (0, FourthSlot.twoThirds, .middleThird, "Left two thirds", "Top two thirds"),
+        (FourthSlot.oneThird, 1, .middleThird, "Right two thirds", "Bottom two thirds"),
+        (0, 1, .lastThird, "Whole desk", "Whole desk"),
     ])
     func everySpanHasItsLabel(start: Double, end: Double, slot: FourthSlot, column: String, row: String) {
         #expect(FourthCopy.label(slot, .horizontal, span: (start, end)) == column)
@@ -130,6 +138,7 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         #expect(FourthCopy.docked("Whole desk") == "Docked to whole desk")
         #expect(FourthCopy.docked("Middle half row") == "Docked to middle half row")
         #expect(FourthCopy.docked("1st row") == "Docked to 1st row")
+        #expect(FourthCopy.docked("Right two thirds") == "Docked to right two thirds")
     }
 
     @Test func aWindowWithNothingElseTakingPartGetsTheWholeDesk() throws {
@@ -338,6 +347,172 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
 
         _ = arranger.handle(.command(.growTile, focused: w), now: .now)
         expectWeights(try rootWeights(arranger), [0.35, 0.65])
+    }
+}
+
+// MARK: Halves and thirds (08.1.1 D-10, UI-SPEC Surface 4)
+
+/// The ten half and third commands, in menu order.
+private let halvesAndThirds: [(FourthSlot, Axis)] = [
+    (.firstHalf, .horizontal), (.secondHalf, .horizontal), (.firstHalf, .vertical), (.secondHalf, .vertical),
+    (.firstThird, .horizontal), (.middleThird, .horizontal), (.lastThird, .horizontal),
+    (.firstThird, .vertical), (.middleThird, .vertical), (.lastThird, .vertical),
+]
+
+/// An Arranger whose desk was restored with no Desktop tile, so these hold before and after new desks lose theirs
+/// (08.1.1-09). `docked` (at most two) dock as equal halves along `axis`; the rest float.
+private func desktopFree(_ infos: [WindowInfo], docked: [WindowRef] = [], along axis: Axis = .horizontal, zoom: Bool = false) throws -> Arranger {
+    var arranger = Arranger()
+    _ = arranger.handle(.restore(try World(ids: IDSource(), desks: [mainKey: Desk(tree: LayoutTree())]), homeFrames: [:]), now: .now)
+    _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: .now)
+    if zoom { _ = arranger.handle(.zoomEnabled(true), now: .now) }
+    try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
+        for (window, slot) in zip(docked, [FourthSlot.firstHalf, .secondHalf]) {
+            try desk.desktop.remove(window)
+            try desk.tree.insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)
+        }
+    }
+    _ = arranger.handle(.gap(8), now: .now)  // re-plans
+    return arranger
+}
+
+private func rootAxis(_ arranger: Arranger) throws -> Axis? {
+    let tree = try #require(arranger.world[mainKey]?.tree)
+    if case .split(let axis, _, _)? = tree.node(try #require(tree.root)) { return axis }
+    return nil
+}
+
+extension ArrangerFourthTests {
+    @Test func aLeftHalfBesideTheRootDocksAtHalfAndUndoFloatsItBack() throws {
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a])
+        #expect(try #require(arranger.world[mainKey]?.tree).state(of: a) == .present)
+        let depth = arranger.history.depth(for: mainKey)
+
+        let effects = command(&arranger, .firstHalf, .horizontal, focused: w)
+
+        expectWeights(try rootWeights(arranger), [0.5, 0.5])
+        #expect(try rootOrder(arranger) == [w, a])
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+        #expect(announcements(effects) == ["Docked to left half"])
+
+        _ = arranger.handle(.command(.undo, focused: w), now: .now)
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.desktop.frame(of: w) == frameW)
+        #expect(desk.tree.state(of: w) == nil)
+    }
+
+    /// D-23 for halves and thirds: on an empty desk every one is the whole desk; beside one tile, the share the window gets.
+    @Test(arguments: zip(halvesAndThirds, [
+        "left half", "right half", "top half", "bottom half", "left third", "left two thirds", "right third", "top third",
+        "top two thirds", "bottom third",
+    ]))
+    func aFloatingWindowDocksAndTheAnnouncementNamesTheSpan(command dock: (FourthSlot, Axis), besideATile: String) throws {
+        var empty = try desktopFree([info(w)])
+        var depth = empty.history.depth(for: mainKey)
+        #expect(announcements(command(&empty, dock.0, dock.1, focused: w)) == ["Docked to whole desk"])
+        #expect(empty.world[mainKey]?.tree.root.flatMap { empty.world[mainKey]?.tree.node($0) } == .panel(w))
+        #expect(empty.history.depth(for: mainKey) == depth + 1)
+
+        var beside = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a])
+        depth = beside.history.depth(for: mainKey)
+        #expect(announcements(command(&beside, dock.0, dock.1, focused: w)) == ["Docked to \(besideATile)"])
+        #expect(try rootAxis(beside) == dock.1)
+        #expect(beside.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test(arguments: [(Axis.horizontal, "center third"), (.vertical, "middle third")])
+    func theMiddleThirdBetweenTwoTilesTakesTheMiddleThird(axis: Axis, name: String) throws {
+        var arranger = try desktopFree([info(w), info(a), info(b)], docked: [a, b], along: axis)
+
+        let effects = command(&arranger, .middleThird, axis, focused: w)
+
+        expectWeights(try rootWeights(arranger), [1.0 / 3, 1.0 / 3, 1.0 / 3])
+        #expect(try rootOrder(arranger) == [a, w, b])
+        #expect(announcements(effects) == ["Docked to \(name)"])
+    }
+
+    /// A docked window moves: docked the other way first, so no command leaves the layout as it was.
+    @Test(arguments: halvesAndThirds)
+    func aDockedWindowMovesInOneUndoStep(slot: FourthSlot, axis: Axis) throws {
+        let other: Axis = axis == .horizontal ? .vertical : .horizontal
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [w, a], along: other)
+        let depth = arranger.history.depth(for: mainKey)
+
+        _ = command(&arranger, slot, axis, focused: w)
+
+        #expect(try rootAxis(arranger) == axis)
+        #expect(try rootOrder(arranger) == ([.secondHalf, .lastThird].contains(slot) ? [a, w] : [w, a]))
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test(arguments: halvesAndThirds)
+    func aTabGroupMemberMovesItsWholeGroup(slot: FourthSlot, axis: Axis) throws {
+        let other: Axis = axis == .horizontal ? .vertical : .horizontal
+        var arranger = try desktopFree([info(w), info(a), info(b)], docked: [a, b], along: other)
+        let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in
+            try desk.desktop.remove(w)
+            try desk.tree.group(w, into: leaf)
+        }
+        _ = arranger.handle(.gap(8), now: .now)
+        guard case .tabs(let members, let selected)? = arranger.world[mainKey]?.tree.node(leaf) else {
+            Issue.record("no group")
+            return
+        }
+        let depth = arranger.history.depth(for: mainKey)
+
+        _ = command(&arranger, slot, axis, focused: members[(selected + 1) % members.count])
+
+        let tree = try #require(arranger.world[mainKey]?.tree)
+        #expect(try rootAxis(arranger) == axis)
+        let moved = try #require(tree.leaf(containing: w))
+        #expect(tree.leaf(containing: a) == moved, "the group came apart")
+        guard case .tabs(let after, _)? = tree.node(moved) else {
+            Issue.record("not a group: \(tree)")
+            return
+        }
+        #expect(Set(after) == Set(members))
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test(arguments: halvesAndThirds)
+    func withZoomOffNoRoomIsRefusedWithTheBlockedFlash(slot: FourthSlot, axis: Axis) throws {
+        var arranger = try desktopFree([info(w, minimum: huge)])
+        let world = arranger.world, depth = arranger.history.depth(for: mainKey)
+        let frame = try wouldBeFrame(arranger) { desk, ids in
+            try desk.desktop.remove(w)
+            try desk.tree.insertFourth(.panel(w), states: [w.identity: .present], slot: slot, axis: axis, ids: &ids)
+        }
+
+        let effects = command(&arranger, slot, axis, focused: w)
+
+        #expect(effects == [.beep, .announce("Not enough room to dock here"), .flashBlocked(frame, displayUUID: "main")])
+        #expect(arranger.world == world)
+        #expect(arranger.history.depth(for: mainKey) == depth)
+    }
+
+    @Test(arguments: halvesAndThirds)
+    func withZoomOnNoRoomCollapsesAndSaysSo(slot: FourthSlot, axis: Axis) throws {
+        var arranger = try desktopFree([info(w, minimum: huge)], zoom: true)
+        let depth = arranger.history.depth(for: mainKey)
+
+        let effects = command(&arranger, slot, axis, focused: w)
+
+        #expect(announcements(effects) == [CollapseCopy.dockedAnnouncement(dragged: true, others: 0)])
+        #expect(arranger.camera.collapsible == [w.identity])
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    @Test(arguments: halvesAndThirds)
+    func theSameCommandAgainOnlyBeepsAndAddsNoUndoStep(slot: FourthSlot, axis: Axis) throws {
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a])
+        _ = command(&arranger, slot, axis, focused: w)
+        let world = arranger.world, depth = arranger.history.depth(for: mainKey)
+
+        #expect(command(&arranger, slot, axis, focused: w) == [.beep])
+
+        #expect(arranger.world == world)
+        #expect(arranger.history.depth(for: mainKey) == depth)
     }
 }
 

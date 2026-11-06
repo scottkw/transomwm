@@ -1,8 +1,14 @@
 import Foundation
 
-/// Where a fourth lands along an axis (D-11): one of four equal spans, or the middle half.
+/// Where a share of the whole desk lands along an axis: one of four equal spans or the middle half (08.1 D-11), or a half
+/// or a third (8.1.1 D-10). Halves and thirds have no drag band (`FourthZones` keeps its five).
 public enum FourthSlot: String, CaseIterable, Hashable, Sendable {
     case first, second, third, fourth, middle
+    case firstHalf, secondHalf, firstThird, middleThird, lastThird
+
+    /// Defined once so the spans `fourthSpan` returns match `FourthCopy`'s label switch exactly.
+    public static let oneThird = 1.0 / 3
+    public static let twoThirds = 2.0 / 3
 
     /// The slot's span as fractions of the axis, 0 being the left edge or the top.
     public var span: (start: Double, end: Double) {
@@ -12,6 +18,11 @@ public enum FourthSlot: String, CaseIterable, Hashable, Sendable {
         case .third: (0.5, 0.75)
         case .fourth: (0.75, 1)
         case .middle: (0.25, 0.75)
+        case .firstHalf: (0, 0.5)
+        case .secondHalf: (0.5, 1)
+        case .firstThird: (0, Self.oneThird)
+        case .middleThird: (Self.oneThird, Self.twoThirds)
+        case .lastThird: (Self.twoThirds, 1)
         }
     }
 }

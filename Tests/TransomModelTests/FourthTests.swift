@@ -246,6 +246,56 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
         #expect(ids == IDSource(next: 3000))
     }
 
+    // MARK: Halves and thirds (08.1.1 D-10), on trees with no Desktop node
+
+    private static let halvesAndThirds: [FourthSlot] = [.firstHalf, .secondHalf, .firstThird, .middleThird, .lastThird]
+
+    @Test(arguments: halvesAndThirds, [Axis.horizontal, .vertical])
+    func onAnEmptyDeskAHalfOrThirdIsTheWholeDesk(slot: FourthSlot, axis: Axis) throws {
+        let tree = try inserted(LayoutTree(), slot, axis)
+        #expect(tree.root.flatMap(tree.node) == .panel(makeWindow(names["W"]!)))
+        #expect(LayoutTree().fourthSpan(slot, axis: axis) == (0, 1))
+    }
+
+    @Test(arguments: [
+        FourthTableRow(before: [("A", 1)], slot: .firstHalf, after: [("W", 1.0 / 2), ("A", 1.0 / 2)]),
+        FourthTableRow(before: [("A", 1)], slot: .secondHalf, after: [("A", 1.0 / 2), ("W", 1.0 / 2)]),
+        FourthTableRow(before: [("A", 1)], slot: .firstThird, after: [("W", 1.0 / 3), ("A", 2.0 / 3)]),
+        FourthTableRow(before: [("A", 1)], slot: .lastThird, after: [("A", 2.0 / 3), ("W", 1.0 / 3)]),
+        // A is centred at ½, the window's position, so it goes after and the window grows to the left two thirds.
+        FourthTableRow(before: [("A", 1)], slot: .middleThird, after: [("W", 2.0 / 3), ("A", 1.0 / 3)]),
+        FourthTableRow(before: [("A", 0.5), ("B", 0.5)], slot: .middleThird, after: [("A", 1.0 / 3), ("W", 1.0 / 3), ("B", 1.0 / 3)]),
+        FourthTableRow(before: [("A", 0.5), ("B", 0.5)], slot: .firstHalf, after: [("W", 1.0 / 2), ("A", 1.0 / 4), ("B", 1.0 / 4)]),
+    ])
+    func halvesAndThirdsUseTheFourthArithmetic(row: FourthTableRow) throws {
+        for axis in [Axis.horizontal, .vertical] {
+            expectChildren(try inserted(try flat(row.before, axis), row.slot, axis), row.after)
+        }
+    }
+
+    /// D-12: the user's collapsed window was not the Desktop tile's doing. On two equal tiles a 3rd-column fourth leaves the
+    /// trailing one a quarter of the width, with no Desktop tile at all.
+    @Test func theD12ThirdColumnGivesTheTrailingTileAQuarter() throws {
+        let tree = try inserted(try flat([("A", 0.5), ("B", 0.5)], .horizontal), .third, .horizontal)
+        expectChildren(tree, [("A", 1.0 / 2), ("W", 1.0 / 4), ("B", 1.0 / 4)])
+    }
+
+    /// Pitfall 8: the spans are the slot's own constants, so `FourthCopy`'s exact tuple matching never drifts.
+    @Test(arguments: [
+        ([("A", 0.5), ("B", 0.5)], FourthSlot.firstThird, 0.0, FourthSlot.oneThird),
+        ([("A", 0.5), ("B", 0.5)], .middleThird, FourthSlot.oneThird, FourthSlot.twoThirds),
+        ([("A", 0.5), ("B", 0.5)], .lastThird, FourthSlot.twoThirds, 1),
+        ([("A", 1)], .middleThird, 0, FourthSlot.twoThirds),
+        ([("A", 1)], .firstHalf, 0, 0.5),
+        ([("A", 1)], .secondHalf, 0.5, 1),
+    ] as [([(String, Double)], FourthSlot, Double, Double)])
+    func theThirdsSpansAreExactlyTheSlotsConstants(children: [(String, Double)], slot: FourthSlot, start: Double, end: Double) throws {
+        for axis in [Axis.horizontal, .vertical] {
+            let span = try flat(children, axis).fourthSpan(slot, axis: axis)
+            #expect(span.start == start && span.end == end, "\(span)")
+        }
+    }
+
     // MARK: Zones (UI-SPEC Surface 3)
 
     private static let visible = Rect(x: 100, y: 50, width: 1600, height: 800)
