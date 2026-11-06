@@ -31,32 +31,40 @@ import Testing
         try await guest.launchApp()
         let visible = try LiveArrange.visibleFrame()
 
-        // Step 1, URL: `open -a` so the URL goes to this copy (D-13, D-14).
+        // Step 1, URL: `open -a` so the URL goes to this copy (D-13, D-14). A lone window docked to any column on an empty
+        // desk becomes the root and fills the visible frame (8.1.1 D-04).
         try run("/usr/bin/open", ["-a", guest.app, "transom-debug://dock-column-1"])
         var first: Rect?
         let docked = await waitUntil(timeout: .seconds(5)) {
             first = try? await LiveArrange.frame(fixture, 0)
-            return first.map { $0.minX <= visible.minX + 16 && $0.width < visible.width * 0.3 } ?? false
+            return first.map {
+                LiveArrange.inside($0, visible) && $0.width >= visible.width * 0.9 && $0.height >= visible.height * 0.9
+            } ?? false
         }
-        #expect(docked, "dock-column-1 left window 0 at \(String(describing: first)) in \(visible)")
+        #expect(docked, "dock-column-1 should fill the desk with window 0, which is at \(String(describing: first)) in \(visible)")
 
-        // Step 2, new window (D-02).
+        // Step 2, new window (D-02). Window 0's tile is the whole desk, wider than tall, so window 1 takes its right half
+        // (8.1.1 D-08). With one tile the focused and the largest tile are the same; host tests
+        // aWideFocusedTileGetsTheNewWindowToItsRight and aFloatingFocusSplitsTheLargestTile pin that choice.
         try await expectNewWindowDocks(1, beside: 0, in: fixture)
-        // Beside the focused tile, not the largest: window 0 has focus from before the launch, and its tile is tall (WR-03).
         let firstTile = try #require(try await LiveArrange.frame(fixture, 0))
         let secondTile = try #require(try await LiveArrange.frame(fixture, 1))
-        #expect(abs(firstTile.minX - secondTile.minX) <= 2 && secondTile.minY > firstTile.maxY - 1, "window 1 did not split window 0's tile: \(firstTile), \(secondTile)")
+        #expect(
+            abs(firstTile.minY - secondTile.minY) <= 2 && abs(firstTile.height - secondTile.height) <= 2
+                && secondTile.minX > firstTile.maxX - 1,
+            "window 1 is not right of window 0: \(firstTile), \(secondTile)")
 
-        // Step 3, Hold ⌥ (D-08).
-        try await expectPlainDragFloats(0, by: { CGPoint(x: $0.width + 16, y: 25) }, in: fixture)
+        // Step 3, Hold ⌥ (D-08). Every tile is full height, so the travel is sideways: half a width keeps the release inside
+        // the visible frame and leaves window 2's later title-bar point clear.
+        try await expectPlainDragFloats(0, by: { CGPoint(x: $0.width / 2, y: 0) }, in: fixture)
 
         try await guest.quitApp()
         try await guest.launchApp()
 
-        // Step 4: both still act after a relaunch (D-19). The focused window 0 floats, so window 2 goes below the largest tile, the
-        // Desktop, which is the only way it can move and still fit once the Desktop takes its room back.
+        // Step 4: both still act after a relaunch (D-19). Window 0 has floated since step 3, so window 1 is the desk's only
+        // tile, and window 2 takes its right half. Half a width to the left keeps window 2 inside the visible frame.
         try await expectNewWindowDocks(2, beside: 1, in: fixture)
-        try await expectPlainDragFloats(2, by: { _ in CGPoint(x: 0, y: -120) }, in: fixture)
+        try await expectPlainDragFloats(2, by: { CGPoint(x: -$0.width / 2, y: 0) }, in: fixture)
 
         try await guest.quitApp()
         try guest.delete(key: "dragToDock")
@@ -66,13 +74,16 @@ import Testing
         // Step 5, defaults (D-01, D-07): a new window floats where it opened, and a plain drag is a docking drag again.
         _ = try await fixture.send("open standard")
         try await Task.sleep(for: .seconds(3))
-        // Where it opened, moved clear of window 1's tile as any floater is: that tile holds the first column since step 3.
+        // Exactly where it opened: Transom never moves a floating window (8.1.1 D-05, D-06).
         let opening = openingFrame(of: 3)
-        let tile = try #require(try await LiveArrange.frame(fixture, 1))
-        let opened = Rect(x: max(opening.x, tile.maxX + 8), y: opening.y, width: opening.width, height: opening.height)
         let floating = try #require(try await LiveArrange.frame(fixture, 3))
-        #expect(LiveArrange.near(floating, opened), "with the keys gone window 3 is at \(floating), opened at \(opening), window 1 at \(tile)")
-        let (start, released) = try await plainDrag(1, by: { CGPoint(x: -($0.width + 16), y: 25) }, in: fixture)
+        #expect(LiveArrange.near(floating, opening), "with the keys gone window 3 is at \(floating), opened at \(opening)")
+        // Windows 0 and 2 float over window 1's title bar since steps 3 and 4, and titleBar refuses a covered window, so they
+        // go behind it. Transom's own conflict alert also sits centred over it after each launch (the VMs keep macOS edge
+        // tiling on, SAFE-04), so window 1 is grabbed near its right end.
+        _ = try await fixture.send("order-back 0")
+        _ = try await fixture.send("order-back 2")
+        let (start, released) = try await plainDrag(1, by: { CGPoint(x: -$0.width / 4, y: 0) }, grabbingAt: 0.875, in: fixture)
         try await Task.sleep(for: .seconds(2))
         let end = try #require(try await LiveArrange.frame(fixture, 1))
         #expect(!LiveArrange.near(end, released, within: 20), "from \(start) a plain drag in Automatically mode floated at \(end)")
@@ -150,15 +161,20 @@ import Testing
         try await Task.sleep(for: .seconds(1))  // the neighbours' writes land before anything is grabbed
     }
 
-    /// A plain title-bar drag by `travel(start frame)`. It has to leave the window inside the Desktop tile as it will be with the
-    /// window out, or it is rightly clamped. Returns the frames before the press and at the release.
-    private func plainDrag(_ index: Int, by travel: (Rect) -> CGPoint, in fixture: FixtureProcess) async throws -> (start: Rect, released: Rect) {
+    /// A plain title-bar drag by `travel(start frame)`. It has to leave the window inside the visible frame, or a floating release
+    /// is rightly clamped onto it. Tiles are full height, so travels are sideways. Returns the frames before the press and at
+    /// the release. `grabbingAt` is how far along the title bar the press lands, from its left end.
+    private func plainDrag(_ index: Int, by travel: (Rect) -> CGPoint, grabbingAt along: Double = 0.5, in fixture: FixtureProcess) async throws
+        -> (start: Rect, released: Rect)
+    {
         let start = try #require(try await LiveArrange.frame(fixture, index))
         let id = try #require(fixture.windows.first { $0.index == index }).id
         try await Task.sleep(for: .milliseconds(300))  // the fixture activates itself
         let drag = PostedDrag()
         defer { drag.finish() }
-        let grab = try LiveArrange.titleBar(of: id, frame: start)
+        // titleBar presses at the middle of the frame it is given: a 2 pt slice centred at `along`.
+        let slice = Rect(x: start.minX + start.width * along - 1, y: start.minY, width: 2, height: start.height)
+        let grab = try LiveArrange.titleBar(of: id, frame: slice)
         let by = travel(start)
         try await drag.press(at: grab)
         try await drag.move(to: CGPoint(x: grab.x + by.x, y: grab.y + by.y))
