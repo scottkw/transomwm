@@ -69,8 +69,8 @@ import Testing
         #expect(settled, "the window never reached \(planned)")
     }
 
-    /// 08.1.1 D-10: a half takes the fourth path on a real window. No weight check: alone on the desk the half is the whole
-    /// desk (D-04), so only the window's place at the left edge is checked.
+    /// 08.1.1 D-10: a half takes the fourth path on a real window. Only the left edge is checked here; the exact half
+    /// (E1) is checked by the Left Half test below.
     @Test(.timeLimit(.minutes(1)))
     func aHalfCommandDocksAFloatingWindowAtTheLeftEdge() async throws {
         let fixture = try await FixtureProcess.launch(["standard"])
@@ -88,6 +88,85 @@ import Testing
         let frames = try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames
         let planned = try #require(frames[ref])
         #expect(frames.values.allSatisfy { planned.minX <= $0.minX }, "not the leftmost: \(frames)")
+        let settled = await waitUntil(timeout: .seconds(3)) {
+            guard let now = try? await LiveArrange.frame(fixture, 0) else { return false }
+            return LiveArrange.near(now, planned)
+        }
+        #expect(settled, "the window never reached \(planned)")
+    }
+
+    /// 8.1.1 D-16, UAT issue 1: Left Half with three floaters and nothing docked takes exactly the left half, the other
+    /// floaters stay put (D-05), and Right Half on a second window fills the right half without moving the first.
+    @Test(.timeLimit(.minutes(1)))
+    func aLeftHalfOnAnEmptyDeskLeavesTheOtherHalfEmpty() async throws {
+        let fixture = try await FixtureProcess.launch(["standard", "standard", "standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs) = try await LiveArrange.start(fixture)
+        defer { withExtendedLifetime(arrange) {} }
+        try #require(refs.count == 3)
+        let key = try #require(arrange.arranger.deskKey(of: refs[0]))
+        try #require(arrange.arranger.world[key]?.tree.windows.isEmpty == true, "the desk is not empty")
+        try #require(refs.allSatisfy { arrange.arranger.isFloating($0) }, "a window is not floating")
+        var before: [Rect] = []
+        for index in refs.indices { before.append(try #require(try await LiveArrange.frame(fixture, index))) }
+        let visible = try LiveArrange.visibleFrame()
+        func planned(_ ref: TransomModel.WindowRef) throws -> Rect {
+            let desk = try #require(arrange.arranger.world[key])
+            return try #require(try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames[ref])
+        }
+
+        await arrange.dispatch(.dockFourth(.firstHalf, .horizontal), focused: refs[0])
+
+        try #require(!arrange.arranger.isFloating(refs[0]), "window 0 did not dock")
+        let left = try planned(refs[0])
+        #expect(LiveArrange.inside(left, visible) && left.maxX <= visible.midX + 1, "\(left) is not in the left half of \(visible)")
+        #expect(left.minX - visible.minX < 20 && left.width > visible.width * 0.45, "\(left) is not the whole left half of \(visible)")
+        let settled = await waitUntil(timeout: .seconds(3)) {
+            guard let now = try? await LiveArrange.frame(fixture, 0) else { return false }
+            return LiveArrange.near(now, left)
+        }
+        #expect(settled, "window 0 never reached \(left)")
+        for index in [1, 2] {
+            #expect(arrange.arranger.isFloating(refs[index]), "window \(index) is no longer floating")
+            let now = try #require(try await LiveArrange.frame(fixture, index))
+            #expect(LiveArrange.near(now, before[index]), "floating window \(index) moved from \(before[index]) to \(now)")
+        }
+
+        await arrange.dispatch(.dockFourth(.secondHalf, .horizontal), focused: refs[1])
+
+        try #require(!arrange.arranger.isFloating(refs[1]), "window 1 did not dock")
+        let right = try planned(refs[1])
+        let leftAfter = try planned(refs[0])
+        #expect(LiveArrange.near(leftAfter, left), "window 0's tile changed: \(left) to \(leftAfter)")
+        #expect(right.minX >= visible.midX - 1 && visible.maxX - right.maxX < 20, "\(right) is not the right half of \(visible)")
+        #expect(abs(right.width - left.width) <= 2, "the halves differ: \(left) and \(right)")
+        let filled = await waitUntil(timeout: .seconds(3)) {
+            guard let a = try? await LiveArrange.frame(fixture, 0), let b = try? await LiveArrange.frame(fixture, 1) else { return false }
+            return LiveArrange.near(a, left) && LiveArrange.near(b, right)
+        }
+        #expect(filled, "the windows never reached \(left) and \(right)")
+        let third = try #require(try await LiveArrange.frame(fixture, 2))
+        #expect(LiveArrange.near(third, before[2]), "floating window 2 moved from \(before[2]) to \(third)")
+    }
+
+    /// 8.1.1 D-17: Top Left docks a floating window into exactly the top-left quarter of an empty desk.
+    @Test(.timeLimit(.minutes(1)))
+    func aCornerCommandDocksAFloatingWindowInTheTopLeftQuarter() async throws {
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+        let (arrange, refs) = try await LiveArrange.start(fixture)
+        defer { withExtendedLifetime(arrange) {} }
+        let ref = try #require(refs.first)
+
+        await arrange.dispatch(.dockCorner(.topLeft), focused: ref)
+
+        let desk = try #require(arrange.arranger.deskKey(of: ref).flatMap { arrange.arranger.world[$0] })
+        #expect(desk.tree.state(of: ref) == .present, "the window is not docked")
+        let visible = try LiveArrange.visibleFrame()
+        let planned = try #require(try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames[ref])
+        #expect(LiveArrange.inside(planned, visible) && planned.maxX <= visible.midX + 1 && planned.maxY <= visible.midY + 1, "\(planned) is not in the top-left quarter of \(visible)")
+        #expect(planned.minX - visible.minX < 20 && planned.minY - visible.minY < 20, "\(planned) is not at the top-left corner of \(visible)")
+        #expect(planned.width > visible.width * 0.45 && planned.height > visible.height * 0.45, "\(planned) is not the whole quarter")
         let settled = await waitUntil(timeout: .seconds(3)) {
             guard let now = try? await LiveArrange.frame(fixture, 0) else { return false }
             return LiveArrange.near(now, planned)
@@ -187,7 +266,7 @@ import Testing
             Issue.record("no fourth preview after the dwell: \(String(describing: arrange.arranger.drag?.shown))")
             return
         }
-        #expect(label == "Top half")  // beside the one docked tile, the window grows into the empty side (D-14, D-23)
+        #expect(label == "2nd row")  // E1: the label names the position; nothing grows into the empty 1st row
 
         drag.release()
         try await drag.letGo(.command, .control)
@@ -202,7 +281,13 @@ import Testing
             return
         }
         #expect(axis == .vertical)
-        let planned = try #require(try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames[ref])
+        let frames = try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames
+        let planned = try #require(frames[ref])
+        // E1: exactly the 2nd row. E3: the 1st row stays empty, so the docked window sits below, not above.
+        #expect(planned.minY > visible.minY + visible.height * 0.2 && planned.maxY < visible.minY + visible.height * 0.55, "\(planned) is not the 2nd row of \(visible)")
+        let docked = try #require(desk.tree.windows.first { $0 != ref })
+        let other = try #require(frames[docked])
+        #expect(other.minY >= planned.maxY - 1, "the docked window at \(other) took the 1st row above \(planned)")
         let settled = await waitUntil(timeout: .seconds(3)) {
             guard let now = try? await LiveArrange.frame(fixture, 0) else { return false }
             return LiveArrange.near(now, planned)
