@@ -196,7 +196,7 @@ import Testing
 @Suite @MainActor struct ZoomCommandMenuTests {
     private let base: NSEvent.ModifierFlags = [.control, .option, .command]
     private nonisolated static let cameraCommands: [CameraCommand] = [
-        .zoomOutAll, .stepOut, .stepIn, .back, .forward, .pan(.left), .pan(.right), .pan(.top), .pan(.bottom), .frameWindow, .frameDesktop,
+        .zoomOutAll, .stepOut, .stepIn, .back, .forward, .pan(.left), .pan(.right), .pan(.top), .pan(.bottom), .frameWindow,
         .overview,
     ]
 
@@ -226,20 +226,20 @@ import Testing
     @Test func withZoomOnTheSectionFollowsSurface6() {
         let menu = CommandMenu { _ in }
         let previews = NSMenuItem(title: "Allow Window Previews\u{2026}", action: nil, keyEquivalent: "")
-        let section = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: false, previews: previews, toggle: toggle())
+        let section = menu.zoomSection(enabled: true, framingWindow: false, previews: previews, toggle: toggle())
         #expect(section.map(\.title) == [
             "Zoom", "Show Overview", "Zoom Out to All Windows", "Zoom Out One Level", "Zoom In One Level", "Back", "Forward", "Move View",
-            "Frame Focused Window", "Frame Desktop", "Allow Window Previews\u{2026}", "Turn Off Zoom",
+            "Frame Focused Window", "Allow Window Previews\u{2026}", "Turn Off Zoom",
         ])
         #expect(section[0].isSectionHeader)
-        let granted = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: false, previews: nil, toggle: toggle())
+        let granted = menu.zoomSection(enabled: true, framingWindow: false, previews: nil, toggle: toggle())
         #expect(!granted.map(\.title).contains("Allow Window Previews\u{2026}"))
     }
 
     @Test func withZoomOffTheSectionIsTheHeaderAndTurnOnZoom() {
         let menu = CommandMenu { _ in }
         let previews = NSMenuItem(title: "Allow Window Previews\u{2026}", action: nil, keyEquivalent: "")
-        let section = menu.zoomSection(enabled: false, framingWindow: true, framingDesktop: true, previews: previews, toggle: toggle())
+        let section = menu.zoomSection(enabled: false, framingWindow: true, previews: previews, toggle: toggle())
         #expect(section.map(\.title) == ["Zoom", "Turn On Zoom"])
     }
 
@@ -247,19 +247,17 @@ import Testing
         let menu = CommandMenu { _ in }
         menu.update { if case .camera = $0 { false } else { true } }  // paused: the availability rule refuses every camera command
         let off = toggle()
-        let section = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: false, previews: nil, toggle: off)
+        let section = menu.zoomSection(enabled: true, framingWindow: false, previews: nil, toggle: off)
         for command in Self.cameraCommands { #expect(!menu.item(for: .camera(command)).isEnabled) }
         #expect(section.last === off && off.isEnabled && off.title == "Turn Off Zoom")
     }
 
-    @Test func theFrameItemsCarryTheirCheckmarks() {
+    @Test func frameFocusedWindowCarriesItsCheckmark() {
         let menu = CommandMenu { _ in }
-        _ = menu.zoomSection(enabled: true, framingWindow: true, framingDesktop: false, previews: nil, toggle: toggle())
+        _ = menu.zoomSection(enabled: true, framingWindow: true, previews: nil, toggle: toggle())
         #expect(menu.item(for: .camera(.frameWindow)).state == .on)
-        #expect(menu.item(for: .camera(.frameDesktop)).state == .off)
-        _ = menu.zoomSection(enabled: true, framingWindow: false, framingDesktop: true, previews: nil, toggle: toggle())
+        _ = menu.zoomSection(enabled: true, framingWindow: false, previews: nil, toggle: toggle())
         #expect(menu.item(for: .camera(.frameWindow)).state == .off)
-        #expect(menu.item(for: .camera(.frameDesktop)).state == .on)
     }
 }
 

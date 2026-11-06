@@ -13,7 +13,7 @@ enum ShortcutsModel {
 
     static let sections: [(title: String, rows: [Row])] = [
         (ZoomCopy.zoomSection, [
-            .showOverview, .zoomOutAll, .stepOut, .stepIn, .zoomBack, .zoomForward, .panLeft, .panRight, .panUp, .panDown, .frameWindow, .frameDesktop,
+            .showOverview, .zoomOutAll, .stepOut, .stepIn, .zoomBack, .zoomForward, .panLeft, .panRight, .panUp, .panDown, .frameWindow,
         ]),
         (ViewCopy.savedViewsSection, [
             .view1, .view2, .view3, .view4, .view5, .view6, .view7, .view8, .view9,

@@ -16,7 +16,7 @@ import TransomModel
         .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
         .arrangeAll, .floatAll, .restoreAll,
         .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
-        .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
+        .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow),
         .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
     ] + fourthColumns + fourthRows
 
@@ -73,17 +73,14 @@ import TransomModel
 
     /// The Zoom section (UI-SPEC Surface 6; 06 Surface 4 puts Show Overview first): the header, the camera items, `previews` (nil while Screen Recording is
     /// granted) and `toggle`; with zoom off only the header and Turn On Zoom. Enabled states come from `update`.
-    /// `takeover` is Replace Mission Control (O2), after Frame Desktop.
-    func zoomSection(
-        enabled: Bool, framingWindow: Bool, framingDesktop: Bool, takeover: NSMenuItem? = nil, previews: NSMenuItem?, toggle: NSMenuItem
-    ) -> [NSMenuItem] {
+    /// `takeover` is Replace Mission Control (O2), after Frame Focused Window.
+    func zoomSection(enabled: Bool, framingWindow: Bool, takeover: NSMenuItem? = nil, previews: NSMenuItem?, toggle: NSMenuItem) -> [NSMenuItem] {
         toggle.title = enabled ? ZoomCopy.turnOffZoom : ZoomCopy.turnOnZoom
         guard enabled else { return [.sectionHeader(title: ZoomCopy.zoomSection), toggle] }
         item(for: .camera(.frameWindow)).state = framingWindow ? .on : .off
-        item(for: .camera(.frameDesktop)).state = framingDesktop ? .on : .off
         let steps = [CameraCommand.overview, .zoomOutAll, .stepOut, .stepIn, .back, .forward].map { item(for: .camera($0)) }
-        let frames = [item(for: .camera(.frameWindow)), item(for: .camera(.frameDesktop))]
-        return [.sectionHeader(title: ZoomCopy.zoomSection)] + steps + [moveViewMenu] + frames + [takeover, previews].compactMap { $0 } + [toggle]
+        let frame = item(for: .camera(.frameWindow))
+        return [.sectionHeader(title: ZoomCopy.zoomSection)] + steps + [moveViewMenu, frame] + [takeover, previews].compactMap { $0 } + [toggle]
     }
 
     func halfItem(_ edge: Edge) -> NSMenuItem {

@@ -167,7 +167,7 @@ import os
         let uuid = context.displayUUID
         let section = commands.zoomSection(
             enabled: on, framingWindow: uuid.map { arranger.isFramingFocused(displayUUID: $0, focused: context.focused) } ?? false,
-            framingDesktop: uuid.map(arranger.isFramingDesktop) ?? false, takeover: takeoverMenuItem(), previews: previews, toggle: toggle)
+            takeover: takeoverMenuItem(), previews: previews, toggle: toggle)
         for item in section { menu.addItem(item) }
     }
 

@@ -51,7 +51,6 @@ extension KeyboardShortcuts.Name {
     static let panUp = Self("panUp", initial: .init(.pageUp, modifiers: [.control, .option, .command]))
     static let panDown = Self("panDown", initial: .init(.pageDown, modifiers: [.control, .option, .command]))
     static let frameWindow = Self("frameWindow", initial: .init(.m, modifiers: [.control, .option, .command]))
-    static let frameDesktop = Self("frameDesktop", initial: .init(.g, modifiers: [.control, .option, .command]))
     // Overview (06 UI-SPEC Surface 4).
     static let showOverview = Self("showOverview", initial: .init(.a, modifiers: [.control, .option, .command]))
     // Tabs (07 UI-SPEC Surface 7): not zoom names, so they stay enabled with zoom off.
@@ -154,7 +153,6 @@ enum Hotkeys {
         (.panUp, .camera(.pan(.top))),
         (.panDown, .camera(.pan(.bottom))),
         (.frameWindow, .camera(.frameWindow)),
-        (.frameDesktop, .camera(.frameDesktop)),
         (.showOverview, .camera(.overview)),
         (.nextTab, .tabs(.next)),
         (.previousTab, .tabs(.previous)),

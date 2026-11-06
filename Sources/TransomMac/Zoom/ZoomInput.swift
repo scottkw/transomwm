@@ -101,8 +101,7 @@ import os
         }
     }
 
-    /// A left press the tap let through (or a green-button press): ends a band whose release was lost and pick mode,
-    /// and frames the Desktop on a double-click on its wallpaper (ZOOM-11), which is never taken.
+    /// A left press the tap let through (or a green-button press): ends a band whose release was lost and pick mode.
     func pointerDown(_ event: TapEvent) {
         endBand()
         if let current = pick, let block = current.blocks.first(where: { $0.rect.contains(event.location) }) {
@@ -112,26 +111,6 @@ import os
             return
         }
         endPick(reason: "click")
-        guard event.clickState == 2, published.armed else { return }
-        // Its own task: Finder's hit test must not hold up the Arranger's view of this press.
-        Task { await desktopDoubleClick(at: event.location) }
-    }
-
-    private func desktopDoubleClick(at location: CGPoint) async {
-        guard let controller else { return }
-        let point = Point(x: location.x, y: location.y)
-        let arranger = controller.arranger
-        guard let display = arranger.displays.first(where: { $0.frame.contains(point) }),
-            let desktop = (try? arranger.shownLeafRects(displayUUID: display.uuid))?[.desktop], desktop.contains(point),
-            CGWindowList.topmostWindow(at: point) == nil  // wallpaper, not a window over the Desktop tile
-        else { return }
-        let finder = NSRunningApplication.runningApplications(withBundleIdentifier: Arranger.finderBundleID).first?.processIdentifier
-        // Off the tap and off main: Finder's hit test may take up to its 0.25 s timeout.
-        let hit = await Task.detached { finder.flatMap { Self.finderElement(at: location, pid: $0) } }.value
-        if let hit { log.debug("desktop double-click hit \(hit.role, privacy: .public) / \(hit.subrole ?? "-", privacy: .public)") }
-        guard !Self.isDesktopItem(hit) else { return }  // a desktop icon only opens
-        log.info("\(ZoomCopy.logDesktopDoubleClick, privacy: .public)")
-        await controller.camera(.frameDesktop, displayUUID: display.uuid, focused: nil, pointer: point)
     }
 
     /// A title-bar double-click on a docked window (ZOOM-10): frame it, or go back when it is framed (the engine toggles).
@@ -341,28 +320,6 @@ import os
         endBand()
         endPick(reason: reason)
         pickMove = nil
-    }
-
-    // MARK: Desktop hit test (A4)
-
-    /// Finder's AX element at `point`: its role and subrole. Nil when Finder has nothing there.
-    nonisolated private static func finderElement(at point: CGPoint, pid: pid_t) -> (role: String, subrole: String?)? {
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.25)
-        var element: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &element) == .success, let element else { return nil }
-        func string(_ attribute: String) -> String? {
-            var value: CFTypeRef?
-            return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value as? String : nil
-        }
-        return string(kAXRoleAttribute).map { ($0, string(kAXSubroleAttribute)) }
-    }
-
-    /// Whether the hit is a desktop icon (or its label) rather than bare wallpaper. Only the desktop's own containers
-    /// count as wallpaper, so an unknown role is treated as an icon and never frames (RESEARCH A4, unverified: UAT).
-    nonisolated static func isDesktopItem(_ hit: (role: String, subrole: String?)?) -> Bool {
-        guard let hit else { return false }
-        return ![kAXScrollAreaRole, kAXGroupRole, kAXWindowRole, kAXApplicationRole].contains(hit.role)
     }
 
     // MARK: Pure helpers

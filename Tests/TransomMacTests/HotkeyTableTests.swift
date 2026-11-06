@@ -17,7 +17,7 @@ import Testing
             "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight", "snapMaximize", "snapCenter",
             "arrangeAll", "floatAll", "restoreAll",
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
-            "frameDesktop", "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
+            "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
             "view1", "view2", "view3", "view4", "view5", "view6", "view7", "view8", "view9",
             "saveView1", "saveView2", "saveView3", "saveView4", "saveView5", "saveView6", "saveView7", "saveView8", "saveView9",
             "dockColumn1", "dockColumn2", "dockColumn3", "dockColumn4", "dockColumnMiddle",
@@ -30,7 +30,7 @@ import Testing
             .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
             .arrangeAll, .floatAll, .restoreAll,
             .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
-            .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
+            .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow),
             .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
         ] + ViewSlot.all.map { .camera(.view($0)) } + ViewSlot.all.map { .camera(.saveView($0)) } + [
             .dockFourth(.first, .horizontal), .dockFourth(.second, .horizontal), .dockFourth(.third, .horizontal), .dockFourth(.fourth, .horizontal),
@@ -51,18 +51,18 @@ import Testing
             .init(.three, modifiers: base), .init(.u, modifiers: base), .init(.i, modifiers: base), .init(.j, modifiers: base),
             .init(.k, modifiers: base), .init(.return, modifiers: base), .init(.c, modifiers: base),
             .init(.d, modifiers: shifted), .init(.f, modifiers: shifted), .init(.zero, modifiers: base),
-            // UI-SPEC Hotkeys and URLs (04): O , . [ ] Home End PageUp PageDown M G
+            // UI-SPEC Hotkeys and URLs (04): O , . [ ] Home End PageUp PageDown M (G retired, 8.1.1 D-13)
             .init(.o, modifiers: base), .init(.comma, modifiers: base), .init(.period, modifiers: base),
             .init(.leftBracket, modifiers: base), .init(.rightBracket, modifiers: base), .init(.home, modifiers: base),
             .init(.end, modifiers: base), .init(.pageUp, modifiers: base), .init(.pageDown, modifiers: base),
-            .init(.m, modifiers: base), .init(.g, modifiers: base),
+            .init(.m, modifiers: base),
             // 06 UI-SPEC Surface 4: Show Overview
             .init(.a, modifiers: base),
             // 07 UI-SPEC Surface 7: Next Tab, Previous Tab, Move Out of Group
             .init(.t, modifiers: base), .init(.t, modifiers: shifted), .init(.l, modifiers: base),
         ]
         // 08 UI-SPEC Surface 3: the saved views follow the OS-version rule (ViewChords), not ⌃⌥⌘.
-        #expect(Array(Hotkeys.entries.map(\.name.defaultShortcut).prefix(47)) == expected)
+        #expect(Array(Hotkeys.entries.map(\.name.defaultShortcut).prefix(46)) == expected)
     }
 
     /// 08.1 UI-SPEC Surface 4: the digit row by key position, columns then rows, 0 last.
@@ -111,16 +111,16 @@ import Testing
         #expect(spec.isSubset(of: Set(Hotkeys.entries.map(\.name.rawValue))))
     }
 
-    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, plus Show Overview (06 UI-SPEC Surface 4) and the
-    /// 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 32 + 12 + the 3 tab names (07
-    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) = 75.
-    @Test func theZoomNamesAreTheUISpecElevenPlusShowOverviewAndTheSavedViews() {
+    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, less frameDesktop (retired, 8.1.1 D-13), plus
+    /// Show Overview (06 UI-SPEC Surface 4) and the 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 32 + 11 + the 3 tab names (07
+    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) = 74.
+    @Test func theZoomNamesAreTheUISpecTenPlusShowOverviewAndTheSavedViews() {
         let zoom = [
-            "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow", "frameDesktop",
+            "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
             "showOverview",
         ] + (1...9).map { "view\($0)" } + (1...9).map { "saveView\($0)" }
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 75)
+        #expect(Hotkeys.entries.count == 74)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
     }
 
@@ -128,8 +128,9 @@ import Testing
     @Test func theRetiredDesktopNamesAreNotInTheTable() {
         let names = Set(Hotkeys.entries.map(\.name.rawValue))
         #expect(!names.isEmpty)
-        #expect(!names.contains("toggleDesktop"))
+        #expect(names.isDisjoint(with: ["toggleDesktop", "frameDesktop"]))
         #expect(!Hotkeys.entries.contains { $0.name.defaultShortcut == .init(.h, modifiers: base) }, "⌃⌥⌘H reaches apps")
+        #expect(!Hotkeys.entries.contains { $0.name.defaultShortcut == .init(.g, modifiers: base) }, "⌃⌥⌘G reaches apps")
     }
 
     /// 07 UI-SPEC Surface 7: persistent names (Pitfall 13), not zoom names.

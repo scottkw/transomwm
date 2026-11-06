@@ -20,7 +20,6 @@ import Testing
         (.node(NodeID(raw: 7)), nil, 3, 0, "Showing 3 windows"),
         (.node(NodeID(raw: 7)), nil, 3, 1, "Showing 3 windows, 1 collapsed"),
         (.node(NodeID(raw: 7)), nil, 3, 2, "Showing 3 windows, 2 collapsed"),
-        (.node(.desktop), nil, 2, 0, "Showing the Desktop"),
     ])
     func revealAnnouncementsUseExplicitBranches(view: ViewTarget, app: String?, windows: Int, collapsed: Int, expected: String) {
         #expect(ZoomCopy.revealAnnouncement(view: view, appName: app, windowCount: windows, collapsed: collapsed) == expected)
@@ -94,6 +93,5 @@ import Testing
         #expect(ZoomCopy.logRectCanceled == "rect zoom canceled (Esc)")
         #expect(ZoomCopy.logRepost == "\u{2318}\u{21E7}-click re-posted")
         #expect(ZoomCopy.logPickOn == "pick mode on")
-        #expect(ZoomCopy.logDesktopDoubleClick == "desktop double-click \u{2192} frame desktop")
     }
 }

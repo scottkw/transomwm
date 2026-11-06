@@ -3,18 +3,18 @@ import TransomEngine
 @testable import TransomMac
 import Testing
 
-/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 75 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows,
+/// ZOOM-08, 04 UI-SPEC Surface 8: one Recorder row per hotkey, 74 in all (06 Surface 4 adds Show Overview, 07 Surface 7 the Tabs rows,
 /// 08 Surface 3 the Saved Views rows, 08.1 Surface 4 the Dock to Fourth rows), in the Surface 8 sections and titles.
 @Suite @MainActor struct ShortcutsModelTests {
     @Test func theSectionsFollowSurface8() {
         #expect(ShortcutsModel.sections.map(\.title) == ["Zoom", "Saved Views", "Arrange", "Dock to Fourth", "Split", "Snap Floating Window", "Tabs", "Safety", "Exclusions"])
     }
 
-    @Test func the75RowsBindTheHotkeyNamesOnceEach() {
+    @Test func the74RowsBindTheHotkeyNamesOnceEach() {
         let names = ShortcutsModel.sections.flatMap(\.rows).map(\.name)
         #expect(ShortcutsModel.sections.count == 9)
-        #expect(names.count == 75)
-        #expect(Set(names).count == 75)
+        #expect(names.count == 74)
+        #expect(Set(names).count == 74)
         #expect(Set(names) == Set(Hotkeys.entries.map(\.name)))
     }
 
@@ -22,7 +22,7 @@ import Testing
         #expect(ShortcutsModel.sections.map { $0.rows.map(\.title) } == [
             [
                 "Show Overview", "Zoom Out to All Windows", "Zoom Out One Level", "Zoom In One Level", "Back", "Forward", "Move View Left", "Move View Right",
-                "Move View Up", "Move View Down", "Frame Focused Window", "Frame Desktop",
+                "Move View Up", "Move View Down", "Frame Focused Window",
             ],
             (1...9).map { "Go to View \($0)" } + (1...9).map { "Save View \($0)" },
             [

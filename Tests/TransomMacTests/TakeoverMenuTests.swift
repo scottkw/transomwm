@@ -121,16 +121,16 @@ import Testing
         #expect(backend.writes.isEmpty)
     }
 
-    @Test func o2SitsAfterFrameDesktopBeforeAllowWindowPreviews() {
+    @Test func o2SitsAfterFrameFocusedWindowBeforeAllowWindowPreviews() {
         let menu = CommandMenu { _ in }
         let item = { (title: String) in NSMenuItem(title: title, action: nil, keyEquivalent: "") }
         let titles = menu.zoomSection(
-            enabled: true, framingWindow: false, framingDesktop: false, takeover: item("Replace Mission Control"),
+            enabled: true, framingWindow: false, takeover: item("Replace Mission Control"),
             previews: item("Allow Window Previews\u{2026}"), toggle: item("Turn Off Zoom")
         ).map(\.title)
-        #expect(Array(titles.suffix(4)) == ["Frame Desktop", "Replace Mission Control", "Allow Window Previews\u{2026}", "Turn Off Zoom"])
+        #expect(Array(titles.suffix(4)) == ["Frame Focused Window", "Replace Mission Control", "Allow Window Previews\u{2026}", "Turn Off Zoom"])
         let off = menu.zoomSection(
-            enabled: false, framingWindow: false, framingDesktop: false, takeover: item("Replace Mission Control"), previews: nil,
+            enabled: false, framingWindow: false, takeover: item("Replace Mission Control"), previews: nil,
             toggle: item("Turn On Zoom"))
         #expect(!off.map(\.title).contains("Replace Mission Control"), "rendered only with zoom on")
     }

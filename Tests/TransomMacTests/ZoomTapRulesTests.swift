@@ -105,7 +105,7 @@ private let full = ZoomTapState(
     titleBarDoubleClick: true)
 
 /// Pick mode clicks (ZOOM-06) and title-bar double-clicks (ZOOM-10): a click is taken (down and up) only on the window
-/// the tile or band belongs to; the Desktop double-click (ZOOM-11) is never taken.
+/// the tile or band belongs to; a wallpaper double-click is not Transom's and is never taken (8.1.1 D-13).
 @Suite struct ZoomTapClickRulesTests {
     private func decide(
         _ type: CGEventType, at location: CGPoint, flags: CGEventFlags = [], clickState: Int64 = 1, window: UInt32,
@@ -162,7 +162,7 @@ private let full = ZoomTapState(
         #expect(swallow == .none)
     }
 
-    @Test func aDesktopDoubleClickIsNeverTaken() {
+    @Test func aWallpaperDoubleClickIsNeverTaken() {
         var swallow = ZoomTapRules.Swallow.none
         #expect(decide(.leftMouseDown, at: CGPoint(x: 1000, y: 700), clickState: 2, window: 0, &swallow) == .pass)
         #expect(decide(.leftMouseUp, at: CGPoint(x: 1000, y: 700), clickState: 2, window: 0, &swallow) == .pass)
