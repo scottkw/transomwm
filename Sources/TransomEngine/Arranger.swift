@@ -389,7 +389,6 @@ public struct Arranger: Sendable {
                 case (.dock, let window?): return try dock(window)
                 case (.float, let window?): return try float(window)
                 case (.undo, _): return try undo(focused)
-                case (.toggleDesktop, _): return try toggleDesktop(focused)
                 case (.focus(let edge), let window?): return try focusNeighbour(of: window, toward: edge)
                 case (.finderSplit, _): return try finderSplit(focused, now: now)
                 case (.moveOrSnap(let edge), let window?): return try moveOrSnap(window, toward: edge)
@@ -958,16 +957,7 @@ public struct Arranger: Sendable {
             return cameraAvailable(command, context: context)
         case .tabs:
             return !sessionPaused && focused.flatMap(tabGroup(holding:)) != nil
-        case .toggleDesktop:
-            // Hiding with nothing docked and present would leave an empty screen (UI-SPEC Surface 1 row 17).
-            guard let key = targetKey(focused), let desk = world[key] else { return false }
-            return desk.tree.isDesktopHidden == true || desk.tree.windows.contains { desk.tree.state(of: $0) == .present }
         }
-    }
-
-    /// Whether the Desktop tile of the desk a command on `focused` targets is hidden: the toggle item's title.
-    public func isDesktopHidden(focused: WindowRef?) -> Bool {
-        targetKey(focused).flatMap { world[$0]?.tree.isDesktopHidden } == true
     }
 
     /// Whether `window` floats on a desk's Desktop layer: which of Move Window or Snap Floating Window the menu enables.
@@ -1524,22 +1514,6 @@ public struct Arranger: Sendable {
             } catch { faults.append(.fault("could not re-add \(info.window) after an undo: \(error)")) }
         }
         return faults + (revived.windows.isEmpty ? replan() : [.requery(revived)])
-    }
-
-    /// Hides the target desk's Desktop tile, so the docked tiles take its space and its floating windows are parked
-    /// (TILE-15, D-24), or shows it with every parked window back at its home frame. One undo step either way. The
-    /// home frames are recorded first; `replan` saves them at once, before any park is sent (D-16).
-    private mutating func toggleDesktop(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
-        guard let key = targetKey(focused), let desk = world[key] else { return [.beep] }
-        if desk.tree.isDesktopHidden == true {
-            try world.edit(key, history: &history, showingDesktop())
-        } else {
-            for floating in desk.desktop.windows where windows[floating.window.identity]?.isExcluded != true {
-                homeFrames[floating.window.identity] = floating.frame
-            }
-            try world.edit(key, history: &history) { desk, _ throws(LayoutError) in try desk.tree.setDesktopHidden(true) }
-        }
-        return replan()
     }
 
     /// Focuses the nearest tile across `edge` of the window's tile, or of its frame when it floats (D-11, TILE-09).

@@ -27,13 +27,12 @@ nonisolated public enum MenuCopy {
     public static let fourthMenu = "Dock to Fourth"
     public static let clearWaitingTiles = "Clear Waiting Tiles"
 
-    /// A command item's title. Toggles have their own functions (`desktopToggle`).
+    /// A command item's title. Toggles have their own functions (`pauseToggle`).
     public static func commandTitle(_ command: Command) -> String {
         switch command {
         case .dock: "Dock Window"
         case .float: "Float Window"
         case .undo: "Undo Layout Change"
-        case .toggleDesktop: desktopToggle(hidden: false)
         case .focus(let edge), .moveOrSnap(let edge): direction(edge)
         case .dockFourth(let slot, let axis): fourthTitle(slot, axis)
         case .swapPrevious: "Swap with Previous Window"
@@ -181,8 +180,6 @@ nonisolated public enum MenuCopy {
         case .holdOption: "Hold Option while dragging to dock"
         }
     }
-
-    public static func desktopToggle(hidden: Bool) -> String { hidden ? "Show Desktop Tile" : "Hide Desktop Tile" }
 
     /// nil at 0, else "1 app not responding" / "N apps not responding".
     public static func degradedLine(count apps: Int) -> String? {

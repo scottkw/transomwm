@@ -66,7 +66,7 @@ private func tiles(_ harness: Harness, gap: Double) throws -> [WindowRef: Rect] 
         await harness.send(.command(.togglePause, focused: nil))
         let paused = CommandContext(focused: a, ready: true)
         #expect(!harness.arranger.availability(.dock, context: paused))
-        #expect(!harness.arranger.availability(.toggleDesktop, context: paused))
+        #expect(!harness.arranger.availability(.finderSplit, context: paused))
         #expect(harness.arranger.availability(.togglePause, context: paused))
         #expect(harness.arranger.handle(.command(.dock, focused: a), now: .now) == [.beep])
         #expect(!harness.arranger.availability(.togglePause, context: CommandContext(focused: a, ready: false)))

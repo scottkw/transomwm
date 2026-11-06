@@ -30,7 +30,6 @@ import Testing
               overview             Open or close the overview
 
             Arrange
-              toggle-desktop       Hide or show the Desktop tile
               split-finder         Split with a new Finder window
               restore              Restore all windows
 

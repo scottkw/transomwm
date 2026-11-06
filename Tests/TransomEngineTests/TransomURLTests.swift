@@ -7,14 +7,18 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
     URL(string: string).flatMap { TransomURL.parse($0, scheme: scheme) }
 }
 
-/// SAFE-03, TILE-15, TILE-17, Pitfall 21, T-03-40: three parameterless commands, nothing else gets through.
+/// SAFE-03, TILE-17, Pitfall 21, T-03-40: two parameterless commands, nothing else gets through.
 @Suite struct TransomURLTests {
-    @Test func theThreeCommandsParse() {
+    @Test func theTwoCommandsParse() {
         #expect(parse("transom://restore") == .restoreAll)
-        #expect(parse("transom://toggle-desktop") == .toggleDesktop)
         #expect(parse("transom://split-finder") == .finderSplit)
         #expect(parse("transom://restore/") == .restoreAll)
         #expect(parse("transom-debug://restore", scheme: "transom-debug") == .restoreAll)
+    }
+
+    /// Hide/Show Desktop Tile was removed (8.1.1 D-09): its old URL is unknown and runs nothing.
+    @Test func theRemovedDesktopToggleIsUnknown() {
+        #expect(parse("transom://toggle-desktop") == nil)
     }
 
     /// 04 UI-SPEC Hotkeys and URLs: every navigation action has a URL.
@@ -152,7 +156,7 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
     @Test func differentCommandsAreLimitedSeparately() {
         var limiter = TransomURLRateLimiter()
         let start = ContinuousClock.now
-        let attempts: [(Command, Duration)] = [(.restoreAll, .zero), (.toggleDesktop, .zero), (.finderSplit, .milliseconds(10)), (.toggleDesktop, .milliseconds(20))]
+        let attempts: [(Command, Duration)] = [(.restoreAll, .zero), (.camera(.back), .zero), (.finderSplit, .milliseconds(10)), (.camera(.back), .milliseconds(20))]
         let admitted = attempts.map { limiter.admit($0.0, at: start + $0.1) }
         #expect(admitted == [true, true, true, false])
     }

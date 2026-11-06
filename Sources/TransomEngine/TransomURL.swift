@@ -1,12 +1,12 @@
 import Foundation
 
-/// The `transom://` URL scheme of Phase 3 (SAFE-03, TILE-15, TILE-17, Pitfall 21, T-03-40): three parameterless commands, plus the 11 camera commands of Phase 4,
+/// The `transom://` URL scheme of Phase 3 (SAFE-03, TILE-17, Pitfall 21, T-03-40): two parameterless commands, plus the 11 camera commands of Phase 4,
 /// Show Overview (Phase 6), the three tab commands (Phase 7), `view/{n}` and `save-view/{n}` (Phase 8, D-06) and the ten dock commands (Phase 8.1, D-17).
 /// Anything from any app or web page can open one, so the parser is a strict whitelist and nothing from the URL but the
 /// chosen command goes anywhere.
 public enum TransomURL {
     static let commands: [String: Command] = [
-        "restore": .restoreAll, "toggle-desktop": .toggleDesktop, "split-finder": .finderSplit,
+        "restore": .restoreAll, "split-finder": .finderSplit,
         // Phase 4: every camera command (04 UI-SPEC Hotkeys and URLs).
         "zoom-out": .camera(.zoomOutAll), "step-out": .camera(.stepOut), "step-in": .camera(.stepIn), "back": .camera(.back),
         "forward": .camera(.forward), "pan-left": .camera(.pan(.left)), "pan-right": .camera(.pan(.right)),
@@ -41,7 +41,6 @@ public enum TransomURL {
         ("Zoom", "frame-window", "", "Frame the focused window, or go back"),
         ("Zoom", "frame-desktop", "", "Frame the Desktop tile, or go back"),
         ("Zoom", "overview", "", "Open or close the overview"),
-        ("Arrange", "toggle-desktop", "", "Hide or show the Desktop tile"),
         ("Arrange", "split-finder", "", "Split with a new Finder window"),
         ("Arrange", "restore", "", "Restore all windows"),
         ("Fourths", "dock-column-1", "", "Dock the focused window as the 1st of 4 columns"),

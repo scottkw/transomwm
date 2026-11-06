@@ -24,18 +24,17 @@ private func started() -> Arranger {
     return arranger
 }
 
-private let arrangeCommands: [Command] = [.dock, .float, .undo, .focus(.left), .finderSplit, .toggleDesktop]
+private let arrangeCommands: [Command] = [.dock, .float, .undo, .focus(.left), .finderSplit]
 
 /// UI-SPEC Surface 1 disabled-state rules: the one rule that greys menu items and makes a refused hotkey beep.
 @Suite struct CommandTests {
-    @Test func withNoFocusedWindowTheWindowScopedItemsAreOffAndTheDesktopToggleIsOn() {
+    @Test func withNoFocusedWindowTheWindowScopedItemsAreOff() {
         var arranger = started()
         _ = arranger.handle(.command(.dock, focused: w1), now: .now)
         let none = CommandContext(focused: nil, ready: true)
         #expect(!arranger.availability(.dock, context: none))
         #expect(!arranger.availability(.float, context: none))
         #expect(!arranger.availability(.focus(.right), context: none))
-        #expect(arranger.availability(.toggleDesktop, context: none))
     }
 
     @Test func whileNotReadyEveryArrangeItemIsOff() {
@@ -46,12 +45,6 @@ private let arrangeCommands: [Command] = [.dock, .float, .undo, .focus(.left), .
         for command in arrangeCommands {
             #expect(!arranger.availability(command, context: notReady), "\(command) is on while not ready")
         }
-    }
-
-    @Test func hideDesktopIsOffWhileNothingIsDocked() {
-        let arranger = started()
-        #expect(!arranger.availability(.toggleDesktop, context: CommandContext(focused: w1, ready: true)))
-        #expect(!arranger.availability(.toggleDesktop, context: CommandContext(focused: nil, ready: true)))
     }
 
     @Test func isAvailableIsTheReadyCaseOfTheSameRule() {
