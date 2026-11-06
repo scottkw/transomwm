@@ -93,17 +93,18 @@ extension Arranger {
         return camera.views[Self.key(display)] ?? .home
     }
 
-    /// The committed view of `key`. When its node is gone: the deepest node of its stored path still in the tree, else home.
+    /// The committed view of `key`. When its node is gone or an empty area: the deepest node of its stored path still in the tree, else home.
     func resolvedView(for key: DeskKey) -> ViewTarget {
         guard camera.enabled, case .node(let id)? = camera.views[key], let tree = world[key]?.tree else { return .home }
-        if tree.node(id) != nil { return .node(id) }
-        return camera.paths[key]?.last { tree.node($0) != nil }.map { Navigator.target($0, in: tree) } ?? .home
+        if Self.exists(.node(id), in: tree) { return .node(id) }
+        return camera.paths[key]?.last { Self.exists(.node($0), in: tree) }.map { Navigator.target($0, in: tree) } ?? .home
     }
 
     /// The view a camera command starts from: the pending target, else the committed view. A move pending on a desk no
-    /// longer shown (a Space switch) is stale.
+    /// longer shown (a Space switch) is stale, and so is one whose node is gone or now an empty area.
     func currentView(_ uuid: String, _ key: DeskKey) -> ViewTarget {
-        camera.pending[uuid].flatMap { $0.key == key ? $0.target : nil } ?? resolvedView(for: key)
+        if let move = camera.pending[uuid], move.key == key, let tree = world[key]?.tree, Self.exists(move.target, in: tree) { return move.target }
+        return resolvedView(for: key)
     }
 
     /// The view `planShown` plans for `key` (`resolvedView`), committing the fallback when the node is gone.
@@ -242,7 +243,7 @@ extension Arranger {
             return refused("no desk on display")
         }
         let key = Self.key(display)
-        if case .node(let id) = target, desk.tree.node(id) == nil { return refused("node not found") }
+        if !Self.exists(target, in: desk.tree) { return refused("node not found") }
         var notes: [ArrangerEffect] = []
         _ = effectiveView(for: key, notes: &notes)
         let current = currentView(uuid, key)
@@ -382,9 +383,13 @@ extension Arranger {
         }
     }
 
+    /// An empty area is never a view (E7): `vacate` and `fill` keep the NodeID, so a view can outlive its window.
     static func exists(_ target: ViewTarget, in tree: LayoutTree) -> Bool {
         guard case .node(let id) = target else { return true }
-        return tree.node(id) != nil
+        switch tree.node(id) {
+        case .spacer?, nil: return false
+        case .split?, .panel?, .tabs?: return true
+        }
     }
 
     /// The affine map taking `viewRect` (the view's rect in the home resolution) onto `area` (identity for `.home`).

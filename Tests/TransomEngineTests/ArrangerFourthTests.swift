@@ -1379,3 +1379,29 @@ extension ArrangerFourthTests {
         #expect(arranger.handle(.command(.dockCorner(.topLeft), focused: nil), now: .now) == [.beep])
     }
 }
+
+extension ArrangerFourthTests {
+    /// Review CR-01 (E4, E7): zoomed onto W, W moves to a position and its old leaf becomes an empty area under the same
+    /// NodeID. The view falls back off the empty area, every replan still tiles, and zooming out still works.
+    @Test func aViewOnALeafThatBecomesAnEmptyAreaFallsBackAndZoomOutWorks() throws {
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a, w], zoom: true)
+        let leaf = try #require(arranger.world[mainKey]?.tree.leaf(containing: w))
+        let into = arranger.handle(.zoomTo(.node(leaf), displayUUID: "main"), now: .now)
+        let move = try #require(into.compactMap { if case .cameraMove(let m) = $0 { m } else { nil } }.first)
+        _ = arranger.handle(.cameraSettle(displayUUID: "main", moveID: move.id), now: .now)
+
+        var effects = command(&arranger, .firstHalf, .vertical, focused: w)
+        #expect(arranger.world[mainKey]?.tree.node(leaf) == .spacer, "precondition: W's old leaf is an empty area")
+        for settle in effects.compactMap({ if case .cameraMove(let m) = $0 { m } else { nil } }) {
+            effects += arranger.handle(.cameraSettle(displayUUID: "main", moveID: settle.id), now: .now)
+        }
+        effects += arranger.handle(.gap(8), now: .now)  // re-plans
+
+        #expect(!effects.contains { if case .fault = $0 { true } else { false } }, "\(effects)")
+        #expect(arranger.view(on: "main") != .node(leaf))
+        if arranger.view(on: "main") != .home {
+            let home = arranger.handle(.zoomTo(.home, displayUUID: "main"), now: .now)
+            #expect(home.contains { if case .cameraMove = $0 { true } else { false } }, "\(home)")
+        }
+    }
+}
