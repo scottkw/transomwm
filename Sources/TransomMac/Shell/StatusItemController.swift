@@ -262,6 +262,7 @@ import os
 
     /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.
     /// While the pointer display's view is not home it reads "Transom: zoomed in" (paused and not ready win).
+    /// No explicit symbol size: the default (18 x 14 pt) fits the 22 pt square item on every menu bar; a forced 16 pt image measured 23 x 18 pt and lost its bottom edge on a 1x display.
     private func updateGlyph() {
         guard let button = statusItem.button else { return }
         let paused = ready && !arrange.arranger.pauseReasons.isEmpty
@@ -270,8 +271,7 @@ import os
             !ready ? ("exclamationmark.triangle", "Transom: Accessibility access needed")
             : paused ? ("rectangle.split.2x1", MenuCopy.pausedGlyphDescription)
             : zoomed ? ("rectangle.split.2x1", ZoomCopy.zoomedInDescription) : ("rectangle.split.2x1", "Transom")
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
         image?.isTemplate = true
         button.image = image
         button.appearsDisabled = paused
