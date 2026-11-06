@@ -18,7 +18,8 @@ private let gap = Shape.empty
 private func window(_ name: String) -> WindowRef { makeWindow(UInt32(name.unicodeScalars.first!.value)) }
 
 /// Builds and validates `shape`, NodeIDs from 1 in pre-order. Every window is present unless named in `absent`.
-private func build(_ shape: Shape, absent: Set<String> = []) throws -> LayoutTree {
+/// `validated: false` skips `validate()`, for shapes only `normalize()` may see.
+private func build(_ shape: Shape, absent: Set<String> = [], validated: Bool = true) throws -> LayoutTree {
     var nodes: [NodeID: Node] = [:]
     var states: [WindowIdentity: WindowState] = [:]
     var next: UInt64 = 1
@@ -39,6 +40,11 @@ private func build(_ shape: Shape, absent: Set<String> = []) throws -> LayoutTre
         return id
     }
     let root = add(shape)
+    guard validated else {
+        var tree = LayoutTree()
+        (tree.root, tree.nodes, tree.states) = (root, nodes, states)
+        return tree
+    }
     return try LayoutTree(root: root, nodes: nodes, states: states)
 }
 
@@ -131,5 +137,124 @@ private let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
         let data = try JSONEncoder().encode(tree)
         #expect(String(decoding: data, as: UTF8.self).contains("\"spacer\""))
         #expect(try JSONDecoder().decode(LayoutTree.self, from: data) == tree)
+    }
+
+    // MARK: Normalise
+
+    @Test(arguments: [
+        (h((w("A"), 0.5), (gap, 0.25), (gap, 0.25)), "H[A 0.5, _ 0.5]"),
+        (h((w("A"), 0.5), (gap, 0.25), (v((gap, 0.5), (gap, 0.5)), 0.25)), "H[A 0.5, _ 0.5]"),
+        (h((gap, 0.5), (w("A"), 0.25), (v((gap, 0.5), (h((gap, 0.5), (gap, 0.5)), 0.5)), 0.25)), "H[_ 0.5, A 0.25, _ 0.25]"),
+        (h((gap, 0.5), (gap, 0.5)), "-"),
+        (v((gap, 0.5), (h((gap, 0.5), (gap, 0.5)), 0.5)), "-"),
+    ] as [(Shape, String)])
+    func normalisingMergesEmptyAreas(shape: Shape, expected: String) throws {
+        var tree = try build(shape, validated: false)
+        tree.normalize()
+        #expect(describe(tree) == expected)
+        try tree.validate()
+        if expected == "-" { #expect(tree.nodes.isEmpty && tree.states.isEmpty) }
+    }
+
+    // MARK: Leaving, rule E5
+
+    @Test(arguments: [
+        (h((w("W"), 0.5), (gap, 0.5)), "W", "-"),
+        (h((w("A"), 0.5), (gap, 0.25), (w("W"), 0.25)), "W", "H[A 0.5, _ 0.5]"),
+        (h((gap, 0.25), (w("W"), 0.5), (gap, 0.25)), "W", "-"),
+        (h((w("A"), 0.5), (w("B"), 0.5)), "B", "A"),
+        (h((w("A"), 0.5), (w("W"), 0.25), (gap, 0.25)), "A", "H[W 0.5, _ 0.5]"),
+        (h((w("A"), 0.25), (w("W"), 0.25), (gap, 0.5)), "W", "H[A 0.25, _ 0.75]"),
+        (v((h((w("X"), 0.5), (gap, 0.5)), 0.5), (h((w("Y"), 0.5), (gap, 0.5)), 0.5)), "X", "V[_ 0.5, H[Y 0.5, _ 0.5] 0.5]"),
+    ] as [(Shape, String, String)])
+    func aLeavingWindowGivesItsSpaceToAnEmptyAreaBesideIt(shape: Shape, leaving: String, expected: String) throws {
+        var tree = try build(shape)
+        try tree.remove(window(leaving))
+        #expect(describe(tree) == expected)
+        #expect(tree.state(of: window(leaving)) == nil)
+        try tree.validate()
+    }
+
+    // MARK: Vacate, rule E4
+
+    @Test func vacatingALeafLeavesAnEmptyAreaInItsPlace() throws {
+        var tree = try build(h((w("A"), 0.5), (w("W"), 0.5)))
+        let taken = try tree.vacate(NodeID(raw: 3))
+        #expect(describe(tree) == "H[A 0.5, _ 0.5]")
+        #expect(tree.node(NodeID(raw: 3)) == .spacer)
+        #expect(taken.node == .panel(window("W")))
+        #expect(taken.states == [window("W").identity: .present])
+        #expect(tree.state(of: window("W")) == nil)
+
+        var alone = try build(w("W"))
+        _ = try alone.vacate(NodeID(raw: 1))
+        #expect(alone == LayoutTree())
+    }
+
+    @Test func aTabGroupVacatesWhole() throws {
+        var tree = try build(h((w("A"), 0.5), (w("W"), 0.5)))
+        try tree.group(window("B"), into: NodeID(raw: 3))
+        let taken = try tree.vacate(NodeID(raw: 3))
+        #expect(describe(tree) == "H[A 0.5, _ 0.5]")
+        #expect(taken.node == .tabs(windows: [window("W"), window("B")], selected: 1))
+        #expect(Set(taken.states.keys) == [window("W").identity, window("B").identity])
+    }
+
+    @Test func onlyAWindowLeafVacates() throws {
+        let tree = try build(h((w("A"), 0.5), (gap, 0.5)))
+        for id in [NodeID(raw: 1), NodeID(raw: 3)] {
+            var copy = tree
+            #expect(throws: LayoutError.notALeaf(id)) { try copy.vacate(id) }
+            #expect(copy == tree)
+        }
+    }
+
+    // MARK: Fill, rule E6
+
+    @Test func fillingAnEmptyAreaPutsTheWindowInItsPlace() throws {
+        var tree = try build(h((w("A"), 0.5), (gap, 0.5)))
+        try tree.fill(NodeID(raw: 3), with: .panel(window("W")), states: [window("W").identity: .present])
+        #expect(describe(tree) == "H[A 0.5, W 0.5]")
+        #expect(tree.state(of: window("W")) == .present)
+    }
+
+    @Test func fillingWithATabGroupKeepsItsMembersAndSelection() throws {
+        var tree = try build(h((w("A"), 0.5), (gap, 0.5)))
+        let group = Node.tabs(windows: [window("W"), window("B")], selected: 0)
+        try tree.fill(NodeID(raw: 3), with: group, states: [window("W").identity: .present, window("B").identity: .absent])
+        #expect(tree.node(NodeID(raw: 3)) == group)
+        #expect(tree.state(of: window("B")) == .absent)
+    }
+
+    @Test func onlyAnEmptyAreaFillsAndAFailedFillChangesNothing() throws {
+        let tree = try build(h((w("A"), 0.5), (gap, 0.5)))
+        var copy = tree
+        #expect(throws: LayoutError.notALeaf(NodeID(raw: 2))) {
+            try copy.fill(NodeID(raw: 2), with: .panel(window("W")), states: [window("W").identity: .present])
+        }
+        #expect(throws: LayoutError.duplicateWindow(window("A"))) {
+            try copy.fill(NodeID(raw: 3), with: .panel(window("A")), states: [window("A").identity: .present])
+        }
+        #expect(copy == tree)
+    }
+
+    // MARK: Other edits, rule E7
+
+    @Test func anEmptyAreaIsNoGroupTarget() throws {
+        let tree = try build(h((w("A"), 0.5), (gap, 0.5)))
+        var copy = tree
+        #expect(throws: LayoutError.notALeaf(NodeID(raw: 3))) { try copy.group(window("W"), into: NodeID(raw: 3)) }
+        #expect(copy == tree)
+    }
+
+    @Test func insertingAtAnEmptyAreasEdgeFollowsTheUsualRules() throws {
+        var beside = try build(h((w("A"), 0.5), (gap, 0.5)))
+        var ids = IDSource(next: 10)
+        try beside.insert(window("W"), at: .right, of: NodeID(raw: 3), ids: &ids)
+        #expect(describe(beside) == "H[A 0.333, _ 0.333, W 0.333]")
+
+        var below = try build(h((w("A"), 0.5), (gap, 0.5)))
+        try below.insert(window("W"), at: .bottom, of: NodeID(raw: 3), ids: &ids)
+        #expect(describe(below) == "H[A 0.5, V[_ 0.5, W 0.5] 0.5]")
     }
 }

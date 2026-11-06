@@ -101,16 +101,12 @@ extension LayoutTree {
         assertValid()
     }
 
-    /// Takes the whole leaf `id` (a panel or a tab group) out of the tree, as `remove` does a panel's: its share goes back
-    /// to its siblings. Returns the leaf and its members' states, for `insertLeaf` or a floating group.
+    /// Takes the whole leaf `id` (a panel or a tab group) out of the tree, as `remove` does a panel's. Rule E5 (8.1.1
+    /// D-16): an empty area right beside it takes its share, the one before it first; with none, its siblings share it
+    /// by weight. Returns the leaf and its members' states, for `insertLeaf` or a floating group.
     public mutating func removeLeaf(_ id: NodeID) throws(LayoutError) -> (node: Node, states: [WindowIdentity: WindowState]) {
         guard let node = nodes[id] else { throw .nodeNotFound(id) }
-        let members: [WindowRef]
-        switch node {
-        case let .panel(window): members = [window]
-        case let .tabs(windows, _): members = windows
-        case .split, .spacer: throw .notALeaf(id)
-        }
+        guard let members = Self.members(of: node) else { throw .notALeaf(id) }
         var next = self
         var states: [WindowIdentity: WindowState] = [:]
         for member in members { states[member.identity] = next.states.removeValue(forKey: member.identity) }
@@ -118,7 +114,10 @@ extension LayoutTree {
         if let parent = parent(of: id), case .split(let axis, var children, var weights)? = nodes[parent] {
             let index = children.firstIndex(of: id)!
             children.remove(at: index)
-            weights.remove(at: index)
+            let weight = weights.remove(at: index)
+            if let beside = [index - 1, index].first(where: { children.indices.contains($0) && nodes[children[$0]] == .spacer }) {
+                weights[beside] += weight
+            }
             next.nodes[parent] = .split(axis: axis, children: children, weights: weights)
         } else {
             next.root = nil
@@ -127,6 +126,35 @@ extension LayoutTree {
         self = next
         assertValid()
         return (node, states)
+    }
+
+    /// Rule E4 (8.1.1 D-16): the leaf `id` (a panel or a whole tab group) leaves, and an empty area takes its place,
+    /// NodeID and weight. For a docked window moved to a docking position. Returns what `removeLeaf` does.
+    public mutating func vacate(_ id: NodeID) throws(LayoutError) -> (node: Node, states: [WindowIdentity: WindowState]) {
+        guard let node = nodes[id] else { throw .nodeNotFound(id) }
+        guard let members = Self.members(of: node) else { throw .notALeaf(id) }
+        var next = self
+        var states: [WindowIdentity: WindowState] = [:]
+        for member in members { states[member.identity] = next.states.removeValue(forKey: member.identity) }
+        next.nodes[id] = .spacer
+        next.normalize()
+        try next.validate()
+        self = next
+        return (node, states)
+    }
+
+    /// Rule E6 (8.1.1 D-16): `node` (a panel or a tab group, every member new to the tree, with their states) takes the
+    /// empty area `spacer`'s place, NodeID and weight.
+    public mutating func fill(_ spacer: NodeID, with node: Node, states: [WindowIdentity: WindowState]) throws(LayoutError) {
+        guard let current = nodes[spacer] else { throw .nodeNotFound(spacer) }
+        guard current == .spacer else { throw .notALeaf(spacer) }
+        try checkNewLeaf(node)
+        var next = self
+        next.nodes[spacer] = node
+        next.states.merge(states) { $1 }
+        next.normalize()
+        try next.validate()  // the caller's states must match the leaf's members
+        self = next
     }
 
     /// Adds `window` as the last, selected tab of the leaf `target` (MODEL-06). A panel becomes a
@@ -221,13 +249,17 @@ extension LayoutTree {
 
     /// A leaf to add: a panel or a tab group whose windows are all new to the tree.
     private func checkNewLeaf(_ node: Node) throws(LayoutError) {
-        let members: [WindowRef]
-        switch node {
-        case let .panel(window): members = [window]
-        case let .tabs(windows, _): members = windows
-        case .split, .spacer: throw .invariantViolated("only a panel or a tab group is inserted as a leaf")
-        }
+        guard let members = Self.members(of: node) else { throw .invariantViolated("only a panel or a tab group is inserted as a leaf") }
         if let duplicate = members.first(where: { states[$0.identity] != nil }) { throw .duplicateWindow(duplicate) }
+    }
+
+    /// A window leaf's windows; nil for a split or an empty area.
+    private static func members(of node: Node) -> [WindowRef]? {
+        switch node {
+        case let .panel(window): [window]
+        case let .tabs(windows, _): windows
+        case .split, .spacer: nil
+        }
     }
 
     private func splitParts(_ id: NodeID) throws(LayoutError) -> (Axis, [NodeID], [Double]) {
@@ -295,12 +327,15 @@ extension LayoutTree {
         try commit(split, .split(axis: axis, children: children, weights: result))
     }
 
-    /// D-06, run on the working copy of every edit. Collapses and merges repeat until a pass finds
-    /// none; then each split's weights are renormalised and clamped. Iterative throughout.
+    /// D-06, run on the working copy of every edit. Collapses and merges (adjacent empty areas included) repeat until a
+    /// pass finds none; then each split's weights are renormalised and clamped. Iterative throughout. A split holding no
+    /// window always reduces to one empty area this way, and a tree of only empty areas is an empty desk (8.1.1 D-16,
+    /// rule E5; D-07).
     /// A merge that would pass `maxChildren` is skipped, leaving that same-axis child nested: more than
     /// maxChildren siblings cannot all keep `minWeight`. A later edit that makes room merges it.
     mutating func normalize() {
         while collapseOrMergeOnce() {}
+        if let root, nodes[root] == .spacer { self = LayoutTree() }
         for (id, node) in nodes {
             if case let .split(axis, children, weights) = node, !Self.isNormalised(weights) {
                 nodes[id] = .split(axis: axis, children: children, weights: Self.clamped(weights))
@@ -308,8 +343,9 @@ extension LayoutTree {
         }
     }
 
-    /// Applies the first collapse (a split with one child) or merge (a child split on its parent's
-    /// axis) found walking down from the root. Returns false when there is none.
+    /// Applies the first collapse (a split with one child), merge (a child split on its parent's axis) or merge of two
+    /// adjacent empty areas (into the first, with both weights) found walking down from the root. Returns false when
+    /// there is none.
     private mutating func collapseOrMergeOnce() -> Bool {
         var stack: [(id: NodeID, parent: NodeID?)] = root.map { [($0, nil)] } ?? []
         while let (id, parent) = stack.popLast() {
@@ -322,6 +358,14 @@ extension LayoutTree {
                     root = children[0]
                 }
                 nodes[id] = nil
+                return true
+            }
+            if let index = children.indices.dropLast().first(where: { nodes[children[$0]] == .spacer && nodes[children[$0 + 1]] == .spacer }) {
+                var children = children, weights = weights
+                let merged = weights.remove(at: index + 1)
+                weights[index] += merged
+                nodes[children.remove(at: index + 1)] = nil
+                nodes[id] = .split(axis: axis, children: children, weights: weights)
                 return true
             }
             for (index, child) in children.enumerated() {
