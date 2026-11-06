@@ -72,3 +72,7 @@ None - plan executed exactly as written.
 - FOUND: .planning/phases/02-window-control/02-UI-SPEC.md
 - FOUND: 2d67345 (ancestor of HEAD)
 - FOUND: 6d6be69 (ancestor of HEAD)
+
+## Host UAT
+
+2026-11-06: user confirmed the icon renders whole on the Dell S3425DW (1x) after rebuilding. Pass.
