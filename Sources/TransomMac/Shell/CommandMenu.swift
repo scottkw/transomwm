@@ -10,7 +10,7 @@ import TransomModel
 @MainActor final class CommandMenu: NSObject, NSMenuItemValidation {
     /// Every command with a menu item, in no particular order: the status menu places them.
     static let commands: [Command] = [
-        .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
+        .dock, .float, .undo, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
         .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
         .swapPrevious, .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .snap(.leftThird), .snap(.centerThird),
         .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),

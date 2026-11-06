@@ -5,11 +5,12 @@ import os
 
 // These raw names are a persistent contract (Pitfall 13): KeyboardShortcuts stores each binding under
 // `KeyboardShortcuts_<name>`, so the Phase 4 recorder reuses them. Never rename one.
+// Retired raw values, never to be reused for another command (a user's old binding is stored under them):
+// toggleDesktop (8.1.1 D-09), frameDesktop (8.1.1 D-13).
 extension KeyboardShortcuts.Name {
     static let dock = Self("dock", initial: .init(.d, modifiers: [.control, .option, .command]))
     static let float = Self("float", initial: .init(.f, modifiers: [.control, .option, .command]))
     static let undo = Self("undo", initial: .init(.z, modifiers: [.control, .option, .command]))
-    static let toggleDesktop = Self("toggleDesktop", initial: .init(.h, modifiers: [.control, .option, .command]))
     static let focusLeft = Self("focusLeft", initial: .init(.leftArrow, modifiers: [.control, .option, .command]))
     static let focusRight = Self("focusRight", initial: .init(.rightArrow, modifiers: [.control, .option, .command]))
     static let focusUp = Self("focusUp", initial: .init(.upArrow, modifiers: [.control, .option, .command]))
@@ -114,7 +115,6 @@ enum Hotkeys {
         (.dock, .dock),
         (.float, .float),
         (.undo, .undo),
-        (.toggleDesktop, .toggleDesktop),
         (.focusLeft, .focus(.left)),
         (.focusRight, .focus(.right)),
         (.focusUp, .focus(.top)),

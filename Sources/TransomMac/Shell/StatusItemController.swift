@@ -127,7 +127,6 @@ import os
     /// Items 6–18: the Arrange section, enabled by the one availability rule (which also greys the camera items).
     private func addArrangeItems(to menu: NSMenu, context: CommandContext) {
         commands.update(focusedFloats: arrange.arranger.isFloating(context.focused)) { arrange.arranger.availability($0, context: context) }
-        commands.item(for: .toggleDesktop).title = MenuCopy.desktopToggle(hidden: arrange.arranger.isDesktopHidden(focused: context.focused))
         menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
         for command in [Command.dock, .float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
         menu.addItem(commands.focusMenu)
@@ -139,7 +138,6 @@ import os
         menu.addItem(.separator())
         menu.addItem(commands.item(for: .arrangeAll))
         menu.addItem(commands.item(for: .floatAll))
-        menu.addItem(commands.item(for: .toggleDesktop))
         // No action greys it out under auto-enabling, as for Restore macOS Window Settings. Menu only (D-24).
         let hasWaiting = arrange.arranger.shownPlaceholderCount > 0
         let clear = NSMenuItem(title: MenuCopy.clearWaitingTiles, action: hasWaiting ? #selector(clearWaitingTiles) : nil, keyEquivalent: "")

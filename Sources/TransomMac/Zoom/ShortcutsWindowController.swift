@@ -21,7 +21,7 @@ enum ShortcutsModel {
         ]),
         (MenuCopy.arrangeSection, [
             .dock, .float, .swapPrevious, .undo, .focusLeft, .focusRight, .focusUp, .focusDown, .moveLeft, .moveRight, .moveUp, .moveDown,
-            .arrangeAll, .floatAll, .toggleDesktop,
+            .arrangeAll, .floatAll,
         ]),
         (MenuCopy.fourthMenu, [
             .dockColumn1, .dockColumn2, .dockColumn3, .dockColumn4, .dockColumnMiddle, .dockRow1, .dockRow2, .dockRow3, .dockRow4, .dockRowMiddle,

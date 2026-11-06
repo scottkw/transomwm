@@ -11,7 +11,7 @@ import Testing
 
     @Test(arguments: [
         (Command.dock, "Dock Window"), (.float, "Float Window"), (.undo, "Undo Layout Change"),
-        (.toggleDesktop, "Hide Desktop Tile"), (.finderSplit, "Split with New Finder Window"),
+        (.finderSplit, "Split with New Finder Window"),
         (.focus(.left), "Left"), (.focus(.right), "Right"), (.focus(.top), "Up"), (.focus(.bottom), "Down"),
         (.swapPrevious, "Swap with Previous Window"), (.growTile, "Grow Tile"), (.shrinkTile, "Shrink Tile"),
         (.balanceSplit, "Balance Split"), (.rotateSplit, "Rotate Layout"), (.flipSplit, "Flip Split"),
