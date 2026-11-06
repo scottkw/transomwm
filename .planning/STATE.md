@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 11
+current_plan: 12
 status: executing
-stopped_at: "Completed 08.1.1-10-PLAN.md (named-skip state: SKIP_B still failing, run 08.1.1-11 next)"
-last_updated: "2026-11-06T16:52:56.410Z"
+stopped_at: "Completed 08.1.1-11-PLAN.md (named skip ended: plain swift test green)"
+last_updated: "2026-11-06T17:04:52.987Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: d043a0afceb9c1345817836591b9fc3b6901a4a5
+state_head: 0e203b41fd709a017bb1075651e60ace9ae12492
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 115
+  completed_plans: 116
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 11
+Current Plan: 12
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -174,6 +174,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P08 | 15min | 2 tasks | 8 files |
 | Phase 08.1.1 P09 | 7min | 2 tasks | 15 files |
 | Phase 08.1.1 P10 | 13min | 2 tasks | 13 files |
+| Phase 08.1.1 P11 | 11min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -491,6 +492,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-09: the flip is one line, Desk.init(tree: LayoutTree = LayoutTree()); every engine-created desk (World.addDesk, autoTile) starts with no tree and no Desktop tile (D-01)
 - [Phase 08.1.1]: 08.1.1-10: where the Desktop tile was only a stand-in sibling in a test layout, a docked window takes its place so the test keeps its subject; savingAViewWithNoWindowsIsRefusedAndKeepsTheSlot deleted (every node now holds a window)
 - [Phase 08.1.1]: 08.1.1-10: SKIP_A passes; the branch is still in a named-skip state with SKIP_B failing. 08.1.1-11 must run next; nothing ships or merges before it ends with a green swift test
+- [Phase 08.1.1]: 08.1.1-11: Desktop-centre drags re-aimed at the dragged window's own tile centre, Desktop-band drags at the visible frame's bottom edge band; the Hold ⌥ precedence table's outcomes are unchanged and all pass
+- [Phase 08.1.1]: 08.1.1-11: the named skip is over; plain swift test is green in all four targets (244/472/118/1248), no product code changed
 
 ### Quick Tasks Completed
 
@@ -521,7 +524,6 @@ Recent decisions affecting current work:
 - Phase 2 obligation (from Phase 1 review fix c403f45): `World.undo` returns `[WindowRef]?`; the engine must re-query the OS for every returned window and report its real state through `World.apply` — MET by 02-04 (`LifecycleSync.undo` → `requery` → `applyRequeried`)
 - Phase 2 obligation: OS lifecycle events (open/close/minimise/fullscreen) go through `World.apply`, never `World.edit`, so they stay off the undo stack; `.closed` needs no valid desk key — MET by 02-04 (`LifecycleSync.handle`)
 - Phase 1 work is on branch `gsd/phase-01-layout-model` (main is protected); merging to main is the developer's call
-- 08.1.1-09 left the branch in the user-approved named-skip state: SKIP_A suites (re-derived by 08.1.1-10) and SKIP_B suites (re-derived by 08.1.1-11) fail; plain swift test is red until 08.1.1-11. Run 08.1.1-10 next, then 08.1.1-11; nothing ships or merges in between. Lists in 08.1.1-09-SUMMARY.md.
 
 ### Roadmap Evolution
 
@@ -537,8 +539,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T16:52:55.591Z
-Stopped at: Completed 08.1.1-10-PLAN.md (named-skip state: SKIP_B still failing, run 08.1.1-11 next)
+Last session: 2026-11-06T17:04:47.441Z
+Stopped at: Completed 08.1.1-11-PLAN.md (named skip ended: plain swift test green)
 Resume file: None
 
 ## Deferred Verification
