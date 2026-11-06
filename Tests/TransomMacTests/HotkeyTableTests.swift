@@ -20,6 +20,8 @@ import Testing
             "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
             "view1", "view2", "view3", "view4", "view5", "view6", "view7", "view8", "view9",
             "saveView1", "saveView2", "saveView3", "saveView4", "saveView5", "saveView6", "saveView7", "saveView8", "saveView9",
+            "dockLeftHalf", "dockRightHalf", "dockTopHalf", "dockBottomHalf",
+            "dockLeftThird", "dockCenterThird", "dockRightThird", "dockTopThird", "dockMiddleThird", "dockBottomThird",
             "dockColumn1", "dockColumn2", "dockColumn3", "dockColumn4", "dockColumnMiddle",
             "dockRow1", "dockRow2", "dockRow3", "dockRow4", "dockRowMiddle",
         ])
@@ -33,6 +35,10 @@ import Testing
             .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow),
             .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
         ] + ViewSlot.all.map { .camera(.view($0)) } + ViewSlot.all.map { .camera(.saveView($0)) } + [
+            .dockFourth(.firstHalf, .horizontal), .dockFourth(.secondHalf, .horizontal), .dockFourth(.firstHalf, .vertical),
+            .dockFourth(.secondHalf, .vertical), .dockFourth(.firstThird, .horizontal), .dockFourth(.middleThird, .horizontal),
+            .dockFourth(.lastThird, .horizontal), .dockFourth(.firstThird, .vertical), .dockFourth(.middleThird, .vertical),
+            .dockFourth(.lastThird, .vertical),
             .dockFourth(.first, .horizontal), .dockFourth(.second, .horizontal), .dockFourth(.third, .horizontal), .dockFourth(.fourth, .horizontal),
             .dockFourth(.middle, .horizontal), .dockFourth(.first, .vertical), .dockFourth(.second, .vertical), .dockFourth(.third, .vertical),
             .dockFourth(.fourth, .vertical), .dockFourth(.middle, .vertical),
@@ -65,10 +71,26 @@ import Testing
         #expect(Array(Hotkeys.entries.map(\.name.defaultShortcut).prefix(46)) == expected)
     }
 
-    /// 08.1 UI-SPEC Surface 4: the digit row by key position, columns then rows, 0 last.
-    @Test func theFourthsAreAllFourModifiersPlusADigit() {
-        let digits: [KeyboardShortcuts.Key] = [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero]
-        #expect(Hotkeys.fourthNames.map(\.defaultShortcut) == digits.map { .init($0, modifiers: shifted) })
+    /// 08.1.1 UI-SPEC Surface 4 then 08.1 Surface 4, by key position: halves and thirds on the two letter rows under the right
+    /// hand (upper row columns, home row rows), then the fourths on the digit row, columns then rows, 0 last.
+    @Test func theDockingPositionsAreAllFourModifiersPlusALetterOrADigit() {
+        let keys: [KeyboardShortcuts.Key] = [
+            .y, .u, .h, .j, .i, .o, .p, .k, .l, .semicolon, .one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero,
+        ]
+        #expect(Hotkeys.fourthNames.map(\.defaultShortcut) == keys.map { .init($0, modifiers: shifted) })
+    }
+
+    /// T-08.1.1-08: the ten new raw values are a persistent contract (Pitfall 13).
+    @Test func theHalfAndThirdNamesKeepTheirRawValues() {
+        let names: [KeyboardShortcuts.Name] = [
+            .dockLeftHalf, .dockRightHalf, .dockTopHalf, .dockBottomHalf, .dockLeftThird, .dockCenterThird, .dockRightThird,
+            .dockTopThird, .dockMiddleThird, .dockBottomThird,
+        ]
+        #expect(names.map(\.rawValue) == [
+            "dockLeftHalf", "dockRightHalf", "dockTopHalf", "dockBottomHalf", "dockLeftThird", "dockCenterThird", "dockRightThird",
+            "dockTopThird", "dockMiddleThird", "dockBottomThird",
+        ])
+        #expect(Array(Hotkeys.fourthNames.prefix(10)) == names)
     }
 
     @Test func noTwoEntriesShareADefaultChord() {
@@ -77,9 +99,9 @@ import Testing
         #expect(Set(chords).count == chords.count)
     }
 
-    /// TILE-10: zoom off disables zoom names only, so the fourths must stay out of them.
-    @Test func theFourthsAreNotZoomNames() {
-        #expect(Hotkeys.fourthNames.count == 10)
+    /// TILE-10: zoom off disables zoom names only, so the docking positions must stay out of them.
+    @Test func theDockingPositionsAreNotZoomNames() {
+        #expect(Hotkeys.fourthNames.count == 20)
         #expect(Set(Hotkeys.zoomNames).isDisjoint(with: Hotkeys.fourthNames))
     }
 
@@ -113,14 +135,14 @@ import Testing
 
     /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, less frameDesktop (retired, 8.1.1 D-13), plus
     /// Show Overview (06 UI-SPEC Surface 4) and the 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 32 + 11 + the 3 tab names (07
-    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) = 74.
+    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) + the 10 halves and thirds (08.1.1 Surface 4, enabled with zoom off) = 84.
     @Test func theZoomNamesAreTheUISpecTenPlusShowOverviewAndTheSavedViews() {
         let zoom = [
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
             "showOverview",
         ] + (1...9).map { "view\($0)" } + (1...9).map { "saveView\($0)" }
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 74)
+        #expect(Hotkeys.entries.count == 84)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
     }
 

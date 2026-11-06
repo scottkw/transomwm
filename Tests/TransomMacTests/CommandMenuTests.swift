@@ -125,7 +125,7 @@ import Testing
     /// 08.1 UI-SPEC Surface 4: five columns, a separator, five rows.
     @Test func theFourthSubmenuFollowsTheUISpecOrder() throws {
         let menu = CommandMenu { _ in }
-        #expect(menu.fourthMenu.title == "Dock to Fourth")
+        #expect(menu.fourthMenu.title == "Dock Window")
         let items = try #require(menu.fourthMenu.submenu).items
         #expect(items.map { $0.isSeparatorItem ? nil : $0.title } == [
             "1st Column", "2nd Column", "3rd Column", "4th Column", "Middle Half Column", nil,

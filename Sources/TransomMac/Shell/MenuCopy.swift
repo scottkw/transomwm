@@ -24,7 +24,7 @@ nonisolated public enum MenuCopy {
     public static let arrangeSection = "Arrange"
     public static let safetySection = "Safety"
     public static let exclusionsSection = "Exclusions"
-    public static let fourthMenu = "Dock to Fourth"
+    public static let fourthMenu = "Dock Window"
     public static let clearWaitingTiles = "Clear Waiting Tiles"
 
     /// A command item's title. Toggles have their own functions (`pauseToggle`).

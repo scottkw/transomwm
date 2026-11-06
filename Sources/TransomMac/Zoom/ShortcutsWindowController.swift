@@ -20,10 +20,12 @@ enum ShortcutsModel {
             .saveView1, .saveView2, .saveView3, .saveView4, .saveView5, .saveView6, .saveView7, .saveView8, .saveView9,
         ]),
         (MenuCopy.arrangeSection, [
-            .dock, .float, .swapPrevious, .undo, .focusLeft, .focusRight, .focusUp, .focusDown, .moveLeft, .moveRight, .moveUp, .moveDown,
+            .float, .swapPrevious, .undo, .focusLeft, .focusRight, .focusUp, .focusDown, .moveLeft, .moveRight, .moveUp, .moveDown,
             .arrangeAll, .floatAll,
         ]),
         (MenuCopy.fourthMenu, [
+            .dock, .dockLeftHalf, .dockRightHalf, .dockTopHalf, .dockBottomHalf,
+            .dockLeftThird, .dockCenterThird, .dockRightThird, .dockTopThird, .dockMiddleThird, .dockBottomThird,
             .dockColumn1, .dockColumn2, .dockColumn3, .dockColumn4, .dockColumnMiddle, .dockRow1, .dockRow2, .dockRow3, .dockRow4, .dockRowMiddle,
         ]),
         ("Split", [.growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .finderSplit]),

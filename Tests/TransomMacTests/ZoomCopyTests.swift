@@ -85,6 +85,10 @@ import Testing
         #expect(ZoomCopy.shortcutTitle(.camera(.saveView(ViewSlot(3)!))) == "Save View 3")
         #expect(ZoomCopy.shortcutTitle(.dockFourth(.first, .horizontal)) == "Dock to 1st Column")
         #expect(ZoomCopy.shortcutTitle(.dockFourth(.middle, .vertical)) == "Dock to Middle Half Row")
+        #expect(ZoomCopy.shortcutTitle(.dock) == "Dock Window Where It Is")
+        #expect(ZoomCopy.shortcutTitle(.dockFourth(.firstHalf, .horizontal)) == "Dock to Left Half")
+        #expect(ZoomCopy.shortcutTitle(.dockFourth(.middleThird, .vertical)) == "Dock to Middle Third")
+        #expect(ZoomCopy.shortcutTitle(.dockFourth(.middleThird, .horizontal)) == "Dock to Center Third")
     }
 
     @Test func theRubberBandCancelCopyMatchesTheContract() {
