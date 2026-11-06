@@ -8,9 +8,9 @@ nonisolated public enum NoticeCopy {
         switch notice {
         case .lostRoom(let windows):
             if windows.count == 1, let window = windows.first {
-                "A \u{201C}\(MenuCopy.truncatedAppName(appName(window)))\u{201D} window no longer fits its tile, so it's floating on the Desktop."
+                "A \u{201C}\(MenuCopy.truncatedAppName(appName(window)))\u{201D} window no longer fits its tile, so it's floating."
             } else {
-                "\(windows.count) windows no longer fit their tiles, so they're floating on the Desktop."
+                "\(windows.count) windows no longer fit their tiles, so they're floating."
             }
         case .finderNoWindow:
             "Finder didn't open a new window."
@@ -18,8 +18,8 @@ nonisolated public enum NoticeCopy {
             "Floated \(count == 1 ? "1 window" : "\(count) windows"). Undo with \u{2303}\u{2325}\u{2318}Z."
         case .arrangeLeftovers(let count):
             count == 1
-                ? "1 window didn't fit, so it stays floating on the Desktop."
-                : "\(count) windows didn't fit, so they stay floating on the Desktop."
+                ? "1 window didn't fit, so it stays floating."
+                : "\(count) windows didn't fit, so they stay floating."
         case .restored(let count):
             count == 0 ? "All windows were already on screen." : "Moved \(count == 1 ? "1 window" : "\(count) windows") back on screen."
         case .crashLoop:
@@ -43,8 +43,8 @@ nonisolated public enum NoticeCopy {
         case .crashRecovered(let unplaced):
             "Transom quit unexpectedly. Your windows are back on screen and your layout is restored."
                 + (unplaced == 0 ? ""
-                    : unplaced == 1 ? " 1 window couldn't be placed and is floating on the Desktop."
-                    : " \(unplaced) windows couldn't be placed and are floating on the Desktop.")
+                    : unplaced == 1 ? " 1 window couldn't be placed and is floating."
+                    : " \(unplaced) windows couldn't be placed and are floating.")
         // Saved views (08 UI-SPEC View toasts): N13–N16 are short labels, N17–N19 sentences.
         case .viewSaved(let slot, let replaced, _): replaced ? "Replaced view \(slot.number)" : "Saved view \(slot.number)"
         case .viewShown(let slot, _): "View \(slot.number)"
