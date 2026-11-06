@@ -22,4 +22,14 @@ import Testing
         #expect(dock.count == 10)
         #expect(Set(dock.map(\.rawValue)).isDisjoint(with: taken), "macOS takes \(dock.map(\.rawValue).filter(taken.contains))")
     }
+
+    /// 8.1.1 D-17: the four corner chords (⇧⌃⌥⌘ - = [ ]) against the same list.
+    @Test
+    func theFourCornerChordsAreFreeOnThisMacOS() {
+        let corners: [KeyboardShortcuts.Name] = [.dockTopLeft, .dockTopRight, .dockBottomLeft, .dockBottomRight]
+        let taken = Hotkeys.systemConflictNames()
+        print("systemConflictNames on macOS \(ProcessInfo.processInfo.operatingSystemVersionString): \(taken)")
+        #expect(corners.count == 4)
+        #expect(Set(corners.map(\.rawValue)).isDisjoint(with: taken), "macOS takes \(corners.map(\.rawValue).filter(taken.contains))")
+    }
 }

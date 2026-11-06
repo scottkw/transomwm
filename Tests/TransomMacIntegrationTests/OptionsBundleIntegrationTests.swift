@@ -31,28 +31,28 @@ import Testing
         try await guest.launchApp()
         let visible = try LiveArrange.visibleFrame()
 
-        // Step 1, URL: `open -a` so the URL goes to this copy (D-13, D-14). A lone window docked to any column on an empty
-        // desk becomes the root and fills the visible frame (8.1.1 D-04).
+        // Step 1, URL: `open -a` so the URL goes to this copy (D-13, D-14). A position takes exactly its part, and the rest
+        // stays empty (8.1.1 D-16, E1): a lone window docked to column 1 on an empty desk is the first quarter, full height.
+        // Resolve insets the area by one gap and puts one gap between the window and the empty three quarters.
         try run("/usr/bin/open", ["-a", guest.app, "transom-debug://dock-column-1"])
         var first: Rect?
         let docked = await waitUntil(timeout: .seconds(5)) {
             first = try? await LiveArrange.frame(fixture, 0)
-            return first.map {
-                LiveArrange.inside($0, visible) && $0.width >= visible.width * 0.9 && $0.height >= visible.height * 0.9
-            } ?? false
+            guard let frame = first, LiveArrange.inside(frame, visible), frame.height >= visible.height * 0.9 else { return false }
+            let inset = frame.minX - visible.minX
+            return inset >= 0 && inset <= 25 && abs(frame.width - (visible.width - 3 * inset) / 4) <= 2
         }
-        #expect(docked, "dock-column-1 should fill the desk with window 0, which is at \(String(describing: first)) in \(visible)")
+        #expect(docked, "dock-column-1 should give window 0 the first quarter, but it is at \(String(describing: first)) in \(visible)")
 
-        // Step 2, new window (D-02). Window 0's tile is the whole desk, wider than tall, so window 1 takes its right half
-        // (8.1.1 D-08). With one tile the focused and the largest tile are the same; host tests
-        // aWideFocusedTileGetsTheNewWindowToItsRight and aFloatingFocusSplitsTheLargestTile pin that choice.
+        // Step 2, new window (D-02). New Windows: Tile fills the largest empty area (E6), so window 1 takes the right three
+        // quarters beside window 0, at its top edge and height.
         try await expectNewWindowDocks(1, beside: 0, in: fixture)
         let firstTile = try #require(try await LiveArrange.frame(fixture, 0))
         let secondTile = try #require(try await LiveArrange.frame(fixture, 1))
         #expect(
             abs(firstTile.minY - secondTile.minY) <= 2 && abs(firstTile.height - secondTile.height) <= 2
-                && secondTile.minX > firstTile.maxX - 1,
-            "window 1 is not right of window 0: \(firstTile), \(secondTile)")
+                && secondTile.minX > firstTile.maxX - 1 && secondTile.width >= visible.width * 0.7,
+            "window 1 is not the three quarters right of window 0: \(firstTile), \(secondTile)")
 
         // Step 3, Hold ⌥ (D-08). Every tile is full height, so the travel is sideways: half a width keeps the release inside
         // the visible frame and leaves window 2's later title-bar point clear.
@@ -61,8 +61,8 @@ import Testing
         try await guest.quitApp()
         try await guest.launchApp()
 
-        // Step 4: both still act after a relaunch (D-19). Window 0 has floated since step 3, so window 1 is the desk's only
-        // tile, and window 2 takes its right half. Half a width to the left keeps window 2 inside the visible frame.
+        // Step 4: both still act after a relaunch (D-19). Window 0 has floated since step 3, with no empty area beside it, so
+        // window 1 took its space (E5) and is the desk's only tile, and window 2 takes its right half. Half a width to the left keeps window 2 inside the visible frame.
         try await expectNewWindowDocks(2, beside: 1, in: fixture)
         try await expectPlainDragFloats(2, by: { CGPoint(x: -$0.width / 2, y: 0) }, in: fixture)
 
