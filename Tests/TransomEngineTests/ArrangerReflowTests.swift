@@ -209,3 +209,43 @@ extension ArrangerReflowTests {
         #expect(harness.arranger.world[key]?.desktop.contains(a) == true)
     }
 }
+
+/// WR-02: relaxing one waiting placeholder's minimum can leave another one without room. That one is relaxed too, rather
+/// than taken for a real window to float, which has no frame and stopped the display's plan.
+@Suite struct ArrangerLostRoomPlaceholderTests {
+    @Test func aPlaceholderLeftWithoutRoomByAnotherRelaxedOneIsRelaxedToo() throws {
+        func display(_ width: Double) -> DisplayInfo {
+            DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: width, height: 625), visibleFrame: Rect(x: 0, y: 25, width: width, height: 600), currentSpaceID: nil)
+        }
+        func found(_ window: WindowRef, x: Double, minimum: Double) -> WindowInfo {
+            WindowInfo(window: window, frame: Rect(x: x, y: 100, width: 300, height: 200), state: .present, displayUUID: "main",
+                learnedMinimum: Size(width: minimum, height: 100))
+        }
+        let r = WindowRef(identity: WindowIdentity(windowID: 3, pid: 950, bundleID: "com.example.other"))
+        var arranger = Arranger()
+        let start = ContinuousClock.now
+        // H[r 50 | a 500 | b 300] on a wide display.
+        var world = World(), history = UndoHistory()
+        try world.addDesk(key)
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            for window in [r, a, b] { try desk.tree.applyDrop(.layoutEdge(.right), window: window, ids: &ids) }
+        }
+        _ = arranger.handle(.restore(world, homeFrames: [:]), now: start)
+        let inventory = WindowInventory(
+            displays: [display(3000)], windows: [found(r, x: 100, minimum: 50), found(a, x: 1000, minimum: 500), found(b, x: 2000, minimum: 300)],
+            initialRefreshComplete: true)
+        _ = arranger.handle(.inventory(inventory), now: start)
+        try #require(arranger.world[key]?.tree.windows.count == 3)
+        _ = arranger.handle(.event(.appTerminated(pid: pid)), now: start)
+        _ = arranger.handle(.event(.windowDestroyed(a)), now: start)
+        _ = arranger.handle(.event(.windowDestroyed(b)), now: start)
+        try #require(arranger.isPlaceholder(a) && arranger.isPlaceholder(b))
+
+        // Inner width 364: a (500) has no room; relaxed to 1x1 it leaves b (300) none, as 1 + 300 + 50 + 2 gaps is 367.
+        let effects = arranger.handle(
+            .inventory(WindowInventory(displays: [display(380)], windows: [found(r, x: 100, minimum: 50)], initialRefreshComplete: true)), now: start)
+
+        #expect(!effects.contains { if case .fault = $0 { true } else { false } }, "\(effects)")
+        #expect(arranger.world[key]?.tree.windows.count == 3, "a window left the tree")
+    }
+}

@@ -2289,37 +2289,41 @@ public struct Arranger: Sendable {
         }
     }
 
-    /// Plans `key`'s desk after floating every docked window it has no room for (D-26), in one pass: a floater takes no
-    /// room (D-05), so floating one never leaves a neighbour short. Each float is an OS fact (`World.reflow`, no undo
+    /// Plans `key`'s desk after floating every docked window it has no room for (D-26); a floater takes no room (D-05).
+    /// Each float is an OS fact (`World.reflow`, no undo
     /// step), at the window's current frame clamped into the display's visible frame. Dock and drops refuse up front, so
     /// this only runs for changes after a window docked.
     private mutating func planFloatingLostRoom(
         _ key: DeskKey, area: Rect, mins: [WindowRef: Size]
     ) throws(LayoutError) -> (FramePlan, [WindowRef]) {
         var mins = mins
-        guard let desk = world[key] else { throw .deskNotFound(key) }
-        var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
-        // A window that is not there has no frame to float at, and its minimum can wait until it comes back.
-        let waiting = plan.unfit.filter { isPlaceholder($0) && mins[$0] != nil }
-        if !waiting.isEmpty {
-            for window in waiting { mins[window] = nil }
-            plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
-        }
-        guard !plan.unfit.isEmpty else { return (plan, []) }
-        var unfit: [(WindowRef, Rect)] = []
-        for window in plan.unfit.sorted(by: { $0.identity < $1.identity }) {
-            guard let frame = windows[window.identity]?.frame else { throw .windowNotFound(window) }
-            unfit.append((window, Planner.clamp(frame, into: area)))
-        }
-        try world.reflow(key) { desk, _ throws(LayoutError) in
-            for (window, frame) in unfit {
-                try desk.tree.remove(window)
-                try desk.desktop.add(window, frame: frame)
+        var lost: [WindowRef] = []
+        // Each pass relaxes a placeholder or takes at least one window out of the tree, so this ends. A relaxed placeholder
+        // still takes 1x1 and a gap, and a float can renormalise the tree, so each pass plans again (WR-02).
+        while true {
+            guard let desk = world[key] else { throw .deskNotFound(key) }
+            let plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
+            guard !plan.unfit.isEmpty else { return (plan, lost) }
+            // A window that is not there has no frame to float at, and its minimum can wait until it comes back.
+            let waiting = plan.unfit.filter { isPlaceholder($0) && mins[$0] != nil }
+            guard waiting.isEmpty else {
+                for window in waiting { mins[window] = nil }
+                continue
             }
+            var unfit: [(WindowRef, Rect)] = []
+            for window in plan.unfit.sorted(by: { $0.identity < $1.identity }) {
+                guard let frame = windows[window.identity]?.frame else { throw .windowNotFound(window) }
+                unfit.append((window, Planner.clamp(frame, into: area)))
+            }
+            try world.reflow(key) { desk, _ throws(LayoutError) in
+                for (window, frame) in unfit {
+                    try desk.tree.remove(window)
+                    try desk.desktop.add(window, frame: frame)
+                }
+            }
+            for (window, frame) in unfit { wantedFrames[window.identity] = frame }
+            lost += unfit.map(\.0)
         }
-        for (window, frame) in unfit { wantedFrames[window.identity] = frame }
-        guard let floated = world[key] else { throw .deskNotFound(key) }
-        return (try Planner.plan(desk: floated, area: area, gap: gap, mins: mins), unfit.map(\.0))
     }
 
     /// The minimums every Phase 3 plan and dry run uses: `learnedMinimums`, with 1x1 for a collapsible window, which
