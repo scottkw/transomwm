@@ -4,7 +4,7 @@ public struct Desk: Codable, Equatable, Sendable {
     public var tree: LayoutTree
     public var desktop: DesktopLayer
 
-    /// A new desk has no tree and no Desktop tile (8.1.1 D-01): its first docked window fills the visible frame.
+    /// A new desk has an empty tree (8.1.1 D-01): its first docked window fills the visible frame.
     public init(tree: LayoutTree = LayoutTree(), desktop: DesktopLayer = DesktopLayer()) {
         self.tree = tree
         self.desktop = desktop
@@ -155,7 +155,7 @@ public struct World: Codable, Equatable, Sendable {
         return copy
     }
 
-    /// Adds an empty desk: no tree and no Desktop tile (8.1.1 D-01).
+    /// Adds an empty desk (8.1.1 D-01).
     public mutating func addDesk(_ key: DeskKey) throws(LayoutError) {
         guard desks[key] == nil else { throw .deskExists(key) }
         desks[key] = Desk()
