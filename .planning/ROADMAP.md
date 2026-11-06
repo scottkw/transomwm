@@ -467,11 +467,11 @@ Plans:
   3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
   4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
 **Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT. User request (2026-11-05): the menu-bar menu should offer every supported docking configuration with its hotkey. Dock to Fourth (10 items with hotkeys) exists; discuss adding halves and thirds as docking commands (today they snap floating windows only), and making the menu easier to find.
-**Plans:** 1/18 plans executed
+**Plans:** 2/18 plans executed
 
 Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 - [x] 08.1.1-01-PLAN.md — Migration: schema 1–3 layout.json loses its Desktop tile (legacy decode, World 2, layout.json 4), parked windows come back, requirement amendments
-- [ ] 08.1.1-02-PLAN.md — Tests whose subject is a hidden Desktop tile or Frame Desktop retire; incidental hide steps go
+- [x] 08.1.1-02-PLAN.md — Tests whose subject is a hidden Desktop tile or Frame Desktop retire; incidental hide steps go
 - [ ] 08.1.1-03-PLAN.md — Hide/Show Desktop Tile and Frame Desktop leave the shell (menus, hotkeys, Shortcuts, wallpaper double-click); toasts say "floating"
 - [ ] 08.1.1-04-PLAN.md — The two commands leave the engine, URL and CLI; New Windows tooltip says float
 - [ ] 08.1.1-05-PLAN.md — Halves and thirds on every route and the Dock Window submenu with hotkeys; D-12 regression row

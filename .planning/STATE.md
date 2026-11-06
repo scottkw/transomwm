@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: Completed 08.1.1-01-PLAN.md
-last_updated: "2026-11-06T15:22:34.455Z"
+stopped_at: Completed 08.1.1-02-PLAN.md
+last_updated: "2026-11-06T15:30:12.688Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: c4a122b5b91e713f46b0629b6f490d9b24fd4c5a
+state_head: baa88bece8129780547afe312992df5c139c409a
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 106
+  completed_plans: 107
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -165,6 +165,7 @@ Progress: [████████░░] 82%
 | Phase 08.1 P06 | 94 min | 3 tasks | 16 files |
 | Phase 08.1 P07 | 30 min | 3 tasks | 6 files |
 | Phase 08.1.1 P01 | 8min | 3 tasks | 15 files |
+| Phase 08.1.1 P02 | 10min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -463,6 +464,8 @@ Recent decisions affecting current work:
 - [Phase 08.1]: TILE-21, TILE-22 and TILE-23 marked complete at 08.1-07 with UI-SPEC's four host checks still open for /gsd-verify-work
 - [Phase 08.1.1]: 08.1.1-01: legacy layouts migrate by swapping the Desktop tile for a stand-in panel, validating the whole legacy tree, then removeLeaf; World schema 2, layout.json schema 4
 - [Phase 08.1.1]: 08.1.1-01: requirements.mark-complete skipped for MODEL-05/MODEL-09/TILE-24; they stay Pending for later plans of 8.1.1
+- [Phase 08.1.1]: 08.1.1-02: the quit-restore live test is rewritten, not deleted. It pauses, parks the floater with the fixture's move and expects it back on screen through terminationPlan's stranded rule.
+- [Phase 08.1.1]: 08.1.1-02: ArrangerRestoreTests' second hide site was parkedC, not the crash-loop test. parkedC and its three Restore All hidden-Desktop tests were deleted.
 
 ### Quick Tasks Completed
 
@@ -508,8 +511,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T15:22:33.722Z
-Stopped at: Completed 08.1.1-01-PLAN.md
+Last session: 2026-11-06T15:30:11.945Z
+Stopped at: Completed 08.1.1-02-PLAN.md
 Resume file: None
 
 ## Deferred Verification
