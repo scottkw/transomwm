@@ -812,7 +812,7 @@ public struct Arranger: Sendable {
         saved: World
     ) -> [ArrangerEffect] {
         func tile(_ window: WindowRef) -> String {
-            saved.desks.values.lazy.compactMap { $0.tree.leaf(containing: window) }.first.map { "\($0)" } ?? "Desktop"
+            saved.desks.values.lazy.compactMap { $0.tree.leaf(containing: window) }.first.map { "\($0)" } ?? "floating"
         }
         let tied = Set(result.ties.flatMap(\.saved))
         let unmatched = Dictionary(grouping: (result.waiting + result.removed).filter { !tied.contains($0) }, by: \.bundleID)
