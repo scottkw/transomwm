@@ -466,7 +466,7 @@ Plans:
   2. Floating windows stay visible on top of docked ones and are never hidden or parked by Transom
   3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
   4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
-**Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT.
+**Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT. User request (2026-11-05): the menu-bar menu should offer every supported docking configuration with its hotkey. Dock to Fourth (10 items with hotkeys) exists; discuss adding halves and thirds as docking commands (today they snap floating windows only), and making the menu easier to find.
 **Plans:** 0 plans
 
 Plans:
