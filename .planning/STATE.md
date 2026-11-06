@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: Not started
+current_plan: 2
 status: executing
-stopped_at: Phase 08.1.1 UI-SPEC approved
-last_updated: "2026-11-06T15:10:19.338Z"
+stopped_at: Completed 08.1.1-01-PLAN.md
+last_updated: "2026-11-06T15:22:34.455Z"
 last_activity: 2026-11-06
-last_activity_desc: Phase 08.1 complete, transitioned to Phase 08.1.1
-state_head: df77c943b7f1988d93068a9c245528b31540762b
+last_activity_desc: Phase 08.1.1 execution started
+state_head: c4a122b5b91e713f46b0629b6f490d9b24fd4c5a
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 105
+  completed_plans: 106
   percent: 82
 ---
 
@@ -24,15 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 7 — Tab Groups
+**Current focus:** Phase 08.1.1 — Remove the Desktop Tile
 
 ## Current Position
 
-Phase: 08.1.1 (Remove the Desktop Tile) — READY TO EXECUTE
-Current Plan: Not started
+Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
+Current Plan: 2
 Total Plans in Phase: 18
 Status: Ready to execute
-Last activity: 2026-11-06 - Completed quick task 261106-bru: Fix menu bar icon clipped on non-Retina external display
+Last activity: 2026-11-06 — Phase 08.1.1 execution started
 
 Progress: [████████░░] 82%
 
@@ -164,6 +164,7 @@ Progress: [████████░░] 82%
 | Phase 08.1 P05 | 21 min | 3 tasks | 10 files |
 | Phase 08.1 P06 | 94 min | 3 tasks | 16 files |
 | Phase 08.1 P07 | 30 min | 3 tasks | 6 files |
+| Phase 08.1.1 P01 | 8min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -460,6 +461,8 @@ Recent decisions affecting current work:
 - [Phase 08.1]: A new window on a Space not showing floats on that Space's desk rather than docking there
 - [Phase 08.1]: vm-session.sh syncs the guest before tart stop, because stopping straight after a suite undid its restored guest state
 - [Phase 08.1]: TILE-21, TILE-22 and TILE-23 marked complete at 08.1-07 with UI-SPEC's four host checks still open for /gsd-verify-work
+- [Phase 08.1.1]: 08.1.1-01: legacy layouts migrate by swapping the Desktop tile for a stand-in panel, validating the whole legacy tree, then removeLeaf; World schema 2, layout.json schema 4
+- [Phase 08.1.1]: 08.1.1-01: requirements.mark-complete skipped for MODEL-05/MODEL-09/TILE-24; they stay Pending for later plans of 8.1.1
 
 ### Quick Tasks Completed
 
@@ -505,9 +508,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T01:22:44.639Z
-Stopped at: Phase 08.1.1 UI-SPEC approved
-Resume file: .planning/phases/08.1.1-remove-the-desktop-tile/08.1.1-UI-SPEC.md
+Last session: 2026-11-06T15:22:33.722Z
+Stopped at: Completed 08.1.1-01-PLAN.md
+Resume file: None
 
 ## Deferred Verification
 
