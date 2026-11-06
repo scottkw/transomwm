@@ -467,7 +467,7 @@ Plans:
   3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
   4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
 **Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT. User request (2026-11-05): the menu-bar menu should offer every supported docking configuration with its hotkey. Dock to Fourth (10 items with hotkeys) exists; discuss adding halves and thirds as docking commands (today they snap floating windows only), and making the menu easier to find.
-**Plans:** 16/18 plans executed
+**Plans:** 17/18 plans executed
 
 Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 - [x] 08.1.1-01-PLAN.md — Migration: schema 1–3 layout.json loses its Desktop tile (legacy decode, World 2, layout.json 4), parked windows come back, requirement amendments
@@ -486,7 +486,7 @@ Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 - [x] 08.1.1-14-PLAN.md — Contract 2: plans carry no Desktop rect, planners take no unread `wanted:`, labels say area
 - [x] 08.1.1-15-PLAN.md — Contract 3: no test builds or hides a Desktop tile; fourths table counts docked tiles only
 - [x] 08.1.1-16-PLAN.md — Contract 4: delete the Desktop node kind and its API; a schema-4 file naming one is set aside
-- [ ] 08.1.1-17-PLAN.md — README, source docs and the Phase 9 note for D-12
+- [x] 08.1.1-17-PLAN.md — README, source docs and the Phase 9 note for D-12
 - [ ] 08.1.1-18-PLAN.md — The migration and every touched live suite on real windows in both VMs; new chords vs macOS; host UAT checklist
 
 ### Phase 9: Polish & Ship
