@@ -119,7 +119,10 @@ import Testing
         #expect(MenuCopy.commandTitle(.dockFourth(.middle, .vertical)) == "Middle Half Row")
         #expect(MenuCopy.commandTitle(.dock) == "Where It Is")
         #expect(MenuCopy.fourthMenu == "Dock Window")
-        #expect([MenuCopy.halvesHeader, MenuCopy.thirdsHeader, MenuCopy.fourthsHeader] == ["Halves", "Thirds", "Fourths"])
+        #expect([MenuCopy.halvesHeader, MenuCopy.cornersHeader, MenuCopy.thirdsHeader, MenuCopy.fourthsHeader] == [
+            "Halves", "Corners", "Thirds", "Fourths",
+        ])
+        #expect(DockCorner.allCases.map { MenuCopy.commandTitle(.dockCorner($0)) } == ["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
         let halvesAndThirds: [(FourthSlot, Axis)] = [
             (.firstHalf, .horizontal), (.secondHalf, .horizontal), (.firstHalf, .vertical), (.secondHalf, .vertical),
             (.firstThird, .horizontal), (.middleThird, .horizontal), (.lastThird, .horizontal),

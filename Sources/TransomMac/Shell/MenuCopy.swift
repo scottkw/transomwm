@@ -27,6 +27,7 @@ nonisolated public enum MenuCopy {
     public static let fourthMenu = "Dock Window"
     /// The Dock Window submenu's section headers (08.1.1 UI-SPEC Surface 3).
     public static let halvesHeader = "Halves"
+    public static let cornersHeader = "Corners"
     public static let thirdsHeader = "Thirds"
     public static let fourthsHeader = "Fourths"
     public static let clearWaitingTiles = "Clear Waiting Tiles"

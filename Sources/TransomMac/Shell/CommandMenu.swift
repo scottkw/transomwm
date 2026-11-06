@@ -18,10 +18,11 @@ import TransomModel
         .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
         .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow),
         .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
-    ] + halfColumns + halfRows + thirdColumns + thirdRows + fourthColumns + fourthRows
+    ] + halfColumns + halfRows + corners + thirdColumns + thirdRows + fourthColumns + fourthRows
 
     private static let halfColumns: [Command] = [.dockFourth(.firstHalf, .horizontal), .dockFourth(.secondHalf, .horizontal)]
     private static let halfRows: [Command] = [.dockFourth(.firstHalf, .vertical), .dockFourth(.secondHalf, .vertical)]
+    private static let corners: [Command] = DockCorner.allCases.map { .dockCorner($0) }
     private static let thirdColumns: [Command] = thirdSlots.map { .dockFourth($0, .horizontal) }
     private static let thirdRows: [Command] = thirdSlots.map { .dockFourth($0, .vertical) }
     private static let thirdSlots: [FourthSlot] = [.firstThird, .middleThird, .lastThird]
@@ -67,7 +68,7 @@ import TransomModel
         splitMenu.submenu = submenu("Split", [.growTile, .shrinkTile, nil, .balanceSplit, .rotateSplit, .flipSplit, nil, .finderSplit])
         moveMenu.submenu = submenu(MenuCopy.moveMenu, Self.edges.map { .moveOrSnap($0) })
         dockMenu.submenu = submenu(MenuCopy.fourthMenu, groups: [
-            (nil, [.dock]), (MenuCopy.halvesHeader, Self.halfColumns + Self.halfRows),
+            (nil, [.dock]), (MenuCopy.halvesHeader, Self.halfColumns + Self.halfRows), (MenuCopy.cornersHeader, Self.corners),
             (MenuCopy.thirdsHeader, Self.thirdColumns + Self.thirdRows), (MenuCopy.fourthsHeader, Self.fourthColumns + Self.fourthRows),
         ])
         let snap = submenu(MenuCopy.snapMenu, [

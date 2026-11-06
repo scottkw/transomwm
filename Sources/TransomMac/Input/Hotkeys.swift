@@ -83,6 +83,11 @@ extension KeyboardShortcuts.Name {
     static let dockRightHalf = Self("dockRightHalf", initial: .init(.u, modifiers: [.control, .option, .command, .shift]))
     static let dockTopHalf = Self("dockTopHalf", initial: .init(.h, modifiers: [.control, .option, .command, .shift]))
     static let dockBottomHalf = Self("dockBottomHalf", initial: .init(.j, modifiers: [.control, .option, .command, .shift]))
+    // Corner quarters (8.1.1 D-17): not zoom names, so they stay enabled with zoom off. Bound by key position.
+    static let dockTopLeft = Self("dockTopLeft", initial: .init(.minus, modifiers: [.control, .option, .command, .shift]))
+    static let dockTopRight = Self("dockTopRight", initial: .init(.equal, modifiers: [.control, .option, .command, .shift]))
+    static let dockBottomLeft = Self("dockBottomLeft", initial: .init(.leftBracket, modifiers: [.control, .option, .command, .shift]))
+    static let dockBottomRight = Self("dockBottomRight", initial: .init(.rightBracket, modifiers: [.control, .option, .command, .shift]))
     static let dockLeftThird = Self("dockLeftThird", initial: .init(.i, modifiers: [.control, .option, .command, .shift]))
     static let dockCenterThird = Self("dockCenterThird", initial: .init(.o, modifiers: [.control, .option, .command, .shift]))
     static let dockRightThird = Self("dockRightThird", initial: .init(.p, modifiers: [.control, .option, .command, .shift]))
@@ -190,6 +195,10 @@ enum Hotkeys {
         (.dockRightHalf, .dockFourth(.secondHalf, .horizontal)),
         (.dockTopHalf, .dockFourth(.firstHalf, .vertical)),
         (.dockBottomHalf, .dockFourth(.secondHalf, .vertical)),
+        (.dockTopLeft, .dockCorner(.topLeft)),
+        (.dockTopRight, .dockCorner(.topRight)),
+        (.dockBottomLeft, .dockCorner(.bottomLeft)),
+        (.dockBottomRight, .dockCorner(.bottomRight)),
         (.dockLeftThird, .dockFourth(.firstThird, .horizontal)),
         (.dockCenterThird, .dockFourth(.middleThird, .horizontal)),
         (.dockRightThird, .dockFourth(.lastThird, .horizontal)),
@@ -211,8 +220,13 @@ enum Hotkeys {
     /// The camera hotkeys: disabled while zoom is off, so their chords reach apps as in Phase 3 (D-D).
     static let zoomNames: [KeyboardShortcuts.Name] = entries.compactMap { if case .camera = $0.command { $0.name } else { nil } }
 
-    /// The docking-position hotkeys (halves, thirds, fourths). They aren't `.camera` commands, so they stay enabled with zoom off (TILE-10).
-    static let fourthNames: [KeyboardShortcuts.Name] = entries.compactMap { if case .dockFourth = $0.command { $0.name } else { nil } }
+    /// The docking-position hotkeys (halves, corners, thirds, fourths). They aren't `.camera` commands, so they stay enabled with zoom off (TILE-10).
+    static let fourthNames: [KeyboardShortcuts.Name] = entries.compactMap {
+        switch $0.command {
+        case .dockFourth, .dockCorner: $0.name
+        default: nil
+        }
+    }
 
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
 

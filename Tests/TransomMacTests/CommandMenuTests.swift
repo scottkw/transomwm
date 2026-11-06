@@ -122,7 +122,7 @@ import Testing
         #expect(menu.tabsMenu.isEnabled, "the submenu item itself stays enabled")
     }
 
-    /// 08.1.1 UI-SPEC Surface 3: Where It Is, then Halves, Thirds and Fourths, each after a separator and a section header;
+    /// 08.1.1 UI-SPEC Surface 3, D-17: Where It Is, then Halves, Corners, Thirds and Fourths, each after a separator and a section header;
     /// no separator between the fourths' columns and rows.
     @Test func theDockWindowSubmenuFollowsTheUISpecOrder() throws {
         let menu = CommandMenu { _ in }
@@ -131,11 +131,12 @@ import Testing
         #expect(items.map { $0.isSeparatorItem ? nil : $0.isSectionHeader ? "# \($0.title)" : $0.title } == [
             "Where It Is",
             nil, "# Halves", "Left Half", "Right Half", "Top Half", "Bottom Half",
+            nil, "# Corners", "Top Left", "Top Right", "Bottom Left", "Bottom Right",
             nil, "# Thirds", "Left Third", "Center Third", "Right Third", "Top Third", "Middle Third", "Bottom Third",
             nil, "# Fourths", "1st Column", "2nd Column", "3rd Column", "4th Column", "Middle Half Column",
             "1st Row", "2nd Row", "3rd Row", "4th Row", "Middle Half Row",
         ])
-        #expect(items.filter(\.isSeparatorItem).count == 3 && items.filter(\.isSectionHeader).count == 3)
+        #expect(items.filter(\.isSeparatorItem).count == 4 && items.filter(\.isSectionHeader).count == 4)
         #expect(menu.item(for: .dock).menu === menu.dockMenu.submenu, "the dock item lives in the submenu only")
     }
 
@@ -144,15 +145,17 @@ import Testing
         var sent: [Command] = []
         let menu = CommandMenu { sent.append($0) }
         let items = try #require(menu.dockMenu.submenu).items.filter { !$0.isSeparatorItem && !$0.isSectionHeader }
-        #expect(items.count == 21)
-        #expect(items.map(\.keyEquivalent) == ["d", "y", "u", "h", "j", "i", "o", "p", "k", "l", ";", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
+        #expect(items.count == 25)
+        #expect(items.map(\.keyEquivalent) == ["d", "y", "u", "h", "j", "-", "=", "[", "]", "i", "o", "p", "k", "l", ";", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
         #expect(items[0].keyEquivalentModifierMask == base)
         #expect(items.dropFirst().allSatisfy { $0.keyEquivalentModifierMask == base.union(.shift) })
         for item in items { _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item) }
         let fourths: [FourthSlot] = [.first, .second, .third, .fourth, .middle]
         let halvesAndThirds: [Command] = [
             .dockFourth(.firstHalf, .horizontal), .dockFourth(.secondHalf, .horizontal), .dockFourth(.firstHalf, .vertical),
-            .dockFourth(.secondHalf, .vertical), .dockFourth(.firstThird, .horizontal), .dockFourth(.middleThird, .horizontal),
+            .dockFourth(.secondHalf, .vertical),
+            .dockCorner(.topLeft), .dockCorner(.topRight), .dockCorner(.bottomLeft), .dockCorner(.bottomRight),
+            .dockFourth(.firstThird, .horizontal), .dockFourth(.middleThird, .horizontal),
             .dockFourth(.lastThird, .horizontal), .dockFourth(.firstThird, .vertical), .dockFourth(.middleThird, .vertical),
             .dockFourth(.lastThird, .vertical),
         ]
@@ -165,19 +168,24 @@ import Testing
         let menu = CommandMenu { _ in }
         let items = try #require(menu.dockMenu.submenu).items.filter { !$0.isSeparatorItem && !$0.isSectionHeader && $0 !== menu.item(for: .dock) }
         let titles = items.map(\.title)
-        #expect(titles.count == 20)
+        #expect(titles.count == 24)
         for floats in [true, false] {
             menu.update(focusedFloats: floats) { _ in true }
             #expect(items.allSatisfy { $0.isEnabled })
         }
-        menu.update { if case .dockFourth = $0 { false } else { true } }
+        menu.update {
+            switch $0 {
+            case .dockFourth, .dockCorner: false
+            default: true
+            }
+        }
         #expect(items.allSatisfy { !$0.isEnabled })
         #expect(items.map(\.title) == titles)
         #expect(menu.dockMenu.isEnabled)
     }
 
-    /// UI-SPEC empty state: with no focused window the halves and thirds are greyed; a focused floating window enables them.
-    @Test func theHalvesAndThirdsNeedAFocusedWindow() throws {
+    /// UI-SPEC empty state: with no focused window the halves, corners and thirds are greyed; a focused floating window enables them.
+    @Test func theHalvesCornersAndThirdsNeedAFocusedWindow() throws {
         let area = Rect(x: 0, y: 25, width: 1440, height: 875)
         let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: area, currentSpaceID: nil)
         let floating = WindowRef(identity: WindowIdentity(windowID: 1, pid: 900, bundleID: "com.example.menu"))
@@ -188,9 +196,10 @@ import Testing
         _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: [info], initialRefreshComplete: true)), now: .now)
         let menu = CommandMenu { _ in }
         let halvesAndThirds = try #require(menu.dockMenu.submenu).items.filter {
-            ($0.title.hasSuffix("Half") || $0.title.hasSuffix("Third")) && !$0.isSectionHeader
+            ($0.title.hasSuffix("Half") || $0.title.hasSuffix("Third") || DockCorner.allCases.map(MenuCopy.cornerTitle).contains($0.title))
+                && !$0.isSectionHeader
         }
-        #expect(halvesAndThirds.count == 10)
+        #expect(halvesAndThirds.count == 14)
         menu.update(focusedFloats: false) { arranger.availability($0, context: CommandContext(focused: nil, ready: true)) }
         #expect(halvesAndThirds.allSatisfy { !$0.isEnabled })
         menu.update(focusedFloats: true) { arranger.availability($0, context: CommandContext(focused: floating, ready: true)) }

@@ -1,6 +1,7 @@
 import AppKit
 import KeyboardShortcuts
 import TransomEngine
+import TransomModel
 @testable import TransomMac
 import Testing
 
@@ -21,6 +22,7 @@ import Testing
             "view1", "view2", "view3", "view4", "view5", "view6", "view7", "view8", "view9",
             "saveView1", "saveView2", "saveView3", "saveView4", "saveView5", "saveView6", "saveView7", "saveView8", "saveView9",
             "dockLeftHalf", "dockRightHalf", "dockTopHalf", "dockBottomHalf",
+            "dockTopLeft", "dockTopRight", "dockBottomLeft", "dockBottomRight",
             "dockLeftThird", "dockCenterThird", "dockRightThird", "dockTopThird", "dockMiddleThird", "dockBottomThird",
             "dockColumn1", "dockColumn2", "dockColumn3", "dockColumn4", "dockColumnMiddle",
             "dockRow1", "dockRow2", "dockRow3", "dockRow4", "dockRowMiddle",
@@ -36,7 +38,9 @@ import Testing
             .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
         ] + ViewSlot.all.map { .camera(.view($0)) } + ViewSlot.all.map { .camera(.saveView($0)) } + [
             .dockFourth(.firstHalf, .horizontal), .dockFourth(.secondHalf, .horizontal), .dockFourth(.firstHalf, .vertical),
-            .dockFourth(.secondHalf, .vertical), .dockFourth(.firstThird, .horizontal), .dockFourth(.middleThird, .horizontal),
+            .dockFourth(.secondHalf, .vertical),
+            .dockCorner(.topLeft), .dockCorner(.topRight), .dockCorner(.bottomLeft), .dockCorner(.bottomRight),
+            .dockFourth(.firstThird, .horizontal), .dockFourth(.middleThird, .horizontal),
             .dockFourth(.lastThird, .horizontal), .dockFourth(.firstThird, .vertical), .dockFourth(.middleThird, .vertical),
             .dockFourth(.lastThird, .vertical),
             .dockFourth(.first, .horizontal), .dockFourth(.second, .horizontal), .dockFourth(.third, .horizontal), .dockFourth(.fourth, .horizontal),
@@ -75,7 +79,7 @@ import Testing
     /// hand (upper row columns, home row rows), then the fourths on the digit row, columns then rows, 0 last.
     @Test func theDockingPositionsAreAllFourModifiersPlusALetterOrADigit() {
         let keys: [KeyboardShortcuts.Key] = [
-            .y, .u, .h, .j, .i, .o, .p, .k, .l, .semicolon, .one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero,
+            .y, .u, .h, .j, .minus, .equal, .leftBracket, .rightBracket, .i, .o, .p, .k, .l, .semicolon, .one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero,
         ]
         #expect(Hotkeys.fourthNames.map(\.defaultShortcut) == keys.map { .init($0, modifiers: shifted) })
     }
@@ -90,7 +94,18 @@ import Testing
             "dockLeftHalf", "dockRightHalf", "dockTopHalf", "dockBottomHalf", "dockLeftThird", "dockCenterThird", "dockRightThird",
             "dockTopThird", "dockMiddleThird", "dockBottomThird",
         ])
-        #expect(Array(Hotkeys.fourthNames.prefix(10)) == names)
+        #expect(Hotkeys.fourthNames.filter { !$0.rawValue.hasPrefix("dockColumn") && !$0.rawValue.hasPrefix("dockRow") && !corners.contains($0) } == names)
+    }
+
+    /// T-08.1.1-31 (8.1.1 D-17): the corner raw values are a persistent contract; ⇧⌃⌥⌘ - = over [ ], top row = top corners.
+    private let corners: [KeyboardShortcuts.Name] = [.dockTopLeft, .dockTopRight, .dockBottomLeft, .dockBottomRight]
+
+    @Test func theCornerNamesKeepTheirRawValuesChordsAndCommands() {
+        #expect(corners.map(\.rawValue) == ["dockTopLeft", "dockTopRight", "dockBottomLeft", "dockBottomRight"])
+        #expect(corners.map(\.defaultShortcut) == [.minus, .equal, .leftBracket, .rightBracket].map { .init($0, modifiers: shifted) })
+        #expect(corners.map { name in Hotkeys.entries.first { $0.name == name }?.command } == DockCorner.allCases.map { .dockCorner($0) })
+        #expect(Set(corners).isSubset(of: Hotkeys.fourthNames))
+        #expect(Set(corners).isDisjoint(with: Hotkeys.zoomNames))
     }
 
     @Test func noTwoEntriesShareADefaultChord() {
@@ -101,7 +116,7 @@ import Testing
 
     /// TILE-10: zoom off disables zoom names only, so the docking positions must stay out of them.
     @Test func theDockingPositionsAreNotZoomNames() {
-        #expect(Hotkeys.fourthNames.count == 20)
+        #expect(Hotkeys.fourthNames.count == 24)
         #expect(Set(Hotkeys.zoomNames).isDisjoint(with: Hotkeys.fourthNames))
     }
 
@@ -135,14 +150,14 @@ import Testing
 
     /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, less frameDesktop (retired, 8.1.1 D-13), plus
     /// Show Overview (06 UI-SPEC Surface 4) and the 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 32 + 11 + the 3 tab names (07
-    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) + the 10 halves and thirds (08.1.1 Surface 4, enabled with zoom off) = 84.
+    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) + the 10 halves and thirds (08.1.1 Surface 4, enabled with zoom off) + the 4 corners (8.1.1 D-17) = 88.
     @Test func theZoomNamesAreTheUISpecTenPlusShowOverviewAndTheSavedViews() {
         let zoom = [
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
             "showOverview",
         ] + (1...9).map { "view\($0)" } + (1...9).map { "saveView\($0)" }
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 84)
+        #expect(Hotkeys.entries.count == 88)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
     }
 
