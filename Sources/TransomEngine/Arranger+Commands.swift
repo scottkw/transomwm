@@ -7,7 +7,7 @@ extension Arranger {
     static let resizeStep = 0.1
 
     /// Moves a docked window into the tile across `edge`, docking it on that tile's near edge (D-11, TILE-13), or
-    /// snaps a floating one to that half of the Desktop tile (TILE-14). No neighbour: beep.
+    /// snaps a floating one to that half of the visible frame (TILE-14). No neighbour: beep.
     mutating func moveOrSnap(_ window: WindowRef, toward edge: Edge) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
         if desk.desktop.contains(window) { return try snap(window, to: edge.half) }
@@ -81,7 +81,7 @@ extension Arranger {
             let area = display(for: key)?.visibleFrame
         else { return [.beep] }
         let group = desk.desktop.group(containing: window)
-        let snapped = Snap.frame(target, window: group?.frame ?? frame, desktop: area, gap: gap)
+        let snapped = Snap.frame(target, window: group?.frame ?? frame, area: area, gap: gap)
         let shown = group.map { $0.members[$0.selected] } ?? window, content = group == nil ? snapped : TabBand.content(of: snapped)
         try world.recordFloatingFrame(content, for: shown)
         wantedFrames[shown.identity] = content
@@ -227,7 +227,7 @@ extension Arranger {
         return replan() + [.notice(.floatedAll(count: shown.count))]
     }
 
-    /// The largest placed leaf (the Desktop tile included); ties go to the smaller NodeID.
+    /// The largest placed leaf; ties go to the smaller NodeID.
     static func largestTile(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
         let leaves = resolution.nodeRects.filter { if case .split? = tree.node($0.key) { false } else { true } }
         return leaves.max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
@@ -295,7 +295,7 @@ extension Edge {
         }
     }
 
-    /// The half of the Desktop tile ⌃⌥⌘⇧ and this arrow snap a floating window to.
+    /// The half of the visible frame ⌃⌥⌘⇧ and this arrow snap a floating window to.
     fileprivate var half: SnapTarget {
         switch self {
         case .left: .leftHalf

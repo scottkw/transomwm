@@ -145,7 +145,7 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
         }
         let history = depth(arranger)
         let effects = arranger.handle(.command(.moveOrSnap(.left), focused: f), now: .now)
-        let expected = Snap.frame(.leftHalf, window: Rect(x: 900, y: 300, width: 300, height: 200), desktop: visible, gap: gap)
+        let expected = Snap.frame(.leftHalf, window: Rect(x: 900, y: 300, width: 300, height: 200), area: visible, gap: gap)
         #expect(setFrames(effects) == [f: expected])
         #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
         #expect(depth(arranger) == history, "a snap is a floating-frame fact, not an undo step")
@@ -254,7 +254,7 @@ extension ArrangerCommandTests {
         var arranger = try arranger(frames: [a: somewhere, f: start]) { desk, ids throws(LayoutError) in
             try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         }
-        let expected = Snap.frame(target, window: start, desktop: visible, gap: gap)
+        let expected = Snap.frame(target, window: start, area: visible, gap: gap)
         #expect(setFrames(arranger.handle(.command(.snap(target), focused: f), now: .now)) == [f: expected])
         #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
         #expect(depth(arranger) == 0)

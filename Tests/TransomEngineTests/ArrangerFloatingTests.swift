@@ -311,7 +311,7 @@ private func freshArranger(_ windows: [WindowInfo], newWindows: NewWindowsMode =
         var (arranger, group, frame) = try groupWithNoDesktopTile()
         let b = ref(3), content = TabBand.content(of: frame)
         let size = arranger.wantedFrames[b.identity]?.size ?? content.size
-        let expected = Arranger.moveOutFrame(size: size, group: frame, desktop: Rect(x: 0, y: 25, width: 1440, height: 875))
+        let expected = Arranger.moveOutFrame(size: size, group: frame, area: Rect(x: 0, y: 25, width: 1440, height: 875))
 
         let effects = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: .now)
 

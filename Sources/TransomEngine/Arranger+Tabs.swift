@@ -621,8 +621,8 @@ extension Arranger {
     }
 
     /// One strip per docked group of `desk` whose selected member is planned on screen (not parked, collapsed,
-    /// absent or fullscreen), and per floating group whose selected member is present and not parked (a hidden Desktop,
-    /// a zoomed view), over its planned or stored content rect; in ID order. Titles are the live ones (Pitfall 7, D-09).
+    /// absent or fullscreen), and per floating group whose selected member is present and not parked, over
+    /// its planned or stored content rect; in ID order. Titles are the live ones (Pitfall 7, D-09).
     func tabStrips(_ key: DeskKey, desk: Desk, plan: FramePlan) -> [TabStrip] {
         func titles(_ members: [WindowRef]) -> [String] { members.map { windows[$0.identity]?.window.titleHint ?? "" } }
         let docked = desk.tree.nodes.compactMap { id, node -> TabStrip? in
@@ -815,7 +815,7 @@ extension Arranger {
         var frame = tile
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
             let removed = try desk.tree.removeLeaf(ref.key.node)
-            frame = Planner.floatFrame(wanted: wanted.map(TabBand.frame(ofContent:)), tile: tile, desktop: area, minimum: minimum)
+            frame = Planner.floatFrame(wanted: wanted.map(TabBand.frame(ofContent:)), tile: tile, area: area, minimum: minimum)
             let group = FloatingTabGroup(id: try ids.make(), members: ref.members, selected: ref.selected, frame: frame)
             try desk.desktop.addGroup(group, states: removed.states)
         }
@@ -975,16 +975,16 @@ extension Arranger {
     static let moveOutGap = 8.0, moveOutCascade = 24.0
 
     /// Where a moved-out window of `size` lands: 8 pt right of `group`, top edges aligned; else 8 pt left; else its
-    /// top-left 24 pt right of and below the group's. A side "fits" when it lies inside `desktop` (the visible frame);
+    /// top-left 24 pt right of and below the group's. A side "fits" when it lies inside `area` (the visible frame);
     /// the result is clamped.
-    static func moveOutFrame(size: Size, group: Rect, desktop: Rect) -> Rect {
-        func inside(_ r: Rect) -> Bool { r.minX >= desktop.minX && r.maxX <= desktop.maxX && r.minY >= desktop.minY && r.maxY <= desktop.maxY }
+    static func moveOutFrame(size: Size, group: Rect, area: Rect) -> Rect {
+        func inside(_ r: Rect) -> Bool { r.minX >= area.minX && r.maxX <= area.maxX && r.minY >= area.minY && r.maxY <= area.maxY }
         let right = Rect(x: group.maxX + moveOutGap, y: group.minY, width: size.width, height: size.height)
         if inside(right) { return right }
         let left = Rect(x: group.minX - moveOutGap - size.width, y: group.minY, width: size.width, height: size.height)
         if inside(left) { return left }
         let cascade = Rect(x: group.minX + moveOutCascade, y: group.minY + moveOutCascade, width: size.width, height: size.height)
-        return Planner.clamp(cascade, into: desktop)
+        return Planner.clamp(cascade, into: area)
     }
 
     /// Move Out of Group: `member` leaves its group and floats at `moveOutFrame` (its saved pre-group size, else the
@@ -999,7 +999,7 @@ extension Arranger {
         let size = wantedFrames[member.identity]?.size ?? content.size
         do throws(LayoutError) {
             guard let area = display(for: key)?.visibleFrame else { return [.beep] }
-            let landing = Self.moveOutFrame(size: size, group: TabBand.frame(ofContent: content), desktop: area)
+            let landing = Self.moveOutFrame(size: size, group: TabBand.frame(ofContent: content), area: area)
             return try commitTearOff(member, from: ref, landing: landing, on: key, via: "\(source)")
         } catch {
             return [.beep, .fault("group \(ref.key.node): move out of \(member) failed: \(error)")] + replan()

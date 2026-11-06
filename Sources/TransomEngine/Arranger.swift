@@ -1417,7 +1417,7 @@ public struct Arranger: Sendable {
         var kept: Rect?
         try world.edit(key, history: &history) { desk, _ throws(LayoutError) in
             try desk.tree.remove(window)
-            let frame = Planner.floatFrame(wanted: wanted, tile: tile, desktop: area, minimum: mins[window])
+            let frame = Planner.floatFrame(wanted: wanted, tile: tile, area: area, minimum: mins[window])
             try desk.desktop.add(window, frame: frame)
             // Float's clamp of the pre-dock frame is Transom's: the pre-dock frame stays wanted (WR-01).
             kept = wanted.map { Planner.clamp($0, into: area) } == frame ? wanted : frame

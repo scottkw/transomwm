@@ -2,12 +2,12 @@ import Foundation
 import Testing
 @testable import TransomModel
 
-private let desktop = Rect(x: 100, y: 50, width: 1200, height: 900)
+private let area = Rect(x: 100, y: 50, width: 1200, height: 900)
 private let window = Rect(x: 0, y: 0, width: 400, height: 300)
 
 private func r(_ x: Double, _ y: Double, _ w: Double, _ h: Double) -> Rect { Rect(x: x, y: y, width: w, height: h) }
 
-/// Expected frames for `desktop` with gap 8: inset (108, 58, 1184, 884).
+/// Expected frames for `area` (a visible frame) with gap 8: inset (108, 58, 1184, 884).
 private let expected: [SnapTarget: Rect] = [
     .leftHalf: r(108, 58, 588, 884), .rightHalf: r(704, 58, 588, 884),
     .topHalf: r(108, 58, 1184, 438), .bottomHalf: r(108, 504, 1184, 438),
@@ -23,28 +23,28 @@ private func inside(_ inner: Rect, _ outer: Rect) -> Bool {
 
 @Suite struct SnapTests {
     @Test(arguments: SnapTarget.allCases) func everyTargetWithGap8(_ target: SnapTarget) throws {
-        let frame = Snap.frame(target, window: window, desktop: desktop, gap: 8)
+        let frame = Snap.frame(target, window: window, area: area, gap: 8)
         #expect(frame == expected[target], "\(target)")
         #expect(frame.isValidGeometry)
-        #expect(inside(frame, desktop))
+        #expect(inside(frame, area))
     }
 
     @Test(arguments: SnapTarget.allCases) func everyTargetFitsWithAnyGap(_ target: SnapTarget) {
         for gap in [0.0, 3.5, 20] {
-            let frame = Snap.frame(target, window: Rect(x: 0, y: 0, width: 5000, height: 5000), desktop: desktop, gap: gap)
-            #expect(frame.isValidGeometry && inside(frame, desktop), "\(target) gap \(gap): \(frame)")
+            let frame = Snap.frame(target, window: Rect(x: 0, y: 0, width: 5000, height: 5000), area: area, gap: gap)
+            #expect(frame.isValidGeometry && inside(frame, area), "\(target) gap \(gap): \(frame)")
         }
     }
 
     @Test func gapZeroHalvesMeetExactly() {
-        let left = Snap.frame(.leftHalf, window: window, desktop: desktop, gap: 0)
-        let right = Snap.frame(.rightHalf, window: window, desktop: desktop, gap: 0)
+        let left = Snap.frame(.leftHalf, window: window, area: area, gap: 0)
+        let right = Snap.frame(.rightHalf, window: window, area: area, gap: 0)
         #expect(left == r(100, 50, 600, 900))
-        #expect(left.maxX == right.minX && right.maxX == desktop.maxX)
+        #expect(left.maxX == right.minX && right.maxX == area.maxX)
     }
 
     @Test func centerClampsAnOversizedWindow() {
-        let wide = Snap.frame(.center, window: r(0, 0, 2000, 300), desktop: desktop, gap: 8)
+        let wide = Snap.frame(.center, window: r(0, 0, 2000, 300), area: area, gap: 8)
         #expect(wide == r(108, 350, 1184, 300))
     }
 }

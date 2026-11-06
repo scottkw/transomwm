@@ -44,25 +44,25 @@ public enum Planner {
             && abs(a.height - b.height) <= tolerance
     }
 
-    /// Where Float puts a window undocked from `tile` (G-03-4): its wanted (pre-dock) frame clamped into `desktop`,
-    /// unless there is none or that lands within 2 pt of the tile. Then a frame centred in `desktop`, 90% of the
-    /// tile per axis, at least `minimum` and at most the Desktop, so the toggle always moves the window.
-    public static func floatFrame(wanted: Rect?, tile: Rect, desktop: Rect, minimum: Size?) -> Rect {
+    /// Where Float puts a window undocked from `tile` (G-03-4): its wanted (pre-dock) frame clamped into `area` (the
+    /// visible frame), unless there is none or that lands within 2 pt of the tile. Then a frame centred in `area`, 90% of
+    /// the tile per axis, at least `minimum` and at most the visible frame, so the toggle always moves the window.
+    public static func floatFrame(wanted: Rect?, tile: Rect, area: Rect, minimum: Size?) -> Rect {
         if let wanted {
-            let clamped = clamp(wanted, into: desktop)
+            let clamped = clamp(wanted, into: area)
             if !near(clamped, tile, within: 2) { return clamped }
         }
-        let width = min(desktop.width, max(0.9 * tile.width, minimum?.width ?? 0))
-        let height = min(desktop.height, max(0.9 * tile.height, minimum?.height ?? 0))
-        return Rect(x: desktop.midX - width / 2, y: desktop.midY - height / 2, width: width, height: height)
+        let width = min(area.width, max(0.9 * tile.width, minimum?.width ?? 0))
+        let height = min(area.height, max(0.9 * tile.height, minimum?.height ?? 0))
+        return Rect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height)
     }
 
-    /// `frame` moved (and shrunk only if it must be) so it lies inside `desktop`.
-    public static func clamp(_ frame: Rect, into desktop: Rect) -> Rect {
-        let width = min(frame.width, desktop.width), height = min(frame.height, desktop.height)
+    /// `frame` moved (and shrunk only if it must be) so it lies inside `area` (the visible frame).
+    public static func clamp(_ frame: Rect, into area: Rect) -> Rect {
+        let width = min(frame.width, area.width), height = min(frame.height, area.height)
         return Rect(
-            x: min(max(frame.minX, desktop.minX), desktop.maxX - width),
-            y: min(max(frame.minY, desktop.minY), desktop.maxY - height),
+            x: min(max(frame.minX, area.minX), area.maxX - width),
+            y: min(max(frame.minY, area.minY), area.maxY - height),
             width: width, height: height)
     }
 

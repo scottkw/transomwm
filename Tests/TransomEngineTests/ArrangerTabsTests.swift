@@ -1451,7 +1451,7 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
         var (arranger, _, _) = try bareFloatingGroup(at: start)
         _ = arranger.handle(.command(.snap(.leftHalf), focused: f), now: start + .seconds(1))
         let group = try #require(floatingGroup(arranger))
-        let expected = Snap.frame(.leftHalf, window: tFrame, desktop: area, gap: 8)
+        let expected = Snap.frame(.leftHalf, window: tFrame, area: area, gap: 8)
         #expect(group.frame == expected, "the group frame did not snap: \(group.frame)")
         #expect(arranger.world[mainKey]?.desktop.frame(of: f) == TabBand.content(of: expected))
     }
@@ -1892,28 +1892,28 @@ private func ownTile(_ arranger: Arranger, _ group: GroupKey) throws -> Rect {
 
 /// D-11 landing rule and Move Out of Group from the tab context menu.
 @Suite struct ArrangerTabsMoveOutTests {
-    private let desktop = Rect(x: 0, y: 25, width: 1440, height: 875)
+    private let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
 
     @Test func theMovedOutWindowLandsEightPointsRightOfTheGroupTopsAligned() {
-        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 300), group: Rect(x: 100, y: 100, width: 800, height: 600), desktop: desktop)
+        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 300), group: Rect(x: 100, y: 100, width: 800, height: 600), area: visible)
         #expect(frame == Rect(x: 908, y: 100, width: 400, height: 300))
     }
 
     @Test func withNoRoomOnTheRightItLandsEightPointsLeft() {
-        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 300), group: Rect(x: 900, y: 100, width: 500, height: 600), desktop: desktop)
+        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 300), group: Rect(x: 900, y: 100, width: 500, height: 600), area: visible)
         #expect(frame == Rect(x: 492, y: 100, width: 400, height: 300))
     }
 
     @Test func withNoRoomOnEitherSideItCascadesThenClamps() {
-        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 400), group: Rect(x: 300, y: 600, width: 800, height: 300), desktop: desktop)
-        #expect(frame == Rect(x: 324, y: 500, width: 400, height: 400), "cascade (324, 624) clamped up to the Desktop's bottom")
+        let frame = Arranger.moveOutFrame(size: Size(width: 400, height: 400), group: Rect(x: 300, y: 600, width: 800, height: 300), area: visible)
+        #expect(frame == Rect(x: 324, y: 500, width: 400, height: 400), "cascade (324, 624) clamped up to the visible frame's bottom")
     }
 
     @Test func moveOutFloatsTheMemberBesideTheGroupInOneUndoStep() throws {
         let start = ContinuousClock.now
         var (arranger, group, frame, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
         let size = arranger.wantedFrames[b.identity]?.size ?? content.size
-        let expected = Arranger.moveOutFrame(size: size, group: frame, desktop: area)
+        let expected = Arranger.moveOutFrame(size: size, group: frame, area: area)
         let depth = arranger.history.depth(for: mainKey), grouped = arranger.world
         let effects = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: start + .seconds(1))
         let desk = try #require(arranger.world[mainKey])
