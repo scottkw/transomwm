@@ -583,7 +583,7 @@ extension ArrangerHoldOptionTests {
         var (arranger, group, _, content) = try holdOptionGroup(at: start)  // [a | [b, f]], f selected
         let ra = try tile(arranger, a)
         let to = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
-        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: try desktopRect(arranger))
+        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: area)
         _ = try tear(&arranger, f, of: group, to: to, at: start)
         let depth = arranger.history.depth(for: mainKey)
 
@@ -601,7 +601,7 @@ extension ArrangerHoldOptionTests {
         var (arranger, group, _, content) = try holdOptionGroup(at: start)
         let ra = try tile(arranger, a)
         let to = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
-        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: try desktopRect(arranger))
+        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: area)
         _ = try tear(&arranger, f, of: group, to: to, at: start)
         let tick = arranger.handle(.tick, now: start + DragSession.dwell)
         #expect(previews(tick) == [.clamp(expected)], "tick gave \(tick)")
@@ -771,11 +771,6 @@ private func groupPreviews(_ effects: [ArrangerEffect]) -> [PreviewState] {
 private func tile(_ arranger: Arranger, _ window: WindowRef) throws -> Rect {
     let desk = try #require(arranger.world[mainKey])
     return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[window])
-}
-
-private func desktopRect(_ arranger: Arranger) throws -> Rect {
-    let desk = try #require(arranger.world[mainKey])
-    return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
 }
 
 /// [a | [b, f]], f selected, on an Arranger with no window system, in Hold ⌥ mode.

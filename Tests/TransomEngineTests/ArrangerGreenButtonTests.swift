@@ -66,7 +66,8 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         #expect(docked == tile)
     }
 
-    /// G-03-4: with no known pre-dock frame (a restored docked window), Float gives a centred frame 90% of the tile.
+    /// G-03-4: with no known pre-dock frame (a restored docked window), Float gives a frame 90% of the tile, centred on
+    /// the visible frame.
     @Test func aFloatWithNoKnownPreDockFrameGetsASlightlySmallerCentredFrame() async throws {
         var source = await Harness.started()
         await source.send(.command(.dock, focused: w1))
@@ -76,9 +77,7 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         _ = restored.handle(.inventory(await source.fake.inventory()), now: .now)
         let effects = restored.handle(.command(.float, focused: w1), now: .now)
         let frame = try #require(setFrames(effects)[w1])
-        let desk = try #require(restored.world[key])
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        #expect(abs(frame.midX - desktop.midX) <= 0.5 && abs(frame.midY - desktop.midY) <= 0.5, "\(frame) not centred in \(desktop)")
+        #expect(abs(frame.midX - visible.midX) <= 0.5 && abs(frame.midY - visible.midY) <= 0.5, "\(frame) not centred in \(visible)")
         #expect(abs(frame.width - 0.9 * tile.width) <= 0.5 && abs(frame.height - 0.9 * tile.height) <= 0.5, "\(frame) vs tile \(tile)")
         #expect(!Planner.near(frame, tile, within: 2))
     }

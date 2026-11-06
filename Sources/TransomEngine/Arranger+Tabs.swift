@@ -801,28 +801,25 @@ extension Arranger {
     }
 
     /// Float Group: the docked group floats at `Planner.floatFrame` of its group frame (its selected member's pre-dock
-    /// frame plus the band, else 90% of the tile, centred), showing a hidden Desktop first (D-31). Its tile closes and the
-    /// neighbours reflow; members, order and selection stay. One undo step. Hidden members re-park at the new size.
+    /// frame plus the band, else 90% of the tile, centred on the visible frame). Its tile closes and the neighbours reflow; members, order and selection stay. One undo step. Hidden members re-park at the new size.
     mutating func floatGroup(_ ref: TabGroupRef) throws(LayoutError) -> [ArrangerEffect] {
         let key = ref.key.desk, selected = ref.members[ref.selected]
         guard let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
-        let mins = minimums, gap = gap, show = showingDesktop(), minimum = groupMinimum(ref.members)
+        let mins = minimums, minimum = groupMinimum(ref.members)
         guard let tile = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution.nodeRects[ref.key.node]
             ?? windows[selected.identity].map({ TabBand.frame(ofContent: $0.frame) })
         else { return [.beep] }
         let wanted = wantedFrames[selected.identity]
-        var frame = tile, desktop = area
+        var frame = tile
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
             let removed = try desk.tree.removeLeaf(ref.key.node)
-            desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
-            frame = Planner.floatFrame(wanted: wanted.map(TabBand.frame(ofContent:)), tile: tile, desktop: desktop, minimum: minimum)
+            frame = Planner.floatFrame(wanted: wanted.map(TabBand.frame(ofContent:)), tile: tile, desktop: area, minimum: minimum)
             let group = FloatingTabGroup(id: try ids.make(), members: ref.members, selected: ref.selected, frame: frame)
             try desk.desktop.addGroup(group, states: removed.states)
         }
-        // As Float Window: a pre-dock frame only clamped stays wanted, re-planned as the Desktop changes (WR-01).
+        // As Float Window: a pre-dock frame only clamped stays wanted (WR-01).
         let content = TabBand.content(of: frame)
-        wantedFrames[selected.identity] = wanted.map { Planner.clamp(TabBand.frame(ofContent: $0), into: desktop) } == frame ? wanted : content
+        wantedFrames[selected.identity] = wanted.map { Planner.clamp(TabBand.frame(ofContent: $0), into: area) } == frame ? wanted : content
         return replan() + [.info("group \(ref.key.node): floated")]
     }
 
@@ -890,27 +887,13 @@ extension Arranger {
         return TabBand.content(of: rect)
     }
 
-    /// The Desktop rect a torn-off `window` floats into on `key`'s desk: with it out of its group and the Desktop shown.
-    func tearOffDesktop(_ window: WindowRef, on key: DeskKey) throws(LayoutError) -> Rect? {
-        guard let area = display(for: key)?.visibleFrame else { return nil }
-        var desk = world[key] ?? Desk()
-        if desk.desktop.contains(window) { try desk.desktop.remove(window) } else if desk.tree.state(of: window) != nil { try desk.tree.remove(window) }
-        try desk.tree.setDesktopHidden(false)
-        return try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).desktopRect
-    }
-
     /// A tear-off with no dock or group target: the float, its landing frame shown as the clamp ghost (always, since
     /// the window is not under the pointer). Back over the strip: no preview.
     func tearOffMiss(_ hover: Hover, window: WindowRef) -> Decision {
         guard !hover.overStrip, let uuid = hover.displayUUID, let display = displays.first(where: { $0.uuid == uuid }) else {
             return Decision(action: .miss)
         }
-        let key = Self.key(display)
-        do throws(LayoutError) {
-            return Decision(action: .tearOffFloat(key), display: uuid, clampInto: try tearOffDesktop(window, on: key) ?? display.visibleFrame)
-        } catch {
-            return Decision(action: .miss)
-        }
+        return Decision(action: .tearOffFloat(Self.key(display)), display: uuid, clampInto: display.visibleFrame)
     }
 
     /// Esc: the tear-off ends with nothing changed; the rest of its press finds no session and does nothing.
@@ -951,14 +934,13 @@ extension Arranger {
         }
     }
 
-    /// The float: `window` leaves its group and floats at `landing` clamped into the Desktop of `key`'s desk, a hidden
-    /// Desktop shown first (D-31). One undo step; raised and focused.
+    /// The float: `window` leaves its group and floats at `landing` clamped into the visible frame of `key`'s display.
+    /// One undo step; raised and focused.
     mutating func commitTearOff(
         _ window: WindowRef, from ref: TabGroupRef, landing: Rect, on key: DeskKey, via source: String = "tear-off"
     ) throws(LayoutError) -> [ArrangerEffect] {
         guard let from = deskKey(of: window), let area = display(for: key)?.visibleFrame else { return replan() }
-        let show = showingDesktop(), gap = gap, mins = minimums
-        var frame = landing
+        let frame = Planner.clamp(landing, into: area)
         if from != key {
             // Leaving another display's desk is a fact of where it was dropped, not a second undo step.
             try world.reflow(from) { desk, _ throws(LayoutError) in
@@ -966,12 +948,10 @@ extension Arranger {
             }
             if world[key] == nil { try world.addDesk(key) }
         }
-        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+        try world.edit(key, history: &history) { desk, _ throws(LayoutError) in
             if from == key {
                 if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
             }
-            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
-            frame = Planner.clamp(landing, into: try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area)
             try desk.desktop.add(window, frame: frame)
         }
         wantedFrames[window.identity] = frame
@@ -993,7 +973,8 @@ extension Arranger {
     static let moveOutGap = 8.0, moveOutCascade = 24.0
 
     /// Where a moved-out window of `size` lands: 8 pt right of `group`, top edges aligned; else 8 pt left; else its
-    /// top-left 24 pt right of and below the group's. A side "fits" when it lies inside `desktop`; the result is clamped.
+    /// top-left 24 pt right of and below the group's. A side "fits" when it lies inside `desktop` (the visible frame);
+    /// the result is clamped.
     static func moveOutFrame(size: Size, group: Rect, desktop: Rect) -> Rect {
         func inside(_ r: Rect) -> Bool { r.minX >= desktop.minX && r.maxX <= desktop.maxX && r.minY >= desktop.minY && r.maxY <= desktop.maxY }
         let right = Rect(x: group.maxX + moveOutGap, y: group.minY, width: size.width, height: size.height)
@@ -1005,7 +986,7 @@ extension Arranger {
     }
 
     /// Move Out of Group: `member` leaves its group and floats at `moveOutFrame` (its saved pre-group size, else the
-    /// content size), a hidden Desktop shown first; raised and focused. One undo step (the tear-off float commit).
+    /// content size), on the visible frame; raised and focused. One undo step (the tear-off float commit).
     mutating func moveOut(_ member: WindowRef, via source: TabLeaveSource, ready: Bool) -> [ArrangerEffect] {
         guard pauseReasons.isEmpty, !sessionPaused else { return refuse(.paused, "move out \(member)", "arranging is paused") }
         guard ready else { return refuse(.notReady, "move out \(member)", "Accessibility is not ready") }
@@ -1015,8 +996,8 @@ extension Arranger {
         let key = ref.key.desk
         let size = wantedFrames[member.identity]?.size ?? content.size
         do throws(LayoutError) {
-            guard let desktop = try tearOffDesktop(member, on: key) else { return [.beep] }
-            let landing = Self.moveOutFrame(size: size, group: TabBand.frame(ofContent: content), desktop: desktop)
+            guard let area = display(for: key)?.visibleFrame else { return [.beep] }
+            let landing = Self.moveOutFrame(size: size, group: TabBand.frame(ofContent: content), desktop: area)
             return try commitTearOff(member, from: ref, landing: landing, on: key, via: "\(source)")
         } catch {
             return [.beep, .fault("group \(ref.key.node): move out of \(member) failed: \(error)")] + replan()
@@ -1027,10 +1008,9 @@ extension Arranger {
 /// Restore All Windows and tab groups (D-07, RESEARCH Pitfall 3): groups dissolve before the rescue, or the replan
 /// would park their hidden members again.
 extension Arranger {
-    /// Dissolves every group on every desk, one undo step per desk holding groups (in key order), a hidden Desktop
-    /// shown first. The selected member keeps the group's place: its tile (a plain panel under the same NodeID), or the
+    /// Dissolves every group on every desk, one undo step per desk holding groups (in key order). The selected member keeps the group's place: its tile (a plain panel under the same NodeID), or the
     /// whole floating frame (the band returns). The others float at the content size, top-lefts 24 pt apart from the
-    /// group frame's top-left, clamped inside the Desktop tile. Returns the groups dissolved, the members floated, and a
+    /// group frame's top-left, clamped into the visible frame. Returns the groups dissolved, the members floated, and a
     /// fault per desk that could not be dissolved (it keeps its groups, so the rest of Restore All still runs).
     mutating func dissolveAllGroups() -> (groups: Int, windows: [WindowRef], faults: [ArrangerEffect]) {
         var groups = 0, floated: [WindowRef] = [], faults: [ArrangerEffect] = []
@@ -1038,7 +1018,7 @@ extension Arranger {
             guard !desk.desktop.groups.isEmpty || desk.tree.nodes.values.contains(where: { if case .tabs = $0 { true } else { false } }) else { continue }
             // shortcut: a desk whose display is gone keeps its groups; its members are rescued as stranded windows.
             guard let area = displays.first(where: { $0.uuid == key.displayUUID })?.visibleFrame else { continue }
-            let mins = minimums, gap = gap, show = showingDesktop()
+            let mins = minimums, gap = gap
             guard let tiles = try? Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution.nodeRects else {
                 faults.append(.fault("restore all: could not plan \(key) to dissolve its groups"))
                 continue
@@ -1056,8 +1036,8 @@ extension Arranger {
             guard !docked.isEmpty || !desk.desktop.groups.isEmpty else { continue }
             var moved: [WindowRef: Rect] = [:]
             do throws(LayoutError) {
-                try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-                    try Self.dissolve(docked, on: &desk, ids: &ids, area: area, gap: gap, mins: mins, show: show, moved: &moved)
+                try world.edit(key, history: &history) { desk, _ throws(LayoutError) in
+                    try Self.dissolve(docked, on: &desk, area: area, moved: &moved)
                 }
             } catch {
                 faults.append(.fault("restore all: could not dissolve the groups of \(key): \(error)"))
@@ -1075,10 +1055,8 @@ extension Arranger {
 
     /// One desk's dissolve (`dissolveAllGroups`): `docked` groups with their tiles, then every floating group.
     private static func dissolve(
-        _ docked: [(NodeID, [WindowRef], Int, Rect)], on desk: inout Desk, ids: inout IDSource, area: Rect, gap: Double,
-        mins: [WindowRef: Size], show: (inout Desk, inout IDSource) throws(LayoutError) -> Void, moved: inout [WindowRef: Rect]
+        _ docked: [(NodeID, [WindowRef], Int, Rect)], on desk: inout Desk, area: Rect, moved: inout [WindowRef: Rect]
     ) throws(LayoutError) {
-        if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
         var cascade: [(WindowRef, WindowState?, frame: Rect, n: Int)] = []
         for (_, members, selected, frame) in docked {
             for (n, member) in members.enumerated().filter({ $0.offset != selected }).map(\.element).enumerated() {
@@ -1095,10 +1073,9 @@ extension Arranger {
                 cascade.append((member, states[member.identity], removed.frame, n + 1))
             }
         }
-        let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
         for (member, state, frame, n) in cascade {
             let content = TabBand.content(of: frame), step = Self.moveOutCascade * Double(n)
-            let rect = Planner.clamp(Rect(x: frame.minX + step, y: frame.minY + step, width: content.width, height: content.height), into: desktop)
+            let rect = Planner.clamp(Rect(x: frame.minX + step, y: frame.minY + step, width: content.width, height: content.height), into: area)
             try desk.desktop.add(member, frame: rect)
             if let state, state != .present { try desk.desktop.setState(state, for: member) }
             moved[member] = rect

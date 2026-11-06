@@ -74,15 +74,14 @@ extension Arranger {
         return dissolved.faults + (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + log + [.notice(.restored(count: count))]
     }
 
-    /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step. A floating
-    /// group's member snaps the group frame, band included (UI-SPEC Surface 5).
+    /// Snaps a floating window to `target` on the visible frame, over any docked windows (TILE-14, 8.1.1 D-10): a frame
+    /// fact, no undo step. A floating group's member snaps the group frame, band included (UI-SPEC Surface 5).
     mutating func snap(_ window: WindowRef, to target: SnapTarget) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let frame = desk.desktop.frame(of: window),
-            let area = display(for: key)?.visibleFrame,
-            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).desktopRect
+            let area = display(for: key)?.visibleFrame
         else { return [.beep] }
         let group = desk.desktop.group(containing: window)
-        let snapped = Snap.frame(target, window: group?.frame ?? frame, desktop: desktop, gap: gap)
+        let snapped = Snap.frame(target, window: group?.frame ?? frame, desktop: area, gap: gap)
         let shown = group.map { $0.members[$0.selected] } ?? window, content = group == nil ? snapped : TabBand.content(of: snapped)
         try world.recordFloatingFrame(content, for: shown)
         wantedFrames[shown.identity] = content
@@ -181,8 +180,8 @@ extension Arranger {
         return replan() + (skipped == 0 ? [] : [.notice(.arrangeLeftovers(count: skipped))])
     }
 
-    /// Floats every docked window of the target desk at its tile rect, clamped into the Desktop that leaves, as one
-    /// undo step that also shows a hidden Desktop (TILE-16). N4 says how many. Nothing docked: beep.
+    /// Floats every docked window of the target desk at its tile rect, clamped on screen, as one undo step (TILE-16).
+    /// N4 says how many. Nothing docked: beep.
     mutating func floatAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame, !desk.tree.windows.isEmpty
         else { return [.beep] }
@@ -202,22 +201,19 @@ extension Arranger {
             let actual = shown.flatMap { windows[$0.identity]?.frame }.map { grouped ? TabBand.frame(ofContent: $0) : $0 }
             return (leaf, plan.resolution.nodeRects[leaf] ?? actual ?? area)
         }
-        let gap = gap, mins = minimums, show = showingDesktop()
         var shown: [WindowRef] = []
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
             var taken: [NodeID: (node: Node, states: [WindowIdentity: WindowState])] = [:]
             for (leaf, _) in docked { taken[leaf] = try desk.tree.removeLeaf(leaf) }  // leaf IDs survive: only splits collapse
-            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
             for (leaf, tile) in docked {
                 guard let (node, states) = taken[leaf] else { continue }
                 switch node {
                 case .panel(let window):
-                    try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
+                    try desk.desktop.add(window, frame: Planner.clamp(tile, into: area))
                     if let state = states[window.identity], state != .present { try desk.desktop.setState(state, for: window) }
                     shown.append(window)
                 case .tabs(let members, let selected):
-                    let group = FloatingTabGroup(id: try ids.make(), members: members, selected: selected, frame: Planner.clamp(tile, into: desktop))
+                    let group = FloatingTabGroup(id: try ids.make(), members: members, selected: selected, frame: Planner.clamp(tile, into: area))
                     try desk.desktop.addGroup(group, states: states)
                     shown.append(members[selected])
                 case .split, .desktop: throw .notALeaf(leaf)

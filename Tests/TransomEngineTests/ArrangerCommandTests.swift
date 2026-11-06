@@ -137,14 +137,14 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
         #expect(arranger.world == world && arranger.history == history)
     }
 
-    @Test func aFloatingWindowSnapsToThatHalfOfTheDesktopAsAFact() throws {
+    /// 8.1.1 D-10: the half is of the visible frame, over the docked windows.
+    @Test func aFloatingWindowSnapsToThatHalfOfTheScreenAsAFact() throws {
         var arranger = try arranger(frames: [a: somewhere, f: Rect(x: 900, y: 300, width: 300, height: 200)]) { desk, ids throws(LayoutError) in
             try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
         }
-        let desktop = try #require(try plan(arranger).desktopRect)
         let history = depth(arranger)
         let effects = arranger.handle(.command(.moveOrSnap(.left), focused: f), now: .now)
-        let expected = Snap.frame(.leftHalf, window: Rect(x: 900, y: 300, width: 300, height: 200), desktop: desktop, gap: gap)
+        let expected = Snap.frame(.leftHalf, window: Rect(x: 900, y: 300, width: 300, height: 200), desktop: visible, gap: gap)
         #expect(setFrames(effects) == [f: expected])
         #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
         #expect(depth(arranger) == history, "a snap is a floating-frame fact, not an undo step")
@@ -241,18 +241,26 @@ extension ArrangerCommandTests {
         #expect(arranger.handle(.command(command, focused: f), now: .now) == [.beep])
     }
 
+    /// 8.1.1 D-10: every target is on the visible frame, over the docked windows.
     @Test(arguments: [SnapTarget.leftThird, .centerThird, .rightThird, .topLeft, .topRight, .bottomLeft, .bottomRight, .maximize, .center])
     func snapPutsAFloatingWindowAtItsTargetAndADockedOneBeeps(target: SnapTarget) throws {
         let start = Rect(x: 900, y: 300, width: 300, height: 200)
         var arranger = try arranger(frames: [a: somewhere, f: start]) { desk, ids throws(LayoutError) in
             try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
         }
-        let desktop = try #require(try plan(arranger).desktopRect)
-        let expected = Snap.frame(target, window: start, desktop: desktop, gap: gap)
+        let expected = Snap.frame(target, window: start, desktop: visible, gap: gap)
         #expect(setFrames(arranger.handle(.command(.snap(target), focused: f), now: .now)) == [f: expected])
         #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
         #expect(depth(arranger) == 0)
         #expect(arranger.handle(.command(.snap(target), focused: a), now: .now) == [.beep])
+    }
+
+    @Test func maximizeFillsTheVisibleFrameOnAnEmptyDesk() throws {
+        var arranger = try arranger(frames: [f: Rect(x: 900, y: 300, width: 300, height: 200)], empty: true)
+        let effects = arranger.handle(.command(.snap(.maximize), focused: f), now: .now)
+        let filled = Rect(x: visible.minX + gap, y: visible.minY + gap, width: visible.width - 2 * gap, height: visible.height - 2 * gap)
+        #expect(setFrames(effects) == [f: filled])
+        #expect(depth(arranger) == 0)
     }
 }
 

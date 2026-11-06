@@ -170,4 +170,59 @@ private func touches(_ window: WindowRef, _ harness: Harness) async -> [WindowCo
         #expect(!effects.contains(.beep))
         #expect(!effects.contains { if case .announce = $0 { true } else { false } }, "\(effects)")
     }
+
+    /// RESEARCH Pitfall 3: a desk with no Desktop node, holding one docked tab group [b, c] filling the screen (c selected)
+    /// and f floating.
+    private func groupWithNoDesktopTile() throws -> (Arranger, GroupKey, frame: Rect) {
+        let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
+        let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visible, currentSpaceID: nil)
+        let b = ref(3), c = ref(4)
+        var arranger = Arranger()
+        _ = arranger.handle(.restore(try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]), homeFrames: [:]), now: .now)
+        let infos = [b, c, f].enumerated().map { i, window in
+            WindowInfo(window: window, frame: Rect(x: 100 + 300 * Double(i), y: 100, width: 400, height: 300), state: .present, displayUUID: "main")
+        }
+        _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: infos, initialRefreshComplete: true)), now: .now)
+        try arranger.world.edit(key, history: &arranger.history) { desk, ids throws(LayoutError) in
+            try desk.desktop.remove(b)
+            try desk.desktop.remove(c)
+            try desk.tree.applyDrop(.emptyLayout, window: b, ids: &ids)
+            guard let root = desk.tree.root else { throw .windowNotFound(b) }
+            try desk.tree.group(c, into: root)
+        }
+        _ = arranger.handle(.gap(8), now: .now)  // re-plans
+        let desk = try #require(arranger.world[key])
+        try #require(!desk.tree.nodes.values.contains { if case .desktop = $0 { true } else { false } }, "precondition: the desk has a Desktop tile")
+        let leaf = try #require(desk.tree.root)
+        let frame = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).resolution.nodeRects[leaf])
+        return (arranger, GroupKey(desk: key, node: leaf), frame)
+    }
+
+    @Test func moveOutOfGroupWorksOnADeskWithNoDesktopTile() throws {
+        var (arranger, group, frame) = try groupWithNoDesktopTile()
+        let b = ref(3), content = TabBand.content(of: frame)
+        let size = arranger.wantedFrames[b.identity]?.size ?? content.size
+        let expected = Arranger.moveOutFrame(size: size, group: frame, desktop: Rect(x: 0, y: 25, width: 1440, height: 875))
+
+        let effects = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: .now)
+
+        #expect(!effects.contains { if case .fault = $0 { true } else { false } }, "\(effects)")
+        #expect(!effects.contains(.beep))
+        let desk = try #require(arranger.world[key])
+        #expect(desk.desktop.frame(of: b) == expected)
+        #expect(desk.tree.node(group.node) == .panel(ref(4)))
+    }
+
+    @Test func floatGroupAndRestoreAllWorkOnADeskWithNoDesktopTile() throws {
+        var (floating, _, _) = try groupWithNoDesktopTile()
+        let toggled = floating.handle(.tab(.toggleGroupFloat(floating.tabGroup(holding: ref(4))!.key), ready: true), now: .now)
+        #expect(!toggled.contains { if case .fault = $0 { true } else { false } } && !toggled.contains(.beep), "\(toggled)")
+        #expect(floating.world[key]?.desktop.groups.count == 1)
+        #expect(floating.world[key]?.tree.root == nil)
+
+        var (restoring, _, _) = try groupWithNoDesktopTile()
+        let restored = restoring.handle(.command(.restoreAll, focused: nil), now: .now)
+        #expect(!restored.contains { if case .fault = $0 { true } else { false } }, "\(restored)")
+        #expect(restoring.world[key]?.desktop.contains(ref(3)) == true)
+    }
 }

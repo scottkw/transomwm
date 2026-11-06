@@ -1389,11 +1389,9 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
     @Test func snapOnAFloatingGroupMemberSnapsTheGroupFrame() throws {
         let start = ContinuousClock.now
         var (arranger, _, _) = try bareFloatingGroup(at: start)
-        let before = try #require(arranger.world[mainKey])
-        let desktop = try #require(try Planner.plan(desk: before, area: area, gap: 8, mins: [:]).desktopRect)
         _ = arranger.handle(.command(.snap(.leftHalf), focused: f), now: start + .seconds(1))
         let group = try #require(floatingGroup(arranger))
-        let expected = Snap.frame(.leftHalf, window: tFrame, desktop: desktop, gap: 8)
+        let expected = Snap.frame(.leftHalf, window: tFrame, desktop: area, gap: 8)
         #expect(group.frame == expected, "the group frame did not snap: \(group.frame)")
         #expect(arranger.world[mainKey]?.desktop.frame(of: f) == TabBand.content(of: expected))
     }
@@ -1593,6 +1591,7 @@ private func landing(_ arranger: Arranger, _ member: WindowRef, content: Rect, a
     return Rect(x: point.x - width / 2, y: point.y - 12, width: width, height: height)
 }
 
+/// The legacy Desktop tile: a spot clear of every docked tile, where a release floats the tab.
 private func desktopRect(_ arranger: Arranger) throws -> Rect {
     let desk = try #require(arranger.world[mainKey])
     return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
@@ -1633,7 +1632,7 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         let desktop = try desktopRect(arranger)
         arranger.wantedFrames[b.identity] = Rect(x: 0, y: 0, width: desktop.width - 40, height: desktop.height - 40)  // its pre-group frame
         let point = centre(desktop)  // the landing frame (top 12 pt above the pointer) must be clamped up
-        let expected = Planner.clamp(landing(arranger, b, content: content, at: point), into: desktop)
+        let expected = Planner.clamp(landing(arranger, b, content: content, at: point), into: area)
         _ = try tear(&arranger, b, of: group, to: point, at: start)
         let tick = arranger.handle(.tick, now: start + DragSession.dwell)
         #expect(previews(tick) == [.clamp(expected)], "tick gave \(tick)")
@@ -1751,8 +1750,7 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         // ⇧ over a's edge band: no Dock, the float at the clamped landing frame.
         var effects: [ArrangerEffect]
         let point = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
-        let desktop = try desktopRect(arranger)
-        let expected = Planner.clamp(landing(arranger, b, content: content, at: point), into: desktop)
+        let expected = Planner.clamp(landing(arranger, b, content: content, at: point), into: area)
         effects = try tear(&arranger, b, of: group, to: point, [.shift], at: start + .seconds(1))
         effects += arranger.handle(.tick, now: start + .seconds(1) + DragSession.dwell)
         #expect(previews(effects) == [.clamp(expected)], "⇧ did not bypass: \(previews(effects))")
@@ -1839,7 +1837,7 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         let start = ContinuousClock.now
         var (arranger, group, frame, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
         let size = arranger.wantedFrames[b.identity]?.size ?? content.size
-        let expected = Arranger.moveOutFrame(size: size, group: frame, desktop: try desktopRect(arranger))
+        let expected = Arranger.moveOutFrame(size: size, group: frame, desktop: area)
         let depth = arranger.history.depth(for: mainKey), grouped = arranger.world
         let effects = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: start + .seconds(1))
         let desk = try #require(arranger.world[mainKey])
@@ -2063,13 +2061,8 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
     }
 
     /// The cascade Restore All gives the `n`th non-selected member: content size, top-left `n` × 24 pt from the group's.
-    private func cascade(_ n: Int, from frame: Rect, content: Rect, into desktop: Rect) -> Rect {
-        Planner.clamp(Rect(x: frame.minX + 24 * Double(n), y: frame.minY + 24 * Double(n), width: content.width, height: content.height), into: desktop)
-    }
-
-    private func desktopRect(_ arranger: Arranger) throws -> Rect {
-        let desk = try #require(arranger.world[mainKey])
-        return try #require(try Planner.plan(desk: desk, area: area, gap: arranger.gap, mins: [:]).desktopRect)
+    private func cascade(_ n: Int, from frame: Rect, content: Rect, into visible: Rect) -> Rect {
+        Planner.clamp(Rect(x: frame.minX + 24 * Double(n), y: frame.minY + 24 * Double(n), width: content.width, height: content.height), into: visible)
     }
 
     @Test func restoreAllDissolvesADockedGroupTheSelectedKeepsTheTileTheOthersCascade() throws {
@@ -2079,9 +2072,8 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         let effects = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
         let desk = try #require(arranger.world[mainKey])
         #expect(desk.tree.node(group.node) == .panel(a), "a does not keep the group's tile")
-        let desktop = try desktopRect(arranger)
-        #expect(desk.desktop.frame(of: b) == cascade(1, from: frame, content: content, into: desktop))
-        #expect(desk.desktop.frame(of: f) == cascade(2, from: frame, content: content, into: desktop))
+        #expect(desk.desktop.frame(of: b) == cascade(1, from: frame, content: content, into: area))
+        #expect(desk.desktop.frame(of: f) == cascade(2, from: frame, content: content, into: area))
         #expect(![a, b, f].contains { arranger.isParked($0) }, "a member is still parked")
         #expect(arranger.history.depth(for: mainKey) == depth + 1, "Restore All is not one undo step on the desk")
         #expect(effects.contains(.info("restore all: dissolved 1 groups, 2 windows brought back")))
@@ -2094,7 +2086,7 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         let desk = try #require(arranger.world[mainKey])
         #expect(desk.desktop.groups.isEmpty)
         #expect(desk.desktop.frame(of: f) == tFrame, "the band did not return to the selected member")
-        #expect(desk.desktop.frame(of: t) == cascade(1, from: tFrame, content: content, into: try desktopRect(arranger)))
+        #expect(desk.desktop.frame(of: t) == cascade(1, from: tFrame, content: content, into: area))
         #expect(!arranger.isParked(t))
     }
 
@@ -2104,7 +2096,7 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         _ = arranger.handle(.event(.windowMoved(b, Rect(x: 5000, y: 5000, width: content.width, height: content.height))), now: start)
         let effects = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
         #expect(effects.contains(.notice(.restored(count: 2))), "N6 count: \(effects)")
-        #expect(arranger.world[mainKey]?.desktop.frame(of: b) == cascade(1, from: frame, content: content, into: try desktopRect(arranger)),
+        #expect(arranger.world[mainKey]?.desktop.frame(of: b) == cascade(1, from: frame, content: content, into: area),
             "the rescue moved the stranded member away from its cascade")
     }
 
