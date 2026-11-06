@@ -386,10 +386,11 @@ extension ArrangerTabsTests {
 /// system, and planned: f in the content rect, b parked. Returns it with the group's key, frame and content rect.
 /// `withA` groups a too ([b, f, a], a selected); `zoom` turns zoom on first.
 private func bareGroup(
-    at now: ContinuousClock.Instant, withA: Bool = false, zoom: Bool = false, displays: [DisplayInfo] = [mainDisplay]
+    at now: ContinuousClock.Instant, withA: Bool = false, zoom: Bool = false, displays: [DisplayInfo] = [mainDisplay],
+    floating: [WindowInfo] = []
 ) throws -> (Arranger, GroupKey, frame: Rect, content: Rect) {
     var arranger = Arranger()
-    let infos = [info(1, frame: frameA), info(2, frame: smallF), info(3, frame: frameB)]
+    let infos = [info(1, frame: frameA), info(2, frame: smallF), info(3, frame: frameB)] + floating
     _ = arranger.handle(.inventory(WindowInventory(displays: displays, windows: infos, initialRefreshComplete: true)), now: now)
     if zoom { _ = arranger.handle(.zoomEnabled(true), now: now) }
     _ = arranger.handle(.command(.dock, focused: a), now: now)
@@ -1830,6 +1831,24 @@ private func ownTile(_ arranger: Arranger, _ group: GroupKey) throws -> Rect {
         let tick = arranger.handle(.tick, now: start + .milliseconds(450))
         #expect(groupPreviews(tick).isEmpty, "its own group was offered: \(tick)")
         #expect(previews(tick).contains { if case .clamp = $0 { true } else { false } }, "no landing ghost: \(tick)")
+    }
+
+    /// WR-01 (iteration 3): a torn tab is still in its group until release, so the group's tile stays on screen and a
+    /// floater behind the group's selected member (focused after it) takes no group.
+    @Test func aTornTabOverItsOwnGroupDoesNotGroupWithAFloaterBehindTheGroup() throws {
+        let start = ContinuousClock.now
+        // [b, f] docked on the right (f selected), t floating inside that tile.
+        var (arranger, group, frame, _) = try bareGroup(
+            at: start, floating: [info(5, frame: Rect(x: 1000, y: 300, width: 300, height: 200))])
+        let tf = try #require(arranger.world[mainKey]?.desktop.frame(of: t))
+        try #require(frame.contains(centre(tf)), "t is not over the group's tile: \(tf) \(frame)")
+        _ = arranger.handle(.event(.windowFocused(t)), now: start)
+        _ = arranger.handle(.event(.windowFocused(f)), now: start)
+        _ = try tear(&arranger, b, of: group, to: centre(tf), at: start)
+        let tick = arranger.handle(.tick, now: start + DragSession.groupDwell)
+        #expect(groupPreviews(tick).isEmpty, "a group was offered over t, behind f: \(tick)")
+        _ = arranger.handle(pointer(.up, tf.midX, tf.midY), now: start + .milliseconds(450))
+        #expect(arranger.world[mainKey]?.desktop.groups.isEmpty == true, "b grouped with t, behind f")
     }
 
     @Test func aReleaseBackOverTheSourceStripCancelsWithNoChange() throws {

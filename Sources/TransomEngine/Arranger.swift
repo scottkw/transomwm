@@ -1747,8 +1747,8 @@ public struct Arranger: Sendable {
             }
             // A floating window's centre groups after the group dwell (D-02), ahead of the docked tile beneath (UI-SPEC
             // discretion 3); the rest of its area gives the tile's regions.
-            // The dragged window's own tile is behind nothing while it is dragged, so it never outranks a floater (WR-02).
-            let beneath: NodeID? = if case .tile(let id, _)? = target, !(key == ownKey && id == ownDesk.tree.leaf(containing: window)) { id } else { nil }
+            // A dragged docked window's own tile is behind nothing, so it never outranks a floater (WR-02); a torn tab's group stays.
+            let beneath: NodeID? = if case .tile(let id, _)? = target, !(docked && key == ownKey && id == ownDesk.tree.leaf(containing: window)) { id } else { nil }
             if !whole, let floating = floatingGroupTarget(at: point, on: key, dragging: window, over: beneath),
                 floating != torn.map({ .floatingGroup($0.desk, $0.node) })
             {
