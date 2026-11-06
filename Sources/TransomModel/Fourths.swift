@@ -94,6 +94,7 @@ extension LayoutTree {
         case let .panel(window)?: state(of: window) == .present
         case let .tabs(windows, selected)?: state(of: windows[selected]) == .present
         case let .split(_, children, _)?: children.contains(where: takesPart)
+        case .spacer?: true
         case nil: false
         }
     }

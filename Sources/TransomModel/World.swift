@@ -74,7 +74,7 @@ extension LayoutTree {
         switch nodes[leaf] {
         case .panel?: nodes[leaf] = .panel(to)
         case let .tabs(windows, selected)?: nodes[leaf] = .tabs(windows: windows.map { $0 == from ? to : $0 }, selected: selected)
-        case .split?, nil: throw .notALeaf(leaf) // leaf(containing:) only returns panels and tab groups
+        case .split?, .spacer?, nil: throw .notALeaf(leaf) // leaf(containing:) only returns panels and tab groups
         }
         states[from.identity] = nil
         states[to.identity] = state
@@ -83,6 +83,8 @@ extension LayoutTree {
 
 /// All desks, keyed by display (and optionally Space), plus the ID source their node IDs come from.
 public struct World: Codable, Equatable, Sendable {
+    /// Not bumped for empty areas (8.1.1 D-16): this decoder reads the same `Node`, and layout.json's schema 5 is what
+    /// keeps an older build away (`.newerVersion`).
     public static let currentSchemaVersion = 2
 
     public private(set) var ids: IDSource
@@ -146,7 +148,7 @@ public struct World: Codable, Equatable, Sendable {
                 switch node {
                 case .panel(let window): desk.tree.nodes[id] = .panel(titled(window))
                 case .tabs(let windows, let selected): desk.tree.nodes[id] = .tabs(windows: windows.map(titled), selected: selected)
-                case .split: break
+                case .split, .spacer: break
                 }
             }
             desk.desktop.mapWindows(titled)

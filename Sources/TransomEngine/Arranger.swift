@@ -1466,7 +1466,7 @@ public struct Arranger: Sendable {
         switch desk.tree.node(id) {
         case .panel(let panel)?: target = panel
         case .tabs(let tabs, let selected)?: target = tabs[selected]  // LayoutTree.validate keeps selected in range
-        case .split?, nil: target = nil
+        case .split?, .spacer?, nil: target = nil
         }
         return target.map { [.perform([.focus($0)])] } ?? [.beep]
     }

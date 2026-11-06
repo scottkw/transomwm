@@ -6,6 +6,9 @@ public enum Node: Codable, Equatable, Sendable {
     case split(axis: Axis, children: [NodeID], weights: [Double])
     case panel(WindowRef)
     case tabs(windows: [WindowRef], selected: Int)
+    /// A part of the screen kept empty (8.1.1 D-16): no window, never drawn, never a focus, swap or group target;
+    /// floating windows show through it.
+    case spacer
 }
 
 /// Messages name NodeIDs and window identities only, never window titles.
@@ -99,6 +102,11 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                 guard axis != parentAxis || siblings - 1 + children.count > Self.maxChildren else {
                     throw .invariantViolated("split \(id) has the same axis as its parent split")
                 }
+                // Also rejects every split with no window below it: its deepest split has two or more children, all
+                // empty areas (8.1.1 D-16).
+                if let pair = zip(children, children.dropFirst()).first(where: { nodes[$0] == .spacer && nodes[$1] == .spacer }) {
+                    throw .invariantViolated("split \(id) holds adjacent empty areas \(pair.0) and \(pair.1)")
+                }
                 stack.append(contentsOf: children.map { ($0, depth + 1, axis, children.count) })
             case let .panel(window):
                 try see(window)
@@ -108,6 +116,8 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                     throw .invariantViolated("tab group \(id) selects \(selected) of \(windows.count) tabs")
                 }
                 for window in windows { try see(window) }
+            case .spacer:
+                guard depth > 0 else { throw .invariantViolated("root \(id) is an empty area") }
             }
         }
         guard visited.count == nodes.count else {
@@ -140,7 +150,7 @@ public struct LayoutTree: Codable, Equatable, Sendable {
             case let .split(_, children, _)?: stack.append(contentsOf: children.reversed())
             case let .panel(window)?: result.append(window)
             case let .tabs(windows, _)?: result.append(contentsOf: windows)
-            case nil: break
+            case .spacer?, nil: break
             }
         }
         return result
@@ -151,7 +161,7 @@ public struct LayoutTree: Codable, Equatable, Sendable {
             switch node {
             case let .panel(window): window == w
             case let .tabs(windows, _): windows.contains(w)
-            case .split: false
+            case .split, .spacer: false
             }
         }?.key
     }

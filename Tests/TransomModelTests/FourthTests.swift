@@ -40,7 +40,7 @@ private func rootChildren(_ tree: LayoutTree) -> [(String, Double)] {
         switch tree.node(id) {
         case let .panel(window)?: (names.first { $0.value == window.windowID }?.key ?? "?", weight)
         case .tabs?: ("tabs", weight)
-        case .split?, nil: ("(…)", weight)
+        case .split?, .spacer?, nil: ("(…)", weight)
         }
     }
 }

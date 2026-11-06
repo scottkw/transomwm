@@ -26,7 +26,7 @@ private func json(_ value: some Encodable) throws -> String {
 
     /// H[W0 0.5, Desktop(hidden) 0.5] with W1 floating at the park rect and a home frame, as 08.1 left it after Hide
     /// Desktop Tile. After the launch W0 fills the visible frame, W1 is back at its home frame, nothing is undoable and
-    /// the next save is schema 4.
+    /// the next save is schema 5.
     @Test(.timeLimit(.minutes(1)))
     func aSchema3LayoutWithAHiddenDesktopComesBackWithoutIt() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: "transom-migration-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -131,10 +131,10 @@ private func json(_ value: some Encodable) throws -> String {
         #expect(settled, "windows are at \(frames), not window 0 at its tile \(tile) and window 1 at its home frame \(wantedHome)")
         #expect(arrange.arranger.history.depth(for: migratedKey) == 0, "the migration left an undo step")
 
-        // The launch write already went down: schema 4, no Desktop node.
+        // The launch write already went down: schema 5, no Desktop node.
         let saved = try String(contentsOf: file, encoding: .utf8)
         let version = try JSONSerialization.jsonObject(with: Data(saved.utf8)) as? [String: Any]
-        #expect(version?["schemaVersion"] as? Int == LayoutFile.schemaVersion && LayoutFile.schemaVersion == 4, "layout.json still says \(String(describing: version?["schemaVersion"]))")
+        #expect(version?["schemaVersion"] as? Int == LayoutFile.schemaVersion && LayoutFile.schemaVersion == 5, "layout.json still says \(String(describing: version?["schemaVersion"]))")
         #expect(!saved.contains("\"hidden\""), "the saved layout.json still names a Desktop node")
     }
 }

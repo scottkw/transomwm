@@ -178,7 +178,7 @@ extension Arranger {
         switch world[key]?.tree.node(id) {
         case .panel(let window)?: members = [window]
         case .tabs(let windows, _)?: members = windows
-        case .split?, nil: return false
+        case .split?, .spacer?, nil: return false
         }
         return members.allSatisfy { window in
             !camera.collapsible.contains(window.identity) && windows[window.identity].map { !$0.isExcluded && $0.kind == .dockable } ?? false

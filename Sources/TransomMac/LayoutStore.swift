@@ -46,7 +46,10 @@ public enum LayoutStoreError: Error, Equatable {
             contents = decoded
             if let line = Self.migrationLine(fromSchema: version, contents: decoded) {
                 Self.logger.info("\(line, privacy: .public)")
-                // The next save overwrites it one way, so a downgrade can restore this copy by hand (WR-04); a failure is logged.
+            }
+            if version != LayoutFile.schemaVersion {
+                // The next save overwrites it one way, so a downgrade can restore this copy by hand (WR-04, 8.1.1 D-20); a
+                // failure is logged.
                 backUp("schema-\(version)")
             }
         } catch {
@@ -61,11 +64,12 @@ public enum LayoutStoreError: Error, Equatable {
         }
     }
 
-    /// The one log line for a file older than the current schema (8.1.1 D-15), nil for a current one. Counts only, never
+    /// The one log line for a file from before schema 4 (8.1.1 D-15), nil for a newer one: only schema 3 and older had
+    /// Desktop tiles to count, and schema 4 → 5 changes nothing in the file (8.1.1 D-20). Counts only, never
     /// a window, title or path (T-08.1.1-03). Every legacy desk held one Desktop tile (RESEARCH A5); the windows brought
     /// back are `world`'s floaters with a home frame, which the Arranger's restore returns from the park rect.
     public static func migrationLine(fromSchema version: Int, contents: LayoutFile) -> String? {
-        guard version != LayoutFile.schemaVersion else { return nil }
+        guard version <= 3 else { return nil }
         let desks = contents.world.desks.count + contents.layoutSets.reduce(0) { $0 + $1.world.desks.count }
         let homes = Set(contents.homeFrames.map(\.window))
         let parked = contents.world.desks.values.reduce(0) { count, desk in
@@ -146,9 +150,9 @@ public enum LayoutStoreError: Error, Equatable {
             switch version {
             // Every user's file at the upgrade: migrated in memory, saved as the current schema (RESEARCH Pitfall 1).
             case 1: contents = try decoder.decode(LayoutFileV1.self, from: data).migrated()
-            // Schemas 2 and 3 have schema 4's shape; their Worlds drop the Desktop tile on decode (World schema 1).
-            // The next save writes schema 4.
-            case 2, 3, LayoutFile.schemaVersion:
+            // Schemas 2 to 4 have schema 5's shape, without empty areas; schema 2 and 3 Worlds drop the Desktop tile
+            // on decode (World schema 1). The next save writes the current schema.
+            case 2, 3, 4, LayoutFile.schemaVersion:
                 contents = try decoder.decode(LayoutFile.self, from: data)
                 contents.schemaVersion = LayoutFile.schemaVersion
             default: throw LayoutStoreError.corrupt("unknown schemaVersion \(version)")
@@ -170,7 +174,8 @@ public enum LayoutStoreError: Error, Equatable {
         }
         // A hidden legacy Desktop left its floaters' stored frames at the park rect; the home frame is where each belongs, so
         // it comes back even when it shows up after launch (8.1.1 D-02, WR-01).
-        if version < LayoutFile.schemaVersion {
+        // Schema 4 had no hidden Desktop, so its floaters keep their stored frames.
+        if version <= 3 {
             for (index, home) in contents.homeFrames.enumerated() {
                 let window = WindowRef(identity: home.window)
                 // A hidden tab would move its whole group, as bringBackParked skips it.

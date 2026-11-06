@@ -109,7 +109,7 @@ extension LayoutTree {
         switch node {
         case let .panel(window): members = [window]
         case let .tabs(windows, _): members = windows
-        case .split: throw .notALeaf(id)
+        case .split, .spacer: throw .notALeaf(id)
         }
         var next = self
         var states: [WindowIdentity: WindowState] = [:]
@@ -138,7 +138,7 @@ extension LayoutTree {
         switch node {
         case let .panel(existing): next.nodes[target] = .tabs(windows: [existing, window], selected: 1)
         case let .tabs(windows, _): next.nodes[target] = .tabs(windows: windows + [window], selected: windows.count)
-        case .split: throw .notALeaf(target)
+        case .split, .spacer: throw .notALeaf(target)
         }
         next.states[window.identity] = .present
         self = next
@@ -225,7 +225,7 @@ extension LayoutTree {
         switch node {
         case let .panel(window): members = [window]
         case let .tabs(windows, _): members = windows
-        case .split: throw .invariantViolated("only a panel or a tab group is inserted as a leaf")
+        case .split, .spacer: throw .invariantViolated("only a panel or a tab group is inserted as a leaf")
         }
         if let duplicate = members.first(where: { states[$0.identity] != nil }) { throw .duplicateWindow(duplicate) }
     }
