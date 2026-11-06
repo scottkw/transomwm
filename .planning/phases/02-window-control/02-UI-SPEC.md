@@ -117,7 +117,7 @@ The status-item glyph is always a **template image** (`isTemplate = true`). It i
 
 ## Surface 1 — Status item and menu
 
-**Status item:** `NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)`. The glyph is an SF Symbol template at `NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)`.
+**Status item:** `NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)`. The glyph is an SF Symbol template at the symbol's default configuration, with no explicit point size, so AppKit fits it to every menu bar. Amended 2026-11-06 by quick 261106-bru: the earlier fixed 16 pt configuration produced a 23 x 18 pt image, wider than the 22 pt square item, and lost its bottom edge on a 1x external display.
 
 | App state (from `PermissionReducer`) | Glyph | `accessibilityDescription` / tooltip |
 |---|---|---|
