@@ -164,21 +164,21 @@ private func previews(_ effects: [ArrangerEffect]) -> [PreviewState] {
 private let a = window(1), b = window(3)
 private let frameA = Rect(x: 40, y: 80, width: 320, height: 232)
 private let frameB = Rect(x: 730, y: 400, width: 150, height: 120)
-/// Small, at the bottom right, clear of the tiles once a and b dock.
+/// Small, at the bottom right: over b once a and b dock.
 private let smallF = Rect(x: 1250, y: 700, width: 150, height: 100)
 private let mainDisplay = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: area, currentSpaceID: nil)
 private let noRoom = "Not enough room to dock here"
 
 private func centre(_ rect: Rect) -> Point { Point(x: rect.midX, y: rect.midY) }
 
-/// [a | b | Desktop] with f floating clear of both tiles, and the plan of that desk.
+/// [a | b] across the whole visible frame with f floating over b, and the plan of that desk.
 private func docked() async throws -> (Harness, FramePlan) {
     var harness = await Harness.started(frames: [1: frameA, 2: smallF, 3: frameB])
     await harness.send(.command(.dock, focused: a))
     await harness.send(.command(.dock, focused: b))
     let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
     let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
-    #expect(plan.frames[f] == nil, "f is not clear of the tiles")
+    #expect(plan.frames[f] == nil, "f is planned as a tile")
     #expect(abs(rb.minX - ra.maxX - 8) < 0.5, "a and b are not side by side: \(ra) \(rb)")
     return (harness, plan)
 }
@@ -259,9 +259,10 @@ extension ArrangerDragTests {
         #expect(harness.arranger.history.depth(for: mainKey) == depth)
     }
 
-    @Test func aFloatingWindowOverACentreInsideTheDesktopGetsNoPreviewAndAPlainMove() async throws {
+    @Test func aFloatingWindowOverAGapGetsNoPreviewAndAPlainMove() async throws {
         var (harness, plan) = try await docked()
-        let point = centre(try #require(plan.desktopRect))
+        let ra = try #require(plan.frames[a])
+        let point = Point(x: ra.maxX + 4, y: ra.midY)
         _ = await drag(&harness, f, from: smallF, to: point)
         harness.now += .milliseconds(150)
         #expect(previews(await harness.send(.tick)).isEmpty)
@@ -285,11 +286,11 @@ extension ArrangerDragTests {
 
     @Test func shiftUndocksADockedWindowAtItsReleaseFrame() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
-        let point = Point(x: desktop.midX, y: desktop.minY + 40)
+        let rb = try #require(plan.frames[b])
+        let point = Point(x: rb.midX, y: rb.minY + 40)
         _ = await drag(&harness, b, from: rb, to: point, [.shift])
         harness.now += .milliseconds(150)
-        #expect(previews(await harness.send(.tick)).isEmpty, "a bypass clear of the tiles showed a preview")
+        #expect(previews(await harness.send(.tick)).isEmpty, "a bypass over its own tile showed a preview")
         let depth = harness.arranger.history.depth(for: mainKey)
 
         await harness.send(pointer(.up, point.x, point.y, [.shift]))
@@ -325,8 +326,8 @@ extension ArrangerDragTests {
     /// WR-02 (review 03-26): undoing a ⇧-undock docks the window again with its pre-dock frame, where Float sends it.
     @Test func undoingAShiftUndockGivesBackThePreDockFrame() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
-        let point = Point(x: desktop.midX, y: desktop.minY + 40)
+        let rb = try #require(plan.frames[b])
+        let point = Point(x: rb.midX, y: rb.minY + 40)
         _ = await drag(&harness, b, from: rb, to: point, [.shift])
         harness.now += .milliseconds(150)
         await harness.send(.tick)
@@ -340,9 +341,9 @@ extension ArrangerDragTests {
 
     /// UI-SPEC Surface 2 row 4 (row gone): pulling a window out of the layout never lacks room, whatever its minimum.
     @Test func shiftWithAWindowTooBigForAnyRoomStillUndocksAtItsReleaseFrame() throws {
-        var tree = LayoutTree.withDesktop()
+        var tree = LayoutTree()
         var ids = IDSource()
-        try tree.insert(a, at: .top, of: .desktop, ids: &ids)
+        try tree.applyDrop(.layoutEdge(.bottom), window: a, ids: &ids)
         try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
         let world = try World(ids: ids, desks: [mainKey: Desk(tree: tree)])
         let mins = [a: Size(width: 100, height: 600), b: Size(width: 100, height: 300)]

@@ -51,7 +51,7 @@ private func drag(
     return effects
 }
 
-/// [a | b | Desktop] with f floating clear of both tiles, and the plan of that desk.
+/// [a | b] across the whole visible frame with f floating over b, and the plan of that desk.
 private func docked() async throws -> (Harness, FramePlan) {
     var harness = await Harness.started(frames: [1: frameA, 2: smallF, 3: frameB])
     await harness.send(.command(.dock, focused: a))
@@ -291,7 +291,7 @@ extension ArrangerTabsTests {
 
     /// An excluded or never-dock window leaves the tree when it is reported so (D-29), so its tile is gone before any
     /// drag can see it; `groupable` still refuses one as a defence.
-    @Test(arguments: ["own tile", "Desktop tile", "collapsed target"])
+    @Test(arguments: ["own tile", "collapsed target"])
     func excludedCentresNeverGroup(over place: String) async throws {
         let start = ContinuousClock.now
         var (arranger, rb) = try bareDocked(bMinimum: place == "collapsed target" ? Size(width: 1500, height: 100) : nil, zoom: place == "collapsed target")
@@ -302,7 +302,6 @@ extension ArrangerTabsTests {
         if place == "collapsed target" { try #require(arranger.camera.collapsible.contains(b.identity), "b did not collapse") }
         let point = switch place {
         case "own tile": centre(ra)
-        case "Desktop tile": centre(plan.desktopRect ?? area)
         default: centre(rb)
         }
         _ = drag(&arranger, a, from: frameA, to: point, at: start)
@@ -642,7 +641,7 @@ private let t = window(5), g = window(4)
 private let tFrame = Rect(x: 400, y: 200, width: 500, height: 400)
 private let gFrame = Rect(x: 950, y: 120, width: 300, height: 200)
 
-/// a, f, g and t floating on the main Desktop, nothing docked.
+/// a, f, g and t floating on the main desk, nothing docked.
 private func floaters() async -> Harness {
     await Harness.started(frames: [1: frameA, 2: smallF, 4: gFrame, 5: tFrame])
 }
@@ -821,7 +820,7 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
     private func groupedDesk() throws -> Desk {
         var desk = Desk()
         var ids = IDSource()
-        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         try desk.desktop.add(t, frame: tFrame)
         try desk.desktop.group(id: try ids.make(), target: t, adding: f)
         return desk
@@ -977,7 +976,8 @@ private func floatingSelected(_ arranger: Arranger, _ group: GroupKey) -> Window
     }
 }
 
-/// a docked left of the Desktop, t and f floating on it, both focused (t last), then grouped as [t, f] with f selected.
+/// a docked alone, filling the visible frame, t and f floating over it, both focused (t last), then grouped as [t, f]
+/// with f selected.
 private func dockedBesideFloatingGroup(at now: ContinuousClock.Instant) throws -> (Arranger, GroupKey) {
     var arranger = Arranger()
     let infos = [info(1, frame: frameA), info(2, frame: smallF), info(5, frame: tFrame)]
@@ -998,12 +998,13 @@ private func dockedBesideFloatingGroup(at now: ContinuousClock.Instant) throws -
 }
 
 /// UI-SPEC Surface 3 "What the user never sees": hidden members stay out of focus moves; a hidden Desktop parks the group.
+/// 08.1.1 Surface 2: no floating window is a Focus target at all, so a move from the only tile beeps.
 @Suite struct FloatingGroupVisibilityTests {
-    @Test func aFocusMoveOntoTheDesktopPicksTheSelectedMemberNotAHiddenOne() throws {
+    @Test func aFocusMoveNeverPicksAFloatingGroupMember() throws {
         let start = ContinuousClock.now
         var (arranger, _) = try dockedBesideFloatingGroup(at: start)
         let effects = arranger.handle(.command(.focus(.right), focused: a), now: start)
-        #expect(commands(effects) == [.focus(f)], "the focus move picked \(commands(effects))")
+        #expect(effects == [.beep], "the focus move gave \(effects)")
     }
 
     @Test func isHiddenTabIsTrueExactlyForNonSelectedMembers() throws {
@@ -1345,8 +1346,8 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
         let leaf = try #require(desk.tree.leaf(containing: f), "the group did not dock: \(effects)")
         #expect(desk.tree.node(leaf) == .tabs(windows: [t, f], selected: 1))
         #expect(desk.desktop.groups.isEmpty && desk.desktop.windows.isEmpty)
-        // tFrame's centre is in the Desktop's centre zone, nearer the top: Dock Window's edge rule.
-        #expect(desk.tree.parent(of: leaf).flatMap { desk.tree.node($0) }.map { if case .split(.vertical, let children, _) = $0 { children.first == leaf } else { false } } == true)
+        // Nothing else is docked: the group becomes the first tile and fills the visible frame (D-08).
+        #expect(desk.tree.root == leaf)
         #expect(arranger.history.depth(for: mainKey) == depth + 1)
         #expect(effects.contains(.info("group \(group.node): docked")))
         _ = arranger.handle(.command(.undo, focused: f), now: start + .seconds(2))
@@ -1399,7 +1400,7 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
 
     @Test func floatAllFloatsADockedGroupAsOneGroupCountedOnce() throws {
         let start = ContinuousClock.now
-        var (arranger, _, frame, _) = try bareGroup(at: start)  // [a | [b, f] | Desktop]
+        var (arranger, _, frame, _) = try bareGroup(at: start)  // [a | [b, f]]
         let effects = arranger.handle(.command(.floatAll, focused: a), now: start)
         #expect(effects.contains(.notice(.floatedAll(count: 2))), "a and the group are not two: \(effects)")
         let floated = try #require(floatingGroup(arranger))
@@ -1429,7 +1430,7 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
 
     @Test func treeCommandsActOnTheGroupsLeafAndFocusLandsOnTheSelectedTab() throws {
         let start = ContinuousClock.now
-        var (arranger, group, _, _) = try bareGroup(at: start)  // [a | [b, f] | Desktop]
+        var (arranger, group, _, _) = try bareGroup(at: start)  // [a | [b, f]]
         #expect(commands(arranger.handle(.command(.focus(.right), focused: a), now: start)) == [.focus(f)])
         let grown = arranger.handle(.command(.growTile, focused: f), now: start)
         #expect(!grown.contains(.beep), "Grow refused: \(grown)")
@@ -1467,7 +1468,7 @@ private func floatingGroup(_ arranger: Arranger) -> FloatingTabGroup? { arranger
     }
 }
 
-/// [a | [b, f] | Desktop] on the fake, f selected; returns the group leaf, a's tile and the group's content rect.
+/// [a | [b, f]] on the fake, f selected; returns the group leaf, a's tile and the group's content rect.
 private func dockedGroup() async throws -> (Harness, leaf: NodeID, ra: Rect, content: Rect) {
     var (harness, plan) = try await docked()
     let ra = try #require(plan.frames[a])
@@ -1596,7 +1597,7 @@ private func groupDocked(_ arranger: Arranger, _ leaf: NodeID, at edge: Edge, of
         var harness = await floaters()
         _ = await groupFOntoT(&harness)
         let content = TabBand.content(of: tFrame)
-        let point = Point(x: content.midX - 100, y: content.minY + 10 + 50)  // on the Desktop, no floater's centre
+        let point = Point(x: content.midX - 100, y: content.minY + 10 + 50)  // on the empty desk, no floater's centre
         _ = await drag(&harness, f, from: content, to: point)
         harness.now += DragSession.dwell
         await harness.send(.tick)
@@ -1665,10 +1666,11 @@ private func landing(_ arranger: Arranger, _ member: WindowRef, content: Rect, a
     return Rect(x: point.x - width / 2, y: point.y - 12, width: width, height: height)
 }
 
-/// The legacy Desktop tile: a spot clear of every docked tile, where a release floats the tab.
-private func desktopRect(_ arranger: Arranger) throws -> Rect {
+/// The torn group's own tile: its centre is no region for its own tab (never a group target), so a release there floats
+/// the tab.
+private func ownTile(_ arranger: Arranger, _ group: GroupKey) throws -> Rect {
     let desk = try #require(arranger.world[mainKey])
-    return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
+    return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).resolution.nodeRects[group.node])
 }
 
 @Suite struct ArrangerTearOffTests {
@@ -1700,12 +1702,12 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(arranger.isDragging)
     }
 
-    @Test func aReleaseOverEmptyDesktopFloatsTheTabAtTheClampedLandingFrameInOneUndoStep() throws {
+    @Test func aReleaseOnNoRegionFloatsTheTabAtTheClampedLandingFrameInOneUndoStep() throws {
         let start = ContinuousClock.now
         var (arranger, group, _, content) = try bareGroup(at: start, withA: true)  // [b, f, a], a selected
-        let desktop = try desktopRect(arranger)
-        arranger.wantedFrames[b.identity] = Rect(x: 0, y: 0, width: desktop.width - 40, height: desktop.height - 40)  // its pre-group frame
-        let point = centre(desktop)  // the landing frame (top 12 pt above the pointer) must be clamped up
+        let own = try ownTile(arranger, group)
+        arranger.wantedFrames[b.identity] = Rect(x: 0, y: 0, width: own.width - 40, height: own.height - 40)  // its pre-group frame
+        let point = centre(own)  // the landing frame (top 12 pt above the pointer) must be clamped up
         let expected = Planner.clamp(landing(arranger, b, content: content, at: point), into: area)
         _ = try tear(&arranger, b, of: group, to: point, at: start)
         let tick = arranger.handle(.tick, now: start + DragSession.dwell)
@@ -1730,9 +1732,9 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
     @Test func tearingFromATwoTabGroupDissolvesIt() throws {
         let start = ContinuousClock.now
         var (arranger, group, frame, _) = try bareGroup(at: start)  // [b, f], f selected
-        let desktop = try desktopRect(arranger)
-        _ = try tear(&arranger, f, of: group, to: centre(desktop), at: start)
-        let up = arranger.handle(pointer(.up, desktop.midX, desktop.midY), now: start + .milliseconds(200))
+        let own = try ownTile(arranger, group)
+        _ = try tear(&arranger, f, of: group, to: centre(own), at: start)
+        let up = arranger.handle(pointer(.up, own.midX, own.midY), now: start + .milliseconds(200))
         let desk = try #require(arranger.world[mainKey])
         #expect(desk.tree.node(group.node) == .panel(b), "the group did not dissolve into b")
         #expect(desk.desktop.contains(f))
@@ -1837,9 +1839,9 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         var (arranger, group, _, _) = try bareGroup(at: start, withA: true)  // [b, f, a]
         try arranger.world.edit(mainKey, history: &arranger.history) { desk, _ throws(LayoutError) in try desk.tree.selectTab(f) }
         _ = arranger.handle(.gap(8), now: start)  // re-plans, sends the strip
-        let desktop = try desktopRect(arranger)
-        _ = try tear(&arranger, f, of: group, to: centre(desktop), at: start)
-        let up = arranger.handle(pointer(.up, desktop.midX, desktop.midY), now: start + .milliseconds(200))
+        let own = try ownTile(arranger, group)
+        _ = try tear(&arranger, f, of: group, to: centre(own), at: start)
+        let up = arranger.handle(pointer(.up, own.midX, own.midY), now: start + .milliseconds(200))
         #expect(selected(arranger, group) == a, "the right neighbour was not selected")
         #expect(arranger.world[mainKey]?.tree.node(group.node) == .tabs(windows: [b, a], selected: 1))
         #expect(announcements(up) == [.movedOut(dissolved: false)])

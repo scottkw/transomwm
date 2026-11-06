@@ -23,11 +23,12 @@ private func displayD(space: UInt64? = nil) -> DisplayInfo {
 }
 private let names = ["D": "DELL U2720Q", "E": "LG UltraFine"]
 
-/// The first window on the left of its display; the second small and inside the right half (ArrangerLifecycleTests).
+/// The first window on the left of its display; the second small, centred three quarters across, so Dock Where It Is
+/// docks it on the right edge of the first, which fills the display (ArrangerLifecycleTests).
 private func startFrame(_ index: Int, on visible: Rect) -> Rect {
     index == 0
         ? Rect(x: visible.minX + 40, y: 80, width: 320, height: 232)
-        : Rect(x: visible.minX + 730, y: 400, width: 150, height: 120)
+        : Rect(x: visible.minX + visible.width * 0.75 - 75, y: 400, width: 150, height: 120)
 }
 
 private func near(_ a: Rect?, _ b: Rect?) -> Bool {
