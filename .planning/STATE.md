@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 4
+current_plan: 5
 status: executing
-stopped_at: Completed 08.1.1-03-PLAN.md
-last_updated: "2026-11-06T15:35:12.042Z"
+stopped_at: Completed 08.1.1-04-PLAN.md
+last_updated: "2026-11-06T15:39:07.300Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: da26166360aba254cb75883a7f7af633aa1cdf0f
+state_head: 822fd3b3b5a426eb0eaf11a275cd04c467f2d84f
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 108
+  completed_plans: 109
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 4
+Current Plan: 5
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -167,6 +167,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P01 | 8min | 3 tasks | 15 files |
 | Phase 08.1.1 P02 | 10min | 2 tasks | 12 files |
 | Phase 08.1.1 P03 | 4min | 3 tasks | 14 files |
+| Phase 08.1.1 P04 | 6min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -468,6 +469,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-02: the quit-restore live test is rewritten, not deleted. It pauses, parks the floater with the fixture's move and expects it back on screen through terminationPlan's stranded rule.
 - [Phase 08.1.1]: 08.1.1-02: ArrangerRestoreTests' second hide site was parkedC, not the crash-loop test. parkedC and its three Restore All hidden-Desktop tests were deleted.
 - [Phase 08.1.1]: 08.1.1-03: retired KeyboardShortcuts raw values toggleDesktop and frameDesktop are kept in a comment in Hotkeys.swift and asserted absent by HotkeyTableTests, which also checks ⌃⌥⌘H and ⌃⌥⌘G stay unbound
+- [Phase 08.1.1]: 08.1.1-04: CommandTests keeps its no-focused-window test (renamed withNoFocusedWindowTheWindowScopedItemsAreOff) minus the Desktop-toggle line, since its dock/float/focus checks guard a live rule
+- [Phase 08.1.1]: 08.1.1-04: tests that used toggleDesktop only as some command now use finderSplit (paused availability) and camera(.back) (rate limiter)
 
 ### Quick Tasks Completed
 
@@ -513,8 +516,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T15:35:11.236Z
-Stopped at: Completed 08.1.1-03-PLAN.md
+Last session: 2026-11-06T15:39:06.519Z
+Stopped at: Completed 08.1.1-04-PLAN.md
 Resume file: None
 
 ## Deferred Verification
