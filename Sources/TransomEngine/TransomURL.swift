@@ -56,6 +56,10 @@ public enum TransomURL {
         ("Dock", "dock-right-half", "", "Dock the focused window to the right half"),
         ("Dock", "dock-top-half", "", "Dock the focused window to the top half"),
         ("Dock", "dock-bottom-half", "", "Dock the focused window to the bottom half"),
+        ("Dock", "dock-top-left", "", "Dock the focused window to the top left"),
+        ("Dock", "dock-top-right", "", "Dock the focused window to the top right"),
+        ("Dock", "dock-bottom-left", "", "Dock the focused window to the bottom left"),
+        ("Dock", "dock-bottom-right", "", "Dock the focused window to the bottom right"),
         ("Dock", "dock-left-third", "", "Dock the focused window to the left third"),
         ("Dock", "dock-center-third", "", "Dock the focused window to the center third"),
         ("Dock", "dock-right-third", "", "Dock the focused window to the right third"),
@@ -123,11 +127,12 @@ public struct TransomURLRateLimiter: Sendable {
         return true
     }
 
-    /// `admit` for an opened URL. Any app or web page can open one, and with one second each the twenty dock commands would allow
-    /// twenty layout edits a second, emptying the undo history in under three, so they share one second here. The CLI stays on `admit`,
+    /// `admit` for an opened URL. Any app or web page can open one, and with one second each the 24 dock commands (fourths, halves,
+    /// thirds and corners) would allow 24 layout edits a second, emptying the undo history in under three, so they share one second here. The CLI stays on `admit`,
     /// so a script can dock several windows quickly.
     public mutating func admitOpenedURL(_ command: Command, at now: ContinuousClock.Instant) -> Bool {
-        guard case .dockFourth = command else { return admit(command, at: now) }
+        let docks = if case .dockFourth = command { true } else if case .dockCorner = command { true } else { false }
+        guard docks else { return admit(command, at: now) }
         if let lastDockURL, now - lastDockURL < Self.interval { return false }
         guard admit(command, at: now) else { return false }
         lastDockURL = now

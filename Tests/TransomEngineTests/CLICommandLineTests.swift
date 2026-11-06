@@ -14,7 +14,8 @@ import Testing
         (["dock-left-half"], "dock-left-half"), (["dock-right-half"], "dock-right-half"), (["dock-top-half"], "dock-top-half"),
         (["dock-bottom-half"], "dock-bottom-half"), (["dock-left-third"], "dock-left-third"), (["dock-center-third"], "dock-center-third"),
         (["dock-right-third"], "dock-right-third"), (["dock-top-third"], "dock-top-third"), (["dock-middle-third"], "dock-middle-third"),
-        (["dock-bottom-third"], "dock-bottom-third"),
+        (["dock-bottom-third"], "dock-bottom-third"), (["dock-top-left"], "dock-top-left"), (["dock-top-right"], "dock-top-right"),
+        (["dock-bottom-left"], "dock-bottom-left"), (["dock-bottom-right"], "dock-bottom-right"),
     ] as [([String], String)])
     func commandsToSend(arguments: [String], path: String) {
         #expect(CLICommandLine.parse(arguments) == .send(path))
@@ -44,6 +45,7 @@ import Testing
         #expect(CLICommandLine.parse(["help", "3"]) == .usage("transom: help takes no argument."))
         #expect(CLICommandLine.parse(["dock-column-1", "3"]) == .usage("transom: dock-column-1 takes no argument."))
         #expect(CLICommandLine.parse(["dock-left-half", "3"]) == .usage("transom: dock-left-half takes no argument."))
+        #expect(CLICommandLine.parse(["dock-top-left", "extra"]) == .usage("transom: dock-top-left takes no argument."))
     }
 
     @Test(arguments: [["view", "3", "4"], ["view/3", "4"], ["zoom-out", "3", "4"]] as [[String]])

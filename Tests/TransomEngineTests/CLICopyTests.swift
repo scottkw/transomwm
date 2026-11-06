@@ -37,6 +37,10 @@ import Testing
               dock-right-half      Dock the focused window to the right half
               dock-top-half        Dock the focused window to the top half
               dock-bottom-half     Dock the focused window to the bottom half
+              dock-top-left        Dock the focused window to the top left
+              dock-top-right       Dock the focused window to the top right
+              dock-bottom-left     Dock the focused window to the bottom left
+              dock-bottom-right    Dock the focused window to the bottom right
               dock-left-third      Dock the focused window to the left third
               dock-center-third    Dock the focused window to the center third
               dock-right-third     Dock the focused window to the right third
@@ -78,7 +82,7 @@ import Testing
         let listed = TransomURL.helpLines.map(\.command)
         #expect(listed.count == allowed.count)
         #expect(Set(listed) == allowed)
-        #expect(TransomURL.commands.count == 36, "08.1.1 UI-SPEC Surface 4: 36 parameterless commands")
+        #expect(TransomURL.commands.count == 40, "8.1.1 D-17: 40 parameterless commands")
     }
 
     @Test func asciiStraightensTheAppsTypography() {

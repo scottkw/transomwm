@@ -1,5 +1,5 @@
 import Foundation
-@testable import TransomEngine
+import TransomEngine
 import TransomModel
 import Testing
 
@@ -97,8 +97,21 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         #expect(parse("transom://\(host)/") == .dockCorner(corner))
     }
 
-    @Test func thereAreFortyParameterlessCommands() {
-        #expect(TransomURL.commands.count == 40)
+    @Test(arguments: ["transom:///dock-top-left/", "transom://DOCK-TOP-LEFT", "transom://dock-corner/top-left", "transom://dock-top-left/1",
+        "transom://dock-top-left?x=1", "transom://dock-left-top"])
+    func malformedCornerURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
+    /// T-08.1.1-29: an opened corner URL and an opened half URL share the one dock second.
+    @Test func anOpenedCornerURLSharesTheDockSecondWithAHalf() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockCorner(.topLeft), .zero), (.dockFourth(.firstHalf, .horizontal), .milliseconds(10)),
+            (.dockCorner(.bottomRight), .milliseconds(20)), (.dockFourth(.secondHalf, .vertical), .seconds(1)),
+        ]
+        #expect(attempts.map { limiter.admitOpenedURL($0.0, at: start + $0.1) } == [true, false, false, true])
     }
 
     /// T-08.1.1-07: an opened half URL and an opened fourth URL share the one dock second.
