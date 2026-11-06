@@ -523,3 +523,24 @@ extension LayoutStoreTests {
         #expect(LayoutStore.migrationLine(fromSchema: 1, contents: v1)?.hasPrefix("migrated layout.json schema 1 to 4: ") == true)
     }
 }
+
+/// 8.1.1 D-02, T-08.1.1-14: the schema-3 fixture relabelled schema 4 (World schema 2) still names its Desktop tiles. No
+/// current Transom writes that, so the file is forged or broken: it is set aside whole, never migrated.
+extension LayoutStoreTests {
+    @Test func aSchema4FileWithADesktopNodeIsSetAside() throws {
+        let forged = LayoutFileV3Fixture.json
+            .replacingOccurrences(of: "\"schemaVersion\" : 3", with: "\"schemaVersion\" : 4")
+            .replacingOccurrences(of: "\"schemaVersion\" : 1", with: "\"schemaVersion\" : 2")
+        try #require(forged.contains("\"hidden\" : false") && !forged.contains("\"schemaVersion\" : 1"))
+        let dir = Directory()
+        try dir.write(forged)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.contents == nil)
+        #expect(store.loadError != nil)
+        #expect(!store.savingDisabled)
+        #expect(!FileManager.default.fileExists(atPath: dir.file.path))
+        let moved = try #require(dir.corrupted.first)
+        #expect(try String(contentsOf: moved, encoding: .utf8) == forged)
+    }
+}

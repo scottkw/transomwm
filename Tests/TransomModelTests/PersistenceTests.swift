@@ -34,8 +34,9 @@ private func deskJSON(
     return #"{"desk":{"desktop":{"windows":[\#(floating.joined(separator: ","))]},"tree":{"nodes":{\#(nodeList)}\#(rootPart),"states":[\#(states)]}},"key":{"displayUUID":"\#(key)"}}"#
 }
 
-private func worldJSON(_ desks: [String], next: UInt64 = 100_000) -> Data {
-    Data(#"{"desks":[\#(desks.joined(separator: ","))],"ids":{"next":\#(next)},"schemaVersion":1}"#.utf8)
+/// `schema` 1 is the legacy World (layout.json schema 3 and older), the only one whose trees may hold a Desktop tile.
+private func worldJSON(_ desks: [String], next: UInt64 = 100_000, schema: Int = 1) -> Data {
+    Data(#"{"desks":[\#(desks.joined(separator: ","))],"ids":{"next":\#(next)},"schemaVersion":\#(schema)}"#.utf8)
 }
 
 private func floatingJSON(_ id: Int, x: String = "0", width: String = "100") -> String {
@@ -129,6 +130,8 @@ private let corruptCorpus: [CorruptCase] = [
     ], windows: [])]).replacing(Data(#""states":[]"#.utf8), with: Data(#""states":[{"state":"present","window":{"bundleID":"","pid":-1,"windowID":0}}]"#.utf8)),
         invalidLayout: true),
     CorruptCase(name: "ids.next = 0 could mint the Desktop ID", data: worldJSON([], next: 0), invalidLayout: true),
+    // 8.1.1 D-02, T-08.1.1-14: the current World has no Desktop node kind, so the legacy-valid baseline relabelled schema 2 does not parse.
+    CorruptCase(name: "schema 2 World with a Desktop node", data: worldJSON([validPair], schema: 2), invalidLayout: false),
 ]
 
 // MARK: Rich world for the exact round-trip
