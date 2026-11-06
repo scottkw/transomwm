@@ -377,16 +377,6 @@ private func decodeLayer(_ json: String) throws -> DesktopLayer {
         #expect(tree == before && ids == beforeIDs)
     }
 
-    @Test func theLastDockedLeafLeavingShowsAHiddenDesktop() throws {
-        var tree = LayoutTree.withDesktop()
-        var ids = IDSource()
-        try tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
-        try tree.group(b, into: try #require(tree.leaf(containing: a)))
-        try tree.setDesktopHidden(true)
-        _ = try tree.removeLeaf(try #require(tree.leaf(containing: a)))
-        #expect(tree.windows.isEmpty && tree.isDesktopHidden == false)
-    }
-
     @Test func removeGroupAndAddGroupRoundTrip() throws {
         var layer = DesktopLayer()
         try layer.add(a, frame: floatA)

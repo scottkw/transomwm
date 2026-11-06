@@ -151,8 +151,7 @@ private func richWorld() throws -> World {
     try nested.insert(c, at: .bottom, of: #require(nested.leaf(containing: b)), ids: &ids)
     try nested.insert(d, at: .left, of: #require(nested.leaf(containing: a)), ids: &ids)
 
-    // D1 Space 7: tabs plus kept-slot states, through the validating init. H[E, tabs(F, G), Desktop] at
-    // 1/3, 1/2, 1/6.
+    // D1 Space 7: tabs plus kept-slot states, through the validating init. H[E, tabs(F, G)] at 2/5, 3/5.
     let e = hinted(10, title: "Notes.txt", ax: "AXWindow-1", order: 3)
     let f = hinted(11, title: "", ax: nil, order: 4)
     let g = hinted(12, title: "Ünïcode ✓ \"quoted\"", ax: "", order: 5)
@@ -162,13 +161,11 @@ private func richWorld() throws -> World {
             NodeID(raw: 100): .panel(e),
             NodeID(raw: 101): .tabs(windows: [f, g], selected: 1),
             NodeID(raw: 102): .split(
-                axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101), .desktop], weights: [1.0 / 3.0, 0.5, 1.0 / 6.0]),
-            .desktop: .desktop(hidden: false),
+                axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101)], weights: [2.0 / 5.0, 3.0 / 5.0]),
         ],
         states: [e.identity: .absent, f.identity: .fullscreen, g.identity: .present])
 
-    // D2: a 0.1 / 0.8 / 0.1 vertical split with a hidden Desktop tile, plus two floating windows, one at a
-    // negative origin.
+    // D2: a 1/9 / 8/9 vertical split, plus two floating windows, one at a negative origin.
     let h = hinted(20, title: "a", ax: "AXWin-20", order: 9_007_199_254_740_993)
     let i = makeWindow(21)
     let thin = try LayoutTree(
@@ -176,8 +173,7 @@ private func richWorld() throws -> World {
         nodes: [
             NodeID(raw: 200): .panel(h),
             NodeID(raw: 201): .panel(i),
-            NodeID(raw: 202): .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201), .desktop], weights: [0.1, 0.8, 0.1]),
-            .desktop: .desktop(hidden: true),
+            NodeID(raw: 202): .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201)], weights: [1.0 / 9.0, 8.0 / 9.0]),
         ],
         states: [h.identity: .present, i.identity: .present])
     var desktop = DesktopLayer()
@@ -221,10 +217,9 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         #expect(floating.window.titleHint == "Float")
         #expect(floating.frame == Rect(x: -1440, y: -0.5, width: 800.25, height: 600))
         let tabs = try #require(decoded[k1s7]?.tree.node(NodeID(raw: 102)))
-        #expect(tabs == .split(axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101), .desktop], weights: [1.0 / 3.0, 0.5, 1.0 / 6.0]))
+        #expect(tabs == .split(axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101)], weights: [2.0 / 5.0, 3.0 / 5.0]))
         let thin = try #require(decoded[k2]?.tree.node(NodeID(raw: 202)))
-        #expect(thin == .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201), .desktop], weights: [0.1, 0.8, 0.1]))
-        #expect(decoded[k2]?.tree.isDesktopHidden == true)
+        #expect(thin == .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201)], weights: [1.0 / 9.0, 8.0 / 9.0]))
         #expect(decoded[k1s7]?.tree.state(of: makeWindow(10)) == nil)  // different pid/bundle: not the same window
         let e = hinted(10, title: "", ax: nil, order: 0)
         #expect(decoded[k1s7]?.tree.state(of: e) == .absent)
@@ -342,7 +337,7 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
 
     @Test func olderFileDecodesThroughTheChain() throws {
         // A hypothetical schema 0 that called desks "spaces". The chain takes it to schema 1, which then loads as
-        // legacy, without its Desktop tiles (8.1.1 D-02).
+        // legacy (8.1.1 D-02; DesktopMigrationTests covers dropping a legacy Desktop tile).
         let v2 = try richWorld().encoded()
         let v1 = try replacing(v2, #""schemaVersion":2"#, with: #""schemaVersion":1"#)
         var v0 = try replacing(v2, #""schemaVersion":2"#, with: #""schemaVersion":0"#)
@@ -352,7 +347,6 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         // IDSource is above 2^53, which JSONSerialization may not keep exact, so compare the desks.
         let legacy = try World.decode(from: v1).desks
         #expect(migrated.desks == legacy)
-        #expect(legacy.values.allSatisfy { $0.tree.isDesktopHidden == nil })
     }
 
     @Test(arguments: corruptCorpus)

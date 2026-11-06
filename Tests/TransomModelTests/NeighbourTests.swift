@@ -16,12 +16,9 @@ private func tree(root: UInt64, _ nodes: [UInt64: Node]) throws -> LayoutTree {
     return try LayoutTree(root: n(root), nodes: Dictionary(uniqueKeysWithValues: nodes.map { (n($0.key), $0.value) }), states: states)
 }
 
-/// [a | b | Desktop], side by side.
-private func abDesktop() throws -> LayoutTree {
-    try tree(root: 1, [
-        1: .split(axis: .horizontal, children: [n(2), n(3), .desktop], weights: [0.3, 0.3, 0.4]),
-        2: .panel(a), 3: .panel(b), 0: .desktop(hidden: false),
-    ])
+/// [a | b], side by side.
+private func ab() throws -> LayoutTree {
+    try tree(root: 1, [1: .split(axis: .horizontal, children: [n(2), n(3)], weights: [0.5, 0.5]), 2: .panel(a), 3: .panel(b)])
 }
 
 /// [a | V[b, c]]
@@ -39,10 +36,10 @@ private func neighbour(_ t: LayoutTree, of leaf: NodeID, _ edge: Edge, recency: 
 
 @Suite struct NeighbourTests {
     @Test func neighbourAcrossEachEdge() throws {
-        let t = try abDesktop()
+        let t = try ab()
         #expect(try neighbour(t, of: n(2), .right) == n(3))
         #expect(try neighbour(t, of: n(2), .left) == nil)
-        #expect(try neighbour(t, of: n(3), .right) == .desktop)
+        #expect(try neighbour(t, of: n(3), .right) == nil)
         #expect(try neighbour(t, of: n(3), .left) == n(2))
         #expect(try neighbour(t, of: n(2), .top) == nil)
     }
@@ -58,12 +55,12 @@ private func neighbour(_ t: LayoutTree, of leaf: NodeID, _ edge: Edge, recency: 
     }
 
     @Test func aFloatingFrameNeedsPerpendicularOverlap() throws {
-        let t = try abDesktop()
+        let t = try ab()
         let r = try resolve(t, in: area, mins: [:], gap: gap)
-        let desktop = r.desktopRect!
-        // A floating window inside the Desktop tile: its left neighbour is b.
-        let floating = Rect(x: desktop.minX + 50, y: desktop.minY + 50, width: 200, height: 200)
-        #expect(Neighbours.neighbour(of: floating, excluding: nil, toward: .left, tree: t, resolution: r, gap: gap, recency: []) == n(3))
+        let overB = try #require(r.nodeRects[n(3)])
+        // A floating window over b: its left neighbour is a, not the tile under it.
+        let floating = Rect(x: overB.minX + 50, y: overB.minY + 50, width: 200, height: 200)
+        #expect(Neighbours.neighbour(of: floating, excluding: nil, toward: .left, tree: t, resolution: r, gap: gap, recency: []) == n(2))
         // A frame entirely below the layout overlaps nothing vertically.
         let below = Rect(x: 0, y: area.maxY + 10, width: 400, height: 50)
         #expect(Neighbours.neighbour(of: below, excluding: nil, toward: .right, tree: t, resolution: r, gap: gap, recency: []) == nil)

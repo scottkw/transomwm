@@ -173,7 +173,7 @@ private func expectInvalidLayout(_ data: Data, _ name: String) {
     @Test func schema2DecodesStrictlyWithoutTheLegacyPath() throws {
         // Node still has the Desktop case until 08.1.1-16; schema 2 keeps what it holds rather than migrating it.
         let t = try tree(legacyWorld(root: 3, nodes: [1: panelJSON(1), 3: splitJSON([1, 0], [0.5, 0.5]), 0: desktopJSON()], windows: [1], version: 2))
-        #expect(t.isDesktopHidden == false)
+        #expect(t.node(.desktop) != nil)
     }
 
     @Test func schema3IsNewer() {

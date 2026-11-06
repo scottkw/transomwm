@@ -11,7 +11,7 @@ private let area = Rect(x: 0, y: 0, width: 1200, height: 800)
 
 private func n(_ raw: UInt64) -> NodeID { NodeID(raw: raw) }
 
-/// A validated tree from raw-ID nodes (0 is the Desktop tile); every window in it is present.
+/// A validated tree from raw-ID nodes; every window in it is present.
 private func tree(root: UInt64, _ nodes: [UInt64: Node]) throws -> LayoutTree {
     var states: [WindowIdentity: WindowState] = [:]
     for node in nodes.values {
@@ -119,12 +119,12 @@ private func worldABDesktop() throws -> World {
 
     @Test func rotateNestedSplitStartsAtTheRoot() throws {
         let original = try tree(root: 1, [
-            1: h(2, 3, 0, weights: [0.3, 0.4, 0.3]), 2: .panel(a), 3: v(4, 5, weights: [0.5, 0.5]),
-            4: .panel(b), 5: .panel(c), 0: .desktop(hidden: false),
+            1: h(2, 3, weights: [3.0 / 7, 4.0 / 7]), 2: .panel(a), 3: v(4, 5, weights: [0.5, 0.5]),
+            4: .panel(b), 5: .panel(c),
         ])
         var t = original
         try t.rotate(split: n(3))
-        #expect(t.node(n(1)) == v(2, 3, 0, weights: [0.3, 0.4, 0.3]))
+        #expect(t.node(n(1)) == v(2, 3, weights: [3.0 / 7, 4.0 / 7]))
         #expect(t.node(n(3)) == h(4, 5, weights: [0.5, 0.5]))
         try t.validate()
         try t.rotate(split: n(3))
