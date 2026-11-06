@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 10
+current_plan: 11
 status: executing
-stopped_at: "Completed 08.1.1-09-PLAN.md (named-skip state: run 08.1.1-10 next, then 08.1.1-11)"
-last_updated: "2026-11-06T16:37:43.727Z"
+stopped_at: "Completed 08.1.1-10-PLAN.md (named-skip state: SKIP_B still failing, run 08.1.1-11 next)"
+last_updated: "2026-11-06T16:52:56.410Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 6af387af45faf68526d98bca2b40df64a40052de
+state_head: d043a0afceb9c1345817836591b9fc3b6901a4a5
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 114
+  completed_plans: 115
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 10
+Current Plan: 11
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -173,6 +173,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P07 | 7min | 3 tasks | 12 files |
 | Phase 08.1.1 P08 | 15min | 2 tasks | 8 files |
 | Phase 08.1.1 P09 | 7min | 2 tasks | 15 files |
+| Phase 08.1.1 P10 | 13min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -488,6 +489,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-08: an empty desk docks a drag only from the 24 pt edge band (hover filters .emptyLayout; keyboard Dock unchanged)
 - [Phase 08.1.1]: 08.1.1-08: floatingGroupTarget runs first for every hover target, so a floater's centre in front of a docked tile (even the dragged window's own) wins the group dwell (RESEARCH A1, UAT 08.1.1-18)
 - [Phase 08.1.1]: 08.1.1-09: the flip is one line, Desk.init(tree: LayoutTree = LayoutTree()); every engine-created desk (World.addDesk, autoTile) starts with no tree and no Desktop tile (D-01)
+- [Phase 08.1.1]: 08.1.1-10: where the Desktop tile was only a stand-in sibling in a test layout, a docked window takes its place so the test keeps its subject; savingAViewWithNoWindowsIsRefusedAndKeepsTheSlot deleted (every node now holds a window)
+- [Phase 08.1.1]: 08.1.1-10: SKIP_A passes; the branch is still in a named-skip state with SKIP_B failing. 08.1.1-11 must run next; nothing ships or merges before it ends with a green swift test
 
 ### Quick Tasks Completed
 
@@ -534,8 +537,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T16:37:42.921Z
-Stopped at: Completed 08.1.1-09-PLAN.md (named-skip state: run 08.1.1-10 next, then 08.1.1-11)
+Last session: 2026-11-06T16:52:55.591Z
+Stopped at: Completed 08.1.1-10-PLAN.md (named-skip state: SKIP_B still failing, run 08.1.1-11 next)
 Resume file: None
 
 ## Deferred Verification
