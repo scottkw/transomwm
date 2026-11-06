@@ -86,6 +86,40 @@ private let area = Rect(x: 0, y: 0, width: 1000, height: 500)
         #expect(target(750, 250, layout) == .tile(n(2), .edge(.right)))
     }
 
+    /// [A .5 | empty .5] at nodes 2 and 3 under split 1, gap 8: A is (8, 8, 488, 484), the empty area (504, 8, 488, 484).
+    func halfEmpty() throws -> (LayoutTree, Resolution) {
+        let tree = try LayoutTree(
+            root: n(1), nodes: [n(1): .split(axis: .horizontal, children: [n(2), n(3)], weights: [0.5, 0.5]), n(2): .panel(a), n(3): .spacer],
+            states: [a.identity: .present])
+        return (tree, try resolve(tree, in: area, mins: [:], gap: 8))
+    }
+
+    /// 8.1.1 D-16, E6: an empty area is filled from anywhere over it, the outer gap and edge band included. A tile keeps its regions.
+    @Test func anEmptyAreaIsFilledAndATileKeepsItsRegions() throws {
+        let layout = try halfEmpty()
+        #expect(target(750, 250, layout) == .fill(n(3)))
+        #expect(target(996, 250, layout) == .fill(n(3)))  // the outer gap belongs to the nearest leaf
+        #expect(target(750, 10, layout) == .fill(n(3)))
+        #expect(target(250, 10, layout) == .layoutEdge(.top))
+        #expect(target(60, 250, layout) == .tile(n(2), .edge(.left)))
+        #expect(target(500, 250, layout) == nil)  // the gap between them
+    }
+
+    @Test func aFillDropTakesTheEmptyAreasPlace() throws {
+        var tree = try halfEmpty().0
+        var ids = IDSource(next: 10)
+        try tree.applyDrop(.fill(n(3)), window: b, ids: &ids)
+        #expect(tree.node(n(3)) == .panel(b))
+        #expect(tree.node(n(1)) == .split(axis: .horizontal, children: [n(2), n(3)], weights: [0.5, 0.5]))
+        #expect(tree.state(of: b) == .present)
+
+        var grouped = try halfEmpty().0
+        let group = Node.tabs(windows: [b, makeWindow(3)], selected: 0)
+        try grouped.applyDrop(.fill(n(3)), leaf: group, states: [b.identity: .present, makeWindow(3).identity: .absent], ids: &ids)
+        #expect(grouped.node(n(3)) == group)
+        #expect(grouped.state(of: makeWindow(3)) == .absent)
+    }
+
     @Test func tuningConstants() {
         #expect(DropZones.edgeBandFraction == 0.25)
         #expect(DropZones.displayEdgeBand == 24)

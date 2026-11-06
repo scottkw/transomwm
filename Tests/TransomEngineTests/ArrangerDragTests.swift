@@ -443,3 +443,60 @@ extension ArrangerDragTests {
         #expect(harness.arranger.drag?.window == b)
     }
 }
+
+// MARK: - Empty areas (8.1.1 D-16, rule E6)
+
+/// a docked to the left half on an empty desk, so the right half is an empty area, with f floating; Hold ⌥ when asked.
+private func leftHalfDocked(_ mode: DragToDockMode) async -> Harness {
+    var harness = await Harness.started(frames: [1: frameA, 2: floatingFrame])
+    await harness.send(.dragToDock(mode))
+    await harness.send(.command(.dockFourth(.firstHalf, .horizontal), focused: a))
+    return harness
+}
+
+/// The right child of [a .5 | X .5] in the visible frame (0, 25, 1440, 875) with gap 8: inner (8, 33, 1424, 859),
+/// each half (1424 - 8) / 2 = 708 wide.
+private let rightHalf = Rect(x: 724, y: 33, width: 708, height: 859)
+private let leftHalf = Rect(x: 8, y: 33, width: 708, height: 859)
+
+extension ArrangerDragTests {
+    /// E6: within 24 pt of the screen edge over the empty half, the preview is exactly that half and the release docks
+    /// there in one undo step; the docked window doesn't move. Hold ⌥ with ⌥ held behaves the same.
+    @Test(arguments: [(DragToDockMode.automatic, Modifiers()), (DragToDockMode.holdOption, Modifiers.option)])
+    func aFloaterDraggedToTheEdgeOverAnEmptyHalfDocksIntoIt(mode: DragToDockMode, modifiers: Modifiers) async throws {
+        var harness = await leftHalfDocked(mode)
+        #expect(await harness.frame(a) == leftHalf)
+        let depth = harness.arranger.history.depth(for: mainKey)
+        _ = await dragFloating(&harness, to: 1430, 460, modifiers)
+        harness.now += .milliseconds(150)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.dock(rightHalf)], "tick gave \(tick)")
+
+        let up = await harness.send(pointer(.up, 1430, 460, modifiers))
+        let tree = try #require(harness.arranger.world[mainKey]?.tree)
+        let root = try #require(tree.root)
+        #expect(tree.node(root) == .split(
+            axis: .horizontal, children: [try #require(tree.leaf(containing: a)), try #require(tree.leaf(containing: f))], weights: [0.5, 0.5]))
+        #expect(setFrames(up)[f] == rightHalf)
+        #expect(setFrames(up)[a] == nil, "the docked window moved")
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    /// E6: anywhere else over the empty half the drag shows nothing and the release only moves the window.
+    @Test(arguments: [(DragToDockMode.automatic, Modifiers()), (DragToDockMode.holdOption, Modifiers.option)])
+    func aFloaterDraggedIntoTheMiddleOfAnEmptyHalfJustMoves(mode: DragToDockMode, modifiers: Modifiers) async throws {
+        var harness = await leftHalfDocked(mode)
+        let depth = harness.arranger.history.depth(for: mainKey)
+        let during = await dragFloating(&harness, to: 1000, 460, modifiers)
+        harness.now += .milliseconds(150)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
+
+        let up = await harness.send(pointer(.up, 1000, 460, modifiers))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.windows == [a])
+        #expect(desk.desktop.frame(of: f) == released(floatingFrame, at: Point(x: 1000, y: 460)))
+        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+        #expect(!writes(during + up, f))
+    }
+}

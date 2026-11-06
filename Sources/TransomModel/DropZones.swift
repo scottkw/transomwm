@@ -14,6 +14,8 @@ public enum DropTarget: Equatable, Sendable {
     case emptyLayout
     /// A share of the whole desk along an axis (D-14).
     case fourth(FourthSlot, Axis)
+    /// An empty area (8.1.1 D-16): the drop takes its place.
+    case fill(NodeID)
 }
 
 public enum DropZones {
@@ -26,7 +28,19 @@ public enum DropZones {
     /// The drop target under `point`, or nil in a gap, over an unplaced tile, or outside `area`.
     public static func target(at point: Point, in area: Rect, tree: LayoutTree, resolution: Resolution) -> DropTarget? {
         guard area.contains(point) else { return nil }
-        guard tree.root != nil else { return .emptyLayout }
+        guard let root = tree.root else { return .emptyLayout }
+
+        // Leaf rects never overlap, so at most one contains the point. Split rects cover the gaps.
+        func leaf(at p: Point) -> (NodeID, Rect)? {
+            resolution.nodeRects.first { id, rect in
+                if case .split? = tree.node(id) { return false }
+                return rect.contains(p)
+            }
+        }
+        // An empty area is filled from anywhere over it; in the outer gap a point belongs to the leaf nearest it (E6).
+        let inner = resolution.nodeRects[root]
+        let probe = inner.map { Point(x: min(max(point.x, $0.minX), $0.maxX.nextDown), y: min(max(point.y, $0.minY), $0.maxY.nextDown)) }
+        if let (id, _) = leaf(at: probe ?? point), tree.node(id) == .spacer { return .fill(id) }
 
         let horizontal = min(point.x - area.minX, area.maxX - point.x)
         let vertical = min(point.y - area.minY, area.maxY - point.y)
@@ -36,11 +50,7 @@ public enum DropZones {
                 : (point.y < area.midY ? .top : .bottom))
         }
 
-        // Leaf rects never overlap, so at most one contains the point. Split rects cover the gaps.
-        guard let (id, rect) = resolution.nodeRects.first(where: { id, rect in
-            if case .split? = tree.node(id) { return false }
-            return rect.contains(point)
-        }) else { return nil }
+        guard let (id, rect) = leaf(at: point) else { return nil }
 
         let fx = (point.x - rect.minX) / rect.width
         let fy = (point.y - rect.minY) / rect.height
@@ -63,6 +73,7 @@ extension LayoutTree {
             if let root { try insert(window, at: edge, of: root, ids: &ids) } else { try insertRoot(window, ids: &ids) }
         case let .fourth(slot, axis):
             try insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)
+        case let .fill(id): try fill(id, with: .panel(window), states: [window.identity: .present])
         }
     }
 }
@@ -80,6 +91,7 @@ extension LayoutTree {
         case let .layoutEdge(edge):
             if let root { try insertLeaf(node, states: states, at: edge, of: root, ids: &ids) } else { try insertRootLeaf(node, states: states, ids: &ids) }
         case let .fourth(slot, axis): try insertFourth(node, states: states, slot: slot, axis: axis, ids: &ids)
+        case let .fill(id): try fill(id, with: node, states: states)
         }
     }
 }

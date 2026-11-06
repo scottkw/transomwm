@@ -1740,9 +1740,10 @@ public struct Arranger: Sendable {
             let key = Self.key(display)
             let v = display.visibleFrame
             target = DropZones.target(at: point, in: v, tree: (world[key] ?? Desk()).tree, resolution: plan.resolution)
-            // An empty desk docks only from its edge band; elsewhere the drag is a plain move (UI-SPEC discretion 2). The
-            // keyboard Dock keeps `.emptyLayout` everywhere (`Planner.dockTarget`).
-            if target == .emptyLayout, min(point.x - v.minX, v.maxX - point.x, point.y - v.minY, v.maxY - point.y) >= DropZones.displayEdgeBand {
+            // An empty desk, or an empty area (8.1.1 D-16, E6), docks only from its edge band; elsewhere the drag is a plain
+            // move (UI-SPEC discretion 2). The keyboard Dock keeps both everywhere (`Planner.dockTarget`).
+            let fills = if case .fill? = target { true } else { false }
+            if target == .emptyLayout || fills, min(point.x - v.minX, v.maxX - point.x, point.y - v.minY, v.maxY - point.y) >= DropZones.displayEdgeBand {
                 target = nil
             }
             // A floating window's centre groups after the group dwell (D-02), ahead of the docked tile beneath (UI-SPEC
