@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: Completed 08.1.1-02-PLAN.md
-last_updated: "2026-11-06T15:30:12.688Z"
+stopped_at: Completed 08.1.1-03-PLAN.md
+last_updated: "2026-11-06T15:35:12.042Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: baa88bece8129780547afe312992df5c139c409a
+state_head: da26166360aba254cb75883a7f7af633aa1cdf0f
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 107
+  completed_plans: 108
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 3
+Current Plan: 4
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -166,6 +166,7 @@ Progress: [████████░░] 82%
 | Phase 08.1 P07 | 30 min | 3 tasks | 6 files |
 | Phase 08.1.1 P01 | 8min | 3 tasks | 15 files |
 | Phase 08.1.1 P02 | 10min | 2 tasks | 12 files |
+| Phase 08.1.1 P03 | 4min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -466,6 +467,7 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-01: requirements.mark-complete skipped for MODEL-05/MODEL-09/TILE-24; they stay Pending for later plans of 8.1.1
 - [Phase 08.1.1]: 08.1.1-02: the quit-restore live test is rewritten, not deleted. It pauses, parks the floater with the fixture's move and expects it back on screen through terminationPlan's stranded rule.
 - [Phase 08.1.1]: 08.1.1-02: ArrangerRestoreTests' second hide site was parkedC, not the crash-loop test. parkedC and its three Restore All hidden-Desktop tests were deleted.
+- [Phase 08.1.1]: 08.1.1-03: retired KeyboardShortcuts raw values toggleDesktop and frameDesktop are kept in a comment in Hotkeys.swift and asserted absent by HotkeyTableTests, which also checks ⌃⌥⌘H and ⌃⌥⌘G stay unbound
 
 ### Quick Tasks Completed
 
@@ -511,8 +513,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T15:30:11.945Z
-Stopped at: Completed 08.1.1-02-PLAN.md
+Last session: 2026-11-06T15:35:11.236Z
+Stopped at: Completed 08.1.1-03-PLAN.md
 Resume file: None
 
 ## Deferred Verification
