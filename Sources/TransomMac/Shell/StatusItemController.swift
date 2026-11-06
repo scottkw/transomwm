@@ -128,10 +128,10 @@ import os
     private func addArrangeItems(to menu: NSMenu, context: CommandContext) {
         commands.update(focusedFloats: arrange.arranger.isFloating(context.focused)) { arrange.arranger.availability($0, context: context) }
         menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
-        for command in [Command.dock, .float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
+        menu.addItem(commands.dockMenu)  // holds .dock's item, which an NSMenuItem allows in one menu only (Pitfall 6)
+        for command in [Command.float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
         menu.addItem(commands.focusMenu)
         menu.addItem(commands.moveMenu)
-        menu.addItem(commands.fourthMenu)
         menu.addItem(commands.splitMenu)
         menu.addItem(commands.snapMenu)
         menu.addItem(commands.tabsMenu)

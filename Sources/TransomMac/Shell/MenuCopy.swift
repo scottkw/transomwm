@@ -25,12 +25,16 @@ nonisolated public enum MenuCopy {
     public static let safetySection = "Safety"
     public static let exclusionsSection = "Exclusions"
     public static let fourthMenu = "Dock Window"
+    /// The Dock Window submenu's section headers (08.1.1 UI-SPEC Surface 3).
+    public static let halvesHeader = "Halves"
+    public static let thirdsHeader = "Thirds"
+    public static let fourthsHeader = "Fourths"
     public static let clearWaitingTiles = "Clear Waiting Tiles"
 
     /// A command item's title. Toggles have their own functions (`pauseToggle`).
     public static func commandTitle(_ command: Command) -> String {
         switch command {
-        case .dock: "Dock Window"
+        case .dock: "Where It Is"  // under the Dock Window ▸ parent (08.1.1 UI-SPEC Surface 3)
         case .float: "Float Window"
         case .undo: "Undo Layout Change"
         case .focus(let edge), .moveOrSnap(let edge): direction(edge)
