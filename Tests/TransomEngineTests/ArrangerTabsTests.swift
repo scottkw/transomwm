@@ -17,8 +17,11 @@ private let frameB = Rect(x: 730, y: 400, width: 150, height: 120)
 /// Small, at the bottom right, clear of the tiles once a and b dock.
 private let smallF = Rect(x: 1250, y: 700, width: 150, height: 100)
 
-private func pointer(_ kind: PointerEvent.Kind, _ x: Double, _ y: Double, _ modifiers: Modifiers = [], press: WindowRef? = nil) -> ArrangerInput {
-    .pointer(PointerEvent(kind: kind, location: Point(x: x, y: y), modifiers: modifiers, pressWindow: press))
+private func pointer(
+    _ kind: PointerEvent.Kind, _ x: Double, _ y: Double, _ modifiers: Modifiers = [], press: WindowRef? = nil, stacking: [WindowRef]? = nil
+) -> ArrangerInput {
+    .pointer(PointerEvent(
+        kind: kind, location: Point(x: x, y: y), modifiers: modifiers, pressWindow: press, stacking: stacking?.map(\.identity)))
 }
 
 private func shifted(_ rect: Rect, _ dx: Double, _ dy: Double = 0) -> Rect {
@@ -39,11 +42,13 @@ private func parks(_ effects: [ArrangerEffect]) -> [WindowCommand] {
 }
 
 /// Presses `window`'s title bar, drags 10 pt right (the session starts), then on to `point`, the frame following.
+/// `stacking` is the press's front-to-back order from the shell (8.1.1 D-18).
 private func drag(
-    _ harness: inout Harness, _ window: WindowRef, from frame: Rect, to point: Point, _ modifiers: Modifiers = []
+    _ harness: inout Harness, _ window: WindowRef, from frame: Rect, to point: Point, _ modifiers: Modifiers = [],
+    stacking: [WindowRef]? = nil
 ) async -> [ArrangerEffect] {
     let grab = Point(x: frame.midX, y: frame.minY + 10)
-    var effects = await harness.send(pointer(.down, grab.x, grab.y, modifiers, press: window))
+    var effects = await harness.send(pointer(.down, grab.x, grab.y, modifiers, press: window, stacking: stacking))
     effects += await harness.send(pointer(.dragged, grab.x + 10, grab.y, modifiers))
     effects += await harness.send(.dragFrame(window.identity, shifted(frame, 10)))
     effects += await harness.send(pointer(.dragged, point.x, point.y, modifiers))
@@ -766,6 +771,30 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         #expect(floatingGroups(harness).isEmpty, "f grouped with t, behind a")
         let desk = try #require(harness.arranger.world[mainKey])
         #expect(desk.tree.leaf(containing: a).flatMap(desk.tree.node) == .tabs(windows: [a, f], selected: 1))
+    }
+
+    /// 8.1.1 D-18 (UAT 7a): the window server's stacking from the press decides, not focus. The docked window was focused
+    /// last and the floater in front of it never was, yet the floater takes the group dwell, in Hold ⌥ (⌥ held) and
+    /// Automatically.
+    @Test(arguments: [(DragToDockMode.automatic, Modifiers()), (DragToDockMode.holdOption, Modifiers.option)])
+    func aFrontFloaterWinsTheDwellOverADockedWindowFocusedLater(mode: DragToDockMode, modifiers: Modifiers) async throws {
+        var harness = await floaters()
+        await harness.send(.dragToDock(mode))
+        await harness.send(.command(.dock, focused: a))
+        let ra = try #require(try docked(harness).frames[a])
+        await harness.fake.userMove(5, to: Rect(x: ra.midX - 150, y: ra.midY - 100, width: 300, height: 200))
+        _ = await harness.refresh()
+        await harness.send(.event(.windowFocused(a)))
+        let target = try #require(harness.arranger.world[mainKey]?.desktop.frame(of: t))
+        _ = await drag(&harness, f, from: smallF, to: centre(target), modifiers, stacking: [f, t, a])
+        harness.now += .milliseconds(400)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.group(frame: target, strip: TabBand.strip(of: target), label: "Group as tabs")], "tick gave \(tick)")
+        await harness.send(pointer(.up, target.midX, target.midY, modifiers))
+        let group = try #require(floatingGroups(harness).first, "f did not group with t, in front of a")
+        #expect(group.members == [t, f])
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.leaf(containing: a).flatMap(desk.tree.node) == .panel(a), "a's tile changed")
     }
 
     /// WR-02 (iteration 2): the dragged docked window's own tile is not in front of anything, so a floater over that

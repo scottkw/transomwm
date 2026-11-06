@@ -1556,10 +1556,12 @@ public struct Arranger: Sendable {
             tabs.tearPress = nil  // a press whose mouse-up never arrived
             if let tab = event.pressTab {
                 pressTab(tab)
+                tabs.tearPress?.stacking = event.stacking
                 return stale
             }
             guard let pressed = event.pressWindow, let info = windows[pressed.identity], canDrag(info) else { return stale }
             drag = DragSession(window: info.window, start: event.location, startFrame: info.frame, modifiers: event.modifiers)
+            drag?.stacking = event.stacking
             return stale
         case .dragged, .flagsChanged:
             if drag == nil, event.kind == .dragged, let press = tabs.tearPress, !press.strip.contains(event.location) {

@@ -38,13 +38,19 @@ public struct PointerEvent: Equatable, Sendable {
     public var modifiers: Modifiers
     public var pressWindow: WindowRef?
     public var pressTab: WindowRef?
+    /// Front to back, tracked windows only, read by the shell on `down` (8.1.1 D-18); nil when unknown.
+    public var stacking: [WindowIdentity]?
 
-    public init(kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil, pressTab: WindowRef? = nil) {
+    public init(
+        kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil, pressTab: WindowRef? = nil,
+        stacking: [WindowIdentity]? = nil
+    ) {
         self.kind = kind
         self.location = location
         self.modifiers = modifiers
         self.pressWindow = pressWindow
         self.pressTab = pressTab
+        self.stacking = stacking
     }
 }
 
@@ -234,6 +240,8 @@ public struct DragSession: Equatable, Sendable {
     var groupAnchor: Point?
     var groupSince: ContinuousClock.Instant?
     var groupDecision: Decision?
+    /// The press's front-to-back stacking from the shell (8.1.1 D-18); nil when unknown.
+    var stacking: [WindowIdentity]?
 
     /// The decision a release applies: the group dwell's once it completed, else the Phase 3 one.
     var current: Decision? { groupDecision ?? decision }

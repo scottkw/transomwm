@@ -40,6 +40,12 @@ public nonisolated enum CGWindowList {
         return nil
     }
 
+    /// The tracked windows of the front-to-back `list`, layer 0 only, in list order, each once (8.1.1 D-18).
+    static func frontToBack(_ list: [CGWindowEntry], tracked: (UInt32) -> WindowIdentity?) -> [WindowIdentity] {
+        var seen = Set<WindowIdentity>()
+        return list.compactMap { $0.layer == 0 ? tracked($0.windowID) : nil }.filter { seen.insert($0).inserted }
+    }
+
     private static func read(_ options: CGWindowListOption) -> [CGWindowEntry]? {
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             logger.error("CG window list unavailable; skipping decisions that need it")

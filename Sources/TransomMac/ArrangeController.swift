@@ -489,7 +489,11 @@ import os
         // A press on a tab may tear it off (Pattern 7); on a button or the background it is only the strip's click.
         // A ⌃-click opens the tab context menu, so it never tears the tab off (the menu's tracking drags must not).
         let tab = strip.flatMap { event.flags.contains(.maskControl) ? nil : tabStripPanels.member(atWindowNumber: $0, point: location) }
-        let pointer = PointerEvent(kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press, pressTab: tab)
+        // One window-server read per press on a window or tab, no AX: what is really in front decides the group dwell (8.1.1 D-18).
+        let stacking = press != nil || tab != nil
+            ? CGWindowList.onScreenFrontToBack().map { CGWindowList.frontToBack($0) { self.trackedWindow(cgID: $0)?.identity } } : nil
+        let pointer = PointerEvent(
+            kind: kind, location: location, modifiers: Self.modifiers(event.flags), pressWindow: press, pressTab: tab, stacking: stacking)
         let session = arranger.drag  // mouse-up ends it
         if kind == .dragged { dragTrace.dragged += 1 }
         await run(arranger.handle(.pointer(pointer), now: .now))

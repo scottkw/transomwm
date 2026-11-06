@@ -40,6 +40,8 @@ struct TearPress: Equatable, Sendable {
     var member: WindowRef
     var group: GroupKey
     var strip: Rect
+    /// The press's stacking, for the torn tab's session (8.1.1 D-18).
+    var stacking: [WindowIdentity]?
 }
 
 /// Why a tab action changed no window (UI-SPEC Surface 2, "While paused, or Accessibility not ready").
@@ -241,14 +243,15 @@ extension Arranger {
     /// pointer, never `dragged` or a hidden member, if `point` is in the middle 50% of its frame, which wins over the
     /// docked tile beneath (UI-SPEC discretion 3; RESEARCH A1: a floater under the pointer is taken to be in front). A
     /// group's selected member stands for its group (its frame is the content rect). An excluded or never-dock window
-    /// there groups nothing. The docked tile `beneath` wins when its window was focused after the floater (D-05, WR-03).
-    /// shortcut: focus recency stands in for the window server's stacking, so a raise without a focus (an app activation
-    /// raising all its windows) can disagree; hit-test `CGWindowList.topmostWindow(at:)` in TransomMac if that shows up.
+    /// there groups nothing. The docked tile `beneath` wins when its window is in front of the floater (D-05, WR-03).
+    /// The window server's stacking from the press decides; focus recency is the fallback when none is known (8.1.1 D-18).
     func floatingGroupTarget(at point: Point, on key: DeskKey, dragging dragged: WindowRef, over beneath: NodeID?) -> GroupTarget? {
         guard let desk = world[key] else { return nil }
         let layer = desk.desktop
-        func recency(_ window: WindowRef) -> Int { focusOrder.firstIndex(of: window.identity) ?? .max }
-        // The most recently focused; with none known, the last added (`min` keeps the first of equals).
+        // Lower is further in front; a window not listed (or never focused) ranks behind every listed one.
+        let order = drag?.stacking ?? focusOrder
+        func recency(_ window: WindowRef) -> Int { order.firstIndex(of: window.identity) ?? .max }
+        // The frontmost; with none known, the last added (`min` keeps the first of equals).
         guard let top = layer.windows.reversed().filter({ floating in
             guard floating.window != dragged, floating.state == .present else { return false }
             if let group = layer.group(containing: floating.window), group.members[group.selected] != floating.window { return false }
@@ -259,7 +262,10 @@ extension Arranger {
         case .tabs(let members, let selected)?: members[selected]
         default: nil
         }
-        if let docked, recency(docked) < recency(top.window) { return nil }
+        // With stacking, a tie (neither listed) goes to the docked window, so an unknown floater never steals the drop.
+        if let docked, drag?.stacking == nil ? recency(docked) < recency(top.window) : recency(docked) <= recency(top.window) {
+            return nil
+        }
         guard let info = windows[top.window.identity], !info.isExcluded, info.kind == .dockable else { return nil }
         let frame = info.frame, band = DropZones.edgeBandFraction
         let fx = (point.x - frame.minX) / frame.width, fy = (point.y - frame.minY) / frame.height
@@ -878,6 +884,7 @@ extension Arranger {
             ?? Size(width: content.width, height: content.height)
         var session = DragSession(window: press.member, start: point, startFrame: content, modifiers: modifiers)
         session.origin = .tearOff(press.group, stripRect: press.strip, landingSize: size)
+        session.stacking = press.stacking
         session.controlAtPress = false  // a strip gets no press under ⌃, so this ⌃ went down after it (ArrangeController)
         session.kind = .move
         drag = session
