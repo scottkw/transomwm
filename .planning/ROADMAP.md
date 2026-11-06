@@ -20,7 +20,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Overview, Spaces & Displays** - Overview with Spaces bar, opt-in Mission Control takeover, per-display/per-Space layouts (completed 2026-11-01)
 - [x] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons (completed 2026-11-03)
 - [x] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `transom://` commands, layouts restored across restarts and reboots (completed 2026-11-04)
-- [ ] **Phase 08.1: Window Behaviour Options**
+- [x] **Phase 08.1: Window Behaviour Options** (completed 2026-11-05)
+- [ ] **Phase 08.1.1: Remove the Desktop Tile** - Docked windows fill the screen; floating windows sit on top like normal macOS windows
 - [ ] **Phase 9: Polish & Ship** - Settings, onboarding, launch at login, GitHub Releases update check, Homebrew cask
 
 ## Phase Details
@@ -439,7 +440,7 @@ Plans:
   4. Both choices survive a relaunch, and the Phase 9 Settings window shows them
   5. The user can dock a window to the 1st, 2nd, 3rd or 4th fourth, or the middle half, as columns or rows, by keyboard or by dragging, and windows already docked shrink to fit
 
-**Plans:** 7/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 - [x] 08.1-01-PLAN.md — Hold ⌥ on real windows: plain drag floats, 16 pt nudge snaps back, ⌥ docks with macOS's tiling kept away by the tap; UI-SPEC corrected
@@ -454,6 +455,22 @@ Plans:
 **Scope notes**: Inserted 2026-11-04 from user feedback after daily use. Settings doesn't exist until Phase 9, so the options need a home here, such as the status menu. Open for discuss-phase: where an auto-tiled window lands, which windows are never auto-tiled (dialogs, panels, excluded apps), which key is held, how that key interacts with the existing ⇧ and ⌘ drag modifiers.
 **Decided (user, 2026-11-04)**: Fourths come as columns and as rows, each with a middle half. They work from the keyboard and from drag regions. Windows already docked shrink to fit. Today's halves, thirds and quarters are snaps for floating windows only, so this is new tiling behaviour.
 **Decided (user, 2026-11-04, on Claude's recommendation; may revisit)**: Drag docking stays, and keyboard docking works in both modes. Removing drag docking was considered and rejected: it is the core value, and the keyboard can't name a position in a nested layout.
+
+### Phase 08.1.1: Remove the Desktop Tile (INSERTED)
+
+**Goal**: As a user, I want docked windows to fill the whole screen and floating windows to sit on top of them like normal macOS windows, so that I never have to learn or manage a "Desktop tile".
+**Requirements**: TBD (discuss-phase)
+**Depends on:** Phase 8.1
+**Success Criteria** (what must be TRUE):
+  1. No Desktop tile appears in any layout; docked windows share the whole visible frame
+  2. Floating windows stay visible on top of docked ones and are never hidden or parked by Transom
+  3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
+  4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
+**Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 08.1.1 to break down)
 
 ### Phase 9: Polish & Ship
 
@@ -489,5 +506,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Overview, Spaces & Displays | 12/12 | Complete    | 2026-11-01 |
 | 7. Tab Groups | 12/12 | Complete    | 2026-11-03 |
 | 8. Saved Views, URLs & Persistence | 7/7 | Complete    | 2026-11-04 |
-| 8.1. Window Behaviour Options (INSERTED) | 7/7 | In Progress | - |
+| 8.1. Window Behaviour Options (INSERTED) | 7/7 | Complete    | 2026-11-05 |
 | 9. Polish & Ship | 0/TBD | Not started | - |

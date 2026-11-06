@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-current_phase: "08.1"
-current_phase_name: Window Behaviour Options
-current_plan: 7
-status: verifying
-stopped_at: Completed 08.1-07-PLAN.md
-last_updated: "2026-11-05T01:34:29.429Z"
-last_activity: 2026-11-04
-last_activity_desc: Phase 8 complete, transitioned to Phase 08.1
-state_head: f6eb2595f38e320470733435d60237772083a33c
+current_phase: 08.1.1
+current_phase_name: Remove the Desktop Tile
+current_plan: Not started
+status: planning
+stopped_at: Phase 08.1 complete, ready to plan Phase 08.1.1
+last_updated: "2026-11-06T00:31:31.646Z"
+last_activity: 2026-11-05
+last_activity_desc: Phase 08.1 complete, transitioned to Phase 08.1.1
+state_head: 0d7aed99ab94dc2ac1134335e3a7e6fff4eb0cdf
 progress:
-  total_phases: 10
-  completed_phases: 8
+  total_phases: 11
+  completed_phases: 9
   total_plans: 105
   completed_plans: 105
-  percent: 80
+  percent: 82
 ---
 
 # Project State
@@ -28,18 +28,18 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 
 ## Current Position
 
-Phase: 08.1 — Window Behaviour Options
-Current Plan: 7
+Phase: 08.1.1 — Remove the Desktop Tile
+Current Plan: Not started
 Total Plans in Phase: 7
-Status: Phase complete — ready for verification
-Last activity: 2026-11-04 — Phase 8 complete, transitioned to Phase 08.1
+Status: Ready to plan
+Last activity: 2026-11-05 — Phase 08.1 complete, transitioned to Phase 08.1.1
 
-Progress: [████████░░] 80%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 98
+- Total plans completed: 105
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -55,6 +55,7 @@ Progress: [████████░░] 80%
 | 6 | 12 | - | - |
 | 7 | 12 | - | - |
 | 8 | 7 | - | - |
+| 08.1 | 7 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -504,7 +505,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-11-05T01:34:28.762Z
-Stopped at: Completed 08.1-07-PLAN.md
+Stopped at: Phase 08.1 complete, ready to plan Phase 08.1.1
 Resume file: None
 
 ## Deferred Verification

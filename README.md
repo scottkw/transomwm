@@ -26,6 +26,7 @@ Phases 1-8.1 of the roadmap are complete, so tiling, zoom, trackpad gestures, th
 | 7 | Tab Groups | Complete |
 | 8 | Saved Views, URLs & Persistence | Complete |
 | 8.1 | Window Behaviour Options | Complete |
+| 8.1.1 | Remove the Desktop Tile | Planned |
 | 9 | Polish & Ship | Planned |
 
 Known gap: testing so far has used a single display. The multi-display re-checks from Phases 2, 3 and 6 (unplug and re-plug, per-arrangement layouts, "Displays have separate Spaces" off, Tab between displays) are still outstanding, so treat behaviour on a second display as unverified.
@@ -171,10 +172,11 @@ On macOS 15.0 and 15.1 the defaults are ⌃⌥1–9 and ⇧⌃⌥1–9. If ⌥ w
 
 ## Planned features
 
-Phase 9 is not in the code yet. Each line summarises the goal in `.planning/ROADMAP.md`.
+Phases 8.1.1 and 9 are not in the code yet. Each line summarises the goal in `.planning/ROADMAP.md`.
 
 | Phase | Feature | Status |
 |---|---|---|
+| 8.1.1 | Remove the Desktop Tile: docked windows fill the whole screen and floating windows sit on top of them like normal macOS windows. Hide/Show Desktop Tile goes away, and saved layouts are migrated. | Planned |
 | 9 | Polish & Ship: a Settings window (gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement, New Windows, Drag to Dock), first-run onboarding, launch at login, an update check against GitHub Releases, a Homebrew cask, and a `transom://settings` URL that opens a given Settings section. | Planned |
 
 ## Requirements
