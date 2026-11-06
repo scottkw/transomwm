@@ -21,16 +21,18 @@ private func leaf(_ desk: Desk, _ window: WindowRef) throws(LayoutError) -> Node
     return id
 }
 
-/// H[a, b, Desktop]
+/// H[a, b, c]: c takes the place the Desktop tile had, so a and b keep a sibling past them (8.1.1 D-01).
 private func row(_ desk: inout Desk, _ ids: inout IDSource) throws(LayoutError) {
-    try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
     try desk.tree.insert(b, at: .right, of: try leaf(desk, a), ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.right), window: c, ids: &ids)
 }
 
-/// V[H[a, b], Desktop]
+/// V[H[a, b], c]
 private func corner(_ desk: inout Desk, _ ids: inout IDSource) throws(LayoutError) {
-    try desk.tree.insert(a, at: .top, of: .desktop, ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.bottom), window: a, ids: &ids)
     try desk.tree.insert(b, at: .right, of: try leaf(desk, a), ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.bottom), window: c, ids: &ids)
 }
 
 private func plan(_ arranger: Arranger, mins: [WindowRef: Size] = [:]) throws -> FramePlan {
@@ -94,7 +96,7 @@ private func near(_ x: Double, _ y: Double) -> Bool { abs(x - y) <= 1 }
         let na = try #require(after.frames[a]), nb = try #require(after.frames[b])
         #expect(near(na.width, ta.width + 100) && na.minX == ta.minX)
         #expect(near(nb.minX, tb.minX + 100) && nb.maxX == tb.maxX)
-        #expect(after.desktopRect == before.desktopRect)
+        #expect(after.frames[c] == before.frames[c])
         #expect(setFrames(up)[a].map { near($0.width, na.width) } ?? true, "a was not settled into its tile")
         #expect(arranger.drag == nil)
     }
@@ -137,7 +139,7 @@ private func near(_ x: Double, _ y: Double) -> Bool { abs(x - y) <= 1 }
         let na = try #require(after.frames[a]), nb = try #require(after.frames[b])
         #expect(near(nb.width, minimum.width))
         #expect(near(na.width, ta.width + 30))
-        #expect(after.desktopRect == before.desktopRect, "the Desktop paid for the resize")
+        #expect(after.frames[c] == before.frames[c], "c paid for the resize")
         // The stored weights say what the screen shows: the next drag back moves the boundary at once.
         let back = Rect(x: na.x, y: na.y, width: na.width - 20, height: na.height)
         let again = setFrames(resize(&arranger, a, grab: Point(x: na.maxX - 1, y: na.midY), by: -20, 0, to: back))
@@ -260,7 +262,7 @@ extension ArrangerResizeTests {
         let mins = [a: Size(width: 700, height: 100)]
         var arranger = try arranger(minimums: mins, row)
         let before = try plan(arranger, mins: mins)
-        let ta = try #require(before.frames[a]), tb = try #require(before.frames[b]), desktop = try #require(before.desktopRect)
+        let ta = try #require(before.frames[a]), tb = try #require(before.frames[b]), tc = try #require(before.frames[c])
         #expect(near(ta.width, 700), "a is not pinned: \(ta)")
         _ = arranger.handle(.gapDrag(try handle(arranger, 0, 1), delta: 50, ended: true), now: .now)
         #expect(arranger.history.depth(for: key) == 1)
@@ -268,8 +270,8 @@ extension ArrangerResizeTests {
         let na = try #require(after.frames[a]), nb = try #require(after.frames[b])
         #expect(near(na.width, ta.width + 50), "\(ta) became \(na)")
         #expect(near(nb.minX, tb.minX + 50) && near(nb.maxX, tb.maxX), "\(tb) became \(nb)")
-        let nd = try #require(after.desktopRect)
-        #expect(near(nd.minX, desktop.minX) && near(nd.width, desktop.width), "the Desktop moved: \(desktop) became \(nd)")
+        let nc = try #require(after.frames[c])
+        #expect(near(nc.minX, tc.minX) && near(nc.width, tc.width), "c moved: \(tc) became \(nc)")
     }
 
     @Test func aTwoChildGapWithAPinnedGrowingSideIsNotFrozen() throws {

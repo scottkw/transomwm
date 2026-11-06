@@ -13,7 +13,7 @@ private func ref(_ id: UInt32) -> WindowRef {
 
 private let a = ref(1), b = ref(2), c = ref(3)
 
-/// [a | V[b, c] | Desktop] (with `four`, V[b, c, d]) re-attached from a saved World (as ArrangerFocusTests), zoom on.
+/// [a | V[b, c]] (with `four`, V[b, c, d]) re-attached from a saved World (as ArrangerFocusTests), zoom on.
 private func nested(four: Bool = false) async throws -> Harness {
     var frames: [UInt32: Rect] = [
         1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 1000, y: 100, width: 300, height: 200),
@@ -25,7 +25,7 @@ private func nested(four: Bool = false) async throws -> Harness {
     var history = UndoHistory()
     try world.addDesk(key)
     try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         guard let left = desk.tree.leaf(containing: a) else { throw .windowNotFound(a) }
         try desk.tree.insert(b, at: .right, of: left, ids: &ids)
         guard let middle = desk.tree.leaf(containing: b) else { throw .windowNotFound(b) }
@@ -162,13 +162,12 @@ private func expectRefused(_ effects: [ArrangerEffect], _ announcement: String, 
         let one = NodeID(raw: 1), two = NodeID(raw: 2), three = NodeID(raw: 3)
         let tree = try LayoutTree(
             root: one,
-            nodes: [one: .split(axis: .horizontal, children: [two, three, .desktop], weights: [0.4, 0.4, 0.2]), two: .panel(a), three: .panel(b),
-                .desktop: .desktop(hidden: false)],
+            nodes: [one: .split(axis: .horizontal, children: [two, three], weights: [0.5, 0.5]), two: .panel(a), three: .panel(b)],
             states: [a.identity: .present, b.identity: .present])
         func resolution(_ widthTwo: Double, _ widthThree: Double) -> Resolution {
             Resolution(nodeRects: [
                 one: Rect(x: 0, y: 0, width: 1000, height: 500), two: Rect(x: 0, y: 0, width: widthTwo, height: 500),
-                three: Rect(x: widthTwo, y: 0, width: widthThree, height: 500), .desktop: Rect(x: 900, y: 0, width: 100, height: 500),
+                three: Rect(x: widthTwo, y: 0, width: widthThree, height: 500),
             ])
         }
 
@@ -462,19 +461,19 @@ private func entry(_ raw: UInt64) -> ViewEntry {
     }
 }
 
-/// H[n1 = a, n2 = V[n3 = b, n4 = c], Desktop] under root n5, with on-screen tiles side by side.
+/// H[n1 = a, n2 = V[n3 = b, n4 = c]] under root n5, with on-screen tiles side by side and nothing right of x = 800.
 private func band() throws -> (LayoutTree, [NodeID: Rect]) {
     let tree = try LayoutTree(
         root: n[5],
         nodes: [
-            n[5]: .split(axis: .horizontal, children: [n[1], n[2], .desktop], weights: [0.4, 0.4, 0.2]),
+            n[5]: .split(axis: .horizontal, children: [n[1], n[2]], weights: [0.5, 0.5]),
             n[2]: .split(axis: .vertical, children: [n[3], n[4]], weights: [0.5, 0.5]),
-            n[1]: .panel(a), n[3]: .panel(b), n[4]: .panel(c), .desktop: .desktop(hidden: false),
+            n[1]: .panel(a), n[3]: .panel(b), n[4]: .panel(c),
         ],
         states: [a.identity: .present, b.identity: .present, c.identity: .present])
     let tiles: [NodeID: Rect] = [
         n[1]: Rect(x: 0, y: 0, width: 400, height: 1000), n[3]: Rect(x: 400, y: 0, width: 400, height: 500),
-        n[4]: Rect(x: 400, y: 500, width: 400, height: 500), .desktop: Rect(x: 800, y: 0, width: 200, height: 1000),
+        n[4]: Rect(x: 400, y: 500, width: 400, height: 500),
     ]
     return (tree, tiles)
 }
@@ -505,15 +504,16 @@ private func band() throws -> (LayoutTree, [NodeID: Rect]) {
         #expect(Navigator.rectTarget(band: Rect(x: 0, y: 0, width: 0, height: 0), tiles: tiles, tree: tree) == nil)
     }
 
-    @Test func collapsedAndDesktopTilesCount() async throws {
+    /// 8.1.1 D-01: only docked leaves are tiles; the bare desktop past them holds no target.
+    @Test func onlyLeafTilesCount() async throws {
         let (tree, tiles) = try band()
-        #expect(Navigator.rectTarget(band: Rect(x: 850, y: 450, width: 100, height: 100), tiles: tiles, tree: tree) == .desktop)
-        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 450, width: 400, height: 350), tiles: tiles, tree: tree) == n[5])
+        #expect(Navigator.rectTarget(band: Rect(x: 850, y: 450, width: 100, height: 100), tiles: tiles, tree: tree) == nil)
+        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 450, width: 400, height: 350), tiles: tiles, tree: tree) == n[4])
 
-        // The engine's tiles: every leaf of the committed view on screen, the Desktop tile included, splits never.
+        // The engine's tiles: every leaf of the committed view on screen, splits never.
         var harness = try await nested()
         let shown = try harness.arranger.shownLeafRects(displayUUID: "main")
-        #expect(Set(shown.keys) == [try leaf(a, harness), try leaf(b, harness), try leaf(c, harness), .desktop])
+        #expect(Set(shown.keys) == [try leaf(a, harness), try leaf(b, harness), try leaf(c, harness)])
         try await harness.go(.node(try column(harness)))
         #expect(Set(try harness.arranger.shownLeafRects(displayUUID: "main").keys) == [try leaf(b, harness), try leaf(c, harness)])
     }

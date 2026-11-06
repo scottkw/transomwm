@@ -123,7 +123,7 @@ private func frames(_ harness: Harness) async -> [WindowRef: Rect] {
 
     /// The drag path of the same pitfall: the preview is the desk-level frame, and a release outside the view widens it.
     @Test func aFourthByDragShowsTheDeskFrameAndWidensTheCamera() async throws {
-        // [[a, b, c] | d | Desktop], viewing the inner split: it outlives a leaving it, so the view is still there to widen.
+        // [[a, b, c] | d], viewing the inner split: it outlives a leaving it, so the view is still there to widen.
         var harness = await Harness.started(frames: [
             1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120),
             3: Rect(x: 1100, y: 600, width: 150, height: 120), 4: Rect(x: 300, y: 600, width: 150, height: 120),
@@ -553,14 +553,17 @@ extension ArrangerCameraTests {
 
 /// CR-01, CR-02 (04-REVIEW): Restore All and Turn Off Zoom leave no window parked, collapsed ones included (D-D).
 extension ArrangerCameraTests {
-    /// a (870 pt tall at least, taller than the tile column; learned from a refused write) docked with zoom on,
-    /// so a is collapsed and parked; b floats.
+    /// a (870 pt tall at least, taller than the tile column; learned from a refused write) docked over c with zoom on,
+    /// so a is collapsed and parked; b floats. c stands where the Desktop tile was: alone, a would get the whole 859 pt
+    /// column, within the learner's 32 pt overflow tolerance, and nothing would be learned (8.1.1 D-01).
     private func collapsedA() async throws -> Harness {
         var harness = await Harness.started(frames: [
             1: Rect(x: 40, y: 10, width: 1360, height: 885), 2: Rect(x: 900, y: 400, width: 300, height: 200),
+            3: Rect(x: 600, y: 600, width: 200, height: 150),
         ])
+        await harness.send(.command(.dock, focused: c))
         await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 100, height: 870) }
-        // Zoom off: docked, written below its minimum, learned a second later, floated as lost room.
+        // Zoom off: docked over c, written below its minimum, learned a second later, floated as lost room.
         await harness.send(.command(.dock, focused: a))
         await harness.fake.advance(by: .seconds(1.1))
         await harness.refresh()
@@ -591,20 +594,21 @@ extension ArrangerCameraTests {
         #expect(effects.contains(.collapsedBlocks([], displayUUID: "main")))
     }
 
-    /// At home a is collapsed; zoomed to its leaf it is still collapsed, and b, floating, stays on screen (D-14).
+    /// At home a is collapsed; zoomed to its leaf it is still collapsed (c, outside the view, is parked), and b,
+    /// floating, stays on screen (D-14).
     @Test(arguments: [false, true]) func turningZoomOffWhilePausedLeavesNoWindowParked(zoomedIn: Bool) async throws {
         var harness = try await collapsedA()
         if zoomedIn {
             let move = try #require(moves(await harness.send(.zoomTo(.node(try leaf(a, harness)), displayUUID: "main"))).first)
             await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
-            try #require(await harness.fake.parked == [a.identity])
+            try #require(await harness.fake.parked == [a.identity, c.identity])
         }
         await harness.send(.command(.togglePause, focused: nil))
 
         await harness.send(.zoomEnabled(false))
 
         #expect(harness.arranger.zoomEnabled == false)
-        for window in [a, b] { try await onScreen(window, harness) }
+        for window in [a, b, c] { try await onScreen(window, harness) }
     }
 }
 

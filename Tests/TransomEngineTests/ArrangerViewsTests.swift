@@ -15,17 +15,15 @@ private func ref(_ id: UInt32) -> WindowRef {
 private let a = ref(1), b = ref(2), c = ref(3), d = ref(4)
 private let three = ViewSlot(3)!
 
-/// a, b and c docked one after another (Phase 3 tiles: a | b | (Desktop tile / c)), d floating on the Desktop unless
-/// `floater` is false, zoom on.
-private func threeDocked(floater: Bool = true) async throws -> Harness {
-    var frames: [UInt32: Rect] = [
+/// a, b, c and d docked one after another, each by its centre (tiles: a | b | (d / c)), zoom on.
+private func fourDocked() async throws -> Harness {
+    let frames: [UInt32: Rect] = [
         1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120),
-        3: Rect(x: 1100, y: 600, width: 150, height: 120),
+        3: Rect(x: 1300, y: 400, width: 100, height: 120), 4: Rect(x: 1000, y: 100, width: 200, height: 150),
     ]
-    if floater { frames[4] = Rect(x: 1000, y: 100, width: 200, height: 150) }
     var harness = await Harness.started(frames: frames)
-    for window in [a, b, c] { await harness.send(.command(.dock, focused: window)) }
-    try #require(harness.arranger.world[key].map { Set($0.tree.windows) } == [a, b, c])
+    for window in [a, b, c, d] { await harness.send(.command(.dock, focused: window)) }
+    try #require(harness.arranger.world[key].map { Set($0.tree.windows) } == [a, b, c, d])
     await harness.send(.zoomEnabled(true))
     return harness
 }
@@ -34,7 +32,7 @@ private func tree(_ harness: Harness) throws -> LayoutTree {
     try #require(harness.arranger.world[key]?.tree)
 }
 
-/// The smallest node holding `windows`' leaves (a floater's is the Desktop tile).
+/// The smallest node holding `windows`' leaves.
 private func lca(_ windows: [WindowRef], _ harness: Harness) throws -> NodeID {
     try #require(Navigator.lowestCommonAncestor(windows.compactMap { harness.arranger.leafNode(of: $0) }, in: tree(harness)))
 }
@@ -58,7 +56,7 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
     effects.compactMap { if case .announce(let text) = $0 { text } else { nil } }
 }
 
-/// Saves the (Desktop tile / c) view into slot 3 and goes home: the view holds c and d.
+/// Saves the (d / c) view into slot 3 and goes home: the view holds c and d.
 private func savedCAndD(_ harness: inout Harness) async throws -> NodeID {
     let node = try lca([c, d], harness)
     try await zoom(&harness, to: .node(node))
@@ -77,10 +75,10 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 /// node holding the windows still there.
 @Suite struct ArrangerViewsTests {
     @Test func savingThenGoingBackZoomsToTheSavedWindows() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let node = try lca([c, d], harness)
         let root = try tree(harness).root
-        try #require(node != root, "c and the Desktop tile share a split without a and b")
+        try #require(node != root, "c and d share a split without a and b")
         try await zoom(&harness, to: .node(node))
 
         let saved = await camera(.saveView(three), &harness)
@@ -97,7 +95,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func aLaterLayoutChangeStillTargetsTheSmallestNodeHoldingTheSavedWindows() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let saved = try #require(harness.arranger.leafNode(of: c))
         try await zoom(&harness, to: .node(saved))
         await camera(.saveView(three), &harness)
@@ -114,7 +112,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func theDeskHoldingMostSavedWindowsIsTheTargetAndATieGoesToTheSavedDesk() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let other = DeskKey(displayUUID: "main", spaceID: 7)  // another Space's desk, holding window 5
         try harness.arranger.world.addDesk(other)
         try harness.arranger.world.reflow(other) { desk, _ throws(LayoutError) in try desk.desktop.add(ref(5), frame: Rect(x: 100, y: 100, width: 200, height: 150)) }
@@ -130,7 +128,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func oneSavedWindowClosedGoesToTheSurvivorsLeafWithNoOtherNotice() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         _ = try await savedCAndD(&harness)
         await harness.fake.close(4)
         await harness.refresh()
@@ -144,7 +142,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func everySavedWindowClosedGoesHomeWithN17AndKeepsTheSlot() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let node = try await savedCAndD(&harness)
         try await zoom(&harness, to: .node(try #require(harness.arranger.leafNode(of: a))))
         for id: UInt32 in [3, 4] { await harness.fake.close(id) }
@@ -166,7 +164,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func everySavedWindowGoneOnADisconnectedDisplayMovesNothing() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let saved = SavedView(slot: three, desk: DeskKey(displayUUID: "unplugged", spaceID: nil), home: false, windows: [ref(99).identity])
         harness.arranger.camera.savedViews.save(saved)
 
@@ -179,7 +177,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func aHomeViewGoesBackHome() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let saved = await camera(.saveView(three), &harness)
         #expect(harness.arranger.camera.savedViews[three] == SavedView(slot: three, desk: key, home: true, windows: []))
         #expect(notices(saved) == [.viewSaved(three, replaced: false, displayUUID: "main")])
@@ -192,7 +190,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func savingDuringAMoveSavesItsTarget() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let leaf = try #require(harness.arranger.leafNode(of: a))
         try #require(moves(await harness.send(.zoomTo(.node(leaf), displayUUID: "main"))).count == 1)  // not settled
 
@@ -201,20 +199,8 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         #expect(harness.arranger.camera.savedViews[three] == SavedView(slot: three, desk: key, home: false, windows: [a.identity]))
     }
 
-    @Test func savingAViewWithNoWindowsIsRefusedAndKeepsTheSlot() async throws {
-        var harness = try await threeDocked(floater: false)
-        await camera(.saveView(three), &harness)  // home
-        try await zoom(&harness, to: .node(.desktop))
-
-        let refused = await camera(.saveView(three), &harness)
-
-        #expect(has(.beep, refused))
-        #expect(notices(refused) == [.viewNothingToSave(displayUUID: "main")])
-        #expect(harness.arranger.camera.savedViews[three] == SavedView(slot: three, desk: key, home: true, windows: []))
-    }
-
     @Test func savingOverAUsedSlotReplacesItWithoutConfirmation() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         await camera(.saveView(three), &harness)
         try await zoom(&harness, to: .node(try #require(harness.arranger.leafNode(of: a))))
 
@@ -225,7 +211,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func goingToAnEmptySlotBeepsWithN16() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
 
         let refused = await camera(.view(three), &harness)
 
@@ -235,7 +221,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func goingToTheViewAlreadyShownMovesNothingAndIsNoRefusal() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let node = try await savedCAndD(&harness)
         try await zoom(&harness, to: .node(node))
 
@@ -247,7 +233,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func pausedOrFullScreenRefusesLikeEveryCameraCommand() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         await camera(.saveView(three), &harness)
         // A display with no desk (a full-screen Space) refuses like Zoom Out to All Windows.
         for command in [CameraCommand.view(three), .saveView(three)] {
@@ -265,7 +251,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func savingTouchesNoWindowOrUndoHistoryAndGoingPushesBackHistory() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let node = try lca([c, d], harness)
         try await zoom(&harness, to: .node(node))
         let world = harness.arranger.world, history = harness.arranger.history, back = harness.arranger.camera.histories["main"]
@@ -284,7 +270,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     }
 
     @Test func goingFocusesTheMostRecentWindowInsideTheViewWhenFocusIsOutside() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         _ = try await savedCAndD(&harness)
         await harness.send(.event(.windowFocused(c)))
         await harness.send(.event(.windowFocused(a)))
@@ -299,7 +285,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// VIEW-02, D-14: a view written to layout.json and loaded by a fresh Arranger lands on the same windows.
     @Test func aViewSurvivesASnapshotAndARestore() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let node = try await savedCAndD(&harness)
         let snapshot = harness.arranger.snapshot
         #expect(snapshot.views.map(\.slot) == [three] && snapshot.views.first?.windows == [c.identity, d.identity])
@@ -316,7 +302,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// D-02, RESEARCH Pitfall 3: a rekey rewrites the identity in every view, so going there still frames the window.
     @Test func aWindowRekeyRewritesTheIdentityInEveryView() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let node = try await savedCAndD(&harness)
         let four = ViewSlot(4)!
         try await zoom(&harness, to: .node(node))
@@ -334,7 +320,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// The remap keeps slots sorted and each window list sorted and unique: an unsorted list would make layout.json invalid.
     @Test func aRemapKeepsTheViewsSortedAndUnique() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         _ = try await savedCAndD(&harness)
         let five = ViewSlot(5)!
         await camera(.saveView(five), &harness)
@@ -353,7 +339,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// RESEARCH Pitfall 3: a relaunch match rewrites the loaded view; the view lands on the windows that came back.
     @Test func aRelaunchMatchRewritesTheLoadedViews() async throws {
-        var source = try await threeDocked()
+        var source = try await fourDocked()
         for (id, title) in [(UInt32(1), "Notes"), (2, "Plan"), (3, "Chart"), (4, "Mail")] { await source.fake.update(id) { $0.title = title } }
         _ = await source.refresh()
         _ = try await savedCAndD(&source)
@@ -380,7 +366,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// After a reboot a returning window can carry another saved window's ID: the view must not chain the two rewrites.
     @Test func matchesOnReusedIdentitiesAreRemappedTogether() async throws {
-        var source = try await threeDocked()
+        var source = try await fourDocked()
         for (id, title) in [(UInt32(1), "Notes"), (2, "Plan"), (3, "Chart"), (4, "Mail")] { await source.fake.update(id) { $0.title = title } }
         _ = await source.refresh()
         _ = try await savedCAndD(&source)  // c and d: "Chart" and "Mail"
@@ -403,7 +389,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// UI-SPEC Surface 1: a saved view reaches layout.json with the next debounced save, though no window changed (CR-01).
     @Test func savingAViewSchedulesASave() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         let saved = await camera(.saveView(three), &harness)
         #expect(notices(saved).count == 1)
         #expect(has(.save(.debounced), saved))
@@ -413,7 +399,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// D-05: an identity no desk holds is pruned at the snapshot; a view left with none keeps its slot and desk and goes home.
     @Test func theSnapshotPrunesIdentitiesNoDeskHolds() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         _ = try await savedCAndD(&harness)
         await harness.fake.close(3)
         _ = await harness.refresh()
@@ -428,7 +414,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
 
     /// The shell's view of a slot (D-03): where it goes, before any Space is switched.
     @Test func theDestinationNamesTheDeskTargetAndWhetherAllAreGone() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         #expect(harness.arranger.viewDestination(slot: three) == nil, "an empty slot has none")
         let node = try await savedCAndD(&harness)
         var destination = try #require(harness.arranger.viewDestination(slot: three))
@@ -456,10 +442,12 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
         await harness.fake.open(.standard(id: 1, pid: pid, frame: onMain))
         await harness.fake.open(.standard(id: 2, pid: pid, frame: Rect(x: 1480, y: 80, width: 320, height: 232)))
+        await harness.fake.open(.standard(id: 3, pid: pid, frame: Rect(x: 2900, y: 600, width: 320, height: 232)))
         await harness.fake.refreshAll()
         _ = await harness.inbox.take()
         await harness.send(.inventory(await harness.fake.inventory()))
-        await harness.send(.command(.dock, focused: b))
+        // c docked beside b, so b's leaf is not the side desk's root (which would be the home view).
+        for window in [b, c] { await harness.send(.command(.dock, focused: window)) }
         await harness.send(.zoomEnabled(true))
         let leaf = try #require(harness.arranger.leafNode(of: b))
         let toLeaf = try #require(moves(await harness.send(.zoomTo(.node(leaf), displayUUID: "side"))).first)
@@ -482,7 +470,7 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
     /// UI-SPEC: every window gone and the saved Space no longer there: the shell addresses the saved display, which goes
     /// home on the Space it shows, with N17.
     @Test func allGoneOnAMissingSpaceGoesHomeOnTheDisplaysCurrentSpace() async throws {
-        var harness = try await threeDocked()
+        var harness = try await fourDocked()
         harness.arranger.camera.savedViews.save(SavedView(slot: three, desk: DeskKey(displayUUID: "main", spaceID: 99), home: false, windows: [ref(77).identity]))
         try await zoom(&harness, to: .node(try #require(harness.arranger.leafNode(of: a))))
 
