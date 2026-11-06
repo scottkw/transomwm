@@ -17,7 +17,8 @@ public enum Neighbours {
     /// The nearest placed leaf across `edge` of `rect`, or nil. A candidate must
     /// start past `rect`'s edge, less `gap + 1` pt of slack, and overlap it on the perpendicular axis by
     /// more than 0. The smallest edge distance wins; ties go to the earliest entry of `recency`, then the
-    /// smaller NodeID. `excluding` is the leaf `rect` belongs to; nil for a floating window's frame.
+    /// smaller NodeID. `excluding` is the leaf `rect` belongs to; nil for a floating window's frame. An empty area is never
+    /// a neighbour (8.1.1 D-16, E7), so Focus, Move Window and the waiting-tile filter skip it.
     public static func neighbour(
         of rect: Rect, excluding leaf: NodeID?, toward edge: Edge, tree: LayoutTree, resolution: Resolution, gap: Double, recency: [NodeID]
     ) -> NodeID? {
@@ -25,6 +26,7 @@ public enum Neighbours {
         var best: (distance: Double, rank: Int, id: NodeID)?
         for (id, other) in resolution.nodeRects where id != leaf {
             if case .split? = tree.node(id) { continue }
+            if tree.node(id) == .spacer { continue }
             let distance: Double
             let overlap: Double
             switch edge {

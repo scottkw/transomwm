@@ -397,3 +397,29 @@ extension ArrangerResizeTests {
         #expect(!later.contains { if case .fault = $0 { true } else { false } }, "\(later)")
     }
 }
+
+/// [a .5 | empty .5]: a at the left half, the right half empty (8.1.1 D-16).
+private func leftHalf(_ desk: inout Desk, _ ids: inout IDSource) throws(LayoutError) {
+    try desk.tree.insertFourth(.panel(a), states: [a.identity: .present], slot: .firstHalf, axis: .horizontal, ids: &ids)
+}
+
+extension ArrangerResizeTests {
+    /// 8.1.1 D-16, E7: the gap between a docked window and an empty area has a handle, and dragging it 100 pt right grows
+    /// the window into the empty area in one undo step.
+    @Test func aGapHandleGrowsAWindowIntoAnEmptyArea() throws {
+        var arranger = try arranger(leftHalf)
+        let before = try plan(arranger)
+        let ta = try #require(before.frames[a])
+        let h = try handle(arranger, 0, 1)
+        let empty = try #require(before.resolution.nodeRects.first { arranger.world[key]?.tree.node($0.key) == .spacer }?.value)
+
+        _ = arranger.handle(.gapDrag(h, delta: 100, ended: true), now: .now)
+
+        #expect(arranger.history.depth(for: key) == 1)
+        let after = try plan(arranger)
+        let na = try #require(after.frames[a])
+        #expect(near(na.width, ta.width + 100) && na.minX == ta.minX)
+        let shrunk = try #require(after.resolution.nodeRects.first { arranger.world[key]?.tree.node($0.key) == .spacer }?.value)
+        #expect(near(shrunk.width, empty.width - 100) && shrunk.maxX == empty.maxX)
+    }
+}

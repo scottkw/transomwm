@@ -176,6 +176,30 @@ private func expectRefused(_ effects: [ArrangerEffect], _ announcement: String, 
         #expect(Navigator.stepIn(view: .node(two), tree: tree, resolution: resolution(450, 450), focusedLeaf: nil, pointer: nil) == nil)
     }
 
+    /// 8.1.1 D-16, E7: Step In and Move View never land on an empty area. [a .25 | empty .5 | b .25]: the pointer over
+    /// the empty area, or none, picks the largest docked child (a and b tie: the lower NodeID); a's right is nothing.
+    @Test func stepInAndPanNeverPickAnEmptyArea() throws {
+        let one = NodeID(raw: 1), two = NodeID(raw: 2), three = NodeID(raw: 3), four = NodeID(raw: 4)
+        let tree = try LayoutTree(
+            root: one,
+            nodes: [one: .split(axis: .horizontal, children: [two, three, four], weights: [0.25, 0.5, 0.25]), two: .panel(a), three: .spacer, four: .panel(b)],
+            states: [a.identity: .present, b.identity: .present])
+        let r = try resolve(tree, in: Rect(x: 0, y: 0, width: 1000, height: 500), mins: [:], gap: 8)
+        #expect(Navigator.stepIn(view: .home, tree: tree, resolution: r, focusedLeaf: nil, pointer: Point(x: 500, y: 250)) == two)
+        #expect(Navigator.stepIn(view: .home, tree: tree, resolution: r, focusedLeaf: nil, pointer: nil) == two)
+        #expect(Navigator.stepIn(view: .home, tree: tree, resolution: r, focusedLeaf: nil, pointer: Point(x: 900, y: 250)) == four)
+        #expect(Navigator.pan(view: .node(two), edge: .right, tree: tree, homeResolution: r, gap: 8, recency: []) == nil)
+    }
+
+    /// E7: the zoom band preview draws no tile for an empty area.
+    @Test func theBandPreviewDrawsNoEmptyArea() async throws {
+        var harness = await Harness.started(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232)])
+        await harness.send(.zoomEnabled(true))
+        await harness.send(.command(.dockFourth(.firstHalf, .horizontal), focused: a))
+        let leafA = try #require(harness.arranger.leafNode(of: a))
+        #expect(try harness.arranger.shownLeafRects(displayUUID: "main").keys.sorted() == [leafA])
+    }
+
     @Test func stepInOnASingleLeafIsRefused() async throws {
         var harness = try await nested()
         try await harness.go(.node(try leaf(a, harness)))

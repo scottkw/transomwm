@@ -35,6 +35,17 @@ private func neighbour(_ t: LayoutTree, of leaf: NodeID, _ edge: Edge, recency: 
 }
 
 @Suite struct NeighbourTests {
+    /// 8.1.1 D-16, E7: an empty area is never a neighbour. [a .25 | empty .5 | b .25]: right of a is b; [a .5 | empty .5]: none.
+    @Test func anEmptyAreaIsNeverANeighbour() throws {
+        let across = try tree(root: 1, [
+            1: .split(axis: .horizontal, children: [n(2), n(3), n(4)], weights: [0.25, 0.5, 0.25]), 2: .panel(a), 3: .spacer, 4: .panel(b),
+        ])
+        #expect(try neighbour(across, of: n(2), .right) == n(4))
+        #expect(try neighbour(across, of: n(4), .left) == n(2))
+        let half = try tree(root: 1, [1: .split(axis: .horizontal, children: [n(2), n(3)], weights: [0.5, 0.5]), 2: .panel(a), 3: .spacer])
+        #expect(try neighbour(half, of: n(2), .right) == nil)
+    }
+
     @Test func neighbourAcrossEachEdge() throws {
         let t = try ab()
         #expect(try neighbour(t, of: n(2), .right) == n(3))

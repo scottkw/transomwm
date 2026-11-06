@@ -77,9 +77,10 @@ public enum Navigator {
 
     /// One level down from the view's node: the child toward `focusedLeaf` when it is in view, else the child under
     /// `pointer` in `resolution` (the view's on-screen one), else the largest child by area, ties to the lower NodeID.
-    /// Nil on a leaf (a tab group is a leaf).
+    /// Nil on a leaf (a tab group is a leaf). An empty area is never picked (8.1.1 D-16, E7).
     public static func stepIn(view: ViewTarget, tree: LayoutTree, resolution: Resolution, focusedLeaf: NodeID?, pointer: Point?) -> NodeID? {
-        guard let node = node(of: view, in: tree), case .split(_, let children, _)? = tree.node(node) else { return nil }
+        guard let node = node(of: view, in: tree), case .split(_, let all, _)? = tree.node(node) else { return nil }
+        let children = all.filter { tree.node($0) != .spacer }
         if let focusedLeaf {
             let path = ancestors(of: focusedLeaf, in: tree)
             if let i = path.firstIndex(of: node), i + 1 < path.count { return path[i + 1] }
@@ -92,12 +93,12 @@ public enum Navigator {
     /// The node across `edge` of the view's node in the home resolution, at the same depth (edges from the root): its
     /// near side within `gap + 1` pt of the view's far side and overlapping it on the other axis. The longest overlap
     /// wins, ties to the earliest in `recency` (the most recently viewed), then the lower NodeID. Nil at home.
-    /// `Neighbours.neighbour` skips splits, hence this variant.
+    /// `Neighbours.neighbour` skips splits, hence this variant. An empty area is never a view (E7).
     public static func pan(view: ViewTarget, edge: Edge, tree: LayoutTree, homeResolution: Resolution, gap: Double, recency: [NodeID]) -> NodeID? {
         guard case .node(let id) = view, let rect = homeResolution.nodeRects[id] else { return nil }
         let depth = ancestors(of: id, in: tree).count
         var best: (overlap: Double, rank: Int, id: NodeID)?
-        for (other, candidate) in homeResolution.nodeRects where other != id && ancestors(of: other, in: tree).count == depth {
+        for (other, candidate) in homeResolution.nodeRects where other != id && tree.node(other) != .spacer && ancestors(of: other, in: tree).count == depth {
             let distance: Double, overlap: Double
             switch edge {
             case .right: distance = candidate.minX - rect.maxX
@@ -206,13 +207,14 @@ extension Arranger {
         return true
     }
 
-    /// Every leaf of that display's committed view with its on-screen rect: collapsed tiles included, splits never. The band preview's `tiles` (04-06); empty for a display with no desk.
+    /// Every leaf of that display's committed view with its on-screen rect: collapsed tiles included, splits and empty
+    /// areas never (8.1.1 D-16, E7). The band preview's `tiles` (04-06); empty for a display with no desk.
     public func shownLeafRects(displayUUID uuid: String) throws(LayoutError) -> [NodeID: Rect] {
         guard let display = displays.first(where: { $0.uuid == uuid }), let desk = world[Self.key(display)] else { return [:] }
         let plan = try ViewPlanner.plan(
             desk: desk, view: resolvedView(for: Self.key(display)), area: display.visibleFrame, gap: gap, mins: minimums,
             collapsible: camera.collapsible)
-        return plan.resolution.nodeRects.filter { if case .split? = desk.tree.node($0.key) { false } else { true } }
+        return plan.resolution.nodeRects.filter { switch desk.tree.node($0.key) { case .split?, .spacer?: false; default: true } }
     }
 
     /// The docked window's leaf; nil for a floating window (8.1.1 UI-SPEC Surface 2).
