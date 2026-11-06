@@ -58,7 +58,7 @@ public enum PreviewState: Equatable, Sendable {
     case swap(target: Rect, origin: Rect)
     /// The tile a docked window goes back to, with an optional label.
     case snapBack(Rect, label: String?)
-    /// Where a floating window lands, clamped inside the Desktop tile.
+    /// Where a floating window lands, clamped inside the visible frame.
     case clamp(Rect)
     /// Zoom on: the drop is accepted and windows collapse (ZOOM-13). The frame the window would get if minimum sizes
     /// were ignored, labelled with who collapses (`CollapseCopy`).

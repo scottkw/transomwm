@@ -15,7 +15,7 @@ public enum LayoutRestore {
     /// or synthetic ID): the identity can't mean both, so they go through the close path (`World.apply(.closed, …)` with a
     /// throwaway history). shortcut: such a tile closes instead of waiting; re-point it to a free identity if that is ever
     /// seen outside a reboot's rare collision. `unplaced` are the tracked dockable, present, non-excluded windows no desk
-    /// holds afterwards; the caller floats them on their desk's Desktop. Throws only if closing or re-pointing a saved
+    /// holds afterwards; the caller floats them on their desk. Throws only if closing or re-pointing a saved
     /// window leaves an invalid World; the caller then starts empty.
     public static func reattach(
         _ saved: World, tracked: [WindowInfo], live: [CGWindowEntry]? = [], savedFrames: [WindowIdentity: Rect] = [:],

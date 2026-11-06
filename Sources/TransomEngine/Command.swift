@@ -13,7 +13,7 @@ public enum Command: Hashable, Sendable {
     /// Don't Arrange the frontmost app (TILE-18, D-29). The shell handles it with its exclusion list; the window
     /// system's `windowChanged` events then tell the Arranger.
     case toggleExcludeFrontmost
-    /// Move a docked window into the tile across that edge, or snap a floating one to that half of the Desktop tile
+    /// Move a docked window into the tile across that edge, or snap a floating one to that half of the visible frame
     /// (D-09, D-11, TILE-13, TILE-14).
     case moveOrSnap(Edge)
     /// Dock the focused window, or move it if docked, to a share of the whole desk (TILE-23, D-14, D-15).
@@ -25,7 +25,7 @@ public enum Command: Hashable, Sendable {
     /// Balance or flip the focused tile's parent split; rotate the whole layout from the desk's root split (TILE-12,
     /// D-32). Rotate's hotkey name stays `rotateSplit` (Pitfall 13).
     case balanceSplit, rotateSplit, flipSplit
-    /// Snap a floating window to a target inside the Desktop tile (TILE-14).
+    /// Snap a floating window to a target inside the visible frame (TILE-14).
     case snap(SnapTarget)
     /// Dock every eligible floating window, or float every docked one, on the target desk: one undo step (TILE-16).
     case arrangeAll, floatAll

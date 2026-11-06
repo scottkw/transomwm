@@ -31,7 +31,7 @@ extension World {
     /// Decodes a saved World. Throws `.newerVersion` for a file written by a newer Transom: the caller
     /// should tell the user it was "saved by a newer version of Transom" and must not overwrite the file
     /// (threat T-01-10). Files older than schema 1, the oldest `World.init(from:)` reads itself (as legacy, dropping the
-    /// Desktop tile), are upgraded through `migrations` to schema 1 one version at a time.
+    /// old Desktop node), are upgraded through `migrations` to schema 1 one version at a time.
     public static func decode(from data: Data, migrations: MigrationChain) throws(PersistenceError) -> World {
         guard data.count <= maxEncodedBytes else { throw .tooLarge(bytes: data.count, limit: maxEncodedBytes) }
         struct VersionProbe: Decodable { let schemaVersion: Int }

@@ -674,7 +674,7 @@ public struct Arranger: Sendable {
 
     private struct Slot: Equatable {
         let desk: DeskKey
-        /// nil on the Desktop layer.
+        /// nil on the floating layer.
         let leaf: NodeID?
     }
 
@@ -850,7 +850,7 @@ public struct Arranger: Sendable {
         return moves
     }
 
-    /// The one-shot return of floating windows a hidden Desktop tile parked in a layout.json of schema 3 or older (8.1.1
+    /// The one-shot return of floating windows a hidden legacy Desktop node parked in a layout.json of schema 3 or older (8.1.1
     /// D-02): each one still at its park rect, with a home frame, goes to that frame clamped onto its desk's display. An OS
     /// fact, so no undo step. One-shot because `handle` clears floater home frames on every desk.
     mutating func bringBackParked() -> [WindowCommand] {
@@ -932,7 +932,7 @@ public struct Arranger: Sendable {
         }
     }
 
-    /// Whether `window` floats on a desk's Desktop layer: which of Move Window or Snap Floating Window the menu enables.
+    /// Whether `window` floats on a desk's floating layer: which of Move Window or Snap Floating Window the menu enables.
     public func isFloating(_ window: WindowRef?) -> Bool {
         window.map { window in world.desks.values.contains { $0.desktop.contains(window) } } ?? false
     }
@@ -1068,7 +1068,7 @@ public struct Arranger: Sendable {
                 // The pressed window may be crossing displays; where it lands is decided at mouse-up.
                 if drag?.window != info.window { try rehome(info) }
             }
-            // A window that just became dockable, present or known floats on its display's Desktop layer (D-24). A new one
+            // A window that just became dockable, present or known floats on its display's floating layer (D-24). A new one
             // may dock first, after re-matching and before `admit` (D-05, D-31).
             if let subject, let info = windows[subject] {
                 if case .windowCreated = event, !filled { faults += autoTile(info, now: now) }
@@ -1257,7 +1257,7 @@ public struct Arranger: Sendable {
             .compactMap { $0 }).min()
     }
 
-    /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's Desktop layer, at its own
+    /// Puts a dockable, present, non-excluded window that no desk holds on its own Space's floating layer, at its own
     /// frame. Never docks it (TILE-07). Creates the desk the first time such a window is seen there, so a fullscreen
     /// Space, which holds no present window, never gets one (WIN-07).
     private mutating func admit(_ info: WindowInfo) throws(LayoutError) {
@@ -1289,7 +1289,7 @@ public struct Arranger: Sendable {
         return effects + replan()
     }
 
-    /// A docked window, or a floating group's member, whose app was just excluded floats on its desk's Desktop at its
+    /// A docked window, or a floating group's member, whose app was just excluded floats on its desk at its
     /// current frame, out of any group (D-29, TILE-18). A hidden member floats at its group's content rect instead, where
     /// the window system's last write before the exclusion put it (`releaseFrames(forExcluding:)`, CR-01). An OS fact:
     /// it goes through `World.reflow`, with no undo step, and its neighbours take its room at the re-plan.
@@ -1502,7 +1502,7 @@ public struct Arranger: Sendable {
         finderExpectation = nil
         let drop = expected.target.map { DropTarget.tile($0, .edge(expected.edge)) } ?? .layoutEdge(expected.edge)
         var candidate = world, candidateHistory = history
-        // Finder may open the window on another display: it leaves that Desktop first (an OS fact, no undo step).
+        // Finder may open the window on another display: it leaves that desk's floating layer first (an OS fact, no undo step).
         if from != expected.key {
             try candidate.reflow(from) { desk, _ throws(LayoutError) in try desk.desktop.remove(info.window) }
             if candidate[expected.key] == nil { try candidate.addDesk(expected.key) }

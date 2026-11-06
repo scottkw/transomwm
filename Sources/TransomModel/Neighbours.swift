@@ -14,7 +14,7 @@ public struct TreeBoundary: Equatable, Sendable {
 /// Which tile lies across an edge, for the direction commands (D-11, TILE-13), and which split boundary
 /// an edge drag moves (D-07).
 public enum Neighbours {
-    /// The nearest placed leaf (the Desktop tile included) across `edge` of `rect`, or nil. A candidate must
+    /// The nearest placed leaf across `edge` of `rect`, or nil. A candidate must
     /// start past `rect`'s edge, less `gap + 1` pt of slack, and overlap it on the perpendicular axis by
     /// more than 0. The smallest edge distance wins; ties go to the earliest entry of `recency`, then the
     /// smaller NodeID. `excluding` is the leaf `rect` belongs to; nil for a floating window's frame.

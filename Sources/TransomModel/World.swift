@@ -10,7 +10,7 @@ public struct Desk: Codable, Equatable, Sendable {
         self.desktop = desktop
     }
 
-    /// True when `window` is docked in the tree or floats on the Desktop layer.
+    /// True when `window` is docked in the tree or floats on the floating layer.
     public func contains(_ window: WindowRef) -> Bool {
         tree.state(of: window) != nil || desktop.contains(window)
     }
@@ -96,7 +96,7 @@ public struct World: Codable, Equatable, Sendable {
     /// The load path (`init(from:)` uses it). Besides `validate()`, requires `ids` to have half its range
     /// left, which no real session approaches, so a hostile file cannot load with an ID source about to
     /// run out. Edits are not held to this bound: they stop only where `IDSource.make()` throws. Also
-    /// requires `ids.next >= 1`: IDs start at 1, and a legacy file's Desktop tile was NodeID 0.
+    /// requires `ids.next >= 1`: IDs start at 1, and a legacy file's Desktop node was NodeID 0.
     public init(ids: IDSource, desks: [DeskKey: Desk]) throws(LayoutError) {
         guard ids.next >= 1 else { throw .invariantViolated("ID source 0 is reserved") }
         guard ids.next <= UInt64.max / 2 else {
@@ -212,7 +212,7 @@ public struct World: Codable, Equatable, Sendable {
     }
 
     /// An OS fact (02-16): macOS corrected `from`'s ID to `to`, and it is the same window. Re-points it on
-    /// whichever desk holds it (panel, tab or Desktop layer, keeping its state and frame) and in every undo
+    /// whichever desk holds it (panel, tab or floating layer, keeping its state and frame) and in every undo
     /// snapshot, so a later undo brings it back under its new ID (Pitfall 3). Pushes no undo step. A window no
     /// desk holds is re-pointed in the snapshots only. If a desk already holds `to`, the tracker merged two
     /// entries: `from` is closed instead, exactly as `apply(.closed, …)`, so no window is held twice. Any throw
@@ -232,7 +232,7 @@ public struct World: Codable, Equatable, Sendable {
         history.rekey(from: from, to: to)
     }
 
-    /// An OS fact (D-11): `window` is the window `placeholder` was waiting for. It leaves any Desktop layer and takes the
+    /// An OS fact (D-11): `window` is the window `placeholder` was waiting for. It leaves any floating layer and takes the
     /// placeholder's place (a panel or a tab position, with the selection; a floating one keeps its frame and group), with
     /// its own state, or present when no desk holds it yet. Every undo snapshot follows: `window`'s entries go, and
     /// `placeholder` is re-pointed to it. Pushes no undo step. Throws `windowNotFound` when no desk holds the placeholder and
@@ -301,7 +301,7 @@ public struct World: Codable, Equatable, Sendable {
         let desk: Desk
     }
 
-    /// Schema 1 (layout.json schema 3 and older): each desk's tree drops its Desktop tile (8.1.1 D-02).
+    /// Schema 1 (layout.json schema 3 and older): each desk's tree drops its legacy Desktop node (8.1.1 D-02).
     private struct LegacyDeskRecord: Decodable {
         let key: DeskKey
         let desk: LegacyDesk

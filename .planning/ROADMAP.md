@@ -506,7 +506,7 @@ Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Standard patterns; port gifsmith's GitHub Releases updater (`~/dev/gifsmith/internal/update`, `internal/services/updates.go`) to Swift; notarisation and Homebrew are well documented (Rectangle and Amethyst casks as models)
-**Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Transom" for existing macOS apps before release.
+**Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Transom" for existing macOS apps before release. From 08.1 UAT and 8.1.1 D-12: a collapsed block can read as a minimized window; the Desktop tile was not the cause (RESEARCH D-12 Investigation).
 
 ## Progress
 
