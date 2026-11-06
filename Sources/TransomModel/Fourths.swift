@@ -61,8 +61,10 @@ enum FourthPiece: Equatable {
 }
 
 extension LayoutTree {
-    /// `node` takes exactly `slot`'s span of the whole desk along `axis` (8.1.1 D-16, rule E1). The caller has already
-    /// taken the window off the desk. All-or-nothing, like every tree edit.
+    /// `node` takes exactly `slot`'s span of the whole desk along `axis` (8.1.1 D-16, rule E1). Empty space is used first
+    /// and docked windows shrink only when it runs out (E2); a side left short stays empty and nothing grows (E3). A root
+    /// split the other way is one child, with its empty margins used first. The caller has already taken the window off
+    /// the desk. All-or-nothing, like every tree edit.
     public mutating func insertFourth(
         _ node: Node, states: [WindowIdentity: WindowState], slot: FourthSlot, axis: Axis, ids: inout IDSource
     ) throws(LayoutError) {
@@ -95,8 +97,17 @@ extension LayoutTree {
                         pieces.append(.tile(child, weight / room))
                     }
                 }
+            } else if takesPart(root) {
+                // A leaf, or a split the other way: one child, whose empty margins along `axis` are used first (E2).
+                let (lead, trail) = margins(of: root, axis: axis)
+                if lead + trail < 1 - Self.minWeight {
+                    next.trimMargins(of: root, axis: axis, lead: lead, trail: trail)
+                    pieces = [.empty(lead), .tile(root, 1 - lead - trail), .empty(trail)]
+                } else {
+                    pieces = [.tile(root, 1)]
+                }
             } else {
-                pieces = [takesPart(root) ? .tile(root, 1) : .absent(root, 1)]
+                pieces = [.absent(root, 1)]
             }
         }
         var children: [NodeID] = []
@@ -145,6 +156,80 @@ extension LayoutTree {
         case .spacer?: true
         case nil: false
         }
+    }
+
+    /// The empty length at each end of `id` along `axis`, as fractions of its length (E2). An empty area is all margin and
+    /// a window has none. A split along `axis` has its leading (trailing) empty areas plus the margin of the first (last)
+    /// child that isn't one; a split across it has its children's smallest. Recursion is bounded by `maxDepth`.
+    func margins(of id: NodeID, axis: Axis) -> (lead: Double, trail: Double) {
+        switch nodes[id] {
+        case .spacer?:
+            return (1, 1)
+        case let .split(splitAxis, children, weights)?:
+            let parts = zip(children, weights).filter { takesPart($0.0) }
+            guard splitAxis == axis else {
+                let each = parts.map { margins(of: $0.0, axis: axis) }
+                return (each.map(\.lead).min() ?? 0, each.map(\.trail).min() ?? 0)
+            }
+            let room = parts.reduce(0) { $0 + $1.1 }
+            func margin(_ parts: [(NodeID, Double)], trailing: Bool) -> Double {
+                var length = 0.0
+                for (child, weight) in parts {
+                    guard nodes[child] != .spacer else {
+                        length += weight / room
+                        continue
+                    }
+                    let inner = margins(of: child, axis: axis)
+                    return length + (trailing ? inner.trail : inner.lead) * weight / room
+                }
+                return length
+            }
+            return (margin(parts, trailing: false), margin(parts.reversed(), trailing: true))
+        default:
+            return (0, 0)
+        }
+    }
+
+    /// Removes `lead` and `trail` (fractions of its length along `axis`, at most its `margins`) from the ends of `id`: the
+    /// same length from every child of a split across `axis`, and from the leading (trailing) empty areas, then the first
+    /// (last) other child, of a split along it. An empty area used up leaves; `normalize` collapses what remains.
+    mutating func trimMargins(of id: NodeID, axis: Axis, lead: Double, trail: Double) {
+        guard lead > 0 || trail > 0, case let .split(splitAxis, children, weights)? = nodes[id] else { return }
+        guard splitAxis == axis else {
+            for child in children where takesPart(child) { trimMargins(of: child, axis: axis, lead: lead, trail: trail) }
+            return
+        }
+        let room = zip(children, weights).reduce(0) { takesPart($1.0) ? $0 + $1.1 : $0 }
+        var lengths = weights.map { $0 / room }
+        func cut(_ order: [Int], _ amount: Double, trailing: Bool) {
+            var rest = amount
+            for i in order where takesPart(children[i]) && rest > 1e-12 {
+                if nodes[children[i]] == .spacer {
+                    let used = min(lengths[i], rest)
+                    lengths[i] -= used
+                    rest -= used
+                } else {
+                    let share = rest / lengths[i]
+                    trimMargins(of: children[i], axis: axis, lead: trailing ? 0 : share, trail: trailing ? share : 0)
+                    lengths[i] -= rest
+                    return
+                }
+            }
+        }
+        cut(Array(children.indices), lead, trailing: false)
+        cut(children.indices.reversed(), trail, trailing: true)
+        var kept: [NodeID] = []
+        var keptWeights: [Double] = []
+        for (i, child) in children.enumerated() {
+            if nodes[child] == .spacer && lengths[i] < 1e-9 {
+                nodes[child] = nil
+            } else {
+                kept.append(child)
+                keptWeights.append(takesPart(child) ? lengths[i] * room : weights[i])
+            }
+        }
+        let sum = keptWeights.reduce(0, +)
+        nodes[id] = .split(axis: axis, children: kept, weights: keptWeights.map { $0 / sum })
     }
 
     /// The pieces in their new order, the window's exactly `span` (8.1.1 D-16). Empty areas under the span are used up

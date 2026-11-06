@@ -67,7 +67,11 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
                 let slot = FourthSlot.allCases.randomElement(using: &rng)!
                 let axis: Axis = Bool.random(using: &rng) ? .horizontal : .vertical
                 // Too deep or too full: nothing changed, so there's nothing to record.
-                guard (try? tree.insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)) != nil else { continue }
+                let unchanged = tree
+                guard (try? tree.insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)) != nil else {
+                    #expect(tree == unchanged, "a failed fourth changed the tree")
+                    continue
+                }
                 expected.insert(window.identity)
             case 10:
                 // Rule E4: a window leaf (a whole tab group) leaves an empty area behind.

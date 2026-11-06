@@ -94,6 +94,24 @@ private let table: [FourthTableRow] = [
     FourthTableRow(before: threeDocked, slot: .middle, after: [("A", 1.0 / 4), ("W", 1.0 / 2), ("B", 1.0 / 6), ("C", 1.0 / 12)]),
 ]
 
+private let leftHalf = [("A", 1.0 / 2), ("_", 1.0 / 2)]
+
+/// 8.1.1 D-16, rules E2 and E3: empty space is used first, a tile moved aside keeps its length, and nothing grows.
+private let emptyFirst: [FourthTableRow] = [
+    // E2: the empty area is filled and A doesn't move.
+    FourthTableRow(before: leftHalf, slot: .secondHalf, after: [("A", 1.0 / 2), ("W", 1.0 / 2)]),
+    FourthTableRow(before: leftHalf, slot: .fourth, after: [("A", 1.0 / 2), ("_", 1.0 / 4), ("W", 1.0 / 4)]),
+    FourthTableRow(before: leftHalf, slot: .third, after: [("A", 1.0 / 2), ("W", 1.0 / 4), ("_", 1.0 / 4)]),
+    // E2: A keeps its length and moves right into the empty area.
+    FourthTableRow(before: leftHalf, slot: .firstThird, after: [("W", 1.0 / 3), ("A", 1.0 / 2), ("_", 1.0 / 6)]),
+    // E2: no empty area on A's side, so A shrinks.
+    FourthTableRow(before: leftHalf, slot: .middle, after: [("A", 1.0 / 4), ("W", 1.0 / 2), ("_", 1.0 / 4)]),
+    // E3: B moves aside and the space it leaves stays empty.
+    FourthTableRow(before: [("A", 0.25), ("B", 0.75)], slot: .third, after: [("A", 1.0 / 4), ("_", 1.0 / 4), ("W", 1.0 / 4), ("B", 1.0 / 4)]),
+    // E2: A moves into the empty area on its side and keeps its length.
+    FourthTableRow(before: [("_", 0.25), ("A", 0.5), ("_", 0.25)], slot: .firstHalf, after: [("W", 1.0 / 2), ("A", 1.0 / 2)]),
+]
+
 private let otherWay: [(FourthSlot, [(String, Double)])] = [
     (.first, [("W", 1.0 / 4), ("(…)", 3.0 / 4)]),
     // E1, E3: the side with no tile stays empty.
@@ -108,6 +126,51 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
         let tree = try inserted(try flat(row.before, axis), row.slot, axis)
         expectChildren(tree, row.after)
         if case let .split(rootAxis, _, _)? = tree.root.flatMap(tree.node) { #expect(rootAxis == axis) }
+    }
+
+    @Test(arguments: emptyFirst, [Axis.horizontal, .vertical])
+    func emptySpaceIsUsedFirstAndNothingGrows(row: FourthTableRow, axis: Axis) throws {
+        expectChildren(try inserted(try flat(row.before, axis), row.slot, axis), row.after)
+    }
+
+    /// E1, E3, WR-07: every docked window minimised, W still gets exactly the left half and A keeps its stored weight.
+    @Test func withEveryDockedWindowMinimisedTheLeftHalfIsExact() throws {
+        let tree = try inserted(try flat([("A", 1)], .horizontal, absent: ["A"]), .firstHalf, .horizontal)
+        let leaf = try #require(tree.leaf(containing: makeWindow(names["W"]!)))
+        let area = Rect(x: 0, y: 0, width: 1000, height: 500)
+        #expect(try resolve(tree, in: area, mins: [:], gap: 0).nodeRects[leaf] == Rect(x: 0, y: 0, width: 500, height: 500))
+        expectChildren(tree, [("W", 1.0 / 4), ("_", 1.0 / 4), ("A", 1.0 / 2)])
+    }
+
+    /// A root split the other way with no empty margin along the axis: it is one child, beside the window (E3 keeps it
+    /// at half, the space it had).
+    @Test(arguments: [Axis.horizontal, .vertical])
+    func aRootSplitTheOtherWayWithNoMarginIsOneChild(axis: Axis) throws {
+        let other: Axis = axis == .horizontal ? .vertical : .horizontal
+        let before = try flat([("A", 0.5), ("_", 0.5)], other)
+        let tree = try inserted(before, .firstHalf, axis)
+        expectChildren(tree, [("W", 1.0 / 2), ("(…)", 1.0 / 2)])
+        #expect(tree.node(n(1)) == before.node(n(1)), "the old root changed")
+    }
+
+    /// 8.1.1 D-17's corner case (E2): after the Top Left and Bottom Left quarters, the Right Half takes the right half
+    /// from both rows' empty margins, and X and Y keep their size.
+    @Test(arguments: [Axis.horizontal, .vertical])
+    func aRootSplitTheOtherWayGivesUpItsEmptyMarginsFirst(axis: Axis) throws {
+        let other: Axis = axis == .horizontal ? .vertical : .horizontal
+        let x = makeWindow(1), y = makeWindow(2)
+        let before = try LayoutTree(
+            root: n(1),
+            nodes: [
+                n(1): .split(axis: other, children: [n(2), n(3)], weights: [0.5, 0.5]),
+                n(2): .split(axis: axis, children: [n(4), n(5)], weights: [0.5, 0.5]), n(4): .panel(x), n(5): .spacer,
+                n(3): .split(axis: axis, children: [n(6), n(7)], weights: [0.5, 0.5]), n(6): .panel(y), n(7): .spacer,
+            ],
+            states: [x.identity: .present, y.identity: .present])
+        let tree = try inserted(before, .secondHalf, axis)
+        expectChildren(tree, [("(…)", 1.0 / 2), ("W", 1.0 / 2)])
+        #expect(tree.node(n(1)) == .split(axis: other, children: [n(4), n(6)], weights: [0.5, 0.5]))
+        #expect(tree.node(n(5)) == nil && tree.node(n(7)) == nil, "the used empty areas are gone")
     }
 
     /// The window overload of `applyDrop` gives the same result.
