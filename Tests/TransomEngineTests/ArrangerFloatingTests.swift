@@ -147,4 +147,27 @@ private func touches(_ window: WindowRef, _ harness: Harness) async -> [WindowCo
         #expect(notices == [.lostRoom([a])])
         #expect(setFrames(effects)[a] == clamped)
     }
+
+    /// D-08, UI-SPEC Surface 2: Dock Window ▸ Where It Is on a desk with no tree makes the window the first tile, filling
+    /// the visible frame, as one undo step with no announcement.
+    @Test func dockWhereItIsOnAnEmptyDeskFillsTheVisibleFrame() throws {
+        let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
+        let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visible, currentSpaceID: nil)
+        var arranger = Arranger()
+        _ = arranger.handle(.restore(try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]), homeFrames: [:]), now: .now)
+        let info = WindowInfo(window: f, frame: overA, state: .present, displayUUID: "main")
+        _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: [info], initialRefreshComplete: true)), now: .now)
+        let steps = arranger.history.depth(for: key)
+
+        let effects = arranger.handle(.command(.dock, focused: f), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        let root = try #require(desk.tree.root)
+        #expect(desk.tree.leaf(containing: f) == root)
+        #expect(!desk.desktop.contains(f))
+        #expect(setFrames(effects)[f] == Rect(x: 8, y: 33, width: 1424, height: 859))
+        #expect(arranger.history.depth(for: key) == steps + 1)
+        #expect(!effects.contains(.beep))
+        #expect(!effects.contains { if case .announce = $0 { true } else { false } }, "\(effects)")
+    }
 }

@@ -10,7 +10,8 @@ extension Arranger {
     static let autoTileMinimum = Size(width: 200, height: 120)
 
     /// New Windows: Tile (D-02, D-03): docks a new window beside the focused docked tile, or the largest tile, along that
-    /// tile's longer side, as one undo step (D-06). Anything else returns no effects and leaves the window to `admit`, which
+    /// tile's longer side; on an empty desk the window becomes the first tile and fills the visible frame (8.1.1 D-08). One
+    /// undo step (D-06). Anything else returns no effects and leaves the window to `admit`, which
     /// floats it. A window that doesn't fit with zoom off stays silent, because nothing the user did was refused.
     mutating func autoTile(_ info: WindowInfo, now: ContinuousClock.Instant) -> [ArrangerEffect] {
         let window = info.window
@@ -30,13 +31,16 @@ extension Arranger {
             // Its own `.windowFocused` can arrive first: the settle delay holds back `.windowCreated`.
             let focused = focusOrder.first { $0 != window.identity }.flatMap { windows[$0]?.window }
             let tile = focused.flatMap { desk.tree.leaf(containing: $0) }.flatMap { leaf in resolution.nodeRects[leaf].map { (leaf, $0) } }
-            guard let (target, rect) = tile ?? Self.largestTile(resolution, in: desk.tree) else { return [] }
-            // The undo step's snapshot holds it floating where it opened. A hidden Desktop can't float it (D-31), and docking
-            // must not show it, so undo re-admits it there instead.
-            if desk.tree.isDesktopHidden != true {
-                try candidate.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(window, frame: info.frame) }
+            let drop: DropTarget
+            if let (target, rect) = tile ?? Self.largestTile(resolution, in: desk.tree) {
+                drop = .tile(target, .edge(rect.width >= rect.height ? .right : .bottom))
+            } else if desk.tree.root == nil {
+                drop = .emptyLayout
+            } else {
+                return []
             }
-            let drop = DropTarget.tile(target, .edge(rect.width >= rect.height ? .right : .bottom))
+            // The undo step's snapshot holds it floating where it opened.
+            try candidate.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(window, frame: info.frame) }
             try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
                 if desk.desktop.contains(window) { try desk.desktop.remove(window) }
                 try desk.tree.applyDrop(drop, window: window, ids: &ids)

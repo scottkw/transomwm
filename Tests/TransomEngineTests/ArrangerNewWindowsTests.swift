@@ -155,6 +155,69 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(arranger.world[key]?.tree.windows == [n])
     }
 
+    // MARK: An empty desk (8.1.1 D-08)
+
+    /// New Windows: Tile on a desk restored with no tree at all, so this holds before and after new desks lose their
+    /// Desktop tile (08.1.1-09); f floats on it.
+    private func emptyDesk(zoom: Bool = false) throws -> (arranger: Arranger, area: Rect, start: ContinuousClock.Instant) {
+        var arranger = Arranger(newWindows: .tile)
+        let start = ContinuousClock.now
+        let area = Rect(x: 0, y: 25, width: 1600, height: 600)
+        let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1600, height: 625), visibleFrame: area, currentSpaceID: nil)
+        _ = arranger.handle(.restore(try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]), homeFrames: [:]), now: start)
+        let floater = found(f, Rect(x: 1400, y: 60, width: 150, height: 120))
+        _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: [floater], initialRefreshComplete: true)), now: start)
+        if zoom { _ = arranger.handle(.zoomEnabled(true), now: start) }
+        _ = arranger.handle(.event(.windowFocused(f)), now: start)
+        return (arranger, area, start)
+    }
+
+    @Test func withNothingDockedATiledNewWindowFillsTheVisibleFrame() throws {
+        var (arranger, area, start) = try emptyDesk()
+        try #require(arranger.world[key]?.tree.root == nil, "precondition: the desk is not empty")
+        let steps = arranger.history.depth(for: key)
+
+        let effects = arranger.handle(.event(.windowCreated(opened(n))), now: start + .milliseconds(400))
+
+        let desk = try #require(arranger.world[key])
+        let root = try #require(desk.tree.root)
+        #expect(desk.tree.leaf(containing: n) == root)
+        #expect(!desk.desktop.contains(n))
+        let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: [:])
+        #expect(plan.resolution.nodeRects[root] == Rect(x: 8, y: 33, width: 1584, height: 584))
+        #expect(arranger.history.depth(for: key) == steps + 1)
+        #expect(!effects.contains(.beep))
+
+        _ = arranger.handle(.command(.undo, focused: f), now: start + .seconds(1))
+
+        let undone = try #require(arranger.world[key])
+        #expect(undone.tree.root == nil)
+        #expect(undone.desktop.frame(of: n) == opening)
+    }
+
+    @Test func withNothingDockedAndZoomOnAWindowBiggerThanTheScreenDocksCollapsed() throws {
+        var (arranger, _, start) = try emptyDesk(zoom: true)
+
+        _ = arranger.handle(.event(.windowCreated(opened(n, minimum: Size(width: 1700, height: 100)))), now: start + .milliseconds(400))
+
+        #expect(arranger.world[key]?.tree.leaf(containing: n) != nil)
+        #expect(arranger.camera.collapsible.contains(n.identity))
+    }
+
+    @Test func withNothingDockedAndZoomOffAWindowBiggerThanTheScreenFloatsSilently() throws {
+        var (arranger, _, start) = try emptyDesk()
+        let steps = arranger.history.depth(for: key)
+
+        let effects = arranger.handle(.event(.windowCreated(opened(n, minimum: Size(width: 1700, height: 100)))), now: start + .milliseconds(400))
+
+        let desk = try #require(arranger.world[key])
+        #expect(desk.tree.root == nil)
+        #expect(desk.desktop.frame(of: n) == opening)
+        #expect(arranger.history.depth(for: key) == steps)
+        #expect(!effects.contains(.beep))
+        #expect(!effects.contains { if case .announce = $0 { true } else { false } }, "\(effects)")
+    }
+
     // MARK: One undo step (D-06)
 
     @Test func itIsOneUndoStepAndUndoFloatsItWhereItOpened() throws {
