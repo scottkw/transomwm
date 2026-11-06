@@ -263,8 +263,8 @@ extension ArrangerCollapseTests {
         #expect(arranger.camera.collapsible.isEmpty)
     }
 
-    @Test func theShiftBypassIntoATooSmallDesktopIsStillBlocked() throws {
-        // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
+    /// UI-SPEC Surface 2 row 4 (row gone): with zoom on too, a ⇧ pull-out never lacks room; it floats and nothing collapses.
+    @Test func theShiftBypassOfABigWindowFloatsItWithNothingCollapsed() throws {
         let saved = try world { tree, ids in
             try tree.insert(a, at: .top, of: .desktop, ids: &ids)
             try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
@@ -276,10 +276,11 @@ extension ArrangerCollapseTests {
         let start = ContinuousClock.now
         let infoA = try #require(arranger.windows[a.identity])
         let tick = hold(&arranger, a, from: infoA.frame, at: Point(x: 700, y: 800), [.shift], start: start)
-        #expect(previews(tick).contains { if case .blocked = $0 { true } else { false } }, "tick gave \(tick)")
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
         let up = arranger.handle(pointer(.up, 700, 800, [.shift]), now: start + .milliseconds(200))
-        #expect(up.contains(.announce(Arranger.noRoom)))
-        #expect(arranger.world[mainKey]?.tree.state(of: a) == .present && arranger.camera.collapsible.isEmpty)
+        #expect(!up.contains(.announce(Arranger.noRoom)))
+        #expect(arranger.world[mainKey]?.tree.state(of: a) == nil && arranger.world[mainKey]?.desktop.contains(a) == true)
+        #expect(arranger.camera.collapsible.isEmpty)
     }
 
     @Test func turningZoomOffFloatsCollapsedWindowsWithTheLostRoomNotice() throws {
