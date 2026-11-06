@@ -245,7 +245,7 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
     return (tree, resolution)
 }
 
-/// ZOOM-09, ZOOM-10, ZOOM-11: Move View, Frame Focused Window and Frame Desktop with toggle-back.
+/// ZOOM-09, ZOOM-10: Move View and Frame Focused Window with toggle-back.
 @Suite struct PanAndFrameNavigatorTests {
     @Test func panMovesToTheSameDepthNeighbourWithTheLongestSharedEdge() async throws {
         // n3 spans 0..496: with the bottom row cut at 200 it shares 292 pt with n7 and 196 with n5.
@@ -332,37 +332,6 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
         excluded.isExcluded = true
         await harness.send(.event(.windowChanged(excluded)))
         expectRefused(await harness.camera(.frameWindow, focused: b), "No docked window to frame", command: "frameWindow")
-    }
-
-    @Test func frameDesktopTogglesAndIsRefusedWhileHidden() async throws {
-        var harness = try await nested()
-        let main = CommandContext(focused: nil, ready: true, displayUUID: "main")
-        #expect(harness.arranger.availability(.camera(.frameDesktop), context: main))
-
-        #expect(await harness.step(.frameDesktop) == .node(.desktop))
-        #expect(harness.arranger.isFramingDesktop(displayUUID: "main"))
-        #expect(await harness.step(.frameDesktop) == .home)
-        #expect(!harness.arranger.isFramingDesktop(displayUUID: "main"))
-
-        await harness.send(.command(.toggleDesktop, focused: a))
-        #expect(harness.arranger.world[key]?.tree.isDesktopHidden == true)
-        expectRefused(await harness.camera(.frameDesktop), "The Desktop tile is hidden", command: "frameDesktop")
-        #expect(!harness.arranger.availability(.camera(.frameDesktop), context: main))
-    }
-
-    /// IN-01: with nothing docked the Desktop tile is the root, so framing it is home, never `.node(root)`.
-    @Test func frameDesktopOnAnEmptyDeskStaysHome() async throws {
-        var harness = try await nested()
-        for id: UInt32 in [1, 2, 3] { await harness.fake.close(id) }
-        await harness.refresh()
-        #expect(harness.arranger.world[key]?.tree.root == .desktop)
-        #expect(harness.arranger.view(on: "main") == .home)
-
-        let effects = await harness.camera(.frameDesktop)
-        await harness.settle(effects)
-
-        #expect(moves(effects).allSatisfy { $0.to == .home })
-        #expect(harness.arranger.view(on: "main") == .home)
     }
 }
 

@@ -504,101 +504,6 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
     }
 
-    /// With a Desktop hidden, `admit` shows it again, as for one that can't dock at all (D-31).
-    @Test func aMinimumLearnedAfterDockingOnAHiddenDesktopShowsIt() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 1000, height: 100)])
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        scene.arrive()
-        #expect(scene.isDocked(n) && scene.desk?.tree.isDesktopHidden == true, "precondition")
-
-        let effects = scene.arranger.handle(.event(.windowChanged(opened(n, minimum: Size(width: 650, height: 100)))), now: scene.start + .seconds(2))
-
-        #expect(scene.isFloating(n) && scene.floatingFrame(n) == opening)
-        #expect(scene.desk?.tree.isDesktopHidden != true)
-        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
-    }
-
-    // MARK: A hidden Desktop (D-31)
-
-    @Test func docksWithoutShowingAHiddenDesktopAndUndoShowsIt() throws {
-        var scene = Scene(width: 1600, height: 600)
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        #expect(scene.desk?.tree.isDesktopHidden == true, "precondition: the Desktop is not hidden")
-        let steps = scene.undoSteps
-
-        scene.arrive()
-
-        #expect(scene.isDocked(n))
-        #expect(scene.desk?.tree.isDesktopHidden == true, "docking showed the Desktop")
-        #expect(scene.undoSteps == steps + 1)
-
-        _ = scene.arranger.handle(.command(.undo, focused: a), now: scene.start + .seconds(1))
-
-        #expect(scene.isFloating(n) && !scene.isDocked(n))
-        #expect(scene.desk?.tree.isDesktopHidden != true, "a floating window can't exist on a hidden Desktop")
-        #expect(scene.floatingFrame(n) != nil)
-    }
-
-    /// The snapshot has no n, so undo re-admits it: at where it opened, not at its tile.
-    @Test func undoOnAHiddenDesktopFloatsItWhereItOpened() throws {
-        var scene = Scene(width: 1600, height: 600)
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        scene.arrive()
-        let tile = try scene.tile(of: n)
-        #expect(tile != opening)
-        _ = scene.arranger.handle(.event(.windowMoved(n, tile)), now: scene.start + .seconds(1))
-
-        let effects = scene.arranger.handle(.command(.undo, focused: a), now: scene.start + .seconds(2))
-
-        #expect(scene.floatingFrame(n) == opening)
-        #expect(scene.arranger.wantedFrames[n.identity] == opening)
-        // Where it opened, moved clear of a's tile as any floater is.
-        let target = Planner.clamp(opening, into: try #require(try scene.plan().desktopRect))
-        #expect(effects.contains { effect in
-            if case .perform(let commands) = effect { commands.contains(.setFrame(n, target)) } else { false }
-        }, "\(effects)")
-    }
-
-    /// Collapsed with zoom on, n is parked with a corner on the display; undo must bring it back, not float it there.
-    @Test func undoOnAHiddenDesktopBringsBackACollapsedWindow() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
-        _ = scene.arranger.handle(.zoomEnabled(true), now: scene.start)
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        scene.arrive(opened(n, minimum: Size(width: 1950, height: 100)))
-        #expect(scene.isDocked(n) && scene.arranger.camera.collapsible.contains(n.identity), "precondition: n did not collapse")
-        let parked = Rect(x: 1599, y: 624, width: 400, height: 300)
-        _ = scene.arranger.handle(.event(.windowMoved(n, parked)), now: scene.start + .seconds(1))
-
-        let effects = scene.arranger.handle(.command(.undo, focused: a), now: scene.start + .seconds(2))
-
-        #expect(scene.isFloating(n))
-        #expect(scene.floatingFrame(n) == opening, "stranded at \(String(describing: scene.floatingFrame(n)))")
-        // Where it opened, moved clear of a's tile as any floater is.
-        let target = Planner.clamp(opening, into: try #require(try scene.plan().desktopRect))
-        #expect(effects.contains { effect in
-            if case .perform(let commands) = effect { commands.contains(.setFrame(n, target)) } else { false }
-        }, "\(effects)")
-    }
-
-    @Test func aRefusedOneShowsAHiddenDesktopThroughAdmit() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 1000, height: 100)])
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        #expect(scene.desk?.tree.isDesktopHidden == true, "precondition: the Desktop is not hidden")
-        let steps = scene.undoSteps
-
-        let effects = scene.arrive(opened(n, minimum: Size(width: 650, height: 100)))
-
-        #expect(scene.isFloating(n) && !scene.isDocked(n))
-        #expect(scene.desk?.tree.isDesktopHidden != true, "a floating window needs the Desktop")
-        #expect(scene.undoSteps == steps)
-        #expect(!effects.contains(.beep))
-    }
-
     // MARK: During a drag (WR-01)
 
     /// Presses `window` and reports it dragged by `dx`, so the session is classified: a size change is a resize.
@@ -622,12 +527,8 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     }
 
     /// One edge resize of a, with or without a window opening halfway through.
-    private func resizingA(openingOne: Bool, hiddenDesktop: Bool = false) throws -> Scene {
+    private func resizingA(openingOne: Bool) throws -> Scene {
         var scene = Scene(width: 1600, height: 600)
-        if hiddenDesktop {
-            _ = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)
-            _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        }
         scene.focus(a)
         let tile = try scene.tile(of: a)
         _ = scene.arranger.handle(.event(.frameApplied(a, requested: tile, actual: tile)), now: scene.start)
@@ -643,16 +544,14 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         return scene
     }
 
-    @Test(arguments: [false, true])
-    func aWindowOpeningDuringAResizeFloatsAfterItAndChangesNothing(hiddenDesktop: Bool) throws {
-        let plain = try resizingA(openingOne: false, hiddenDesktop: hiddenDesktop)
-        var scene = try resizingA(openingOne: true, hiddenDesktop: hiddenDesktop)
+    @Test func aWindowOpeningDuringAResizeFloatsAfterItAndChangesNothing() throws {
+        let plain = try resizingA(openingOne: false)
+        var scene = try resizingA(openingOne: true)
 
         #expect(scene.isFloating(n) && !scene.isDocked(n))
         #expect(scene.floatingFrame(n) == opening)
         #expect(scene.undoSteps == plain.undoSteps, "the new window took an undo step")
         #expect(try weights(scene, around: a) == weights(plain, around: a), "the drag's result changed")
-        if hiddenDesktop { #expect(scene.desk?.tree.isDesktopHidden != true, "a floating window needs the Desktop") }
 
         // Only that gesture: the next window tiles again.
         let next = ref(21)

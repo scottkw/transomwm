@@ -977,28 +977,6 @@ private func dockedBesideFloatingGroup(at now: ContinuousClock.Instant) throws -
         #expect(commands(effects) == [.focus(f)], "the focus move picked \(commands(effects))")
     }
 
-    @Test func aHiddenDesktopParksEveryMemberAndShowingItBringsBackOnlyTheSelected() throws {
-        let start = ContinuousClock.now
-        var (arranger, _) = try dockedBesideFloatingGroup(at: start)
-        // t's frame crosses a's tile, so the group's content rect is clamped into the Desktop.
-        let desk = try #require(arranger.world[mainKey])
-        let desktop = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
-        let content = Planner.clamp(TabBand.content(of: tFrame), into: desktop)
-        _ = arranger.handle(.event(.windowMoved(f, content)), now: start)  // f's echo
-        let hide = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
-        #expect(arranger.isParked(f) && arranger.isParked(t), "not every member parked: \(hide)")
-        #expect(parks(hide).filter { if case .park(t, _, _) = $0 { true } else { false } }.isEmpty, "t parked twice")
-        #expect(strips(hide) == [[]], "the strip stayed on a hidden Desktop")
-        for window in [f, t] {  // the parks' echoes: slivers at the display's corner
-            _ = arranger.handle(.event(.windowMoved(window, Rect(x: 1439, y: 899, width: content.width, height: content.height))), now: start)
-        }
-        let show = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
-        #expect(setFrames(show)[f] == content, "f did not come back at the content rect: \(show)")
-        #expect(setFrames(show)[t] == nil, "the hidden member came back")
-        #expect(arranger.isParked(t) && !arranger.isParked(f))
-        #expect(strips(show).last?.first?.floating == true, "the strip did not come back")
-    }
-
     @Test func isHiddenTabIsTrueExactlyForNonSelectedMembers() throws {
         let start = ContinuousClock.now
         let (floating, _) = try dockedBesideFloatingGroup(at: start)
@@ -1922,18 +1900,6 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(announcements(effects) == [.movedOut(dissolved: true)])
     }
 
-    @Test func aHiddenDesktopIsShownFirst() throws {
-        let start = ContinuousClock.now
-        var (arranger, _, _, _) = try bareGroup(at: start, withA: true)
-        _ = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
-        try #require(arranger.world[mainKey]?.tree.isDesktopHidden == true, "the Desktop did not hide")
-        _ = arranger.handle(.tab(.moveOut(b, via: .menu), ready: true), now: start + .seconds(1))
-        let desk = try #require(arranger.world[mainKey])
-        #expect(desk.tree.isDesktopHidden != true, "the Desktop was not shown")
-        let floated = try #require(desk.desktop.frame(of: b), "b does not float")
-        #expect(floated == Planner.clamp(floated, into: try desktopRect(arranger)), "b is outside the Desktop tile")
-    }
-
     @Test(arguments: [true, false])
     func aRefusedMoveOutBeepsAndChangesNothing(paused: Bool) throws {
         let start = ContinuousClock.now
@@ -2160,17 +2126,6 @@ private func desktopRect(_ arranger: Arranger) throws -> Rect {
         #expect(desk.desktop.frame(of: f) == tFrame, "the band did not return to the selected member")
         #expect(desk.desktop.frame(of: t) == cascade(1, from: tFrame, content: content, into: try desktopRect(arranger)))
         #expect(!arranger.isParked(t))
-    }
-
-    @Test func restoreAllShowsAHiddenDesktopBeforeFloatingTheMembers() throws {
-        let start = ContinuousClock.now
-        var (arranger, _, _, _) = try bareGroup(at: start, withA: true)
-        _ = arranger.handle(.command(.toggleDesktop, focused: a), now: start)
-        try #require(arranger.world[mainKey]?.tree.isDesktopHidden == true)
-        _ = arranger.handle(.command(.restoreAll, focused: nil), now: start + .seconds(1))
-        let desk = try #require(arranger.world[mainKey])
-        #expect(desk.tree.isDesktopHidden == false)
-        #expect(desk.desktop.contains(b) && desk.desktop.contains(f))
     }
 
     @Test func restoreAllCountsTheMembersBroughtBackOnceEvenWhenStranded() throws {
