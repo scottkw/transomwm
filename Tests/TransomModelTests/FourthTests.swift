@@ -6,21 +6,17 @@ private func n(_ raw: UInt64) -> NodeID { NodeID(raw: raw) }
 
 private let names: [String: UInt32] = ["W": 9, "A": 1, "B": 2, "C": 3]
 
-/// A flat tree along `axis` with the named children and stored weights, "D" being the Desktop tile. A single child is a
-/// leaf root. A name in `absent` takes no part: the Desktop is hidden, a window is not present.
+/// A flat tree along `axis` with the named docked children and stored weights. A single child is a leaf root. A name in
+/// `absent` takes no part: its window is not present.
 private func flat(_ children: [(String, Double)], _ axis: Axis, absent: Set<String> = []) throws -> LayoutTree {
     var nodes: [NodeID: Node] = [:]
     var states: [WindowIdentity: WindowState] = [:]
     var ids: [NodeID] = []
     for (i, child) in children.enumerated() {
-        let id = child.0 == "D" ? NodeID.desktop : n(UInt64(i + 2))
-        if child.0 == "D" {
-            nodes[id] = .desktop(hidden: absent.contains("D"))
-        } else {
-            let window = makeWindow(names[child.0]!)
-            nodes[id] = .panel(window)
-            states[window.identity] = absent.contains(child.0) ? .absent : .present
-        }
+        let id = n(UInt64(i + 2))
+        let window = makeWindow(names[child.0]!)
+        nodes[id] = .panel(window)
+        states[window.identity] = absent.contains(child.0) ? .absent : .present
         ids.append(id)
     }
     guard children.count > 1 else { return try LayoutTree(root: ids[0], nodes: nodes, states: states) }
@@ -68,32 +64,27 @@ struct FourthTableRow: Sendable, CustomTestStringConvertible {
     var testDescription: String { "\(before.map(\.0)) \(slot)" }
 }
 
-private let zeroDocked = [("D", 1.0)]
-private let oneDocked = [("A", 0.5), ("D", 0.5)]
-private let twoDocked = [("A", 1.0 / 3), ("B", 1.0 / 3), ("D", 1.0 / 3)]
-private let threeDocked = [("A", 0.6), ("B", 0.2), ("C", 0.1), ("D", 0.1)]
+/// 8.1.1 D-04: docked tiles only. An empty desk has no row: the window becomes the root (`onAnEmptyDeskEverySlotIsTheWholeDesk`).
+private let oneDocked = [("A", 1.0)]
+private let twoDocked = [("A", 1.0 / 2), ("B", 1.0 / 2)]
+private let threeDocked = [("A", 2.0 / 3), ("B", 2.0 / 9), ("C", 1.0 / 9)]
 
 private let table: [FourthTableRow] = [
-    FourthTableRow(before: zeroDocked, slot: .first, after: [("W", 1.0 / 4), ("D", 3.0 / 4)]),
-    FourthTableRow(before: zeroDocked, slot: .second, after: [("W", 1.0 / 2), ("D", 1.0 / 2)]),
-    FourthTableRow(before: zeroDocked, slot: .third, after: [("D", 1.0 / 2), ("W", 1.0 / 2)]),
-    FourthTableRow(before: zeroDocked, slot: .fourth, after: [("D", 3.0 / 4), ("W", 1.0 / 4)]),
-    FourthTableRow(before: zeroDocked, slot: .middle, after: [("W", 3.0 / 4), ("D", 1.0 / 4)]),
-    FourthTableRow(before: oneDocked, slot: .first, after: [("W", 1.0 / 4), ("A", 3.0 / 8), ("D", 3.0 / 8)]),
-    FourthTableRow(before: oneDocked, slot: .second, after: [("A", 1.0 / 4), ("W", 1.0 / 4), ("D", 1.0 / 2)]),
-    FourthTableRow(before: oneDocked, slot: .third, after: [("A", 1.0 / 2), ("W", 1.0 / 4), ("D", 1.0 / 4)]),
-    FourthTableRow(before: oneDocked, slot: .fourth, after: [("A", 3.0 / 8), ("D", 3.0 / 8), ("W", 1.0 / 4)]),
-    FourthTableRow(before: oneDocked, slot: .middle, after: [("A", 1.0 / 4), ("W", 1.0 / 2), ("D", 1.0 / 4)]),
-    FourthTableRow(before: twoDocked, slot: .first, after: [("W", 1.0 / 4), ("A", 1.0 / 4), ("B", 1.0 / 4), ("D", 1.0 / 4)]),
-    FourthTableRow(before: twoDocked, slot: .second, after: [("A", 1.0 / 4), ("W", 1.0 / 4), ("B", 1.0 / 4), ("D", 1.0 / 4)]),
-    FourthTableRow(before: twoDocked, slot: .third, after: [("A", 1.0 / 4), ("B", 1.0 / 4), ("W", 1.0 / 4), ("D", 1.0 / 4)]),
-    FourthTableRow(before: twoDocked, slot: .fourth, after: [("A", 1.0 / 4), ("B", 1.0 / 4), ("D", 1.0 / 4), ("W", 1.0 / 4)]),
-    FourthTableRow(before: twoDocked, slot: .middle, after: [("A", 1.0 / 4), ("W", 1.0 / 2), ("B", 1.0 / 8), ("D", 1.0 / 8)]),
-    FourthTableRow(before: threeDocked, slot: .first, after: [("W", 1.0 / 4), ("A", 0.45), ("B", 0.15), ("C", 0.075), ("D", 0.075)]),
-    FourthTableRow(before: threeDocked, slot: .second, after: [("A", 1.0 / 4), ("W", 1.0 / 4), ("B", 1.0 / 4), ("C", 1.0 / 8), ("D", 1.0 / 8)]),
-    FourthTableRow(before: threeDocked, slot: .third, after: [("A", 1.0 / 2), ("W", 1.0 / 4), ("B", 1.0 / 8), ("C", 1.0 / 16), ("D", 1.0 / 16)]),
-    FourthTableRow(before: threeDocked, slot: .fourth, after: [("A", 0.45), ("B", 0.15), ("C", 0.075), ("D", 0.075), ("W", 1.0 / 4)]),
-    FourthTableRow(before: threeDocked, slot: .middle, after: [("A", 1.0 / 4), ("W", 1.0 / 2), ("B", 1.0 / 8), ("C", 1.0 / 16), ("D", 1.0 / 16)]),
+    FourthTableRow(before: oneDocked, slot: .first, after: [("W", 1.0 / 4), ("A", 3.0 / 4)]),
+    FourthTableRow(before: oneDocked, slot: .second, after: [("W", 1.0 / 2), ("A", 1.0 / 2)]),
+    FourthTableRow(before: oneDocked, slot: .third, after: [("A", 1.0 / 2), ("W", 1.0 / 2)]),
+    FourthTableRow(before: oneDocked, slot: .fourth, after: [("A", 3.0 / 4), ("W", 1.0 / 4)]),
+    FourthTableRow(before: oneDocked, slot: .middle, after: [("W", 3.0 / 4), ("A", 1.0 / 4)]),
+    FourthTableRow(before: twoDocked, slot: .first, after: [("W", 1.0 / 4), ("A", 3.0 / 8), ("B", 3.0 / 8)]),
+    FourthTableRow(before: twoDocked, slot: .second, after: [("A", 1.0 / 4), ("W", 1.0 / 4), ("B", 1.0 / 2)]),
+    FourthTableRow(before: twoDocked, slot: .third, after: [("A", 1.0 / 2), ("W", 1.0 / 4), ("B", 1.0 / 4)]),
+    FourthTableRow(before: twoDocked, slot: .fourth, after: [("A", 3.0 / 8), ("B", 3.0 / 8), ("W", 1.0 / 4)]),
+    FourthTableRow(before: twoDocked, slot: .middle, after: [("A", 1.0 / 4), ("W", 1.0 / 2), ("B", 1.0 / 4)]),
+    FourthTableRow(before: threeDocked, slot: .first, after: [("W", 1.0 / 4), ("A", 1.0 / 2), ("B", 1.0 / 6), ("C", 1.0 / 12)]),
+    FourthTableRow(before: threeDocked, slot: .second, after: [("A", 1.0 / 4), ("W", 1.0 / 4), ("B", 1.0 / 3), ("C", 1.0 / 6)]),
+    FourthTableRow(before: threeDocked, slot: .third, after: [("A", 1.0 / 2), ("W", 1.0 / 4), ("B", 1.0 / 6), ("C", 1.0 / 12)]),
+    FourthTableRow(before: threeDocked, slot: .fourth, after: [("A", 1.0 / 2), ("B", 1.0 / 6), ("C", 1.0 / 12), ("W", 1.0 / 4)]),
+    FourthTableRow(before: threeDocked, slot: .middle, after: [("A", 1.0 / 4), ("W", 1.0 / 2), ("B", 1.0 / 6), ("C", 1.0 / 12)]),
 ]
 
 private let otherWay: [(FourthSlot, [(String, Double)])] = [
@@ -113,10 +104,10 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
 
     /// The window overload of `applyDrop` gives the same result.
     @Test func applyDropInsertsTheFourth() throws {
-        var tree = try flat(oneDocked, .horizontal)
+        var tree = try flat(twoDocked, .horizontal)
         var ids = IDSource(next: 100)
         try tree.applyDrop(.fourth(.second, .horizontal), window: makeWindow(names["W"]!), ids: &ids)
-        expectChildren(tree, [("A", 1.0 / 4), ("W", 1.0 / 4), ("D", 1.0 / 2)])
+        expectChildren(tree, [("A", 1.0 / 4), ("W", 1.0 / 4), ("B", 1.0 / 2)])
     }
 
     @Test func aNestedSplitMovesAsOneChildWithItsInnerWeightsUntouched() throws {
@@ -147,11 +138,6 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
         #expect(tree.node(n(1)) == before.node(n(1)), "the old root's weights changed")
     }
 
-    @Test func aDockedSingleRootLeafBehavesLikeTheDesktopLeaf() throws {
-        expectChildren(try inserted(try flat([("A", 1)], .horizontal), .first, .horizontal), [("W", 1.0 / 4), ("A", 3.0 / 4)])
-        expectChildren(try inserted(try flat([("A", 1)], .horizontal), .middle, .vertical), [("W", 3.0 / 4), ("A", 1.0 / 4)])
-    }
-
     /// The window comes off first, the split left with one child collapses, and the root then runs the other way.
     @Test func removingTheWindowCanTurnTheRootTheOtherWay() throws {
         let w = makeWindow(names["W"]!), a = makeWindow(1), b = makeWindow(2)
@@ -172,44 +158,34 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
         var ids = IDSource(next: 100)
         try tree.insertFourth(
             .tabs(windows: [b, c], selected: 0), states: [b.identity: .present, c.identity: .present], slot: .third, axis: .horizontal, ids: &ids)
-        expectChildren(tree, [("A", 1.0 / 2), ("tabs", 1.0 / 4), ("D", 1.0 / 4)])
+        expectChildren(tree, [("A", 1.0 / 2), ("tabs", 1.0 / 2)])
 
-        let tabbed = try LayoutTree(
-            root: n(1),
-            nodes: [n(1): .split(axis: .horizontal, children: [n(2), .desktop], weights: [0.5, 0.5]), n(2): .tabs(windows: [b, c], selected: 1), .desktop: .desktop(hidden: false)],
-            states: [b.identity: .present, c.identity: .present])
-        expectChildren(try inserted(tabbed, .first, .horizontal), [("W", 1.0 / 4), ("tabs", 3.0 / 8), ("D", 3.0 / 8)])
+        let tabbed = try LayoutTree(root: n(2), nodes: [n(2): .tabs(windows: [b, c], selected: 1)], states: [b.identity: .present, c.identity: .present])
+        expectChildren(try inserted(tabbed, .first, .horizontal), [("W", 1.0 / 4), ("tabs", 3.0 / 4)])
     }
 
-    /// A hidden Desktop keeps its stored weight and the others scale into the rest, so W still gets ¼ of what shows.
-    @Test func aHiddenDesktopKeepsItsWeightAndTheOthersScaleIntoTheRest() throws {
-        let before = try flat([("A", 0.25), ("B", 0.25), ("D", 0.5)], .horizontal, absent: ["D"])
-        expectChildren(try inserted(before, .first, .horizontal), [("W", 1.0 / 8), ("A", 3.0 / 16), ("B", 3.0 / 16), ("D", 1.0 / 2)])
-    }
-
-    /// B is absent, so positions are worked out over A and D only: A's centre ⅓ is before ⅜ and D's ⅚ after it.
+    /// B is absent, so positions are worked out over A and C only: A's centre ⅓ is before ⅜ and C's ⅚ after it.
     @Test func aChildNotPresentKeepsItsWeightAndTakesNoPartInThePosition() throws {
-        let before = try flat([("A", 0.5), ("B", 0.25), ("D", 0.25)], .horizontal, absent: ["B"])
-        expectChildren(try inserted(before, .second, .horizontal), [("A", 3.0 / 16), ("B", 1.0 / 4), ("W", 3.0 / 16), ("D", 3.0 / 8)])
+        let before = try flat([("A", 0.5), ("B", 0.25), ("C", 0.25)], .horizontal, absent: ["B"])
+        expectChildren(try inserted(before, .second, .horizontal), [("A", 3.0 / 16), ("B", 1.0 / 4), ("W", 3.0 / 16), ("C", 3.0 / 8)])
     }
 
     @Test func withNothingElseTakingPartTheWindowFillsTheDesk() throws {
-        let before = try flat([("A", 0.5), ("D", 0.5)], .horizontal, absent: ["A", "D"])
+        let before = try flat([("A", 0.5), ("B", 0.5)], .horizontal, absent: ["A", "B"])
         let tree = try inserted(before, .second, .horizontal)
         let w = makeWindow(names["W"]!)
         let leaf = try #require(tree.leaf(containing: w))
         let area = Rect(x: 0, y: 0, width: 1000, height: 500)
         #expect(try resolve(tree, in: area, mins: [:], gap: 0).nodeRects[leaf] == area)
-        #expect(tree.isDesktopHidden == true)
     }
 
     /// WR-07: filling the desk while it's the only one taking part must not leave the window a sliver when the others return.
     @Test func withNothingElseTakingPartTheWindowKeepsARealShareForWhenTheOthersReturn() throws {
-        let before = try flat([("A", 0.5), ("D", 0.5)], .horizontal, absent: ["A", "D"])
-        expectChildren(try inserted(before, .second, .horizontal), [("A", 1.0 / 4), ("D", 1.0 / 4), ("W", 1.0 / 2)])
-        // A lone hidden Desktop: the root the window wraps.
-        let lone = try flat([("D", 1)], .horizontal, absent: ["D"])
-        expectChildren(try inserted(lone, .first, .horizontal), [("W", 1.0 / 2), ("D", 1.0 / 2)])
+        let before = try flat([("A", 0.5), ("B", 0.5)], .horizontal, absent: ["A", "B"])
+        expectChildren(try inserted(before, .second, .horizontal), [("A", 1.0 / 4), ("B", 1.0 / 4), ("W", 1.0 / 2)])
+        // A lone absent leaf root: the root the window wraps.
+        let lone = try flat([("A", 1)], .horizontal, absent: ["A"])
+        expectChildren(try inserted(lone, .first, .horizontal), [("W", 1.0 / 2), ("A", 1.0 / 2)])
     }
 
     @Test func aRootAtMaxChildrenThrowsAndChangesNothing() throws {
@@ -248,10 +224,9 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
 
     // MARK: Halves and thirds (08.1.1 D-10), on trees with no Desktop node
 
-    private static let halvesAndThirds: [FourthSlot] = [.firstHalf, .secondHalf, .firstThird, .middleThird, .lastThird]
-
-    @Test(arguments: halvesAndThirds, [Axis.horizontal, .vertical])
-    func onAnEmptyDeskAHalfOrThirdIsTheWholeDesk(slot: FourthSlot, axis: Axis) throws {
+    /// D-04: with nothing docked every slot, fourths included, makes the window the root.
+    @Test(arguments: FourthSlot.allCases, [Axis.horizontal, .vertical])
+    func onAnEmptyDeskEverySlotIsTheWholeDesk(slot: FourthSlot, axis: Axis) throws {
         let tree = try inserted(LayoutTree(), slot, axis)
         #expect(tree.root.flatMap(tree.node) == .panel(makeWindow(names["W"]!)))
         #expect(LayoutTree().fourthSpan(slot, axis: axis) == (0, 1))
@@ -321,21 +296,21 @@ private let otherWay: [(FourthSlot, [(String, Double)])] = [
 
     /// D-23: `fourthSpan` says what `insertFourth` then does, read back off the weights, along either axis.
     @Test(arguments: [
-        ([("D", 1.0)], Set<String>(), FourthSlot.first, 0.0, 0.25),
-        ([("D", 1)], [], .second, 0, 0.5),
-        ([("D", 1)], [], .middle, 0, 0.75),
-        ([("D", 1)], [], .third, 0.5, 1),
-        ([("D", 1)], [], .fourth, 0.75, 1),
-        ([("D", 1)], ["D"], .third, 0, 1),
-        ([("A", 0.5), ("D", 0.5)], [], .second, 0.25, 0.5),
-        ([("A", 0.5), ("D", 0.5)], [], .middle, 0.25, 0.75),
-        ([("A", 0.5), ("D", 0.5)], [], .third, 0.5, 0.75),
-        ([("A", 0.5), ("D", 0.5)], ["D"], .middle, 0, 0.75),
-        ([("A", 0.5), ("D", 0.5)], ["A", "D"], .second, 0, 1),
-        ([("A", 0.2), ("D", 0.8)], [], .third, 0.5, 1),
-        ([("A", 0.8), ("D", 0.2)], [], .second, 0, 0.5),
-        ([("A", 0.8), ("D", 0.2)], [], .third, 0.5, 0.75),
-        ([("A", 0.2), ("D", 0.8)], [], .first, 0, 0.25),
+        ([("A", 1.0)], Set<String>(), FourthSlot.first, 0.0, 0.25),
+        ([("A", 1)], [], .second, 0, 0.5),
+        ([("A", 1)], [], .middle, 0, 0.75),
+        ([("A", 1)], [], .third, 0.5, 1),
+        ([("A", 1)], [], .fourth, 0.75, 1),
+        ([("A", 1)], ["A"], .third, 0, 1),
+        ([("A", 0.5), ("B", 0.5)], [], .second, 0.25, 0.5),
+        ([("A", 0.5), ("B", 0.5)], [], .middle, 0.25, 0.75),
+        ([("A", 0.5), ("B", 0.5)], [], .third, 0.5, 0.75),
+        ([("A", 0.5), ("B", 0.5)], ["B"], .middle, 0, 0.75),
+        ([("A", 0.5), ("B", 0.5)], ["A", "B"], .second, 0, 1),
+        ([("A", 0.2), ("B", 0.8)], [], .third, 0.5, 1),
+        ([("A", 0.8), ("B", 0.2)], [], .second, 0, 0.5),
+        ([("A", 0.8), ("B", 0.2)], [], .third, 0.5, 0.75),
+        ([("A", 0.2), ("B", 0.8)], [], .first, 0, 0.25),
         ([("A", 0.125), ("B", 0.875)], [], .third, 0.5, 1),
     ] as [([(String, Double)], Set<String>, FourthSlot, Double, Double)])
     func theSpanIsWhatTheWindowGets(children: [(String, Double)], absent: Set<String>, slot: FourthSlot, start: Double, end: Double) throws {
