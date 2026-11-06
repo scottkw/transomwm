@@ -161,7 +161,9 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         #expect(desk.tree.state(of: w) == nil)
     }
 
-    @Test func aDockedWindowMovesAndTheOthersShareWhatIsLeft() throws {
+    /// E4, E2: w's old third stays empty, and a and b move left into it keeping their widths; what the 4th column needs
+    /// comes out of that empty area.
+    @Test func aDockedWindowMovesAndTheOthersMoveIntoItsPlace() throws {
         var arranger = arranger([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120)), info(b, Rect(x: 200, y: 200, width: 150, height: 120))])
         try dockFlat([w, a, b], in: &arranger)
         expectWeights(try rootWeights(arranger), [1.0 / 3, 1.0 / 3, 1.0 / 3])
@@ -169,8 +171,8 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
 
         _ = command(&arranger, .fourth, .horizontal, focused: w)
 
-        expectWeights(try rootWeights(arranger), [3.0 / 8, 3.0 / 8, 1.0 / 4])
-        #expect(try rootOrder(arranger) == [a, b, w])
+        expectWeights(try rootWeights(arranger), [1.0 / 12, 1.0 / 3, 1.0 / 3, 1.0 / 4])
+        #expect(try rootOrder(arranger) == [nil, a, b, w])
         #expect(arranger.history.depth(for: mainKey) == depth + 1)
     }
 
@@ -232,12 +234,14 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
 
         _ = command(&arranger, .fourth, .horizontal, focused: notSelected)
 
+        // E4, E2: the group's old half stays empty and b moves left into it keeping its width.
         let after = try #require(arranger.world[mainKey]?.tree)
-        expectWeights(try rootWeights(arranger), [3.0 / 4, 1.0 / 4])
-        guard case .split(_, let children, _)? = after.node(try #require(after.root)), case .tabs(let moved, _)? = after.node(children[1]) else {
+        expectWeights(try rootWeights(arranger), [1.0 / 4, 1.0 / 2, 1.0 / 4])
+        guard case .split(_, let children, _)? = after.node(try #require(after.root)), case .tabs(let moved, _)? = after.node(children[2]) else {
             Issue.record("the group is not the last child: \(after)")
             return
         }
+        #expect(after.node(children[0]) == .spacer, "the group's old place is not empty")
         #expect(Set(moved) == Set(members))
         #expect(arranger.history.depth(for: mainKey) == depth + 1)
     }
@@ -434,6 +438,40 @@ extension ArrangerFourthTests {
         #expect(undone.desktop.frame(of: w) == frameW && undone.desktop.frame(of: x) == frameX)
     }
 
+    /// E4, E2: [A .5 | W .5], W to the left third. W's half is left empty, and A keeps its width and moves right into it.
+    @Test func aDockedWindowMovedToAPositionLeavesItsPlaceEmpty() throws {
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a, w])
+        #expect(try rootOrder(arranger) == [a, w])
+        let depth = arranger.history.depth(for: mainKey)
+
+        let effects = command(&arranger, .firstThird, .horizontal, focused: w)
+
+        #expect(try rootOrder(arranger) == [w, a, nil])
+        expectWeights(try rootWeights(arranger), [1.0 / 3, 1.0 / 2, 1.0 / 6])
+        #expect(announcements(effects) == ["Docked to left third"])
+        #expect(arranger.history.depth(for: mainKey) == depth + 1)
+
+        _ = arranger.handle(.command(.undo, focused: w), now: .now)
+        #expect(try rootOrder(arranger) == [a, w])
+        expectWeights(try rootWeights(arranger), [0.5, 0.5])
+    }
+
+    /// `fourthChangesNothing`: vacating W's half and filling it again moves no frame.
+    @Test func aDockedWindowAlreadyAtItsPositionOnlyBeeps() throws {
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [w, a])
+        let world = arranger.world
+        #expect(command(&arranger, .firstHalf, .horizontal, focused: w) == [.beep])
+        #expect(arranger.world == world)
+    }
+
+    /// E4, E2: W's left half is left empty and A moves into it, so the halves swap and A keeps its width.
+    @Test func movingTheLeftHalfToTheRightHalfSwapsTheHalves() throws {
+        var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [w, a])
+        _ = command(&arranger, .secondHalf, .horizontal, focused: w)
+        #expect(try rootOrder(arranger) == [a, w])
+        expectWeights(try rootWeights(arranger), [0.5, 0.5])
+    }
+
     @Test func aLeftHalfBesideTheRootDocksAtHalfAndUndoFloatsItBack() throws {
         var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a])
         #expect(try #require(arranger.world[mainKey]?.tree).state(of: a) == .present)
@@ -492,8 +530,9 @@ extension ArrangerFourthTests {
         _ = command(&arranger, slot, axis, focused: w)
 
         #expect(try rootAxis(arranger) == axis)
-        // E1, E3: a is centred at the middle third's centre, so it goes after and the left third stays empty.
-        let order: [WindowRef?] = slot == .middleThird ? [nil, w, a] : [.secondHalf, .lastThird].contains(slot) ? [a, w] : [w, a]
+        // E4: w's old place stays empty, so a keeps its place in the old root, which is one child here (nil). E3: at the
+        // middle third the old root goes after and the left third stays empty.
+        let order: [WindowRef?] = slot == .middleThird ? [nil, w, nil] : [.secondHalf, .lastThird].contains(slot) ? [nil, w] : [w, nil]
         #expect(try rootOrder(arranger) == order)
         #expect(arranger.history.depth(for: mainKey) == depth + 1)
     }
@@ -605,11 +644,9 @@ private func tick(_ harness: inout Harness) async -> [ArrangerEffect] {
 }
 
 /// The frame a dry run of a fourth gives `window` on the main desk: out of its tree or Desktop layer, `applyDrop`, plan.
+/// Where `window` lands at the fourth, through the Arranger's own drop (a docked window leaves its place empty, E4).
 private func fourthFrame(_ arranger: Arranger, _ window: WindowRef, _ slot: FourthSlot, _ axis: Axis) throws -> Rect {
-    var desk = try #require(arranger.world[mainKey])
-    var ids = arranger.world.ids
-    if desk.desktop.contains(window) { try desk.desktop.remove(window) } else { try desk.tree.remove(window) }
-    try desk.tree.applyDrop(.fourth(slot, axis), window: window, ids: &ids)
+    let desk = try #require(try arranger.dropping(window, on: mainKey, at: .fourth(slot, axis)).world[mainKey])
     return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[window])
 }
 
@@ -1070,7 +1107,7 @@ extension ArrangerFourthTests {
 
         let desk = try #require(bare.world[mainKey])
         #expect(desk.tree.leaf(containing: w) == desk.tree.leaf(containing: a), "the group came apart")
-        expectWeights(try rootWeights(bare), [3.0 / 4, 1.0 / 4])
+        expectWeights(try rootWeights(bare), [1.0 / 4, 1.0 / 2, 1.0 / 4])  // E4, E2: b moves into the group's old place
         #expect(bare.history.depth(for: mainKey) == depth + 1)
         #expect(announcements(up) == ["Docked to 4th column"])
     }

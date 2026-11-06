@@ -1843,17 +1843,29 @@ public struct Arranger: Sendable {
             }
             if candidate[key] == nil { try candidate.addDesk(key) }
         }
+        // Rule E4 (8.1.1 D-16): a window docked on this desk and moved to a position leaves its old place empty.
+        let vacates = if case .fourth = target { true } else { false }
         try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
             if let group {
                 let moved: (node: Node, states: [WindowIdentity: WindowState])
-                if let taken { moved = taken } else { moved = try Self.takeGroup(group, from: &desk) }
+                if let taken {
+                    moved = taken
+                } else if vacates, !group.floating {
+                    moved = try desk.tree.vacate(group.key.node)
+                } else {
+                    moved = try Self.takeGroup(group, from: &desk)
+                }
                 try desk.tree.applyDrop(target, leaf: moved.node, states: moved.states, ids: &ids)
                 return
             }
             if desk.desktop.contains(window) {
                 try desk.desktop.remove(window)
             } else if desk.tree.state(of: window) != nil {
-                try desk.tree.remove(window)
+                if vacates, let leaf = desk.tree.leaf(containing: window), case .panel? = desk.tree.node(leaf) {
+                    _ = try desk.tree.vacate(leaf)
+                } else {
+                    try desk.tree.remove(window)
+                }
             }
             try desk.tree.applyDrop(target, window: window, ids: &ids)
         }
