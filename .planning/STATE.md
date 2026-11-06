@@ -4,16 +4,16 @@ current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
 current_plan: 18
 status: verifying
-stopped_at: Completed 08.1.1-26-PLAN.md
-last_updated: "2026-11-06T22:40:36.108Z"
+stopped_at: Completed 08.1.1-27-PLAN.md
+last_updated: "2026-11-06T22:44:45.922Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 8cd26ddbdfe3656d60a3fd7031b159476b3507b1
+state_head: 2d1e67f49576b0bef70c796cbffbef997dc36a76
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 132
-  completed_plans: 131
+  completed_plans: 132
   percent: 82
 ---
 
@@ -190,6 +190,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P24 | 9min | 2 tasks | 9 files |
 | Phase 08.1.1 P25 | 50min | 3 tasks | 10 files |
 | Phase 08.1.1 P26 | 10min | 3 tasks | 4 files |
+| Phase 08.1.1 P27 | 15min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -536,6 +537,7 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 8.1.1 D-18: the group dwell's 'in front' is the window server's stacking read once from the CG list at mouse-down; focus recency is only the fallback (08.1.1-25)
 - [Phase 08.1.1]: 8.1.1 D-18: with stacking known, unlisted windows rank behind every listed one and a tie goes to the docked window (08.1.1-25)
 - [Phase 08.1.1]: 08.1.1-26: D-16/D-17 proven live on macOS 27.2 and 15.7 (Fourths, OptionsBundle, HotkeyConflict suites, first run each); OptionsBundle step 1 derives the gap from window 0's left inset
+- [Phase 08.1.1]: 08.1.1-27: UAT re-check says hold ⌥ for edge/group drags in Hold ⌥ mode; ⌃/⌃⌘ fourth drags need no ⌥
 
 ### Quick Tasks Completed
 
@@ -581,8 +583,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T22:40:35.057Z
-Stopped at: Completed 08.1.1-26-PLAN.md
+Last session: 2026-11-06T22:44:44.891Z
+Stopped at: Completed 08.1.1-27-PLAN.md
 Resume file: None
 
 ## Deferred Verification
