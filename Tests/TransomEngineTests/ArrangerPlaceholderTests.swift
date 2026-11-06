@@ -1018,7 +1018,7 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         }
         func waitingOnly(_ id: NodeID) throws -> Bool {
             let sub = try tree.subtree(at: id)
-            return sub.nodes[.desktop] == nil && sub.windows.allSatisfy(harness.arranger.isPlaceholder)
+            return sub.windows.allSatisfy(harness.arranger.isPlaceholder)
         }
         // The pointer over a waiting tile: its window is not there to zoom to.
         let pointer = Point(x: home.frame.midX, y: home.frame.midY)

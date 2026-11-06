@@ -12,9 +12,8 @@ extension Arranger {
         let view = currentView(uuid, key)
         var windows: [WindowIdentity] = []
         if case .node(let id) = view {
-            // ViewPlanner's showsDesktop rule: a subtree holding the Desktop tile shows the Desktop layer's windows.
-            let tree = try desk.tree.subtree(at: id)
-            windows = tree.windows.map(\.identity) + (tree.nodes[.desktop] != nil ? desk.desktop.windows.map(\.window.identity) : [])
+            // 8.1.1 D-14: floating windows are not part of a view.
+            windows = try desk.tree.subtree(at: id).windows.map(\.identity)
             guard !windows.isEmpty else {
                 return [.beep, .notice(.viewNothingToSave(displayUUID: uuid)), .info("refused save view \(slot): no windows in view")]
             }

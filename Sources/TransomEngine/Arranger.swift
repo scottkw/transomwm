@@ -274,9 +274,9 @@ public struct Arranger: Sendable {
         if !heldAdmits.isEmpty, !gestureLive { effects += admitHeld() }
         if displays != shownBefore { extendPlaceholdersShown(since: shownBefore, now: now) }
         if earliestPlaceholderDeadline != earliest, let wake = nextWake { effects.append(.wake(at: wake)) }
-        // Home frames are only for parked windows; on a shown Desktop they are spent, even when no re-plan runs (WR-06).
+        // Home frames are only for parked windows and a floater is never parked: spent, even when no re-plan runs (WR-06).
         if !homeFrames.isEmpty {
-            for desk in world.desks.values where desk.tree.isDesktopHidden != true {
+            for desk in world.desks.values {
                 for floating in desk.desktop.windows { homeFrames[floating.window.identity] = nil }
             }
         }
@@ -852,7 +852,7 @@ public struct Arranger: Sendable {
 
     /// The one-shot return of floating windows a hidden Desktop tile parked in a layout.json of schema 3 or older (8.1.1
     /// D-02): each one still at its park rect, with a home frame, goes to that frame clamped onto its desk's display. An OS
-    /// fact, so no undo step. One-shot because `handle` clears floater home frames on every desk with no hidden Desktop.
+    /// fact, so no undo step. One-shot because `handle` clears floater home frames on every desk.
     mutating func bringBackParked() -> [WindowCommand] {
         var moves: [WindowCommand] = []
         for info in windows.values.sorted(by: { $0.window.identity < $1.window.identity })
@@ -860,9 +860,7 @@ public struct Arranger: Sendable {
             && Recovery.isStranded(info.frame, displays: displays)
         {
             let id = info.window.identity
-            // shortcut: a still-hidden Desktop keeps its parks until 08.1.1-13 removes hiding.
-            guard let home = homeFrames[id], let key = deskKey(of: info.window), world[key]?.tree.isDesktopHidden != true,
-                let display = displays.first(where: { $0.uuid == key.displayUUID })
+            guard let home = homeFrames[id], let key = deskKey(of: info.window), let display = displays.first(where: { $0.uuid == key.displayUUID })
             else { continue }
             let frame = Recovery.destination(for: info.frame, home: home, display: display)
             guard (try? world.recordFloatingFrame(frame, for: info.window)) != nil else { continue }
@@ -922,7 +920,7 @@ public struct Arranger: Sendable {
             return targetKey(focused) != nil  // enabled with no focused window (UI-SPEC disabled-state rules)
         case .snap:
             guard trackable, let focused, let key = deskKey(of: focused), let desk = world[key] else { return false }
-            return desk.desktop.contains(focused) && desk.state(of: focused) == .present && desk.tree.isDesktopHidden != true
+            return desk.desktop.contains(focused) && desk.state(of: focused) == .present
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
         case .togglePause, .toggleExcludeFrontmost, .restoreAll:

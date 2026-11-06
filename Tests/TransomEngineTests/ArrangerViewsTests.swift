@@ -176,6 +176,34 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         #expect(harness.arranger.camera.savedViews[three] == saved)
     }
 
+    /// 8.1.1 D-14: floating windows are not part of a view, so a node view saves only its docked windows.
+    @Test func savingANodeViewSavesOnlyItsDockedWindows() async throws {
+        var harness = try await fourDocked()
+        await harness.send(.command(.float, focused: d))
+        try #require(harness.arranger.isFloating(d))
+        try await zoom(&harness, to: .node(try #require(harness.arranger.leafNode(of: c))))
+
+        await camera(.saveView(three), &harness)
+
+        #expect(harness.arranger.camera.savedViews[three]?.windows == [c.identity])
+    }
+
+    /// RESEARCH Open Question 3: a view saved before 8.1.1 that names only floating windows goes home at runtime, with
+    /// no file rewrite, and its notice is N15, not the "all gone" N17: the windows are still there.
+    @Test func aViewOfOnlyFloatingWindowsGoesHome() async throws {
+        var harness = try await fourDocked()
+        for window in [c, d] { await harness.send(.command(.float, focused: window)) }
+        try #require(harness.arranger.isFloating(c) && harness.arranger.isFloating(d))
+        try await zoom(&harness, to: .node(try #require(harness.arranger.leafNode(of: a))))
+        harness.arranger.camera.savedViews.save(SavedView(slot: three, desk: key, home: false, windows: [c.identity, d.identity]))
+
+        let shown = await camera(.view(three), &harness)
+
+        #expect(moves(shown).map(\.to) == [.home])
+        #expect(notices(shown) == [.viewShown(three, displayUUID: "main")])
+        #expect(!has(.beep, shown))
+    }
+
     @Test func aHomeViewGoesBackHome() async throws {
         var harness = try await fourDocked()
         let saved = await camera(.saveView(three), &harness)

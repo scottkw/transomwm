@@ -708,6 +708,23 @@ extension ArrangerRestoreTests {
         #expect(inside(tile, visibleFrame))
     }
 
+    /// T-08.1.1-04, T-08.1.1-19: the bring-back stays one-shot because `handle` clears every floater's home frame, on
+    /// every desk, at the end of the input that applies the restore.
+    @Test func aFloatersHomeFrameIsClearedOnEveryDesk() async throws {
+        let other = DeskKey(displayUUID: "main", spaceID: 7)
+        let fake = await fakeWith([3: Rect(x: 900, y: 300, width: 150, height: 120), 4: Rect(x: 200, y: 300, width: 150, height: 120)])
+        var mine = DesktopLayer(), theirs = DesktopLayer()
+        try mine.add(c, frame: Rect(x: 900, y: 300, width: 150, height: 120))
+        try theirs.add(d, frame: Rect(x: 200, y: 300, width: 150, height: 120))
+        let saved = try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree(), desktop: mine), other: Desk(tree: LayoutTree(), desktop: theirs)])
+        var restored = Arranger()
+        _ = restored.handle(.restore(saved, homeFrames: [c.identity: Self.home, d.identity: Self.home]), now: .now)
+        _ = restored.handle(.inventory(await fake.inventory()), now: .now)
+        try #require(restored.isFloating(c) && restored.isFloating(d), "\(restored.world)")
+        #expect(restored.deskKey(of: c) != restored.deskKey(of: d), "both desks hold a floater")
+        #expect(restored.homeFrames[c.identity] == nil && restored.homeFrames[d.identity] == nil)
+    }
+
     @Test func aRescuedWindowIsNotBroughtBackTwice() async throws {
         let fake = await fakeWith([3: Self.park])
         var restored = Arranger()
