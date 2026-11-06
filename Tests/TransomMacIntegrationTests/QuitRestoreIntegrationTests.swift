@@ -150,3 +150,78 @@ private func listedFrame(_ fixture: FixtureProcess, _ index: Int) async throws -
         #expect(near(moved, target), "the responsive window is at \(moved), not \(target)")
     }
 }
+
+/// How the bundled app is told to quit from outside. ⌘Q and menu Quit need a status menu, so they stay a guest probe.
+enum OutsideQuit: String, CaseIterable, CustomTestStringConvertible {
+    case sigterm, appleEvent
+    var testDescription: String { rawValue }
+}
+
+/// SAFE-01 on the real bundled app (sigterm-quit-hang): each way of asking it to quit from outside restores a stranded
+/// window, records the clean exit and ends the process. Run with scripts/vm-quit-check.sh, which stages the app. VM only:
+/// it signals the app and replaces Application Support/Transom for the run.
+@Suite(.serialized, .enabled(if: IntegrationEnv.trusted && IntegrationEnv.inVM && IntegrationEnv.bundledApp != nil, "needs the VM and a staged Transom Debug.app"))
+@MainActor struct OutsideQuitIntegrationTests {
+    @Test(.timeLimit(.minutes(1)), arguments: OutsideQuit.allCases)
+    func aQuitFromOutsideRestoresRecordsTheCleanExitAndExits(_ route: OutsideQuit) async throws {
+        let manager = FileManager.default
+        let support = manager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Transom")
+        let kept = support.appendingPathExtension("before-quit-test")
+        if manager.fileExists(atPath: support.path) { try manager.moveItem(at: support, to: kept) }
+        defer {
+            try? manager.removeItem(at: support)
+            try? manager.moveItem(at: kept, to: support)
+        }
+        try #require(try appPID() == nil, "Transom Debug is already running")
+        let fixture = try await FixtureProcess.launch(["standard"])
+        defer { fixture.terminate() }
+
+        let app = try #require(IntegrationEnv.bundledApp).path
+        try run("/usr/bin/open", [app])
+        defer {  // `open` registered this copy; a later URL or `open` should not find it
+            try? run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-u", app])
+        }
+        let layout = support.appendingPathComponent("layout.json")
+        let launched = await waitUntil(timeout: .seconds(10)) { manager.fileExists(atPath: layout.path) }
+        try #require(launched, "the app wrote no layout.json: is it trusted in this VM?")
+        let pid = try #require(try appPID())
+        defer { kill(pid, SIGKILL) }
+        try await Task.sleep(for: .seconds(3))  // the first sweep tracks the fixture
+        _ = try await fixture.send("move 0 5000 5000")
+        try await Task.sleep(for: .seconds(2))  // the app sees the move
+        let displays = Displays.current()
+        let stranded = try #require(try await listedFrame(fixture, 0))
+        try #require(Recovery.isStranded(stranded, displays: displays), "the move left the window on screen: \(stranded)")
+
+        switch route {
+        case .sigterm: kill(pid, SIGTERM)
+        case .appleEvent: try run("/usr/bin/osascript", ["-e", "quit app id \"com.eightabyte.transom.debug\""], wait: false)
+        }
+        // Bounded by the 2 s restore limit, with room for a slow guest. The bug: alive for minutes.
+        let exited = await waitUntil(timeout: .seconds(10)) { kill(pid, 0) != 0 }
+        #expect(exited, "still running 10 s after \(route.rawValue)")
+        let file = try JSONSerialization.jsonObject(with: Data(contentsOf: layout)) as? [String: Any]
+        #expect((file?["session"] as? [String: Any])?["cleanExit"] as? Bool == true, "no clean exit recorded")
+        let back = try #require(try await listedFrame(fixture, 0))
+        #expect(!Recovery.isStranded(back, displays: displays), "the window is still stranded at \(back)")
+    }
+
+    private func run(_ tool: String, _ arguments: [String], wait: Bool = true) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = arguments
+        try process.run()
+        if wait { process.waitUntilExit() }
+    }
+
+    private func appPID() throws -> Int32? {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        process.arguments = ["-x", "Transom Debug"]
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+        return Int32(String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+}

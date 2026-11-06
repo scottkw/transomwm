@@ -15,13 +15,18 @@ cd "$root"
 # The VM name and SSH key defaults keep their pre-rename names: they are existing host resources, not repo artifacts.
 vm="${TRANSOM_VM:-pane-test}"
 key="${TRANSOM_VM_KEY:-$HOME/.ssh/pane_vm_ed25519}"
-host="${TRANSOM_VM_USER:-admin}@$(tart ip "$vm")"
+ip="$(tart ip "$vm")"
+# `tart ip` can be empty after sleep: only ever ssh with a real address.
+[ -n "$ip" ] || { echo "vm-live-test: tart ip gave no address for $vm" >&2; exit 1; }
+host="${TRANSOM_VM_USER:-admin}@$ip"
 ssh_opts=(-i "$key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
-# One VM user at a time, shared with the UAT re-check plans.
+# One VM user at a time, shared with the UAT re-check plans. TRANSOM_VM_LOCK_HELD: scripts/vm-session.sh holds it for this run.
 mkdir -p .build
-mkdir .build/transom-vm.lock 2>/dev/null || { echo "vm-live-test: VM busy (.build/transom-vm.lock exists)" >&2; exit 1; }
-trap 'rmdir .build/transom-vm.lock' EXIT
+if [ -z "${TRANSOM_VM_LOCK_HELD:-}" ]; then
+    mkdir .build/transom-vm.lock 2>/dev/null || { echo "vm-live-test: VM busy (.build/transom-vm.lock exists)" >&2; exit 1; }
+    trap 'rmdir .build/transom-vm.lock' EXIT
+fi
 
 scratch=.build/vm
 swift build --build-tests --scratch-path "$scratch"
@@ -30,6 +35,8 @@ rm -rf "$stage" && mkdir -p "$stage"
 dev="$(xcode-select -p)"
 plat="$dev/Platforms/MacOSX.platform/Developer"
 cp -R "$scratch/debug/TransomMacIntegrationTests.xctest" "$scratch/debug/TransomFixtureApp" "$scratch"/debug/*.bundle "$stage/"
+# TRANSOM_VM_APP: a built app bundle to stage beside the tests (scripts/vm-quit-check.sh).
+if [ -n "${TRANSOM_VM_APP:-}" ]; then cp -R "$TRANSOM_VM_APP" "$stage/"; fi
 cp -R "$plat"/Library/Frameworks/{XCTest,XCUIAutomation,Testing}.framework "$plat"/Library/Frameworks/_Testing_*.framework \
     "$plat"/Library/PrivateFrameworks/*.framework "$plat"/usr/lib/{libXCTestSwiftSupport,lib_TestingInterop}.dylib \
     "$dev/Toolchains/XcodeDefault.xctoolchain/usr/libexec/swift/pm/swiftpm-testing-helper" "$stage/"

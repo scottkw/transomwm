@@ -52,9 +52,9 @@
 - [x] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
 - [x] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
 - [x] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
-- [ ] **TILE-21**: User can choose whether new windows tile automatically or float on the Desktop tile until docked (default: float)
-- [ ] **TILE-22**: User can choose whether a drag shows the docking regions automatically or only while a key is held (default: automatic). In hold-a-key mode, a plain drag pulls a docked window out to floating and just moves a floating one
-- [ ] **TILE-23**: User can dock a window to the 1st, 2nd, 3rd or 4th fourth, or to the middle half, as columns or rows, by keyboard or by dragging; windows already docked shrink to fit
+- [x] **TILE-21**: User can choose whether new windows tile automatically or float on the Desktop tile until docked (default: float)
+- [x] **TILE-22**: User can choose whether a drag shows the docking regions automatically or only while a key is held (default: automatic). In hold-a-key mode, a plain drag pulls a docked window out to floating and just moves a floating one
+- [x] **TILE-23**: User can dock a window to the 1st, 2nd, 3rd or 4th fourth, or to the middle half, as columns or rows, by keyboard or by dragging; windows already docked shrink to fit
 
 ### Safety & Recovery
 
@@ -116,7 +116,7 @@
 
 ### Ship
 
-- [ ] **SHIP-01**: Settings window covers gaps, appearance, gestures, hotkeys, exclusions and Mission Control replacement
+- [ ] **SHIP-01**: Settings window covers gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement, New Windows and Drag to Dock
 - [ ] **SHIP-02**: First-run onboarding walks through permissions and conflicting macOS features
 - [ ] **SHIP-03**: User can launch Transom at login
 - [ ] **SHIP-04**: Transom checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
@@ -195,9 +195,9 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-18 | Phase 3 | Complete |
 | TILE-19 | Phase 3 | Complete |
 | TILE-20 | Phase 3 | Complete |
-| TILE-21 | Phase 8.1 | Pending |
-| TILE-22 | Phase 8.1 | Pending |
-| TILE-23 | Phase 8.1 | Pending |
+| TILE-21 | Phase 8.1 | Complete |
+| TILE-22 | Phase 8.1 | Complete |
+| TILE-23 | Phase 8.1 | Complete |
 | SAFE-01 | Phase 3 | Complete |
 | SAFE-02 | Phase 3 | Complete |
 | SAFE-03 | Phase 3 | Complete |

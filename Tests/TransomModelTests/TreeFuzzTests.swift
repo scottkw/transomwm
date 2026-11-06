@@ -29,7 +29,7 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
         for _ in 0..<100 {
             // Dictionary order varies per process; sort so a seed always picks the same node.
             let nodeIDs = tree.nodes.keys.sorted()
-            switch Int.random(in: 0..<10, using: &rng) {
+            switch Int.random(in: 0..<11, using: &rng) {
             case 0..<4:
                 let window = makeWindow(nextWindow)
                 nextWindow += 1
@@ -61,6 +61,14 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
                 guard let split = splits.randomElement(using: &rng), case let .split(_, children, _)? = tree.nodes[split] else { continue }
                 let index = Int.random(in: 0..<(children.count - 1), using: &rng)
                 try tree.resizeBoundary(in: split, after: index, by: Double.random(in: -0.5...0.5, using: &rng))
+            case 9:
+                let window = makeWindow(nextWindow)
+                nextWindow += 1
+                let slot = FourthSlot.allCases.randomElement(using: &rng)!
+                let axis: Axis = Bool.random(using: &rng) ? .horizontal : .vertical
+                // Too deep or too full: nothing changed, so there's nothing to record.
+                guard (try? tree.insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)) != nil else { continue }
+                expected.insert(window.identity)
             default:
                 // Edits that must throw and leave the tree and the ID source untouched.
                 let before = tree

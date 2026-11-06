@@ -78,6 +78,17 @@ extension KeyboardShortcuts.Name {
     static let saveView7 = Self("saveView7", initial: ViewChords.shortcut(7, save: true))
     static let saveView8 = Self("saveView8", initial: ViewChords.shortcut(8, save: true))
     static let saveView9 = Self("saveView9", initial: ViewChords.shortcut(9, save: true))
+    // Fourths (08.1 UI-SPEC Surface 4): not zoom names, so they stay enabled with zoom off. Bound by key position.
+    static let dockColumn1 = Self("dockColumn1", initial: .init(.one, modifiers: [.control, .option, .command, .shift]))
+    static let dockColumn2 = Self("dockColumn2", initial: .init(.two, modifiers: [.control, .option, .command, .shift]))
+    static let dockColumn3 = Self("dockColumn3", initial: .init(.three, modifiers: [.control, .option, .command, .shift]))
+    static let dockColumn4 = Self("dockColumn4", initial: .init(.four, modifiers: [.control, .option, .command, .shift]))
+    static let dockColumnMiddle = Self("dockColumnMiddle", initial: .init(.five, modifiers: [.control, .option, .command, .shift]))
+    static let dockRow1 = Self("dockRow1", initial: .init(.six, modifiers: [.control, .option, .command, .shift]))
+    static let dockRow2 = Self("dockRow2", initial: .init(.seven, modifiers: [.control, .option, .command, .shift]))
+    static let dockRow3 = Self("dockRow3", initial: .init(.eight, modifiers: [.control, .option, .command, .shift]))
+    static let dockRow4 = Self("dockRow4", initial: .init(.nine, modifiers: [.control, .option, .command, .shift]))
+    static let dockRowMiddle = Self("dockRowMiddle", initial: .init(.zero, modifiers: [.control, .option, .command, .shift]))
 }
 
 /// The saved-view defaults (D-01): ⌥1–9 and ⇧⌥1–9, or ⌃⌥ / ⇧⌃⌥ on macOS 15.0 and 15.1, which refuse Option-only and
@@ -166,10 +177,23 @@ enum Hotkeys {
         (.saveView7, .camera(.saveView(ViewSlot(7)!))),
         (.saveView8, .camera(.saveView(ViewSlot(8)!))),
         (.saveView9, .camera(.saveView(ViewSlot(9)!))),
+        (.dockColumn1, .dockFourth(.first, .horizontal)),
+        (.dockColumn2, .dockFourth(.second, .horizontal)),
+        (.dockColumn3, .dockFourth(.third, .horizontal)),
+        (.dockColumn4, .dockFourth(.fourth, .horizontal)),
+        (.dockColumnMiddle, .dockFourth(.middle, .horizontal)),
+        (.dockRow1, .dockFourth(.first, .vertical)),
+        (.dockRow2, .dockFourth(.second, .vertical)),
+        (.dockRow3, .dockFourth(.third, .vertical)),
+        (.dockRow4, .dockFourth(.fourth, .vertical)),
+        (.dockRowMiddle, .dockFourth(.middle, .vertical)),
     ]
 
     /// The camera hotkeys: disabled while zoom is off, so their chords reach apps as in Phase 3 (D-D).
     static let zoomNames: [KeyboardShortcuts.Name] = entries.compactMap { if case .camera = $0.command { $0.name } else { nil } }
+
+    /// The fourth hotkeys. They aren't `.camera` commands, so they stay enabled with zoom off (TILE-10).
+    static let fourthNames: [KeyboardShortcuts.Name] = entries.compactMap { if case .dockFourth = $0.command { $0.name } else { nil } }
 
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
 
@@ -184,9 +208,9 @@ enum Hotkeys {
         if enabled { KeyboardShortcuts.enable(zoomNames) } else { KeyboardShortcuts.disable(zoomNames) }
     }
 
-    /// The zoom defaults macOS also uses (⌃⌥⌘, and ⌃⌥⌘. when the contrast shortcuts are on); macOS takes them.
+    /// The zoom and fourth defaults macOS also uses (⌃⌥⌘, and ⌃⌥⌘. when the contrast shortcuts are on); macOS takes them.
     static func logSystemConflicts() {
-        for name in zoomNames {
+        for name in zoomNames + fourthNames {
             guard let chord = name.initialShortcut, chord.isTakenBySystem else { continue }
             logger.info("hotkey \(name.rawValue, privacy: .public) \(chord.description, privacy: .public) is also a macOS shortcut; macOS takes it")
         }

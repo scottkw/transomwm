@@ -13,6 +13,8 @@ import os
     private let commands: CommandMenu
     private let permission: PermissionController
     private let gaps: GapPreference
+    private let dragToDock: DragToDockPreference
+    private let newWindows: NewWindowsPreference
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
     private let conflicts: ConflictController
@@ -41,13 +43,15 @@ import os
     /// `showSetup` opens the "Set Up Transom" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
         system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
-        gaps: GapPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        gaps: GapPreference, dragToDock: DragToDockPreference, newWindows: NewWindowsPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.arrange = arrange
         commands = CommandMenu(dispatch: dispatch)
         self.permission = permission
         self.gaps = gaps
+        self.dragToDock = dragToDock
+        self.newWindows = newWindows
         self.exclusions = exclusions
         self.freezeTest = freezeTest
         self.conflicts = conflicts
@@ -128,6 +132,7 @@ import os
         for command in [Command.dock, .float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
         menu.addItem(commands.focusMenu)
         menu.addItem(commands.moveMenu)
+        menu.addItem(commands.fourthMenu)
         menu.addItem(commands.splitMenu)
         menu.addItem(commands.snapMenu)
         menu.addItem(commands.tabsMenu)
@@ -135,7 +140,18 @@ import os
         menu.addItem(commands.item(for: .arrangeAll))
         menu.addItem(commands.item(for: .floatAll))
         menu.addItem(commands.item(for: .toggleDesktop))
+        // No action greys it out under auto-enabling, as for Restore macOS Window Settings. Menu only (D-24).
+        let hasWaiting = arrange.arranger.shownPlaceholderCount > 0
+        let clear = NSMenuItem(title: MenuCopy.clearWaitingTiles, action: hasWaiting ? #selector(clearWaitingTiles) : nil, keyEquivalent: "")
+        clear.target = self
+        menu.addItem(clear)
         menu.addItem(gapsMenuItem())
+        menu.addItem(newWindowsMenuItem())
+        menu.addItem(dragToDockMenuItem())
+    }
+
+    @objc private func clearWaitingTiles() {
+        Task { await arrange.clearWaitingTiles() }
     }
 
     /// The Zoom section (Surface 6), on the pointer's display. Screen Recording is never checked while zoom is off.
@@ -214,6 +230,34 @@ import os
 
     @objc private func chooseGap(_ sender: NSMenuItem) {
         _ = gaps.set(GapPreference.allowed[sender.tag])
+    }
+
+    /// New Windows ▸ (D-01, D-19); enabled while paused or not ready, like Gaps ▸.
+    private func newWindowsMenuItem() -> NSMenuItem {
+        CommandMenu.optionMenu(
+            title: MenuCopy.newWindowsTitle(newWindows.value),
+            choices: NewWindowsMode.allCases.map {
+                (MenuCopy.newWindowsChoice($0), MenuCopy.newWindowsTooltip($0), $0 == newWindows.value)
+            },
+            target: self, action: #selector(chooseNewWindows))
+    }
+
+    @objc private func chooseNewWindows(_ sender: NSMenuItem) {
+        newWindows.set(NewWindowsMode.allCases[sender.tag])
+    }
+
+    /// Drag to Dock ▸ (D-07, D-19); enabled while paused or not ready, like Gaps ▸.
+    private func dragToDockMenuItem() -> NSMenuItem {
+        CommandMenu.optionMenu(
+            title: MenuCopy.dragToDockTitle(dragToDock.value),
+            choices: DragToDockMode.allCases.map {
+                (MenuCopy.dragToDockChoice($0), MenuCopy.dragToDockTooltip($0), $0 == dragToDock.value)
+            },
+            target: self, action: #selector(chooseDragToDock))
+    }
+
+    @objc private func chooseDragToDock(_ sender: NSMenuItem) {
+        dragToDock.set(DragToDockMode.allCases[sender.tag])
     }
 
     /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.

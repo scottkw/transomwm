@@ -12,6 +12,8 @@ public enum DropTarget: Equatable, Sendable {
     case layoutEdge(Edge)
     /// The tree is empty: the drop becomes the root.
     case emptyLayout
+    /// A share of the whole desk along an axis (D-14).
+    case fourth(FourthSlot, Axis)
 }
 
 public enum DropZones {
@@ -59,6 +61,8 @@ extension LayoutTree {
         case let .tile(node, .center): try group(window, into: node)
         case let .layoutEdge(edge):
             if let root { try insert(window, at: edge, of: root, ids: &ids) } else { try insertRoot(window, ids: &ids) }
+        case let .fourth(slot, axis):
+            try insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)
         }
     }
 }
@@ -75,6 +79,7 @@ extension LayoutTree {
         case let .tile(id, .center): throw .notALeaf(id)
         case let .layoutEdge(edge):
             if let root { try insertLeaf(node, states: states, at: edge, of: root, ids: &ids) } else { try insertRootLeaf(node, states: states, ids: &ids) }
+        case let .fourth(slot, axis): try insertFourth(node, states: states, slot: slot, axis: axis, ids: &ids)
         }
     }
 }

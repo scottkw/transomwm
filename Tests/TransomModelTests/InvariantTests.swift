@@ -18,7 +18,7 @@ private func h(_ children: UInt64..., weights: [Double]? = nil) -> Node {
 
 /// `splits` nested splits with alternating axes (n1 horizontal). Each holds a panel and the next
 /// split; the last holds two panels, at depth `splits` (the root is depth 0).
-private func chain(splits: Int) -> (root: NodeID, nodes: [NodeID: Node], states: [WindowIdentity: WindowState], deepest: NodeID, deepestAxis: Axis) {
+func chain(splits: Int) -> (root: NodeID, nodes: [NodeID: Node], states: [WindowIdentity: WindowState], deepest: NodeID, deepestAxis: Axis) {
     var nodes: [NodeID: Node] = [:]
     var states: [WindowIdentity: WindowState] = [:]
     func panel(_ raw: UInt64) -> NodeID {

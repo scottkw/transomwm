@@ -71,6 +71,7 @@ nonisolated public enum ZoomCopy {
         case .moveOrSnap(let edge): "Move Window \(MenuCopy.direction(edge)) or Snap to \(MenuCopy.snapTitle(half(edge)))"
         case .toggleDesktop: "Hide or Show Desktop Tile"
         case .togglePause: "Pause or Resume Arranging"
+        case .dockFourth(let slot, let axis): "Dock to \(MenuCopy.fourthTitle(slot, axis))"
         default: MenuCopy.commandTitle(command)
         }
     }

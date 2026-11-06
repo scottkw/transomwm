@@ -40,6 +40,12 @@ enum IntegrationEnv {
         return url
     }
 
+    /// `Transom Debug.app` staged next to the `.xctest` bundle (`TRANSOM_VM_APP` in scripts/vm-live-test.sh), if any.
+    static let bundledApp: URL? = {
+        guard let app = productsDirectory?.appendingPathComponent("Transom Debug.app") else { return nil }
+        return FileManager.default.fileExists(atPath: app.path) ? app : nil
+    }()
+
     /// swiftpm-testing-helper gets `--test-bundle-path <dir>/X.xctest/Contents/MacOS/X`.
     private static var productsDirectory: URL? {
         let args = CommandLine.arguments

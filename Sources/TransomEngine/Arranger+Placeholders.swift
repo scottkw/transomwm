@@ -102,6 +102,14 @@ extension Arranger {
         placeholders.table.values.count { isPlaceholder($0.ref) }
     }
 
+    /// The tiles held on desks now showing: what Clear Waiting Tiles would close (D-24).
+    public var shownPlaceholderCount: Int { shownPlaceholders.count }
+
+    /// shortcut: counts waiting windows, so a saved tab group is several "tiles" in the announcement; count leaves if that's noticed.
+    private var shownPlaceholders: [Placeholder] {
+        placeholders.table.values.filter { isPlaceholder($0.ref) && isOnShownDesk($0.ref) }
+    }
+
     /// The desks on screen.
     var shownDesks: Set<DeskKey> { Set(displays.map(Self.key)) }
 
@@ -238,22 +246,37 @@ extension Arranger {
     /// Closes every placeholder past a running deadline through the close path, as if its window had closed
     /// (D-12): no undo step, and the neighbours reflow, whose writes wait out a pause (RESEARCH Pitfall 14).
     mutating func expirePlaceholders(now: ContinuousClock.Instant) -> [ArrangerEffect] {
-        let due = placeholders.table.values.filter { now >= $0.deadline && deadlineRuns($0) }.sorted { $0.ref.identity < $1.ref.identity }
+        let due = placeholders.table.values.filter { now >= $0.deadline && deadlineRuns($0) }
+        let effects = closePlaceholders(due) { "expired (\($0.wait.rawValue))" }
+        placeholders.quitting = placeholders.quitting.filter { now < $0.value.at + Self.quitWait || placeholders.waits(for: $0.value.bundleID) }
+        return effects
+    }
+
+    /// Clear Waiting Tiles (D-24): the tiles on the desks showing close as expiry closes them, with no undo step.
+    /// Tiles on hidden desks still wait (D-12b). A floating saved window has no tile to clear.
+    mutating func clearWaitingTiles() -> [ArrangerEffect] {
+        let shown = shownPlaceholders
+        guard !shown.isEmpty else { return [] }
+        return closePlaceholders(shown) { _ in "cleared" } + [.announce(shown.count == 1 ? "Cleared 1 waiting tile" : "Cleared \(shown.count) waiting tiles")]
+    }
+
+    /// Takes `waiting` off the desks through the close path, as if each window had closed.
+    private mutating func closePlaceholders(_ waiting: [Placeholder], logging outcome: (Placeholder) -> String) -> [ArrangerEffect] {
+        guard !waiting.isEmpty else { return [] }
         var effects: [ArrangerEffect] = []
-        for placeholder in due {
+        for placeholder in waiting.sorted(by: { $0.ref.identity < $1.ref.identity }) {
             let tile = tileName(of: placeholder.ref)
             placeholders.table[placeholder.ref.identity] = nil
             forget(placeholder.ref)
             do throws(LayoutError) {
                 _ = try LifecycleSync.handle(.windowDestroyed(placeholder.ref), world: &world, history: &history)
-                effects.append(.info("placeholder \(tile) expired (\(placeholder.wait.rawValue))"))
+                effects.append(.info("placeholder \(tile) \(outcome(placeholder))"))
             } catch {
-                effects.append(.fault("could not close the expired placeholder \(placeholder.ref): \(error)"))
+                effects.append(.fault("could not close the placeholder \(placeholder.ref): \(error)"))
             }
         }
-        placeholders.quitting = placeholders.quitting.filter { now < $0.value.at + Self.quitWait || placeholders.waits(for: $0.value.bundleID) }
-        // The trim is for a pause, whose replan sends nothing: an expired tile goes at once, a filled one at Resume.
-        return due.isEmpty ? [] : effects + replan() + showPlaceholders(placeholders.shown.mapValues { $0.filter { isPlaceholder($0.window) } })
+        // The trim is for a pause, whose replan sends nothing: a closed tile goes at once, a filled one at Resume.
+        return effects + replan() + showPlaceholders(placeholders.shown.mapValues { $0.filter { isPlaceholder($0.window) } })
     }
 
     /// Matches the app's waiting placeholders against its fresh windows, as the launch path does (D-11, HintMatcher), and

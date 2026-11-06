@@ -1,7 +1,7 @@
 import Foundation
 
 /// The `transom://` URL scheme of Phase 3 (SAFE-03, TILE-15, TILE-17, Pitfall 21, T-03-40): three parameterless commands, plus the 11 camera commands of Phase 4,
-/// Show Overview (Phase 6), the three tab commands (Phase 7) and `view/{n}` and `save-view/{n}` (Phase 8, D-06).
+/// Show Overview (Phase 6), the three tab commands (Phase 7), `view/{n}` and `save-view/{n}` (Phase 8, D-06) and the ten dock commands (Phase 8.1, D-17).
 /// Anything from any app or web page can open one, so the parser is a strict whitelist and nothing from the URL but the
 /// chosen command goes anywhere.
 public enum TransomURL {
@@ -16,6 +16,13 @@ public enum TransomURL {
         "overview": .camera(.overview),
         // Phase 7: the tab commands (07 UI-SPEC Surface 7).
         "next-tab": .tabs(.next), "previous-tab": .tabs(.previous), "move-out-of-group": .tabs(.moveOut),
+        // Phase 8.1: the ten fourths (08.1 UI-SPEC Surface 5).
+        "dock-column-1": .dockFourth(.first, .horizontal), "dock-column-2": .dockFourth(.second, .horizontal),
+        "dock-column-3": .dockFourth(.third, .horizontal), "dock-column-4": .dockFourth(.fourth, .horizontal),
+        "dock-column-middle": .dockFourth(.middle, .horizontal),
+        "dock-row-1": .dockFourth(.first, .vertical), "dock-row-2": .dockFourth(.second, .vertical),
+        "dock-row-3": .dockFourth(.third, .vertical), "dock-row-4": .dockFourth(.fourth, .vertical),
+        "dock-row-middle": .dockFourth(.middle, .vertical),
     ]
 
     /// One line of `transom help` per command, in help order; `help` itself has no URL.
@@ -37,6 +44,16 @@ public enum TransomURL {
         ("Arrange", "toggle-desktop", "", "Hide or show the Desktop tile"),
         ("Arrange", "split-finder", "", "Split with a new Finder window"),
         ("Arrange", "restore", "", "Restore all windows"),
+        ("Fourths", "dock-column-1", "", "Dock the focused window as the 1st of 4 columns"),
+        ("Fourths", "dock-column-2", "", "Dock the focused window as the 2nd of 4 columns"),
+        ("Fourths", "dock-column-3", "", "Dock the focused window as the 3rd of 4 columns"),
+        ("Fourths", "dock-column-4", "", "Dock the focused window as the 4th of 4 columns"),
+        ("Fourths", "dock-column-middle", "", "Dock the focused window as the middle half column"),
+        ("Fourths", "dock-row-1", "", "Dock the focused window as the 1st of 4 rows"),
+        ("Fourths", "dock-row-2", "", "Dock the focused window as the 2nd of 4 rows"),
+        ("Fourths", "dock-row-3", "", "Dock the focused window as the 3rd of 4 rows"),
+        ("Fourths", "dock-row-4", "", "Dock the focused window as the 4th of 4 rows"),
+        ("Fourths", "dock-row-middle", "", "Dock the focused window as the middle half row"),
         ("Tabs", "next-tab", "", "Select the next tab in the focused tab group"),
         ("Tabs", "previous-tab", "", "Select the previous tab"),
         ("Tabs", "move-out-of-group", "", "Move the focused tab out of its group"),
@@ -78,12 +95,24 @@ public enum TransomURL {
 public struct TransomURLRateLimiter: Sendable {
     public static let interval: Duration = .seconds(1)
     private var lastAdmitted: [Command: ContinuousClock.Instant] = [:]
+    private var lastDockURL: ContinuousClock.Instant?
 
     public init() {}
 
     public mutating func admit(_ command: Command, at now: ContinuousClock.Instant) -> Bool {
         if let last = lastAdmitted[command], now - last < Self.interval { return false }
         lastAdmitted[command] = now
+        return true
+    }
+
+    /// `admit` for an opened URL. Any app or web page can open one, and with one second each the ten dock commands would allow
+    /// ten layout edits a second, emptying the undo history in five, so they share one second here. The CLI stays on `admit`,
+    /// so a script can dock several windows quickly.
+    public mutating func admitOpenedURL(_ command: Command, at now: ContinuousClock.Instant) -> Bool {
+        guard case .dockFourth = command else { return admit(command, at: now) }
+        if let lastDockURL, now - lastDockURL < Self.interval { return false }
+        guard admit(command, at: now) else { return false }
+        lastDockURL = now
         return true
     }
 }

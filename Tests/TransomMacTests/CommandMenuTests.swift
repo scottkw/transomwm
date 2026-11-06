@@ -122,12 +122,73 @@ import Testing
         #expect(menu.tabsMenu.isEnabled, "the submenu item itself stays enabled")
     }
 
+    /// 08.1 UI-SPEC Surface 4: five columns, a separator, five rows.
+    @Test func theFourthSubmenuFollowsTheUISpecOrder() throws {
+        let menu = CommandMenu { _ in }
+        #expect(menu.fourthMenu.title == "Dock to Fourth")
+        let items = try #require(menu.fourthMenu.submenu).items
+        #expect(items.map { $0.isSeparatorItem ? nil : $0.title } == [
+            "1st Column", "2nd Column", "3rd Column", "4th Column", "Middle Half Column", nil,
+            "1st Row", "2nd Row", "3rd Row", "4th Row", "Middle Half Row",
+        ])
+    }
+
+    /// D-17: each item shows its chord and runs its command. Every chord is ⇧⌃⌥⌘ and a digit.
+    @Test func eachFourthItemShowsItsChordAndDispatchesItsCommand() throws {
+        var sent: [Command] = []
+        let menu = CommandMenu { sent.append($0) }
+        let items = try #require(menu.fourthMenu.submenu).items.filter { !$0.isSeparatorItem }
+        #expect(items.map(\.keyEquivalent) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
+        #expect(items.allSatisfy { $0.keyEquivalentModifierMask == base.union(.shift) })
+        for item in items { _ = (item.target as? NSObject)?.perform(try #require(item.action), with: item) }
+        let slots: [FourthSlot] = [.first, .second, .third, .fourth, .middle]
+        #expect(sent == slots.map { .dockFourth($0, .horizontal) } + slots.map { .dockFourth($0, .vertical) })
+    }
+
+    /// D-15, D-17: one availability rule, for a floating window and a docked one alike; a disabled item keeps its title.
+    @Test func aFourthItemFollowsAvailabilityAlone() throws {
+        let menu = CommandMenu { _ in }
+        let items = try #require(menu.fourthMenu.submenu).items.filter { !$0.isSeparatorItem }
+        let titles = items.map(\.title)
+        #expect(titles.count == 10)
+        for floats in [true, false] {
+            menu.update(focusedFloats: floats) { _ in true }
+            #expect(items.allSatisfy { $0.isEnabled })
+        }
+        menu.update { if case .dockFourth = $0 { false } else { true } }
+        #expect(items.allSatisfy { !$0.isEnabled })
+        #expect(items.map(\.title) == titles)
+    }
+
     @Test func theFocusAndSplitSubmenusHoldThePersistentItems() {
         let menu = CommandMenu { _ in }
         #expect(menu.focusMenu.title == "Focus")
         #expect(menu.focusMenu.submenu?.items.contains { $0 === menu.item(for: .focus(.left)) } == true)
         #expect(menu.splitMenu.title == "Split")
         #expect(menu.splitMenu.submenu?.items.contains { $0 === menu.item(for: .finderSplit) } == true)
+    }
+
+    /// UI-SPEC Surface 1: the shape both options share, enabled with no availability rule.
+    @Test func optionMenuBuildsARadioSubmenu() throws {
+        final class Target: NSObject {
+            var chosen: [Int] = []
+            @objc func choose(_ sender: NSMenuItem) { chosen.append(sender.tag) }
+        }
+        let target = Target()
+        let item = CommandMenu.optionMenu(
+            title: "Option: B",
+            choices: [("A", "First.", false), ("B", "Second.", true)],
+            target: target, action: #selector(Target.choose))
+        #expect(item.title == "Option: B")
+        #expect(item.action == #selector(NSMenu.submenuAction(_:)), "AppKit's own, for any item with a submenu")
+        let choices = try #require(item.submenu).items
+        #expect(choices.map(\.title) == ["A", "B"])
+        #expect(choices.map(\.state) == [.off, .on])
+        #expect(choices.map(\.toolTip) == ["First.", "Second."])
+        #expect(choices.map(\.tag) == [0, 1])
+        #expect(choices.allSatisfy { $0.target === target && $0.keyEquivalent.isEmpty && $0.isEnabled })
+        _ = target.perform(try #require(choices[1].action), with: choices[1])
+        #expect(target.chosen == [1])
     }
 }
 

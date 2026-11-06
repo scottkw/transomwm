@@ -31,6 +31,7 @@ import os
     public private(set) var arranger: Arranger {
         didSet {
             publishGreenButtons()
+            publishDragOption()
             zoomInput.publish()
             gestures.publish()
             guard arranger.pauseReasons != reportedPause else { return }
@@ -58,12 +59,13 @@ import os
     /// The one pending debounced write: a newer request replaces it, so it lands 0.5 s after the latest.
     private let saveTimer = WakeTimer()
     private var fedCompleteInventory = false
+    private var seededFocus = false
 
     /// The exclusion list Don't Arrange toggles; nil in tests that never dispatch it.
     private let exclusions: ExclusionStore?
 
     /// The active event tap that sees title-bar drags (TILE-01), and the poll of the dragged window's frame.
-    private let tap = InputTap()
+    let tap = InputTap()
     private var tapReader: Task<Void, Never>?
     private let dragPoller = DragFramePoller()
     /// The drop preview panels, one per display; made when tracking starts.
@@ -136,13 +138,14 @@ import os
     var isRectZoomActive: Bool { zoomInput.isBandActive }
 
     public init(
-        system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, zoomEnabled: Bool = false
+        system: AXWindowSystem, store: LayoutStore? = nil, exclusions: ExclusionStore? = nil, gap: Double = 8, dragToDock: DragToDockMode = .automatic,
+        newWindows: NewWindowsMode = .float, zoomEnabled: Bool = false
     ) {
         self.system = system
         self.store = store
         self.exclusions = exclusions
         self.zoomEnabled = zoomEnabled
-        arranger = Arranger(gap: gap)
+        arranger = Arranger(gap: gap, dragToDock: dragToDock, newWindows: newWindows)
         system.releaseFramesBeforeExcluding = { [weak self] bundleIDs in self?.arranger.releaseFrames(forExcluding: bundleIDs) ?? [:] }
         gapPanels.onDrag = { [weak self] handle, delta, ended in
             Task { [weak self] in
@@ -173,6 +176,21 @@ import os
     /// A new gap from the Gaps submenu: applied at once, or on Resume while paused (D-27).
     public func setGap(_ gap: Double) async {
         await run(arranger.handle(.gap(gap), now: .now))
+    }
+
+    /// Menu ▸ Arrange ▸ Clear Waiting Tiles (D-24).
+    public func clearWaitingTiles() async {
+        await run(arranger.handle(.clearWaitingTiles, now: .now))
+    }
+
+    /// A new Drag to Dock choice: the next drag follows it (D-07, D-19).
+    public func setDragToDock(_ mode: DragToDockMode) async {
+        await run(arranger.handle(.dragToDock(mode), now: .now))
+    }
+
+    /// A new New Windows choice: the next window follows it, and nothing already floating moves (D-05, D-19).
+    public func setNewWindows(_ mode: NewWindowsMode) async {
+        await run(arranger.handle(.newWindows(mode), now: .now))
     }
 
     /// Queues a toast from outside the Arranger (ConflictController's N7 and N8).
@@ -237,6 +255,7 @@ import os
             Task { await self?.displaysSettled() }
         }
         if zoomEnabled { await run(arranger.handle(.zoomEnabled(true), now: .now)) }
+        await seedFocus()
         onInventory?(inventory)
         Task { [weak self, system] in
             for await event in system.events {
@@ -288,9 +307,19 @@ import os
                     await self.run(self.arranger.handle(.inventory(inventory), now: .now))
                     await self.settleIfLaunchArrangementChanged()
                 }
+                await self.seedFocus()
                 self.onInventory?(inventory)
             }
         }
+    }
+
+    /// `.windowFocused` fires on a change, so the window focused when Transom started needs one of its own (D-02, WR-03). Once,
+    /// after the saved layout is re-attached: until then the Arranger ignores events.
+    private func seedFocus() async {
+        guard !seededFocus, fedCompleteInventory, !arranger.awaitsRestore else { return }
+        seededFocus = true
+        guard let window = commandContext().focused else { return }
+        await run(arranger.handle(.event(.windowFocused(window)), now: .now))
     }
 
     /// Whether the event tap is running: drags are detected only while it is (the Debug line).
@@ -328,6 +357,7 @@ import os
         zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
+        previews?.hideAllFourthGuides()
     }
 
     /// Every 2 s and whenever an app activates: the tap's watchdog, and a restart once access is back (Pitfall 4).
@@ -374,6 +404,7 @@ import os
         zoomInput.reset(reason: "tap stopped")
         dragPoller.stop()
         previews?.show(nil, on: nil)
+        previews?.hideAllFourthGuides()
     }
 
     /// Accessibility access changed (PermissionController's phase entered or left `.ready`).
@@ -415,6 +446,13 @@ import os
         guard rects != publishedGreenButtons else { return }
         publishedGreenButtons = rects
         tap.setGreenButtons(rects)
+    }
+
+    /// Hands the tap the Arranger's ⌥ strip on every Arranger change, with no change-only cache: the tap clears its own copy
+    /// on mouse-down, and a press the Arranger never sees (a zoom or green-button press, or one dropped from the bounded
+    /// stream) would leave a cache at `.always` and the tap at `.off`, so ⌥ would reach macOS (D-07a).
+    private func publishDragOption() {
+        tap.setDragOption(arranger.dragOptionStrip)
     }
 
     /// The tracked window showing CG window `id` (`visibleMemberID ?? windowID`).
@@ -623,13 +661,13 @@ import os
         return arranger.handle(.command(command, focused: context.focused), now: .now)
     }
 
-    /// What a URL or CLI route keeps of `effects`: no beep, and a refusal shows nothing on screen (Phase 3 rule, UI-SPEC
-    /// N16). A camera command says nothing either way; its toasts still show.
+    /// What a URL or CLI route keeps of `effects`: no beep, and a refusal shows nothing on screen, Blocked flash included
+    /// (Phase 3 rule, UI-SPEC N16, 08.1 Surface 4). A camera command says nothing either way; its toasts still show.
     static func silenced(_ effects: [ArrangerEffect], of command: Command) -> [ArrangerEffect] {
         let quiet = if case .camera = command { true } else { effects.contains(.beep) }
         return effects.filter {
             switch $0 {
-            case .beep, .tabAnnouncement(.refused), .notice(.viewEmpty), .notice(.viewDisplayGone), .notice(.viewNothingToSave): false
+            case .beep, .flashBlocked, .tabAnnouncement(.refused), .notice(.viewEmpty), .notice(.viewDisplayGone), .notice(.viewNothingToSave): false
             case .announce: !quiet
             default: true
             }
@@ -819,6 +857,8 @@ import os
                 previews?.flashBlocked(rect, on: displayUUID)
             case .gapHandles(let handles, let displayUUID):
                 gapPanels.show(handles, on: displayUUID)
+            case .fourthGuides(let rects, let displayUUID):
+                previews?.showFourthGuides(rects, on: displayUUID)
             case .collapsedBlocks(let blocks, let displayUUID):
                 collapsedPanels.show(blocks, on: displayUUID)
             case .tabStrips(let strips, let displayUUID):

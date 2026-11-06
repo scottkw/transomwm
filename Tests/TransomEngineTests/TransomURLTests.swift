@@ -1,5 +1,6 @@
 import Foundation
 import TransomEngine
+import TransomModel
 import Testing
 
 private func parse(_ string: String, scheme: String = "transom") -> Command? {
@@ -44,6 +45,56 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         "transom://move-out", "transom://previous-tab:80"])
     func malformedTabURLsAreRejected(_ string: String) {
         #expect(parse(string) == nil)
+    }
+
+    /// 08.1 UI-SPEC Surface 5: the ten fourths.
+    @Test(arguments: [
+        ("dock-column-1", FourthSlot.first, Axis.horizontal), ("dock-column-2", .second, .horizontal), ("dock-column-3", .third, .horizontal),
+        ("dock-column-4", .fourth, .horizontal), ("dock-column-middle", .middle, .horizontal), ("dock-row-1", .first, .vertical),
+        ("dock-row-2", .second, .vertical), ("dock-row-3", .third, .vertical), ("dock-row-4", .fourth, .vertical),
+        ("dock-row-middle", .middle, .vertical),
+    ])
+    func theFourthCommandsParse(host: String, slot: FourthSlot, axis: Axis) {
+        #expect(parse("transom://\(host)") == .dockFourth(slot, axis))
+        #expect(parse("transom://\(host)/") == .dockFourth(slot, axis))
+    }
+
+    @Test(arguments: ["transom://dock-column-5", "transom://DOCK-COLUMN-1", "transom://dock-column/1", "transom://dock-column-1/1", "transom://dock-column-1?x=1",
+        "transom://dock-column-1#f", "transom://dock-row-0", "transom://dock-fourth"])
+    func malformedFourthURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
+    /// WR-09: on the URL route the fourths share a second, on top of each command's own, and other commands are untouched.
+    @Test func openedDockURLsShareOneSecond() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockFourth(.first, .horizontal), .zero), (.dockFourth(.second, .vertical), .milliseconds(10)), (.restoreAll, .milliseconds(20)),
+            (.dockFourth(.middle, .horizontal), .seconds(1)),
+        ]
+        #expect(attempts.map { limiter.admitOpenedURL($0.0, at: start + $0.1) } == [true, false, true, true])
+    }
+
+    /// D-07: one limiter for both routes. The CLI's use of a command uses up its second for URLs too, but not the family's.
+    @Test func theCLIUsesUpACommandsSecondButNotTheFamilys() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let cli = limiter.admit(.dockFourth(.first, .horizontal), at: start)
+        let sameByURL = limiter.admitOpenedURL(.dockFourth(.first, .horizontal), at: start + .milliseconds(10))
+        let otherByURL = limiter.admitOpenedURL(.dockFourth(.second, .horizontal), at: start + .milliseconds(20))
+        let cliAfterURL = limiter.admit(.dockFourth(.third, .horizontal), at: start + .milliseconds(30))
+        #expect([cli, sameByURL, otherByURL, cliAfterURL] == [true, false, true, true])
+    }
+
+    /// T-08.1-12: on the CLI route each fourth has its own one-per-second limit.
+    @Test func eachFourthIsLimitedSeparately() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockFourth(.first, .horizontal), .zero), (.dockFourth(.second, .horizontal), .milliseconds(10)), (.dockFourth(.first, .horizontal), .milliseconds(20)),
+        ]
+        #expect(attempts.map { limiter.admit($0.0, at: start + $0.1) } == [true, true, false])
     }
 
     /// 08 UI-SPEC Surface 4: the same commands as ⌥{n} and ⇧⌥{n}.

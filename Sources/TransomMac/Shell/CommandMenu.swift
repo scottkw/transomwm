@@ -18,11 +18,16 @@ import TransomModel
         .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
         .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
         .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
-    ]
+    ] + fourthColumns + fourthRows
+
+    private static let fourthColumns: [Command] = fourthSlots.map { .dockFourth($0, .horizontal) }
+    private static let fourthRows: [Command] = fourthSlots.map { .dockFourth($0, .vertical) }
+    private static let fourthSlots: [FourthSlot] = [.first, .second, .third, .fourth, .middle]
 
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
     let splitMenu = NSMenuItem(title: "Split", action: nil, keyEquivalent: "")
     let moveMenu = NSMenuItem(title: MenuCopy.moveMenu, action: nil, keyEquivalent: "")
+    let fourthMenu = NSMenuItem(title: MenuCopy.fourthMenu, action: nil, keyEquivalent: "")
     let snapMenu = NSMenuItem(title: MenuCopy.snapMenu, action: nil, keyEquivalent: "")
     let moveViewMenu = NSMenuItem(title: ZoomCopy.moveViewMenu, action: nil, keyEquivalent: "")
     let tabsMenu = NSMenuItem(title: TabCopy.tabsMenu, action: nil, keyEquivalent: "")
@@ -55,6 +60,7 @@ import TransomModel
         focusMenu.submenu = submenu("Focus", [.focus(.left), .focus(.right), .focus(.top), .focus(.bottom)])
         splitMenu.submenu = submenu("Split", [.growTile, .shrinkTile, nil, .balanceSplit, .rotateSplit, .flipSplit, nil, .finderSplit])
         moveMenu.submenu = submenu(MenuCopy.moveMenu, Self.edges.map { .moveOrSnap($0) })
+        fourthMenu.submenu = submenu(MenuCopy.fourthMenu, Self.fourthColumns + [nil] + Self.fourthRows)
         let snap = submenu(MenuCopy.snapMenu, [
             nil, .snap(.leftThird), .snap(.centerThird), .snap(.rightThird), nil, .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft),
             .snap(.bottomRight), nil, .snap(.maximize), .snap(.center),
@@ -108,6 +114,23 @@ import TransomModel
 
     @objc private func run(_ sender: NSMenuItem) {
         dispatch(Self.commands[sender.tag])
+    }
+
+    /// A preference in the menu (UI-SPEC Surface 1): a titled item with a radio submenu, rebuilt each time the menu
+    /// opens. Each choice's `tag` is its index; no availability rule greys them, as with Gaps ▸.
+    static func optionMenu(title: String, choices: [(title: String, toolTip: String, selected: Bool)], target: AnyObject, action: Selector) -> NSMenuItem {
+        let submenu = NSMenu(title: title)
+        for (index, choice) in choices.enumerated() {
+            let item = NSMenuItem(title: choice.title, action: action, keyEquivalent: "")
+            item.target = target
+            item.tag = index
+            item.state = choice.selected ? .on : .off
+            item.toolTip = choice.toolTip
+            submenu.addItem(item)
+        }
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
     }
 
     /// nil adds a separator.

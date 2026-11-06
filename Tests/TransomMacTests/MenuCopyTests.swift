@@ -61,6 +61,10 @@ import Testing
         #expect(MenuCopy.permissionHeader(phase) == expected)
     }
 
+    @Test func theClearItemHasItsTitle() {
+        #expect(MenuCopy.clearWaitingTiles == "Clear Waiting Tiles")
+    }
+
     @Test func permissionHeaderIsAbsentWhenReady() {
         #expect(MenuCopy.permissionHeader(.ready) == nil)
     }
@@ -111,6 +115,8 @@ import Testing
     }
 
     @Test func zoomItemTitles() {
+        #expect(MenuCopy.commandTitle(.dockFourth(.first, .horizontal)) == "1st Column")
+        #expect(MenuCopy.commandTitle(.dockFourth(.middle, .vertical)) == "Middle Half Row")
         #expect(MenuCopy.commandTitle(.camera(.zoomOutAll)) == "Zoom Out to All Windows")
         #expect(MenuCopy.commandTitle(.camera(.view(ViewSlot(1)!))) == "Go to View 1")
         #expect(MenuCopy.commandTitle(.camera(.saveView(ViewSlot(9)!))) == "Save View 9")
@@ -127,6 +133,28 @@ import Testing
         #expect(MenuCopy.dontArrange(appName: "Safari") == "Don't Arrange \u{201C}Safari\u{201D}")
         #expect(MenuCopy.dontArrangeFallback == "Don't Arrange Frontmost App")
         #expect(MenuCopy.noExclusions == "No apps excluded")
+    }
+
+    @Test func dragToDockCopyFollowsTheUISpec() {
+        #expect(MenuCopy.dragToDockTitle(.automatic) == "Drag to Dock: Automatically")
+        #expect(MenuCopy.dragToDockTitle(.holdOption) == "Drag to Dock: Hold ⌥")
+        #expect(MenuCopy.dragToDockChoice(.automatic) == "Automatically")
+        #expect(MenuCopy.dragToDockChoice(.holdOption) == "Hold ⌥")
+        #expect(MenuCopy.dragToDockTooltip(.automatic) == "Docking regions show on every drag.")
+        #expect(MenuCopy.dragToDockTooltip(.holdOption) == "A drag moves the window and leaves it floating. Hold ⌥ to show docking regions.")
+        #expect(MenuCopy.dragToDockAnnouncement(.automatic) == "Docking regions show on every drag")
+        #expect(MenuCopy.dragToDockAnnouncement(.holdOption) == "Hold Option while dragging to dock")
+    }
+
+    @Test func newWindowsCopyFollowsTheUISpec() {
+        #expect(MenuCopy.newWindowsTitle(.float) == "New Windows: Float")
+        #expect(MenuCopy.newWindowsTitle(.tile) == "New Windows: Tile")
+        #expect(MenuCopy.newWindowsChoice(.float) == "Float")
+        #expect(MenuCopy.newWindowsChoice(.tile) == "Tile")
+        #expect(MenuCopy.newWindowsTooltip(.float) == "New windows float on the Desktop tile until you dock them.")
+        #expect(MenuCopy.newWindowsTooltip(.tile) == "New windows dock beside the focused tile. Dialogs, panels and excluded apps still float.")
+        #expect(MenuCopy.newWindowsAnnouncement(.float) == "New windows float")
+        #expect(MenuCopy.newWindowsAnnouncement(.tile) == "New windows tile")
     }
 }
 

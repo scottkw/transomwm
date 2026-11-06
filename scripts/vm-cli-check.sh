@@ -13,13 +13,18 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 vm="${TRANSOM_VM:-pane-test}"
 key="${TRANSOM_VM_KEY:-$HOME/.ssh/pane_vm_ed25519}"
-host="${TRANSOM_VM_USER:-admin}@$(tart ip "$vm")"
+ip="$(tart ip "$vm")"
+# `tart ip` can be empty after sleep: only ever ssh with a real address.
+[ -n "$ip" ] || { echo "vm-cli-check: tart ip gave no address for $vm" >&2; exit 1; }
+host="${TRANSOM_VM_USER:-admin}@$ip"
 ssh_opts=(-i "$key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
-# One VM user at a time, shared with vm-live-test.sh, vm-spike.sh and the UAT re-check plans.
+# One VM user at a time, shared with vm-live-test.sh, vm-spike.sh and the UAT re-check plans. TRANSOM_VM_LOCK_HELD: scripts/vm-session.sh holds it for this run.
 mkdir -p .build
-mkdir .build/transom-vm.lock 2>/dev/null || { echo "vm-cli-check: VM busy (.build/transom-vm.lock exists)" >&2; exit 1; }
-trap 'rmdir .build/transom-vm.lock' EXIT
+if [ -z "${TRANSOM_VM_LOCK_HELD:-}" ]; then
+    mkdir .build/transom-vm.lock 2>/dev/null || { echo "vm-cli-check: VM busy (.build/transom-vm.lock exists)" >&2; exit 1; }
+    trap 'rmdir .build/transom-vm.lock' EXIT
+fi
 
 # An incremental build can keep an old signed copy of the tool in Contents/Helpers (08-05), so start from no bundle.
 rm -rf "xcode/.xcode-build/Build/Products/Debug/Transom Debug.app"
@@ -131,7 +136,9 @@ usage_shown "no arguments prints usage"
 expect "unknown command exits 64" 64 'transom: unknown command "foo". Run "transom help" to see every command.' foo
 expect "bad slot exits 64" 64 'transom: view needs a slot from 1 to 9, as in "transom view 3".' view 0
 expect "argument to zoom-out exits 64" 64 "transom: zoom-out takes no argument." zoom-out 3
+expect "argument to dock-column-1 exits 64" 64 "transom: dock-column-1 takes no argument." dock-column-1 3
 expect "not running exits 2" 2 "transom: Transom is not running" view 4
+expect "dock-column-1 not running exits 2" 2 "transom: Transom is not running" dock-column-1
 
 # Against the running app. Reaching it at all proves the symlinked tool found its bundle's port (Assumption A3).
 zoom_saved="$(defaults read "$domain" zoomEnabled 2>/dev/null || echo unset)"
@@ -164,6 +171,12 @@ else
     skipped=$((skipped + 1))
     echo "SKIP save-view/view 4: $err"
 fi
+sleep 1.1
+
+# Dock URLs act on the focused window, so give it one.
+open "$HOME"
+sleep 2
+expect "dock-column-1 exits 0" 0 "" dock-column-1
 sleep 1.1
 
 # Assumption A2, recorded and not judged: the same call with no launchctl asuser.

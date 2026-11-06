@@ -1,7 +1,8 @@
 import TransomModel
 
-/// Modifier keys read from each pointer and flagsChanged event (D-05). Only ⇧ (bypass) and ⌘ (swap) change a drop;
-/// ⌥ (Sequoia's tiling modifier) and ⌃ (right-click) are carried and ignored.
+/// Modifier keys read from each pointer and flagsChanged event (D-05). ⇧ (bypass) and ⌘ (swap) change a drop in both
+/// modes, and ⌥ shows the regions in Hold ⌥ mode (D-08). ⌃ pressed during a drag shows fourths, and ⌘ with it picks rows
+/// (D-18); ⌃ at the press is a right click.
 public struct Modifiers: OptionSet, Hashable, Sendable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
@@ -10,6 +11,20 @@ public struct Modifiers: OptionSet, Hashable, Sendable {
     public static let command = Modifiers(rawValue: 1 << 1)
     public static let option = Modifiers(rawValue: 1 << 2)
     public static let control = Modifiers(rawValue: 1 << 3)
+}
+
+/// How a title-bar drag docks (D-07): automatically, or only with ⌥ held.
+public enum DragToDockMode: String, CaseIterable, Sendable {
+    case automatic, holdOption
+}
+
+/// What the event tap does with ⌥ on the events it passes on, so macOS's own ⌥ tiling stays away (D-07a).
+public enum DragOptionStrip: Equatable, Sendable {
+    case off
+    /// A Hold ⌥ move: ⌥ always goes.
+    case always
+    /// An Automatically move: ⌥ goes only with ⌃, the fourths chord (UI-SPEC rows 2-3).
+    case withControl
 }
 
 /// One left-button or modifier event from the event tap, in global top-left points. `pressWindow` is resolved by the
@@ -51,6 +66,8 @@ public enum PreviewState: Equatable, Sendable {
     /// A centre held for the group dwell: the group frame, its strip band, and the label (`GroupCopy`), hidden by the
     /// clearance rule in a small content rect.
     case group(frame: Rect, strip: Rect, label: String?)
+    /// A fourth (D-18): a dock preview with its capsule, "1st column" to "Middle half row".
+    case fourth(Rect, label: String)
 }
 
 /// UI-SPEC Surface 1: the Group preview's labels.
@@ -71,6 +88,39 @@ public enum CollapseCopy {
         if dragged { return "Docked. Zoom in to see it." }
         return others == 1 ? "Docked. 1 window collapsed." : "Docked. \(others) windows collapsed."
     }
+}
+
+/// UI-SPEC Surface 2: the announcement of a pulled-out window in Hold ⌥ mode.
+public enum FourthCopy {
+    public static let floating = "Floating"
+
+    /// A fourth's name, in sentence case: "1st column", "Middle half row" (UI-SPEC Surface 3).
+    public static func label(_ slot: FourthSlot, _ axis: Axis) -> String {
+        let line = axis == .horizontal ? "column" : "row"
+        return switch slot {
+        case .first: "1st \(line)"
+        case .second: "2nd \(line)"
+        case .third: "3rd \(line)"
+        case .fourth: "4th \(line)"
+        case .middle: "Middle half \(line)"
+        }
+    }
+
+    /// What a window given `span` of the desk gets (D-23): a slot grown into an empty side is named by its share.
+    public static func label(_ slot: FourthSlot, _ axis: Axis, span: (start: Double, end: Double)) -> String {
+        let (lead, trail) = axis == .horizontal ? ("Left", "Right") : ("Top", "Bottom")
+        return switch (span.start, span.end) {
+        case (0, 1): "Whole desk"
+        case (0, 0.5): "\(lead) half"
+        case (0.5, 1): "\(trail) half"
+        case (0, 0.75): "\(lead) three quarters"
+        case (0.25, 1): "\(trail) three quarters"
+        default: label(slot, axis)  // the slot's own span, the only other result of `fourthSpan`
+        }
+    }
+
+    /// The announcement of a docked fourth: "Docked to 1st column", "Docked to top half" (UI-SPEC Surface 3).
+    public static func docked(_ label: String) -> String { "Docked to \(label.lowercased())" }
 }
 
 /// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain
@@ -110,6 +160,8 @@ struct Hover: Equatable, Sendable {
     var groupTarget: GroupTarget?
     /// A tear-off's pointer is back over its source strip: no preview, and a release cancels (D-10).
     var overStrip = false
+    /// Hold ⌥'s plain drag: the result never depends on the dwell, so it is decided at mouse-up (UI-SPEC Surface 2).
+    var plain = false
 }
 
 /// The dry run's verdict for one hover (UI-SPEC Surface 2 state matrix).
@@ -135,6 +187,8 @@ public struct DragSession: Equatable, Sendable {
     public static let groupDwell: Duration = .milliseconds(400)
     /// How far the pointer may wander from where the group dwell started before it restarts there (D-01).
     public static let groupRest = 16.0
+    /// Hold ⌥: a plain drag of a docked window pulls it out only from this far from the press, so a nudge can't float it (D-08a).
+    public static let pullOutTravel = 16.0
 
     /// What the press grabbed: a window's title bar, or a tab torn out of its strip (D-10), whose window does not move
     /// until release and lands at `landingSize` under the pointer.
@@ -156,6 +210,8 @@ public struct DragSession: Equatable, Sendable {
     public internal(set) var origin: Origin = .window
     public internal(set) var pointer: Point
     public internal(set) var modifiers: Modifiers
+    /// ⌃ was down at the press, a right click, so it means nothing until released and pressed again (D-18).
+    var controlAtPress: Bool
     /// nil until the press is classified; the first verdict sticks.
     public internal(set) var kind: Kind?
     /// The 60 Hz frame poll was asked for.
@@ -165,6 +221,9 @@ public struct DragSession: Equatable, Sendable {
     /// The preview on screen, and its display.
     public internal(set) var shown: PreviewState?
     var shownOn: String?
+    /// The fourth zone guides on screen, and their display.
+    var guides: [Rect] = []
+    var guidesOn: String?
     var hover: Hover?
     var hoverSince: ContinuousClock.Instant?
     var decision: Decision?
@@ -182,6 +241,7 @@ public struct DragSession: Equatable, Sendable {
         self.startFrame = startFrame
         pointer = start
         self.modifiers = modifiers
+        controlAtPress = modifiers.contains(.control)
     }
 
     /// The group a tear-off leaves; nil for a window drag.
@@ -203,6 +263,12 @@ public struct DragSession: Equatable, Sendable {
     public var travelled: Bool {
         let dx = pointer.x - start.x, dy = pointer.y - start.y
         return (dx * dx + dy * dy).squareRoot() >= Self.minimumTravel
+    }
+
+    /// The pointer is at least `pullOutTravel` from the press now, so coming back inside it counts as not travelled.
+    public var travelledToPullOut: Bool {
+        let dx = pointer.x - start.x, dy = pointer.y - start.y
+        return (dx * dx + dy * dy).squareRoot() >= Self.pullOutTravel
     }
 
     /// Classifies a frame report of the press window (RESEARCH Pattern 1): within 2 pt of Transom's last read-back it is an

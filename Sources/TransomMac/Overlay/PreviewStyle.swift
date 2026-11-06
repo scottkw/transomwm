@@ -41,6 +41,12 @@ nonisolated enum PreviewStyle {
             switch state {
             case .dock(let rect):
                 [LayerStyle(rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85)]
+            case .fourth(let rect, let text):
+                [
+                    LayerStyle(
+                        rect: rect, fill: .accent, fillAlpha: 0.20, border: .accent, borderAlpha: 0.85,
+                        label: Label(text: text, glyph: nil, glyphRole: .label))
+                ]
             case .swap(let target, let origin):
                 [
                     LayerStyle(rect: origin, fill: .accent, fillAlpha: 0.10, border: .accent, borderAlpha: 0.85, dash: dash),
@@ -100,6 +106,13 @@ nonisolated enum PreviewStyle {
         // Inset by half the 2 pt border, so the stroke lies inside the tile.
         let inside = Rect(x: rect.x + 1, y: rect.y + 1, width: max(rect.width - 2, 0), height: max(rect.height - 2, 0))
         let style = LayerStyle(rect: inside, fill: .accent, fillAlpha: 0, border: .accent, borderAlpha: 0.85, cornerRadius: radius)
+        return increaseContrast ? contrasted(style) : style
+    }
+
+    /// One fourth zone (08.1 UI-SPEC Surface 3): the ghost recipe, inset 4 pt on all sides.
+    static func fourthGuide(_ rect: Rect, increaseContrast: Bool) -> LayerStyle {
+        let inset = Rect(x: rect.x + 4, y: rect.y + 4, width: max(rect.width - 8, 0), height: max(rect.height - 8, 0))
+        let style = ghost(inset, label: nil)
         return increaseContrast ? contrasted(style) : style
     }
 

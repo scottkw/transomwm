@@ -1,6 +1,7 @@
 import CoreFoundation
 import Foundation
 import TransomEngine
+import TransomModel
 @testable import TransomMac
 import Testing
 
@@ -83,6 +84,16 @@ import Testing
         #expect(try gate.admit(url, at: now) == .command(.camera(.view(#require(ViewSlot(3))))))
         #expect(gate.admit(url, at: now + .milliseconds(10)) == .rateLimited)
         #expect(gate.admit(try #require(URL(string: "transom://view/3?x=1")), at: now) == .rejected)
+    }
+
+    /// WR-09: a script can dock several windows quickly, and what the dock URLs share is theirs alone.
+    @Test func theCLIKeepsAPerCommandLimitOnDocking() throws {
+        let gate = CommandGate(scheme: "transom")
+        let one = try #require(URL(string: "transom://dock-column-1")), two = try #require(URL(string: "transom://dock-column-2"))
+        let now = ContinuousClock.now
+        #expect(gate.admit(one, at: now) == .command(.dockFourth(.first, .horizontal)))
+        #expect(gate.admit(two, at: now + .milliseconds(10)) == .command(.dockFourth(.second, .horizontal)))
+        #expect(gate.admit(one, at: now + .milliseconds(20)) == .rateLimited)
     }
 
     /// D-07: the refusal's reason crosses the port and the tool prints it.
@@ -171,6 +182,17 @@ import Testing
         }
         #expect(ArrangeController.silenced([.beep, .announce("No room"), .info("refused")], of: .restoreAll) == [.info("refused")])
         #expect(ArrangeController.silenced([.beep, .tabAnnouncement(.refused(.paused))], of: .tabs(.next)).isEmpty)
+    }
+
+    /// 08.1 UI-SPEC Surface 4: a refused fourth shows nothing on a silent route, not even the Blocked flash; the CLI still hears why.
+    @Test func aRefusedFourthShowsNothingAndRepliesWhy() {
+        let refusal: [ArrangerEffect] = [.beep, .announce("Not enough room to dock here"), .flashBlocked(Rect(x: 0, y: 0, width: 10, height: 10), displayUUID: "main")]
+        #expect(ArrangeController.silenced(refusal, of: .dockFourth(.first, .horizontal)).isEmpty)
+        #expect(ArrangeController.cliReply(for: refusal) == "refused\tNot enough room to dock here")
+    }
+
+    @Test func aSuccessfulFourthStillAnnounces() {
+        #expect(ArrangeController.silenced([.announce("Docked to 1st column")], of: .dockFourth(.first, .horizontal)) == [.announce("Docked to 1st column")])
     }
 
     /// A non-refusal announcement of a command other than the camera's keeps speaking, as it did.

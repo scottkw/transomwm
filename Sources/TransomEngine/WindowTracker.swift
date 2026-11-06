@@ -33,6 +33,8 @@ public struct WindowTracker: Sendable {
     private var bundleHints: [String: Size] = [:]
     /// The displays of the latest observation, so a frame write can place its window too.
     private var displays: [DisplayInfo] = []
+    /// The highest real CG window ID the initial sweep saw, on any Space. A later window above it opened while Transom ran.
+    private var launchHighWater: UInt32 = 0
     /// Quick follow-ups per window before it is left to the sweep: WindowServer drops a closed window a few
     /// hundred ms after AX reports it invalid, so the decision must be retried soon, but not forever.
     public static let maxQuickRechecks = 8
@@ -50,6 +52,11 @@ public struct WindowTracker: Sendable {
     public mutating func ingest(_ app: AppObservation, context: ObservationContext) -> [WindowEvent] {
         closedIDs.purge(at: context.now)
         displays = context.displays
+        if context.initialSweep {
+            // `cgWindows` carries synthetic entries too (`withSyntheticPresence`), and those never count.
+            let real = context.cgWindows.map(\.windowID).filter { $0 < WindowIdentity.syntheticIDBase }
+            launchHighWater = max(launchHighWater, real.max() ?? 0)
+        }
         var events: [WindowEvent] = []
         // Corrected IDs first, so the rest of this refresh sees each window under its new ID.
         for o in app.windows {
@@ -176,6 +183,10 @@ public struct WindowTracker: Sendable {
                     bundleHints[identity.bundleID] = Size(width: max(hint.width, shared.width), height: max(hint.height, shared.height))
                 }
             }
+            // Decided once, at first sight. A lower ID is an old window first listed late; if an ID were ever reused it just floats.
+            // Under a sheet the Classifier can't judge it yet, so it may be a dialog (D-04): it counts as not new, and floats.
+            info.openedWhileRunning = old?.openedWhileRunning
+                ?? (!context.initialSweep && observation.idSource != .synthetic && windowID > launchHighWater && snapshot.sheetAttached != true)
             windows[identity] = info
 
             guard let old else {

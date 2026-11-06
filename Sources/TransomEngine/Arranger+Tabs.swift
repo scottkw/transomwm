@@ -869,6 +869,7 @@ extension Arranger {
             ?? Size(width: content.width, height: content.height)
         var session = DragSession(window: press.member, start: point, startFrame: content, modifiers: modifiers)
         session.origin = .tearOff(press.group, stripRect: press.strip, landingSize: size)
+        session.controlAtPress = false  // a strip gets no press under ⌃, so this ⌃ went down after it (ArrangeController)
         session.kind = .move
         drag = session
         tabs.tearing = press.member

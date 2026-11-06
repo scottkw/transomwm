@@ -174,6 +174,10 @@ private func logged(_ effects: [ArrangerEffect], _ text: String) -> Bool {
     effects.contains { if case .info(let line) = $0 { line.contains(text) } else { false } }
 }
 
+private func announcements(_ effects: [ArrangerEffect]) -> [String] {
+    effects.compactMap { if case .announce(let text) = $0 { text } else { nil } }
+}
+
 private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instant) async -> [ArrangerEffect] {
     harness.now = instant
     return await harness.send(.tick)
@@ -390,6 +394,97 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         #expect(harness.arranger.placeholderCount == 0)
         #expect(harness.arranger.world[key]?.tree.windows.isEmpty == true)
         #expect(logged(due, "expired (5 min, no launch)"))
+    }
+
+    // MARK: Clear Waiting Tiles (D-24)
+
+    /// They close as expiry closes them: tiles gone, neighbours reflow, no undo step, and the app's next window floats.
+    @Test func clearingClosesTheWaitingTilesOnce() async throws {
+        var harness = await launched(try savedTwo())
+        #expect(harness.arranger.shownPlaceholderCount == 2)
+        let depth = harness.arranger.history.depth(for: key)
+
+        let cleared = await harness.send(.clearWaitingTiles)
+
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(harness.arranger.shownPlaceholderCount == 0)
+        #expect(harness.arranger.world[key]?.tree.windows.isEmpty == true)
+        #expect(sentTiles(cleared) == [])
+        #expect(announcements(cleared) == ["Cleared 2 waiting tiles"])
+        #expect(logged(cleared, "cleared"))
+        #expect(harness.arranger.history.depth(for: key) == depth)
+
+        await harness.send(.event(.appLaunched(pid: newPID, bundleID: bundleID)))
+        await harness.send(.event(.windowCreated(returning(11, title: "Notes"))))
+        #expect(harness.arranger.world[key]?.tree.windows.isEmpty == true)
+        #expect(harness.arranger.world[key]?.desktop.contains(ref(11, pid: newPID)) == true)
+    }
+
+    @Test func oneClearedTileIsSingular() async throws {
+        var harness = await launched(try saved { desk, ids throws(LayoutError) in
+            try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids)
+        })
+        #expect(announcements(await harness.send(.clearWaitingTiles)) == ["Cleared 1 waiting tile"])
+    }
+
+    /// As with expiry, a pause holds the neighbours' writes back but not the tile's going.
+    @Test func clearingWhilePausedStillTakesTheTileAway() async throws {
+        var harness = await launched(try savedTwo())
+        await harness.send(.setPaused(.user, true))
+        let cleared = await harness.send(.clearWaitingTiles)
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(sentTiles(cleared) == [])
+    }
+
+    /// With none showing the menu item is greyed, and a click racing a fill says nothing.
+    @Test func clearingWithNoneShowingDoesNothing() async throws {
+        var harness = await threeDocked()
+        #expect(harness.arranger.shownPlaceholderCount == 0)
+        #expect(await harness.send(.clearWaitingTiles) == [])
+    }
+
+    /// A step before the clear still undoes, and never brings the closed tile back (`UndoHistory.forget`, as for a closed window).
+    @Test func undoAfterAClearNeverBringsATileBack() async throws {
+        var harness = await threeDocked()
+        _ = await quit(&harness)
+        #expect(harness.arranger.placeholderCount == 2)
+        let depth = harness.arranger.history.depth(for: key)
+
+        await harness.send(.clearWaitingTiles)
+        #expect(harness.arranger.history.depth(for: key) == depth)
+        await harness.send(.command(.undo, focused: ref(3, pid: 950, bundle: otherBundle)))
+
+        #expect(harness.arranger.world[key]?.contains(ref(1)) == false)
+        #expect(harness.arranger.world[key]?.contains(ref(2)) == false)
+        #expect(harness.arranger.world[key]?.desktop.contains(ref(3, pid: 950, bundle: otherBundle)) == true, "the undo still took effect")
+    }
+
+    /// D-12b: a tile on a desk not showing stays. Its Space shows later, and it still fills or expires.
+    @Test func clearingLeavesHiddenDesksAndTheyStillFillAndExpire() async throws {
+        var harness = await launchedOnSpaceOne(try storedOnBothSpaces())
+        let start = harness.now
+        #expect(harness.arranger.placeholderCount == 3)
+        #expect(harness.arranger.shownPlaceholderCount == 1)
+
+        let cleared = await harness.send(.clearWaitingTiles)
+
+        #expect(announcements(cleared) == ["Cleared 1 waiting tile"])
+        #expect(harness.arranger.world[spaceOne]?.tree.windows.isEmpty == true)
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.count == 2)
+        #expect(harness.arranger.placeholderCount == 2)
+        #expect(harness.arranger.shownPlaceholderCount == 0)
+
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 2)))
+        #expect(harness.arranger.shownPlaceholderCount == 2)
+        await harness.send(.event(.appLaunched(pid: newPID, bundleID: bundleID)))
+        await harness.send(.event(.windowCreated(returning(11, title: "Notes", spaces: [2]))))
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows.contains(ref(11, pid: newPID)) == true, "the re-match")
+        #expect(harness.arranger.placeholderCount == 1)
+
+        let due = await ticked(&harness, at: start + .seconds(3600))
+        #expect(harness.arranger.placeholderCount == 0)
+        #expect(harness.arranger.world[spaceTwo]?.tree.windows == [ref(11, pid: newPID)])
+        #expect(logged(due, "expired"), "the later expiry")
     }
 
     @Test func aSavedWindowWhoseAppLaunchesLaterTakesTheTenSeconds() async throws {
