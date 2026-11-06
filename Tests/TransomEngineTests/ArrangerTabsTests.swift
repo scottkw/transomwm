@@ -660,6 +660,15 @@ private func groupFOntoT(_ harness: inout Harness) async -> [ArrangerEffect] {
     return await harness.send(pointer(.up, tFrame.midX, tFrame.midY))
 }
 
+/// a docked over the whole desk, then `floater` moved over a's middle; returns its frame.
+private func floating(_ floater: WindowRef, overDocked harness: inout Harness) async throws -> Rect {
+    if harness.arranger.world[mainKey]?.tree.leaf(containing: a) == nil { await harness.send(.command(.dock, focused: a)) }
+    let ra = try #require(try docked(harness).frames[a])
+    await harness.fake.userMove(floater.windowID, to: Rect(x: ra.midX - 150, y: ra.midY - 100, width: 300, height: 200))
+    _ = await harness.refresh()
+    return try #require(harness.arranger.world[mainKey]?.desktop.frame(of: floater))
+}
+
 /// The plan of the main desk as it is now.
 private func docked(_ harness: Harness) throws -> FramePlan {
     try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
@@ -814,6 +823,70 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         await harness.send(pointer(.up, target.midX, target.midY))
         let group = try #require(floatingGroups(harness).first, "a did not group with t")
         #expect(group.members == [t, a])
+    }
+
+    /// 8.1.1 D-18: a floater the stacking puts behind the docked window takes nothing, although it was focused later;
+    /// the docked window's centre groups with it.
+    @Test func aFloaterTheStackingPutsBehindTheDockedWindowDoesNotGroup() async throws {
+        var harness = await floaters()
+        let target = try await floating(t, overDocked: &harness)
+        await harness.send(.event(.windowFocused(a)))
+        await harness.send(.event(.windowFocused(t)))
+        _ = await drag(&harness, f, from: smallF, to: centre(target), stacking: [f, a, t])
+        harness.now += .milliseconds(400)
+        await harness.send(.tick)
+        await harness.send(pointer(.up, target.midX, target.midY))
+        #expect(floatingGroups(harness).isEmpty, "f grouped with t, behind a")
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.leaf(containing: a).flatMap(desk.tree.node) == .tabs(windows: [a, f], selected: 1))
+    }
+
+    /// 8.1.1 D-18: of two floaters under the pointer, the one the stacking puts in front takes the dwell, not the one
+    /// focused last.
+    @Test func ofTwoFloatersUnderThePointerTheStackingsFrontOneGroups() async throws {
+        var harness = await floaters()
+        let target = try await floating(t, overDocked: &harness)
+        _ = try await floating(g, overDocked: &harness)
+        await harness.send(.event(.windowFocused(g)))
+        await harness.send(.event(.windowFocused(t)))
+        _ = await drag(&harness, f, from: smallF, to: centre(target), stacking: [f, g, t, a])
+        harness.now += .milliseconds(400)
+        await harness.send(.tick)
+        await harness.send(pointer(.up, target.midX, target.midY))
+        #expect(floatingGroups(harness).map(\.members) == [[g, f]])
+    }
+
+    /// 8.1.1 D-18: a floating group whose selected member is in front takes the dwell as a group.
+    @Test func aFloatingGroupInFrontTakesTheDwellAsAGroup() async throws {
+        var harness = await floaters()
+        let target = try await floating(t, overDocked: &harness)
+        _ = await drag(&harness, f, from: smallF, to: centre(target), stacking: [f, t, a])
+        harness.now += .milliseconds(400)
+        await harness.send(.tick)
+        await harness.send(pointer(.up, target.midX, target.midY))
+        try #require(floatingGroups(harness).map(\.members) == [[t, f]])
+        await harness.send(.event(.windowFocused(a)))
+        let content = TabBand.content(of: target)
+        _ = await drag(&harness, g, from: gFrame, to: centre(content), stacking: [g, f, a])
+        harness.now += .milliseconds(400)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.group(frame: target, strip: TabBand.strip(of: target), label: "Add as a tab")], "tick gave \(tick)")
+        await harness.send(pointer(.up, content.midX, content.midY))
+        #expect(floatingGroups(harness).map(\.members) == [[t, f, g]])
+    }
+
+    /// 8.1.1 D-18: stacking that lists neither the floater nor the docked window ranks both behind, and the tie goes to
+    /// the docked window. The dragged window, first in it, is never a candidate.
+    @Test func stackingListingNeitherGivesTheDropToTheDockedWindow() async throws {
+        var harness = await floaters()
+        let target = try await floating(t, overDocked: &harness)
+        _ = await drag(&harness, f, from: smallF, to: centre(target), stacking: [f])
+        harness.now += .milliseconds(400)
+        await harness.send(.tick)
+        await harness.send(pointer(.up, target.midX, target.midY))
+        #expect(floatingGroups(harness).isEmpty, "an unlisted floater took the drop")
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.leaf(containing: a).flatMap(desk.tree.node) == .tabs(windows: [a, f], selected: 1))
     }
 
     /// UI-SPEC discretion 3: the rest of a front floater's area gives the docked tile's regions beneath.
