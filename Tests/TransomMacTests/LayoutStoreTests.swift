@@ -472,6 +472,10 @@ extension LayoutStoreTests {
         #expect(store.loadError == nil)
         #expect(!store.savingDisabled)
         #expect(dir.corrupted.isEmpty)
+        // The one-way migration keeps the pre-upgrade file for a downgrade (WR-04).
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir.url.path).filter { $0.hasPrefix(LayoutStore.fileName + ".schema-3-") }
+        #expect(backups.count == 1)
+        #expect(try backups.first.map { try String(contentsOf: dir.url.appending(path: $0), encoding: .utf8) } == LayoutFileV3Fixture.json)
         let contents = try #require(store.contents)
         #expect(contents.schemaVersion == 4)
 

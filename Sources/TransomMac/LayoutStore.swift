@@ -46,6 +46,8 @@ public enum LayoutStoreError: Error, Equatable {
             contents = decoded
             if let line = Self.migrationLine(fromSchema: version, contents: decoded) {
                 Self.logger.info("\(line, privacy: .public)")
+                // The next save overwrites it one way, so a downgrade can restore this copy by hand (WR-04); a failure is logged.
+                backUp("schema-\(version)")
             }
         } catch {
             loadError = error
