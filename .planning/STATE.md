@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
 current_plan: 18
-status: executing
-stopped_at: Completed 08.1.1-17-PLAN.md
-last_updated: "2026-11-06T17:43:07.498Z"
+status: verifying
+stopped_at: Completed 08.1.1-18-PLAN.md
+last_updated: "2026-11-06T18:46:43.909Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 0edfcb73ed08b8af9debed9acbb3a676255a7245
+state_head: 73d28fa3855c942c4b105789fa37d93ebccd49fc
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 122
+  completed_plans: 123
   percent: 82
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
 Current Plan: 18
 Total Plans in Phase: 18
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
 
 Progress: [████████░░] 82%
@@ -181,6 +181,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P15 | 6min | 3 tasks | 7 files |
 | Phase 08.1.1 P16 | 15min | 2 tasks | 20 files |
 | Phase 08.1.1 P17 | 12 min | 2 tasks | 13 files |
+| Phase 08.1.1 P18 | 62min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -511,6 +512,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-15: hidden-Desktop tests deleted, not converted (FourthTests aHiddenDesktopKeeps..., TabGroupModelTests theLastDockedLeafLeavingShowsAHiddenDesktop); a Desktop child standing for another participating tile becomes a docked tile with the same weight
 - [Phase 08.1.1]: 08.1.1-16: Node has no Desktop case; a schema-4 file naming a Desktop node is set aside as corrupt, schema <= 3 still migrates through LegacyNode
 - [Phase 08.1.1]: 08.1.1-17: migration docs outside the three allowed files say 'legacy Desktop node'; Arranger.matchLog's 'Desktop' log fallback kept
+- [Phase 08.1.1]: 08.1.1-18: Four macOS 27.2 live-suite failures (TabGroup close confirmation, OverviewSpaceSwitch x3, TabStripSpace, Overview helper exit) fail identically at 475030e before this phase and pass on 15.7; deferred, not phase regressions
+- [Phase 08.1.1]: 08.1.1-18: Hold ⌥ live tests dock into a docked window's tile, not the empty desk's edge band, where macOS 27 draws its own edge-tiling guide (RESEARCH E1)
 
 ### Quick Tasks Completed
 
@@ -556,8 +559,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T17:43:06.683Z
-Stopped at: Completed 08.1.1-17-PLAN.md
+Last session: 2026-11-06T18:46:43.091Z
+Stopped at: Completed 08.1.1-18-PLAN.md
 Resume file: None
 
 ## Deferred Verification
