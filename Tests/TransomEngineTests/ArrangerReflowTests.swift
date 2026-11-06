@@ -175,22 +175,6 @@ extension ArrangerReflowTests {
         #expect(setFrameCount(effects) == 0)
     }
 
-    @Test func aFloatingWindowMovedOntoADockedTileIsClampedIntoTheDesktop() async throws {
-        var harness = await Harness.started()
-        await harness.send(.command(.dock, focused: a))
-        let depth = harness.arranger.history.depth(for: key)
-        let target = Rect(x: 600, y: 300, width: 150, height: 120)
-        await harness.fake.userMove(2, to: target)
-        let effects = await harness.refresh()
-        let desk = try #require(harness.arranger.world[key])
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        let clamped = Planner.clamp(target, into: desktop)
-        #expect(setFrameCount(effects) == 1)
-        #expect(setFrames(effects)[b] == clamped)
-        #expect(desk.desktop.frame(of: b) == clamped)
-        #expect(harness.arranger.history.depth(for: key) == depth)
-    }
-
     @Test func aRefusedWriteReadBackIsAnEchoNotAMoveToUndo() async throws {
         var harness = await Harness.started()
         await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 900, height: 100) }

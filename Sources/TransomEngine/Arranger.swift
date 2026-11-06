@@ -165,9 +165,6 @@ public struct Arranger: Sendable {
     /// shortcut: one level per window, so an Undo across two undocks of one window gives back the later one's; snapshot
     /// wanted frames per undo step if that matters.
     var undockedWanted: [WindowIdentity: Rect] = [:]
-    /// The size each floating window's app refused to go below, per axis, from its read-backs (G-03-11 B). Session-only,
-    /// never learned or saved; only boundary drags count it, so a drag stops at the floater's real size.
-    private var floaterFloors: [WindowIdentity: Size] = [:]
     public var gap: Double
     public internal(set) var dragToDock: DragToDockMode
     /// Whether a window opened while Transom runs floats or docks (D-01).
@@ -1016,7 +1013,6 @@ public struct Arranger: Sendable {
                 if let wanted = undockedWanted.removeValue(forKey: from.identity) { undockedWanted[to.window.identity] = wanted }
                 if tabs.pendingReveal?.revealed == from { tabs.pendingReveal?.revealed = to.window }
                 if tabs.pendingReveal?.previous == from { tabs.pendingReveal?.previous = to.window }
-                if let floor = floaterFloors.removeValue(forKey: from.identity) { floaterFloors[to.window.identity] = floor }
                 if heldAdmits.remove(from.identity) != nil { heldAdmits.insert(to.window.identity) }
                 if awaitingFit.remove(from.identity) != nil { awaitingFit.insert(to.window.identity) }
                 focusOrder = focusOrder.map { $0 == from.identity ? to.window.identity : $0 }
@@ -1032,17 +1028,6 @@ public struct Arranger: Sendable {
                 let t = MinimumSizeLearner.tolerance
                 if actual.width <= requested.width + t, actual.height <= requested.height + t { awaitingFit.remove(window.identity) }
                 if let shown = revealed(window, actual: actual, now: now) { return shown }
-                if isFloating(window) {
-                    let old = floaterFloors[window.identity] ?? Size(width: 0, height: 0)
-                    let floor = Size(
-                        width: actual.width > requested.width + t ? max(old.width, actual.width) : old.width,
-                        height: actual.height > requested.height + t ? max(old.height, actual.height) : old.height)
-                    if floor != old {
-                        floaterFloors[window.identity] = floor
-                        // This step's cut is recomputed at once while a boundary drag is live.
-                        if liveGap != nil || drag?.kind == .resize { return replan() }
-                    }
-                }
                 return retryRefusal(window, requested: requested, actual: actual, now: now)
             case .windowStateChanged(let window, let state):
                 if state == .closed || state == .absent { suppressFocus(ofGroupHolding: window, now: now) }
@@ -1192,7 +1177,6 @@ public struct Arranger: Sendable {
         wantedFrames[window.identity] = nil
         awaitingFit.remove(window.identity)
         undockedWanted[window.identity] = nil
-        floaterFloors[window.identity] = nil
         camera.collapsible.remove(window.identity)
         camera.unparkedNew.remove(window.identity)
         placeholders.arriving.remove(window.identity)
@@ -1207,7 +1191,7 @@ public struct Arranger: Sendable {
     /// A window moved or resized. Within 2 pt of Transom's last read-back (or, for a floating window, of its last request
     /// or at any point of a boundary drag: an app that applies it late) it is Transom's own write coming back: a floating window's frame is still recorded as
     /// a fact, and nothing is answered. Otherwise a floating window's frame is recorded (TILE-07, no undo step) and
-    /// becomes its wanted frame, even while paused, clamped into the Desktop only if it now overlaps a docked tile, and a docked
+    /// becomes its wanted frame, even while paused, and is never moved (D-05); a docked
     /// window goes back to its tile, at most once per second (T-03-13). There is no pointer state yet, so every move
     /// counts as finished; plan 10 adds drag sessions so a user dragging a docked window is never fought.
     private mutating func moved(_ window: WindowRef, to frame: Rect, now: ContinuousClock.Instant) throws(LayoutError) -> [ArrangerEffect] {
@@ -1233,25 +1217,10 @@ public struct Arranger: Sendable {
             // Once the window has been elsewhere, Transom's last read-back is history: a move back onto it is not Transom's (CR-01).
             lastApplied[window.identity] = nil
         }
-        // The app went below its floor after all (late, or by the user): that axis stops pinning the Desktop (T-03-71).
-        if floating, var floor = floaterFloors[window.identity] {
-            let t = MinimumSizeLearner.tolerance
-            if frame.width < floor.width - t { floor.width = 0 }
-            if frame.height < floor.height - t { floor.height = 0 }
-            floaterFloors[window.identity] = floor
-        }
         guard pauseReasons.isEmpty, !settling else { return [] }  // paused or settling: the fact is recorded, nothing is answered (D-23)
         guard windows[window.identity]?.isExcluded != true else { return [] }  // never clamped or corrected (D-29)
         if own { return [] }
-        if floating {
-            if let area = display(for: key)?.visibleFrame, let desk = world[key],
-                let clamped = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames[window]
-            {
-                try world.recordFloatingFrame(clamped, for: window)
-                wantedFrames[window.identity] = clamped
-            }
-            return replan()
-        }
+        if floating { return replan() }
         guard desk.tree.state(of: window) == .present else { return [] }
         if let tile = lastRequested[window.identity], Self.near(tile, frame, within: 2) { return [] }
         if let last = lastCorrection[window.identity], now < last + Self.correctionInterval {
@@ -2144,8 +2113,8 @@ public struct Arranger: Sendable {
     /// give before its minimum, so the stored weights say what the screen shows (no dead zone on the way back).
     func boundaryChange(_ key: DeskKey, _ moves: [BoundaryMove]) throws(LayoutError) -> ((inout Desk, inout IDSource) throws(LayoutError) -> Void)? {
         guard !moves.isEmpty, let desk = world[key], let area = display(for: key)?.visibleFrame else { return nil }
-        let gap = gap, mins = minimums, floors = floaterFloors
-        let before = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, floors: floors).resolution
+        let gap = gap, mins = minimums
+        let before = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).resolution
         func size(_ id: NodeID, _ axis: Axis, _ resolution: Resolution) -> Double {
             resolution.nodeRects[id].map { axis == .horizontal ? $0.width : $0.height } ?? 0
         }
@@ -2173,7 +2142,7 @@ public struct Arranger: Sendable {
         }
         var raw = desk
         try apply(moves, to: &raw)
-        let after = try Planner.plan(desk: raw, area: area, gap: gap, mins: mins, floors: floors).resolution
+        let after = try Planner.plan(desk: raw, area: area, gap: gap, mins: mins).resolution
         let cut = try moves.map { move throws(LayoutError) -> BoundaryMove in
             guard case .split(let axis, let children, _)? = desk.tree.node(move.split) else { throw .nodeNotFound(move.split) }
             let loser = children[move.points > 0 ? move.second : move.first]
@@ -2487,7 +2456,7 @@ public struct Arranger: Sendable {
         return mins
     }
 
-    /// Excluded windows have none: they never dock, and the Desktop tile is not sized for them. ViewPlanner gets these,
+    /// Excluded windows have none: they never dock. ViewPlanner gets these,
     /// so it can tell which collapsible windows are collapsed.
     var learnedMinimums: [WindowRef: Size] {
         Dictionary(

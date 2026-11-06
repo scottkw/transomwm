@@ -743,9 +743,10 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         await harness.send(.command(.dock, focused: a))
         let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
         let ra = try #require(plan.frames[a])
-        let desktop = try #require(plan.desktopRect)
+        // D-05 leaves t over a's tile; until 08.1.1-08 only a floater over the Desktop region is a group target.
+        await harness.fake.userMove(5, to: Rect(x: 850, y: 200, width: 500, height: 400))
+        _ = await harness.refresh()
         let target = try #require(harness.arranger.world[mainKey]?.desktop.frame(of: t))
-        try #require(desktop.contains(centre(target)), "t is not on the Desktop tile")
         _ = await drag(&harness, a, from: ra, to: centre(target))
         harness.now += .milliseconds(400)
         await harness.send(.tick)
@@ -756,15 +757,14 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
     }
 }
 
-/// The Planner side of floating groups: the selected member at the content rect, hidden members parked once at the content size.
+/// The Planner side of floating groups: the selected member never planned (D-05), hidden members parked once at the content size.
 @Suite struct FloatingGroupPlannerTests {
-    private func groupedDesk(hidden: Bool = false) throws -> Desk {
+    private func groupedDesk() throws -> Desk {
         var desk = Desk()
         var ids = IDSource()
         try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
         try desk.desktop.add(t, frame: tFrame)
         try desk.desktop.group(id: try ids.make(), target: t, adding: f)
-        if hidden { try desk.tree.setDesktopHidden(true) }
         return desk
     }
 
@@ -776,42 +776,12 @@ private func floatingGroups(_ harness: Harness) -> [FloatingTabGroup] {
         #expect(plan.frames[t] == nil)
     }
 
-    @Test func aHiddenDesktopParksEveryMemberOnce() throws {
-        let plan = try Planner.plan(desk: try groupedDesk(hidden: true), area: area, gap: 8, mins: [:])
-        let content = TabBand.content(of: tFrame)
-        #expect(plan.parks.filter { $0 == t }.count == 1 && plan.parks.filter { $0 == f }.count == 1, "parks: \(plan.parks)")
-        #expect(plan.parkSizes[t] == Size(width: content.width, height: content.height))
-        #expect(plan.parkSizes[f] == nil, "the selected member parks at its own size")
-    }
-
-    @Test func aFloatingGroupCrossingATileIsClampedWholeStripIncluded() throws {
-        var desk = Desk()
-        var ids = IDSource()
-        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
-        let desktop = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
-        // Over a's tile on the left, its strip above the Desktop's top edge, its content rect inside it.
-        let frame = Rect(x: desktop.minX - 50, y: desktop.minY - 20, width: 400, height: 300)
-        try desk.desktop.add(t, frame: frame)
-        try desk.desktop.group(id: try ids.make(), target: t, adding: f)
-        let planned = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[f])
-        #expect(planned == TabBand.content(of: Planner.clamp(frame, into: desktop)), "planned \(planned) in \(desktop)")
-        #expect(TabBand.frame(ofContent: planned).minY >= desktop.minY, "the strip sticks out past the Desktop's top edge")
-    }
-
-    @Test func theSelectedMembersBandCountsTowardTheDesktopMinimum() throws {
-        var desk = Desk()
-        var ids = IDSource()
-        try desk.tree.insert(a, at: .top, of: .desktop, ids: &ids)
-        try desk.desktop.add(t, frame: tFrame)
-        try desk.desktop.group(id: try ids.make(), target: t, adding: f)
-        let mins = [f: Size(width: 100, height: 600), a: Size(width: 100, height: 100)]
-        let grouped = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: mins).desktopRect)
-        #expect(grouped.height >= 632, "the band did not raise the Desktop minimum: \(grouped)")
-        var plain = Desk()
-        try plain.tree.insert(a, at: .top, of: .desktop, ids: &ids)
-        try plain.desktop.add(f, frame: tFrame)
-        let alone = try #require(try Planner.plan(desk: plain, area: area, gap: 8, mins: mins).desktopRect)
-        #expect(alone.height < 632, "a plain floater got the band: \(alone)")
+    /// D-05: a floating group over a docked tile stays where it is, strip and all.
+    @Test func aFloatingGroupOverATileIsNeverMoved() throws {
+        let plan = try Planner.plan(desk: try groupedDesk(), area: area, gap: 8, mins: [:])
+        let tile = try #require(plan.frames[a])
+        try #require(tFrame.overlaps(tile), "the group is clear of a's tile")
+        #expect(plan.frames[f] == nil && plan.frames[t] == nil)
     }
 }
 

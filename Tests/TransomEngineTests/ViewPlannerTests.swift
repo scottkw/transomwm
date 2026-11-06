@@ -121,7 +121,7 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
         let plan = try ViewPlanner.plan(desk: desk, view: .node(.desktop), area: area, gap: 8, mins: [:], wanted: [f.identity: wanted])
 
         #expect(plan.desktopRect == inner)
-        #expect(plan.frames == [f: wanted], "no tile in view, so the wanted frame is kept unclamped")
+        #expect(plan.frames.isEmpty, "a floater is never planned (D-05)")
         #expect(plan.parks == [a, b, c])
     }
 

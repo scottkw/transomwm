@@ -1,12 +1,9 @@
 import TransomModel
 
-/// Where every window of one desk should be. `frames` holds docked windows' tile rects and the floating windows that
-/// must move: each to its wanted frame, clamped into the Desktop only when that frame overlaps a docked tile. A
-/// floating window already there and clear of every tile is left where it is (D-24).
-/// While the Desktop tile is hidden, its present floating windows are in `parks` instead, with no frame. A tab group's
-/// hidden members are always in `parks`, never in `frames`, with their content size in `parkSizes` (D-07); a floating
-/// group's too, once each, while its selected member is present. A floating group's selected member is planned like
-/// any floater, its stored frame being the group's content rect.
+/// Where every docked window of one desk should be: `frames` holds docked windows' tile rects only. A tab group's hidden
+/// members are in `parks`, never in `frames`, with their content size in `parkSizes` (D-07); a floating group's too,
+/// once each, while its selected member is present. Floating windows are never planned: they stay where the user or
+/// their app put them (D-05).
 public struct FramePlan: Equatable, Sendable {
     public var frames: [WindowRef: Rect]
     public var parks: [WindowRef]
@@ -19,87 +16,29 @@ public struct FramePlan: Equatable, Sendable {
 
 /// Pure layout of one desk: no state, no AppKit.
 public enum Planner {
-    /// Lays `desk` out in `area` (the display's visibleFrame). The Desktop tile's minimum is the per-axis maximum
-    /// of its present floating windows' minimums, so they keep room to sit in it. Docked windows win over floaters
-    /// (G-03-6): if that leaves docked windows unfit that would fit beside a 1x1 Desktop, the floaters with the
-    /// largest minimum area are dropped from it one at a time until they do; then each dropped floater that still fits
-    /// is added back, last dropped first (WR-02). A dropped floater is only clamped, and may still overlap a tile if
-    /// its app refuses to shrink (T-03-58). A floater's wanted frame is `wanted[identity]`, else its recorded frame
-    /// (G-03-11), so with no wanted frames only floaters that overlap a tile are planned. `floors` raise floaters'
-    /// minimums for the Desktop tile only, never docked windows' (G-03-11 B).
+    /// Lays `desk`'s docked windows out in `area` (the display's visibleFrame). Floating windows take no room and get
+    /// no frame (D-05). `wanted` is unread; 08.1.1-14 removes it with its callers.
     public static func plan(
-        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:],
-        floors: [WindowIdentity: Size] = [:]
+        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:]
     ) throws(LayoutError) -> FramePlan {
-        let present = desk.desktop.windows.filter { $0.state == .present }
-        let groups = desk.desktop.groups
-        let selectedMembers = Set(groups.map { $0.members[$0.selected] })
-        let hiddenMembers = Set(groups.flatMap { group in group.members.indices.filter { $0 != group.selected }.map { group.members[$0] } })
-        // Hidden members take no part in the Desktop (parked below); the selected one needs room for its band too.
-        let floating = present.filter { !hiddenMembers.contains($0.window) }
-        var sizing = floating.compactMap { window -> (window: WindowRef, min: Size)? in
-            let min = mins[window.window], floor = floors[window.window.identity]
-            guard min != nil || floor != nil else { return nil }
-            let band = selectedMembers.contains(window.window) ? TabBand.height : 0
-            return (window.window, Size(width: max(min?.width ?? 0, floor?.width ?? 0), height: max(min?.height ?? 0, floor?.height ?? 0) + band))
-        }
-            .sorted { lhs, rhs in
-                let l = lhs.min.width * lhs.min.height, r = rhs.min.width * rhs.min.height
-                return l != r ? l > r : lhs.window.identity < rhs.window.identity
-            }
-        func resolved(_ sizing: [(window: WindowRef, min: Size)]) throws(LayoutError) -> Resolution {
-            let desktopMinimum = Size(width: sizing.map(\.min.width).max() ?? 1, height: sizing.map(\.min.height).max() ?? 1)
-            return try resolve(desk.tree, in: area, mins: mins, gap: gap, desktopMinimum: desktopMinimum)
-        }
-        var resolution = try resolved(sizing)
-        if !resolution.unfit.isEmpty {
-            let baselineUnfit = try resolved([]).unfit
-            var dropped: [(window: WindowRef, min: Size)] = []
-            // Ends: with no floater left, the resolution is the baseline.
-            while !resolution.unfit.isSubset(of: baselineUnfit) {
-                dropped.append(sizing.removeFirst())
-                resolution = try resolved(sizing)
-            }
-            // The area order can drop a floater that was never the problem (or before a single-axis hint, area 0).
-            for floater in dropped.reversed() {
-                let trial = try resolved(sizing + [floater])
-                if trial.unfit.isSubset(of: baselineUnfit) {
-                    sizing.append(floater)
-                    resolution = trial
-                }
-            }
-        }
-        var frames = resolution.windowRects
-        var parks = desk.tree.isDesktopHidden == true ? present.map(\.window) : []
+        let resolution = try resolve(desk.tree, in: area, mins: mins, gap: gap)
+        var parks: [WindowRef] = []
         var parkSizes: [WindowRef: Size] = [:]
         for (window, content) in resolution.hiddenTabs.sorted(by: { $0.key.identity < $1.key.identity }) {
             parks.append(window)
             parkSizes[window] = Size(width: content.width, height: content.height)
         }
-        if let desktop = resolution.desktopRect {
-            let tiles = Array(resolution.windowRects.values)
-            for window in floating {
-                let want = wanted[window.window.identity] ?? window.frame
-                // A group's selected member stands for its whole group frame: the strip band is clamped with it.
-                let grouped = selectedMembers.contains(window.window)
-                let outer = grouped ? TabBand.frame(ofContent: want) : want
-                let clamped = clamp(outer, into: desktop)
-                let target = tiles.contains(where: outer.overlaps) ? (grouped ? TabBand.content(of: clamped) : clamped) : want
-                let now = grouped ? TabBand.frame(ofContent: window.frame) : window.frame
-                if tiles.contains(where: now.overlaps) || !near(target, window.frame, within: 0.5) { frames[window.window] = target }
-            }
-        }
-        let presentSet = Set(present.map(\.window)), parkedByDesktop = Set(parks)
-        for group in groups where presentSet.contains(group.members[group.selected]) {  // else no part, as docked
-            let selected = group.members[group.selected]
-            let content = frames[selected] ?? TabBand.content(of: group.frame)
-            for hidden in group.members where hidden != selected && presentSet.contains(hidden) {
-                if !parkedByDesktop.contains(hidden) { parks.append(hidden) }
+        let present = Set(desk.desktop.windows.filter { $0.state == .present }.map(\.window))
+        for group in desk.desktop.groups where present.contains(group.members[group.selected]) {  // else no part, as docked
+            let selected = group.members[group.selected], content = TabBand.content(of: group.frame)
+            for hidden in group.members where hidden != selected && present.contains(hidden) {
+                parks.append(hidden)
                 parkSizes[hidden] = Size(width: content.width, height: content.height)
             }
         }
         return FramePlan(
-            frames: frames, parks: parks, parkSizes: parkSizes, unfit: resolution.unfit, desktopRect: resolution.desktopRect, resolution: resolution)
+            frames: resolution.windowRects, parks: parks, parkSizes: parkSizes, unfit: resolution.unfit, desktopRect: resolution.desktopRect,
+            resolution: resolution)
     }
 
     static func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
