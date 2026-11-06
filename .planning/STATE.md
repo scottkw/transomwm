@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 13
+current_plan: 14
 status: executing
-stopped_at: Completed 08.1.1-12-PLAN.md
-last_updated: "2026-11-06T17:17:12.195Z"
+stopped_at: Completed 08.1.1-13-PLAN.md
+last_updated: "2026-11-06T17:22:20.890Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 98c168a5fdd61f33b9adaa1b1b695a1552c884d8
+state_head: "0b35ab05e326ac4730de9512bf269c696c2d66b7"
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 117
+  completed_plans: 118
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 13
+Current Plan: 14
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -176,6 +176,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P10 | 13min | 2 tasks | 13 files |
 | Phase 08.1.1 P11 | 11min | 2 tasks | 15 files |
 | Phase 08.1.1 P12 | 12min | 2 tasks | 8 files |
+| Phase 08.1.1 P13 | 25min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -498,6 +499,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-12: live fourths tests keep their labels and weights by docking a second fixture window first (one docked tile, D-04)
 - [Phase 08.1.1]: 08.1.1-12: the too-big live test learns both minimums beside each other; window 0 floats on screen at its own frame (D-05), window 1 spans the visible frame
 - [Phase 08.1.1]: 08.1.1-12: ViewsIntegrationTests seeds [(A / B) | D] so the saved column is not the whole desk
+- [Phase 08.1.1]: 08.1.1-13: focusNeighbour's .desktop? arm folded into the .split?/nil arm (exhaustive, no default); 08.1.1-16 deletes it with the case
+- [Phase 08.1.1]: 08.1.1-13: a saved view naming only floating windows resolves home at runtime with N15, not N17; no layout.json rewrite (RESEARCH OQ3, pinned by aViewOfOnlyFloatingWindowsGoesHome)
 
 ### Quick Tasks Completed
 
@@ -543,8 +546,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T17:17:11.393Z
-Stopped at: Completed 08.1.1-12-PLAN.md
+Last session: 2026-11-06T17:22:20.120Z
+Stopped at: Completed 08.1.1-13-PLAN.md
 Resume file: None
 
 ## Deferred Verification
