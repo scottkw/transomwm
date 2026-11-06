@@ -42,7 +42,11 @@ public enum LayoutStoreError: Error, Equatable {
         loadError = nil
         guard FileManager.default.fileExists(atPath: file.path) else { return }
         do {
-            contents = try Self.decode(file)
+            let (decoded, version) = try Self.decode(file)
+            contents = decoded
+            if let line = Self.migrationLine(fromSchema: version, contents: decoded) {
+                Self.logger.info("\(line, privacy: .public)")
+            }
         } catch {
             loadError = error
             if case .newerVersion(let version) = error {
@@ -53,6 +57,19 @@ public enum LayoutStoreError: Error, Equatable {
             Self.logger.error("rejected \(Self.fileName, privacy: .public): \(String(describing: error), privacy: .public); starting empty")
             setAside()
         }
+    }
+
+    /// The one log line for a file older than the current schema (8.1.1 D-15), nil for a current one. Counts only, never
+    /// a window, title or path (T-08.1.1-03). Every legacy desk held one Desktop tile (RESEARCH A5); the windows brought
+    /// back are `world`'s floaters with a home frame, which the Arranger's restore returns from the park rect.
+    public static func migrationLine(fromSchema version: Int, contents: LayoutFile) -> String? {
+        guard version != LayoutFile.schemaVersion else { return nil }
+        let desks = contents.world.desks.count + contents.layoutSets.reduce(0) { $0 + $1.world.desks.count }
+        let homes = Set(contents.homeFrames.map(\.window))
+        let parked = contents.world.desks.values.reduce(0) { count, desk in
+            count + desk.desktop.windows.filter { homes.contains($0.window.identity) }.count
+        }
+        return "migrated layout.json schema \(version) to \(LayoutFile.schemaVersion): dropped \(desks) Desktop tiles, brought back \(parked) parked windows"
     }
 
     /// Writes `contents`, window titles included, atomically and owner-only (0600); creates the directory if needed.
@@ -99,7 +116,8 @@ public enum LayoutStoreError: Error, Equatable {
     /// Size cap on the whole file, then a version probe, then the full decode (schema 1 through `LayoutFileV1`, each
     /// World's own validation), then `LayoutFile.validate()`, then every home frame and wanted frame (Persistence.swift's
     /// order). The session record has no field to check beyond its decode.
-    private static func decode(_ url: URL) throws(LayoutStoreError) -> LayoutFile {
+    /// Returns the schema version the file was written in, too.
+    private static func decode(_ url: URL) throws(LayoutStoreError) -> (LayoutFile, Int) {
         let data: Data
         do {
             if let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int, size > World.maxEncodedBytes {
@@ -153,7 +171,7 @@ public enum LayoutStoreError: Error, Equatable {
             guard wanted.frame.isValidGeometry else { throw .invalidEntry("wanted frame \(index): not finite or out of range") }
             guard seen.insert(wanted.window).inserted else { throw .invalidEntry("wanted frame \(index): duplicate window") }
         }
-        return contents
+        return (contents, version)
     }
 
     /// Moves the rejected file to `<name>.corrupt-<unix seconds>`, as `backUp` names its copies, so no earlier one is

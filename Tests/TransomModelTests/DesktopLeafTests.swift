@@ -80,10 +80,6 @@ private func besideDesktop() throws -> LayoutTree {
         }
     }
 
-    @Test func aDeskWithoutTheDesktopTileIsInvalid() {
-        #expect(throws: LayoutError.self) { try Desk(tree: LayoutTree()).validate() }
-    }
-
     @Test func aWorldWhoseIDSourceCouldMintTheDesktopIDIsInvalid() {
         #expect(throws: LayoutError.self) { try World(ids: IDSource(next: 0), desks: [:]) }
     }

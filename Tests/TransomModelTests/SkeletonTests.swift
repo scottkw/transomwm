@@ -35,7 +35,7 @@ func makeWindow(_ id: UInt32, title: String = "") -> WindowRef {
         try desk.tree.insert(b, at: .right, of: #require(desk.tree.leaf(containing: a)), ids: &ids)
         let world = try World(ids: ids, desks: [DeskKey(displayUUID: "D1", spaceID: nil): desk])
         let data = try world.encoded()
-        #expect(String(decoding: data, as: UTF8.self).contains("\"schemaVersion\":1"))
+        #expect(String(decoding: data, as: UTF8.self).contains("\"schemaVersion\":2"))
         let decoded = try World.decode(from: data)
         #expect(decoded == world)
         #expect(try decoded.encoded() == data)

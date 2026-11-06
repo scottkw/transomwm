@@ -503,3 +503,23 @@ extension LayoutStoreTests {
         #expect(fresh.contents == contents)
     }
 }
+
+/// 8.1.1 D-15: the migration's one log line holds counts only, and none for a current file.
+extension LayoutStoreTests {
+    @Test func theMigrationLineCountsDesktopTilesAndParkedWindows() throws {
+        let dir = Directory()
+        try dir.write(LayoutFileV3Fixture.json)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        let contents = try #require(store.contents)
+        #expect(
+            LayoutStore.migrationLine(fromSchema: 3, contents: contents)
+                == "migrated layout.json schema 3 to 4: dropped 2 Desktop tiles, brought back 1 parked windows")
+        #expect(LayoutStore.migrationLine(fromSchema: 4, contents: contents) == nil)
+
+        try dir.write(LayoutFileV1Fixture.json)
+        store.load()
+        let v1 = try #require(store.contents)
+        #expect(LayoutStore.migrationLine(fromSchema: 1, contents: v1)?.hasPrefix("migrated layout.json schema 1 to 4: ") == true)
+    }
+}

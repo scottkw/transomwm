@@ -116,12 +116,18 @@ private let corruptCorpus: [CorruptCase] = [
     ], windows: [1])]), invalidLayout: false),
     CorruptCase(name: "100-deep split chain", data: worldJSON([chainDesk(splits: 100)]), invalidLayout: true),
     CorruptCase(name: "5000 nodes", data: worldJSON([manyNodesDesk(5000)], next: 10_000), invalidLayout: true),
-    CorruptCase(name: "desk without the Desktop tile", data: worldJSON([deskJSON(root: 3, nodes: [
-        1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [0.5, 0.5]),
-    ], windows: [1, 2], desktopTile: false)]), invalidLayout: true),
     CorruptCase(name: "Desktop tile under NodeID 7", data: worldJSON([deskJSON(root: 3, nodes: [
         1: panelJSON(1), 7: desktopTileJSON, 3: splitJSON([1, 7], [0.5, 0.5]),
     ], windows: [1], desktopTile: false)]), invalidLayout: true),
+    CorruptCase(name: "Desktop tiles at NodeIDs 0 and 7", data: worldJSON([deskJSON(root: 3, nodes: [
+        1: panelJSON(1), 7: desktopTileJSON, 3: splitJSON([1, 7, 0], [0.5, 0.25, 0.25]),
+    ], windows: [1])]), invalidLayout: true),
+    // The legacy migration's stand-in for the Desktop tile is windowID 0, pid -1, bundle "".
+    CorruptCase(name: "a window with the Desktop stand-in's identity", data: worldJSON([deskJSON(root: 3, nodes: [
+        1: #"{"panel":{"_0":{"creationOrder":0,"identity":{"bundleID":"","pid":-1,"windowID":0},"titleHint":""}}}"#,
+        3: splitJSON([1, 0], [0.5, 0.5]),
+    ], windows: [])]).replacing(Data(#""states":[]"#.utf8), with: Data(#""states":[{"state":"present","window":{"bundleID":"","pid":-1,"windowID":0}}]"#.utf8)),
+        invalidLayout: true),
     CorruptCase(name: "ids.next = 0 could mint the Desktop ID", data: worldJSON([], next: 0), invalidLayout: true),
 ]
 
@@ -251,28 +257,38 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         _ = try World.decode(from: worldJSON([chainDesk(splits: LayoutTree.maxDepth)]))
     }
 
-    @Test func versionOneLoads() throws {
+    @Test func versionTwoLoads() throws {
         let data = try richWorld().encoded()
-        #expect(String(decoding: data, as: UTF8.self).contains(#""schemaVersion":1"#))
+        #expect(String(decoding: data, as: UTF8.self).contains(#""schemaVersion":2"#))
         _ = try World.decode(from: data)
     }
 
+    /// 8.1.1 D-02: a desk with no Desktop tile is harmless in a legacy file; it loads with its windows.
+    @Test func aLegacyDeskWithoutADesktopTileLoadsUnchanged() throws {
+        let world = try World.decode(from: worldJSON([deskJSON(root: 3, nodes: [
+            1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [0.5, 0.5]),
+        ], windows: [1, 2], desktopTile: false)]))
+        let tree = try #require(world[k1]?.tree)
+        #expect(tree.windows == [makeWindow(1), makeWindow(2)])
+        #expect(tree.node(NodeID(raw: 3)) == .split(axis: .horizontal, children: [NodeID(raw: 1), NodeID(raw: 2)], weights: [0.5, 0.5]))
+    }
+
     @Test func newerVersionIsRefused() throws {
-        let data = try replacing(richWorld().encoded(), #""schemaVersion":1"#, with: #""schemaVersion":2"#)
-        expectPersistenceError(.newerVersion(found: 2, supported: 1)) { () throws(PersistenceError) in try World.decode(from: data) }
+        let data = try replacing(richWorld().encoded(), #""schemaVersion":2"#, with: #""schemaVersion":3"#)
+        expectPersistenceError(.newerVersion(found: 3, supported: 2)) { () throws(PersistenceError) in try World.decode(from: data) }
     }
 
     @Test func olderVersionWithoutMigrationIsRefused() throws {
-        let data = try replacing(richWorld().encoded(), #""schemaVersion":1"#, with: #""schemaVersion":0"#)
+        let data = try replacing(richWorld().encoded(), #""schemaVersion":2"#, with: #""schemaVersion":0"#)
         expectPersistenceError(.missingMigration(from: 0)) { () throws(PersistenceError) in try World.decode(from: data) }
     }
 
-    @Test(arguments: [#","schemaVersion":1"#, #""schemaVersion":"1""#])
+    @Test(arguments: [#","schemaVersion":2"#, #""schemaVersion":"2""#])
     func missingOrNonIntegerVersionIsCorrupt(replacement: String) throws {
         let original = try richWorld().encoded()
         let data = replacement.hasPrefix(",")
             ? try replacing(original, replacement, with: "")
-            : try replacing(original, #""schemaVersion":1"#, with: replacement)
+            : try replacing(original, #""schemaVersion":2"#, with: replacement)
         do {
             _ = try World.decode(from: data)
             Issue.record("expected corrupt")
@@ -325,14 +341,18 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
     }
 
     @Test func olderFileDecodesThroughTheChain() throws {
-        // A hypothetical schema 0 that called desks "spaces".
-        let v1 = try richWorld().encoded()
-        var v0 = try replacing(v1, #""schemaVersion":1"#, with: #""schemaVersion":0"#)
+        // A hypothetical schema 0 that called desks "spaces". The chain takes it to schema 1, which then loads as
+        // legacy, without its Desktop tiles (8.1.1 D-02).
+        let v2 = try richWorld().encoded()
+        let v1 = try replacing(v2, #""schemaVersion":2"#, with: #""schemaVersion":1"#)
+        var v0 = try replacing(v2, #""schemaVersion":2"#, with: #""schemaVersion":0"#)
         v0 = try replacing(v0, #""desks":"#, with: #""spaces":"#)
         let chain = MigrationChain(steps: [0: { object in object["desks"] = object.removeValue(forKey: "spaces") }])
         let migrated = try World.decode(from: v0, migrations: chain)
         // IDSource is above 2^53, which JSONSerialization may not keep exact, so compare the desks.
-        #expect(migrated.desks == (try richWorld()).desks)
+        let legacy = try World.decode(from: v1).desks
+        #expect(migrated.desks == legacy)
+        #expect(legacy.values.allSatisfy { $0.tree.isDesktopHidden == nil })
     }
 
     @Test(arguments: corruptCorpus)
