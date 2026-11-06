@@ -997,7 +997,7 @@ private func dockedBesideFloatingGroup(at now: ContinuousClock.Instant) throws -
     return (arranger, GroupKey(desk: mainKey, node: id))
 }
 
-/// UI-SPEC Surface 3 "What the user never sees": hidden members stay out of focus moves; a hidden Desktop parks the group.
+/// UI-SPEC Surface 3 "What the user never sees": hidden members stay out of focus moves.
 /// 08.1.1 Surface 2: no floating window is a Focus target at all, so a move from the only tile beeps.
 @Suite struct FloatingGroupVisibilityTests {
     @Test func aFocusMoveNeverPicksAFloatingGroupMember() throws {
