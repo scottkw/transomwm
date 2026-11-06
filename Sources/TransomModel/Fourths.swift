@@ -6,7 +6,7 @@ public enum FourthSlot: String, CaseIterable, Hashable, Sendable {
     case first, second, third, fourth, middle
     case firstHalf, secondHalf, firstThird, middleThird, lastThird
 
-    /// Defined once so the spans `fourthSpan` returns match `FourthCopy`'s label switch exactly.
+    /// Defined once so every third is the same constant.
     public static let oneThird = 1.0 / 3
     public static let twoThirds = 2.0 / 3
 
@@ -51,41 +51,89 @@ public enum FourthZones {
     }
 }
 
+/// One part of a desk's length along an axis, for `insertFourth`. Tiles and empty areas are measured as fractions of the
+/// length the children taking part share; a child not taking part keeps its stored weight.
+enum FourthPiece: Equatable {
+    case tile(NodeID, Double)
+    case empty(Double)
+    case absent(NodeID, Double)
+    case window(Double)
+}
+
 extension LayoutTree {
-    /// D-14: `node` takes `slot`'s share of the whole desk at the root, and a root split the other way becomes one child
-    /// of a new root. The caller has already taken the window off the desk. All-or-nothing, like every tree edit.
+    /// `node` takes exactly `slot`'s span of the whole desk along `axis` (8.1.1 D-16, rule E1). The caller has already
+    /// taken the window off the desk. All-or-nothing, like every tree edit.
     public mutating func insertFourth(
         _ node: Node, states: [WindowIdentity: WindowState], slot: FourthSlot, axis: Axis, ids: inout IDSource
     ) throws(LayoutError) {
-        guard let root else { return try insertRootLeaf(node, states: states, ids: &ids) }
-        let (children, weights) = fourthChildren(of: root, axis: axis)
-        let (index, shares, _) = Self.fourthShares(weights: weights, takesPart: children.map(takesPart), span: slot.span)
+        try checkNewLeaf(node)
         var next = self
         var nextIDs = ids
-        let leading: Edge = axis == .horizontal ? .left : .top
-        let trailing: Edge = axis == .horizontal ? .right : .bottom
-        if index < children.count {
-            try next.insertLeaf(node, states: states, at: leading, of: children[index], ids: &nextIDs)
-        } else {
-            try next.insertLeaf(node, states: states, at: trailing, of: children[children.count - 1], ids: &nextIDs)
+        func make() throws(LayoutError) -> NodeID {
+            // IDSource is public and not tied to the tree, so a lagging one must not overwrite a node.
+            let id = try nextIDs.make()
+            guard next.nodes[id] == nil else { throw .invariantViolated("ID source issued \(id), which is already in the tree") }
+            return id
         }
-        guard let newRoot = next.root else { throw .invariantViolated("a fourth left no root") }
-        try next.setWeights(in: newRoot, shares)
+        var pieces: [FourthPiece] = []
+        var basis = 1.0
+        var rootID: NodeID?
+        if let root {
+            if case let .split(rootAxis, children, weights)? = nodes[root], rootAxis == axis {
+                rootID = root
+                let room = zip(children, weights).reduce(0) { takesPart($1.0) ? $0 + $1.1 : $0 }
+                // Nothing taking part leaves no room to scale into: the window's share of the stored total keeps it from
+                // being a sliver when the others return (WR-07).
+                basis = room > 0 ? room : weights.reduce(0, +)
+                for (child, weight) in zip(children, weights) {
+                    if !takesPart(child) {
+                        pieces.append(.absent(child, weight))
+                    } else if nodes[child] == .spacer {
+                        pieces.append(.empty(weight / room))
+                        next.nodes[child] = nil
+                    } else {
+                        pieces.append(.tile(child, weight / room))
+                    }
+                }
+            } else {
+                pieces = [takesPart(root) ? .tile(root, 1) : .absent(root, 1)]
+            }
+        }
+        var children: [NodeID] = []
+        var weights: [Double] = []
+        for piece in Self.fourthPieces(pieces, span: slot.span) {
+            switch piece {
+            case let .tile(id, length):
+                children.append(id)
+                weights.append(length * basis)
+            case let .absent(id, weight):
+                children.append(id)
+                weights.append(weight)
+            case let .empty(length):
+                let id = try make()
+                next.nodes[id] = .spacer
+                children.append(id)
+                weights.append(length * basis)
+            case let .window(length):
+                let id = try make()
+                next.nodes[id] = node
+                children.append(id)
+                weights.append(length * basis)
+            }
+        }
+        let id: NodeID
+        if let rootID { id = rootID } else { id = try make() }
+        let sum = weights.reduce(0, +)
+        next.nodes[id] = .split(axis: axis, children: children, weights: weights.map { $0 / sum })
+        next.root = id
+        next.states.merge(states) { $1 }
+        next.normalize()
+        if let root = next.root, case let .split(_, children, _)? = next.nodes[root], children.count > Self.maxChildren {
+            throw .splitFull(root, limit: Self.maxChildren)
+        }
+        try next.validate()
         self = next
         ids = nextIDs
-    }
-
-    /// The share of the desk `insertFourth` would give a window: `slot`'s span, grown into a side with no tile (D-14, D-23).
-    /// A window being moved has to be off this tree already.
-    public func fourthSpan(_ slot: FourthSlot, axis: Axis) -> (start: Double, end: Double) {
-        guard let root else { return (0, 1) }
-        let (children, weights) = fourthChildren(of: root, axis: axis)
-        return Self.fourthShares(weights: weights, takesPart: children.map(takesPart), span: slot.span).span
-    }
-
-    /// The root's children along `axis`; a leaf root, or a root split the other way, is one child.
-    private func fourthChildren(of root: NodeID, axis: Axis) -> ([NodeID], [Double]) {
-        if case let .split(rootAxis, children, weights)? = nodes[root], rootAxis == axis { (children, weights) } else { ([root], [1]) }
     }
 
     /// Mirrors `Solver.aggregate`: whether a node gets any space when resolved. Only docked tiles count (D-04).
@@ -99,40 +147,66 @@ extension LayoutTree {
         }
     }
 
-    /// The insertion index, the new weights (the window's at that index) and the span it gets. Children not taking part keep their stored
-    /// weight and the rest share what they leave, so positions are worked out over the children taking part only.
-    private static func fourthShares(
-        weights: [Double], takesPart: [Bool], span: (start: Double, end: Double)
-    ) -> (index: Int, shares: [Double], span: (start: Double, end: Double)) {
-        let room = weights.indices.reduce(0) { takesPart[$1] ? $0 + weights[$1] : $0 }
-        var index = weights.count
-        if span.start == 0 {
-            index = 0
-        } else if span.end != 1 {
-            // A tile centred exactly at the window's position goes after it (D-14).
-            let position = (span.start + span.end) / 2
-            var earlier = 0.0
-            for i in weights.indices where takesPart[i] {
-                if (earlier + weights[i] / 2) / room >= position - 1e-9 {
-                    index = i
-                    break
+    /// The pieces in their new order, the window's exactly `span` (8.1.1 D-16). Empty areas under the span are used up
+    /// first (E2). A tile goes after the window when the span starts the axis, before it when the span ends it, and
+    /// otherwise by its centre (one centred exactly at the window's goes after, D-14). Each side then fits its room: too
+    /// long, its empty areas shrink first and then its tiles shrink proportionally (E2); too short, the rest stays an
+    /// empty area beside the window, so nothing grows (E3). Pieces not taking part stay with the piece before them.
+    static func fourthPieces(_ pieces: [FourthPiece], span: (start: Double, end: Double)) -> [FourthPiece] {
+        let (a, b) = span
+        let centre = (a + b) / 2
+        var before: [FourthPiece] = []
+        var after: [FourthPiece] = []
+        var position = 0.0
+        var toAfter = a == 0
+        for piece in pieces {
+            switch piece {
+            case let .empty(length):
+                let (start, end) = (position, position + length)
+                position = end
+                if start < a { before.append(.empty(min(end, a) - start)) }
+                if end > b {
+                    after.append(.empty(end - max(start, b)))
+                    toAfter = true
                 }
-                earlier += weights[i]
+            case let .tile(_, length):
+                toAfter = a == 0 || (b != 1 && position + length / 2 >= centre - 1e-9)
+                position += length
+                if toAfter { after.append(piece) } else { before.append(piece) }
+            case .absent, .window:
+                if toAfter { after.append(piece) } else { before.append(piece) }
             }
         }
-        let before = weights.indices.reduce(0) { $1 < index && takesPart[$1] ? $0 + weights[$1] : $0 }
-        let after = room - before
-        // An empty side has no tile to fill it, so the window grows into that space (D-14).
-        let start = before > 0 ? span.start : 0
-        let end = after > 0 ? span.end : 1
-        var shares = weights.indices.map { i -> Double in
-            guard takesPart[i] else { return weights[i] }
-            return (i < index ? start / before : (1 - end) / after) * weights[i] * room
+        return fitted(before, room: a, windowAfter: true) + [.window(b - a)] + fitted(after, room: 1 - b, windowAfter: false)
+    }
+
+    private static func fitted(_ side: [FourthPiece], room: Double, windowAfter: Bool) -> [FourthPiece] {
+        func length(_ piece: FourthPiece, empty: Bool) -> Double {
+            switch piece {
+            case let .empty(l): empty ? l : 0
+            case let .tile(_, l): empty ? 0 : l
+            default: 0
+            }
         }
-        // Nothing else taking part leaves no room to scale into: the window fills the desk once resolved, and its share of the
-        // stored total keeps it from being a sliver when the others return (WR-07).
-        let basis = room > 0 ? room : weights.reduce(0, +)
-        shares.insert(max((end - start) * basis, minWeight), at: index)
-        return (index, shares, (start, end))
+        let empties = side.reduce(0) { $0 + length($1, empty: true) }
+        let tiles = side.reduce(0) { $0 + length($1, empty: false) }
+        var result = side
+        if empties + tiles > room + 1e-9 {
+            let excess = empties + tiles - room
+            let emptyScale = empties >= excess ? (empties - excess) / empties : 0
+            let tileScale = empties >= excess ? 1 : room / tiles
+            result = side.map { piece in
+                switch piece {
+                case let .empty(l): .empty(l * emptyScale)
+                case let .tile(id, l): .tile(id, l * tileScale)
+                default: piece
+                }
+            }
+        } else if room - empties - tiles > 1e-9 {
+            let rest = FourthPiece.empty(room - empties - tiles)
+            if windowAfter { result.append(rest) } else { result.insert(rest, at: 0) }
+        }
+        // A sliver of empty area is no area.
+        return result.filter { if case let .empty(l) = $0 { l >= minWeight } else { true } }
     }
 }

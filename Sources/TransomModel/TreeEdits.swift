@@ -248,7 +248,7 @@ extension LayoutTree {
     }
 
     /// A leaf to add: a panel or a tab group whose windows are all new to the tree.
-    private func checkNewLeaf(_ node: Node) throws(LayoutError) {
+    func checkNewLeaf(_ node: Node) throws(LayoutError) {
         guard let members = Self.members(of: node) else { throw .invariantViolated("only a panel or a tab group is inserted as a leaf") }
         if let duplicate = members.first(where: { states[$0.identity] != nil }) { throw .duplicateWindow(duplicate) }
     }

@@ -95,7 +95,8 @@ public enum FourthCopy {
     public static let floating = "Floating"
 
     /// A slot's own name, in sentence case: "1st column", "Middle half row", "Left half", "Center third" (08.1 UI-SPEC
-    /// Surface 3, 08.1.1 UI-SPEC label table).
+    /// Surface 3, 08.1.1 UI-SPEC label table). The only label: a window always gets exactly its position (8.1.1 D-16,
+    /// E1), so 08.1 D-23 holds without naming grown spans.
     public static func label(_ slot: FourthSlot, _ axis: Axis) -> String {
         let line = axis == .horizontal ? "column" : "row"
         let (lead, middle, trail) = axis == .horizontal ? ("Left", "Center", "Right") : ("Top", "Middle", "Bottom")
@@ -110,22 +111,6 @@ public enum FourthCopy {
         case .firstThird: "\(lead) third"
         case .middleThird: "\(middle) third"
         case .lastThird: "\(trail) third"
-        }
-    }
-
-    /// What a window given `span` of the desk gets (D-23): a slot grown into an empty side is named by its share. The
-    /// thirds match exactly because `fourthSpan` returns the slot's own `FourthSlot.oneThird`/`twoThirds` (Pitfall 8).
-    public static func label(_ slot: FourthSlot, _ axis: Axis, span: (start: Double, end: Double)) -> String {
-        let (lead, trail) = axis == .horizontal ? ("Left", "Right") : ("Top", "Bottom")
-        return switch (span.start, span.end) {
-        case (0, 1): "Whole desk"
-        case (0, 0.5): "\(lead) half"
-        case (0.5, 1): "\(trail) half"
-        case (0, 0.75): "\(lead) three quarters"
-        case (0.25, 1): "\(trail) three quarters"
-        case (0, FourthSlot.twoThirds): "\(lead) two thirds"
-        case (FourthSlot.oneThird, 1): "\(trail) two thirds"
-        default: label(slot, axis)  // the slot's own span, the only other result of `fourthSpan`
         }
     }
 

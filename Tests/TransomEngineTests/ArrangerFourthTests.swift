@@ -82,24 +82,24 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         #expect(announcements(effects) == ["Docked to 1st column"])
     }
 
-    /// D-23: the announcement names what the window gets. Only docked tiles count (8.1.1 D-04): on an empty desk every slot
-    /// is the whole desk, and beside one tile a slot with an empty side grows into it.
+    /// 8.1.1 D-16, E1: the window always gets exactly its position, so the announcement names the position, on an empty
+    /// desk and beside tiles alike (08.1 D-23 holds trivially).
     @Test(arguments: [
-        (FourthSlot.first, 0, "Whole desk", "Whole desk"),
-        (.second, 0, "Whole desk", "Whole desk"),
-        (.middle, 0, "Whole desk", "Whole desk"),
-        (.third, 0, "Whole desk", "Whole desk"),
-        (.fourth, 0, "Whole desk", "Whole desk"),
+        (FourthSlot.first, 0, "1st column", "1st row"),
+        (.second, 0, "2nd column", "2nd row"),
+        (.middle, 0, "Middle half column", "Middle half row"),
+        (.third, 0, "3rd column", "3rd row"),
+        (.fourth, 0, "4th column", "4th row"),
         (.first, 1, "1st column", "1st row"),
-        (.second, 1, "Left half", "Top half"),
-        (.middle, 1, "Left three quarters", "Top three quarters"),
-        (.third, 1, "Right half", "Bottom half"),
+        (.second, 1, "2nd column", "2nd row"),
+        (.middle, 1, "Middle half column", "Middle half row"),
+        (.third, 1, "3rd column", "3rd row"),
         (.fourth, 1, "4th column", "4th row"),
         (.second, 2, "2nd column", "2nd row"),
         (.middle, 2, "Middle half column", "Middle half row"),
         (.third, 2, "3rd column", "3rd row"),
     ])
-    func theAnnouncementNamesTheActualSpan(slot: FourthSlot, docked: Int, column: String, row: String) throws {
+    func theAnnouncementNamesThePosition(slot: FourthSlot, docked: Int, column: String, row: String) throws {
         let tiles = Array([a, b].prefix(docked))
         for (axis, edge, label) in [(Axis.horizontal, Edge.left, column), (.vertical, .top, row)] {
             var arranger = arranger([info(w)] + tiles.map { info($0) })
@@ -108,53 +108,46 @@ private func announcements(_ effects: [ArrangerEffect]) -> [String] {
         }
     }
 
-    /// The user's case (host check 3): by rows over side-by-side windows the whole layout is one child, on one side.
-    @Test(arguments: [(FourthSlot.second, "top half"), (.middle, "top three quarters"), (.third, "bottom half")])
-    func rowsOverSideBySideWindowsNameTheShareTheWindowGets(slot: FourthSlot, name: String) throws {
+    /// The user's case (host check 3): by rows over side-by-side windows the whole layout is one child, on one side. E1:
+    /// the announcement names the row the window gets.
+    @Test(arguments: [(FourthSlot.second, "2nd row"), (.middle, "middle half row"), (.third, "3rd row")])
+    func rowsOverSideBySideWindowsNameThePosition(slot: FourthSlot, name: String) throws {
         var arranger = arranger([info(w), info(a), info(b)])
         try dockFlat([a, b], in: &arranger)
         #expect(announcements(command(&arranger, slot, .vertical, focused: w)) == ["Docked to \(name)"])
     }
 
-    /// Every span `FourthCopy` words, on both axes. An own span keeps the slot's name. No layout reaches (0.25, 1) today: the
-    /// last tile's centre is never before the 2nd or middle slot's, but the label is the user's table all the same.
+    /// Every position's own label, on both axes: the only labels since 8.1.1 D-16 (E1).
     @Test(arguments: [
-        (0.0, 0.25, FourthSlot.first, "1st column", "1st row"),
-        (0.25, 0.5, .second, "2nd column", "2nd row"),
-        (0.5, 0.75, .third, "3rd column", "3rd row"),
-        (0.75, 1, .fourth, "4th column", "4th row"),
-        (0.25, 0.75, .middle, "Middle half column", "Middle half row"),
-        (0, 0.5, .second, "Left half", "Top half"),
-        (0.5, 1, .third, "Right half", "Bottom half"),
-        (0, 0.75, .middle, "Left three quarters", "Top three quarters"),
-        (0.25, 1, .middle, "Right three quarters", "Bottom three quarters"),
-        (0, 1, .first, "Whole desk", "Whole desk"),
-        (0, 0.5, .firstHalf, "Left half", "Top half"),
-        (0.5, 1, .secondHalf, "Right half", "Bottom half"),
-        (0, FourthSlot.oneThird, .firstThird, "Left third", "Top third"),
-        (FourthSlot.oneThird, FourthSlot.twoThirds, .middleThird, "Center third", "Middle third"),
-        (FourthSlot.twoThirds, 1, .lastThird, "Right third", "Bottom third"),
-        (0, FourthSlot.twoThirds, .middleThird, "Left two thirds", "Top two thirds"),
-        (FourthSlot.oneThird, 1, .middleThird, "Right two thirds", "Bottom two thirds"),
-        (0, 1, .lastThird, "Whole desk", "Whole desk"),
+        (FourthSlot.first, "1st column", "1st row"),
+        (.second, "2nd column", "2nd row"),
+        (.third, "3rd column", "3rd row"),
+        (.fourth, "4th column", "4th row"),
+        (.middle, "Middle half column", "Middle half row"),
+        (.firstHalf, "Left half", "Top half"),
+        (.secondHalf, "Right half", "Bottom half"),
+        (.firstThird, "Left third", "Top third"),
+        (.middleThird, "Center third", "Middle third"),
+        (.lastThird, "Right third", "Bottom third"),
     ])
-    func everySpanHasItsLabel(start: Double, end: Double, slot: FourthSlot, column: String, row: String) {
-        #expect(FourthCopy.label(slot, .horizontal, span: (start, end)) == column)
-        #expect(FourthCopy.label(slot, .vertical, span: (start, end)) == row)
+    func everyPositionHasItsLabel(slot: FourthSlot, column: String, row: String) {
+        #expect(FourthCopy.label(slot, .horizontal) == column)
+        #expect(FourthCopy.label(slot, .vertical) == row)
     }
 
     @Test func theAnnouncementLowersTheLabelsCase() {
-        #expect(FourthCopy.docked("Whole desk") == "Docked to whole desk")
+        #expect(FourthCopy.docked("Left half") == "Docked to left half")
         #expect(FourthCopy.docked("Middle half row") == "Docked to middle half row")
         #expect(FourthCopy.docked("1st row") == "Docked to 1st row")
-        #expect(FourthCopy.docked("Right two thirds") == "Docked to right two thirds")
+        #expect(FourthCopy.docked("Center third") == "Docked to center third")
     }
 
-    @Test func aWindowWithNothingElseTakingPartGetsTheWholeDesk() throws {
+    /// E1: with nothing else taking part the window still gets exactly its position.
+    @Test func aWindowWithNothingElseTakingPartGetsItsPosition() throws {
         var arranger = arranger([info(w), info(a)])
         try dockFlat([a], in: &arranger)
         try arranger.world.apply(.absent, for: a, on: mainKey, history: &arranger.history)
-        #expect(announcements(command(&arranger, .third, .vertical, focused: w)) == ["Docked to whole desk"])
+        #expect(announcements(command(&arranger, .third, .vertical, focused: w)) == ["Docked to 3rd row"])
     }
 
     @Test func undoBringsTheWindowBackToFloatingAtItsFrame() throws {
@@ -376,9 +369,14 @@ private func desktopFree(_ infos: [WindowInfo], docked: [WindowRef] = [], along 
     _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: .now)
     if zoom { _ = arranger.handle(.zoomEnabled(true), now: .now) }
     try arranger.world.edit(mainKey, history: &arranger.history) { desk, ids throws(LayoutError) in
-        for (window, slot) in zip(docked, [FourthSlot.firstHalf, .secondHalf]) {
+        // One docked window is the whole desk; a second takes the trailing half.
+        for (i, window) in docked.prefix(2).enumerated() {
             try desk.desktop.remove(window)
-            try desk.tree.insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)
+            if i == 0 {
+                try desk.tree.insertRootLeaf(.panel(window), states: [window.identity: .present], ids: &ids)
+            } else {
+                try desk.tree.insertFourth(.panel(window), states: [window.identity: .present], slot: .secondHalf, axis: axis, ids: &ids)
+            }
         }
     }
     _ = arranger.handle(.gap(8), now: .now)  // re-plans
@@ -391,7 +389,51 @@ private func rootAxis(_ arranger: Arranger) throws -> Axis? {
     return nil
 }
 
+private func planned(_ arranger: Arranger) throws -> [WindowRef: Rect] {
+    try Planner.plan(desk: try #require(arranger.world[mainKey]), area: area, gap: 8, mins: [:]).frames
+}
+
 extension ArrangerFourthTests {
+    /// UAT round 2 issue 1 (8.1.1 D-16, E1, E3, E6): with three floating windows and nothing docked, Left Half gives the
+    /// focused window exactly the left half and leaves the right half empty; Right Half then fills it.
+    @Test func aLeftHalfOnAnEmptyDeskTakesOnlyTheLeftHalf() throws {
+        let x = window(4), y = window(5)
+        let frameX = Rect(x: 100, y: 100, width: 300, height: 200), frameY = Rect(x: 900, y: 500, width: 250, height: 250)
+        var arranger = try desktopFree([info(w), info(x, frameX), info(y, frameY)])
+        let reference = try planned(try desktopFree([info(w), info(x)], docked: [w, x]))
+        let depth = arranger.history.depth(for: mainKey)
+
+        let left = command(&arranger, .firstHalf, .horizontal, focused: w)
+
+        let tree = try #require(arranger.world[mainKey]?.tree)
+        guard case let .split(_, children, _)? = tree.node(try #require(tree.root)) else {
+            Issue.record("no root split")
+            return
+        }
+        #expect(try rootOrder(arranger) == [w, nil])
+        #expect(tree.node(children[1]) == .spacer)
+        expectWeights(try rootWeights(arranger), [0.5, 0.5])
+        #expect(try planned(arranger)[w] == reference[w])
+        let desk = try #require(arranger.world[mainKey])
+        #expect(desk.desktop.frame(of: x) == frameX && desk.desktop.frame(of: y) == frameY, "D-05: floating windows don't move")
+        #expect(announcements(left) == ["Docked to left half"])
+
+        let right = command(&arranger, .secondHalf, .horizontal, focused: x)
+
+        #expect(try rootOrder(arranger) == [w, x])
+        expectWeights(try rootWeights(arranger), [0.5, 0.5])
+        #expect(try planned(arranger)[w] == reference[w])
+        #expect(try planned(arranger)[x] == reference[x])
+        #expect(announcements(right) == ["Docked to right half"])
+        #expect(arranger.history.depth(for: mainKey) == depth + 2)
+
+        _ = arranger.handle(.command(.undo, focused: x), now: .now)
+        _ = arranger.handle(.command(.undo, focused: w), now: .now)
+        let undone = try #require(arranger.world[mainKey])
+        #expect(undone.tree.root == nil)
+        #expect(undone.desktop.frame(of: w) == frameW && undone.desktop.frame(of: x) == frameX)
+    }
+
     @Test func aLeftHalfBesideTheRootDocksAtHalfAndUndoFloatsItBack() throws {
         var arranger = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a])
         #expect(try #require(arranger.world[mainKey]?.tree).state(of: a) == .present)
@@ -410,16 +452,16 @@ extension ArrangerFourthTests {
         #expect(desk.tree.state(of: w) == nil)
     }
 
-    /// D-23 for halves and thirds: on an empty desk every one is the whole desk; beside one tile, the share the window gets.
+    /// 8.1.1 D-16, E1: halves and thirds name their position, on an empty desk and beside one tile alike.
     @Test(arguments: zip(halvesAndThirds, [
-        "left half", "right half", "top half", "bottom half", "left third", "left two thirds", "right third", "top third",
-        "top two thirds", "bottom third",
+        "left half", "right half", "top half", "bottom half", "left third", "center third", "right third", "top third",
+        "middle third", "bottom third",
     ]))
-    func aFloatingWindowDocksAndTheAnnouncementNamesTheSpan(command dock: (FourthSlot, Axis), besideATile: String) throws {
+    func aFloatingWindowDocksAndTheAnnouncementNamesThePosition(command dock: (FourthSlot, Axis), besideATile: String) throws {
         var empty = try desktopFree([info(w)])
         var depth = empty.history.depth(for: mainKey)
-        #expect(announcements(command(&empty, dock.0, dock.1, focused: w)) == ["Docked to whole desk"])
-        #expect(empty.world[mainKey]?.tree.root.flatMap { empty.world[mainKey]?.tree.node($0) } == .panel(w))
+        #expect(announcements(command(&empty, dock.0, dock.1, focused: w)) == ["Docked to \(besideATile)"])
+        #expect(try rootAxis(empty) == dock.1, "E3: the rest of the desk stays an empty area beside the window")
         #expect(empty.history.depth(for: mainKey) == depth + 1)
 
         var beside = try desktopFree([info(w), info(a, Rect(x: 700, y: 400, width: 150, height: 120))], docked: [a])
@@ -450,7 +492,9 @@ extension ArrangerFourthTests {
         _ = command(&arranger, slot, axis, focused: w)
 
         #expect(try rootAxis(arranger) == axis)
-        #expect(try rootOrder(arranger) == ([.secondHalf, .lastThird].contains(slot) ? [a, w] : [w, a]))
+        // E1, E3: a is centred at the middle third's centre, so it goes after and the left third stays empty.
+        let order: [WindowRef?] = slot == .middleThird ? [nil, w, a] : [.secondHalf, .lastThird].contains(slot) ? [a, w] : [w, a]
+        #expect(try rootOrder(arranger) == order)
         #expect(arranger.history.depth(for: mainKey) == depth + 1)
     }
 
@@ -586,18 +630,20 @@ private func twoDocked() async throws -> (Harness, Rect) {
 }
 
 extension ArrangerFourthTests {
-    /// D-23: the capsule and the announcement both name what the window gets, and the window gets that.
-    @Test func aRowDragOverSideBySideWindowsSaysTopHalfAndGivesIt() async throws {
+    /// E1: the capsule and the announcement both name the position, and the window gets exactly it; the 1st row stays
+    /// empty (E3).
+    @Test func aRowDragOverSideBySideWindowsSays2ndRowAndGivesIt() async throws {
         var (harness, tile) = try await twoDocked()
         let point = Point(x: 720, y: area.minY + area.height * 0.3125)
         _ = await controlDrag(&harness, w, from: tile, to: point, [.control, .command])
         let frame = try fourthFrame(harness.arranger, w, .second, .vertical)
-        #expect(abs(frame.height - (area.height - 24) / 2) <= 1, "\(frame)")  // three 8 pt gaps
+        // Four 8 pt gaps: an empty area takes its gaps like a tile (08.1.1-20).
+        #expect(abs(frame.height - (area.height - 32) / 4) <= 1, "\(frame)")
         let shown = await tick(&harness)
-        #expect(shown.contains(.preview(.fourth(frame, label: "Top half"), displayUUID: "main")), "tick gave \(shown)")
+        #expect(shown.contains(.preview(.fourth(frame, label: "2nd row"), displayUUID: "main")), "tick gave \(shown)")
         let up = await harness.send(pointer(.up, point.x, point.y, [.control, .command]))
         #expect(setFrames(up)[w] == frame)
-        #expect(announcements(up) == ["Docked to top half"])
+        #expect(announcements(up) == ["Docked to 2nd row"])
     }
 
     @Test func controlDuringADragPreviewsTheColumnAfterTheDwellAndDocksThere() async throws {
@@ -628,16 +674,16 @@ extension ArrangerFourthTests {
         #expect(shown.contains(.preview(.fourth(frame, label: "1st row"), displayUUID: "main")), "tick gave \(shown)")
     }
 
-    /// The window grows into the side with no tile (D-14), and the capsule names that result, not the zone (D-23).
-    @Test func theMiddleBandShowsTheResultNotTheZone() async throws {
+    /// E1, E3: the window takes exactly the middle half and the side with no tile stays empty; the capsule names it.
+    @Test func theMiddleBandShowsTheMiddleHalf() async throws {
         var harness = await besideATile()
         _ = await controlDrag(&harness, w, from: frameW, to: Point(x: 720, y: 310))
 
         let shown = await tick(&harness)
 
         let frame = try fourthFrame(harness.arranger, w, .middle, .horizontal)
-        #expect(shown.contains(.preview(.fourth(frame, label: "Left three quarters"), displayUUID: "main")), "tick gave \(shown)")
-        #expect(frame.width > area.width / 2, "\(frame)")
+        #expect(shown.contains(.preview(.fourth(frame, label: "Middle half column"), displayUUID: "main")), "tick gave \(shown)")
+        #expect(frame.width <= area.width / 2, "\(frame)")
     }
 
     /// UI-SPEC Surface 3: released on the zone it already holds, it stays, with nothing refused and nothing to undo (WR-08).
@@ -1080,8 +1126,8 @@ extension ArrangerFourthTests {
         let candidate = try #require(try bare.dropping(w, on: sideKey, at: .fourth(.first, .horizontal)).world[sideKey])
         let frame = try #require(try Planner.plan(desk: candidate, area: side.visibleFrame, gap: 8, mins: [:]).frames[w])
         let shown = bare.handle(.tick, now: start + .milliseconds(310))
-        // The side desk is empty, so the 1st column is the whole desk (8.1.1 D-04).
-        #expect(shown.contains(.preview(.fourth(frame, label: "Whole desk"), displayUUID: "side")), "got \(shown)")
+        // The side desk is empty: the 1st column is still exactly the 1st column (8.1.1 D-16, E1).
+        #expect(shown.contains(.preview(.fourth(frame, label: "1st column"), displayUUID: "side")), "got \(shown)")
         let depth = bare.history.depth(for: sideKey), mainDepth = bare.history.depth(for: mainKey)
 
         _ = bare.handle(pointer(.up, 1500, 310, .control), now: start + .milliseconds(320))

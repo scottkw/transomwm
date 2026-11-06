@@ -1825,16 +1825,13 @@ public struct Arranger: Sendable {
     /// The World and history with `window` taken off its desk and dropped on `key`'s at `target`: one undo step there.
     /// The selected member of a group takes its whole group, as one leaf (Surface 5).
     /// `group` is the keyboard's whole group, for any focused member; a drag leaves it nil and uses `movingGroup`.
-    /// `fourthLabel` names what a fourth gets, read off the desk with the window out of it (D-23).
+    /// `fourthLabel` names a fourth's position, which is exactly what the window gets (8.1.1 D-16, E1).
     func dropping(
         _ window: WindowRef, on key: DeskKey, at target: DropTarget, moving group: TabGroupRef? = nil
     ) throws(LayoutError) -> (world: World, history: UndoHistory, fourthLabel: String?) {
         var candidate = world, candidateHistory = history
         var fourthLabel: String?
-        func nameFourth(on tree: LayoutTree) {
-            guard case .fourth(let slot, let axis) = target else { return }
-            fourthLabel = FourthCopy.label(slot, axis, span: tree.fourthSpan(slot, axis: axis))
-        }
+        if case .fourth(let slot, let axis) = target { fourthLabel = FourthCopy.label(slot, axis) }
         let group = group ?? movingGroup(window)
         var taken: (node: Node, states: [WindowIdentity: WindowState])?
         if let from = deskKey(of: window), from != key {
@@ -1850,7 +1847,6 @@ public struct Arranger: Sendable {
             if let group {
                 let moved: (node: Node, states: [WindowIdentity: WindowState])
                 if let taken { moved = taken } else { moved = try Self.takeGroup(group, from: &desk) }
-                nameFourth(on: desk.tree)
                 try desk.tree.applyDrop(target, leaf: moved.node, states: moved.states, ids: &ids)
                 return
             }
@@ -1859,7 +1855,6 @@ public struct Arranger: Sendable {
             } else if desk.tree.state(of: window) != nil {
                 try desk.tree.remove(window)
             }
-            nameFourth(on: desk.tree)
             try desk.tree.applyDrop(target, window: window, ids: &ids)
         }
         return (candidate, candidateHistory, fourthLabel)
