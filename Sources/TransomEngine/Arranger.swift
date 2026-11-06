@@ -349,13 +349,16 @@ public struct Arranger: Sendable {
             let rescued = launch == .normal ? [] : rescueStranded(desks: restore.world)
             inventory.windows = inventory.windows.map { windows[$0.window.identity] ?? $0 }
             let restored: (effects: [ArrangerEffect], unplaced: Int)
+            var broughtBack: [WindowCommand] = []
             do throws(LayoutError) {
                 restored = try reattach(restore, tracked: inventory.windows, live: live, holdingFrom: now)
+                broughtBack = bringBackParked()
             } catch {
                 unattached = (restore.world, restore.homeFrames, restore.wantedFrames, arrangement)
                 restored = ([.fault("could not re-attach the saved layout; starting empty, keeping layout.json as it is: \(error)")], 0)
             }
-            var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects + regroupedLog(saved: restore.world)
+            var effects: [ArrangerEffect] = (rescued.isEmpty ? [] : [.perform(rescued)]) + restored.effects
+                + (broughtBack.isEmpty ? [] : [.perform(broughtBack)]) + regroupedLog(saved: restore.world)
             if launch != .normal {
                 do throws(LayoutError) {
                     try showParkedDesktops(keeping: rescued, undoable: false)
@@ -859,6 +862,30 @@ public struct Arranger: Sendable {
             // A stranded wanted frame would pull the window back off screen at the next plan (T-03-72).
             if let wanted = wantedFrames[id], Recovery.isStranded(wanted, displays: displays) { wantedFrames[id] = frame }
             parkRequested.remove(id)
+            moves.append(.setFrame(info.window, frame))
+        }
+        return moves
+    }
+
+    /// The one-shot return of floating windows a hidden Desktop tile parked in a layout.json of schema 3 or older (8.1.1
+    /// D-02): each one still at its park rect, with a home frame, goes to that frame clamped onto its desk's display. An OS
+    /// fact, so no undo step. One-shot because `handle` clears floater home frames on every desk with no hidden Desktop.
+    mutating func bringBackParked() -> [WindowCommand] {
+        var moves: [WindowCommand] = []
+        for info in windows.values.sorted(by: { $0.window.identity < $1.window.identity })
+        where info.kind == .dockable && info.state == .present && !info.isExcluded && isFloating(info.window) && !isHiddenTab(info.window)
+            && Recovery.isStranded(info.frame, displays: displays)
+        {
+            let id = info.window.identity
+            // shortcut: a still-hidden Desktop keeps its parks until 08.1.1-13 removes hiding.
+            guard let home = homeFrames[id], let key = deskKey(of: info.window), world[key]?.tree.isDesktopHidden != true,
+                let display = displays.first(where: { $0.uuid == key.displayUUID })
+            else { continue }
+            let frame = Recovery.destination(for: info.frame, home: home, display: display)
+            guard (try? world.recordFloatingFrame(frame, for: info.window)) != nil else { continue }
+            windows[id]?.frame = frame
+            wantedFrames[id] = frame
+            homeFrames[id] = nil
             moves.append(.setFrame(info.window, frame))
         }
         return moves

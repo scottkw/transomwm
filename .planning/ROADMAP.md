@@ -459,7 +459,7 @@ Plans:
 ### Phase 08.1.1: Remove the Desktop Tile (INSERTED)
 
 **Goal**: As a user, I want docked windows to fill the whole screen and floating windows to sit on top of them like normal macOS windows, so that I never have to learn or manage a "Desktop tile".
-**Requirements**: TBD (discuss-phase)
+**Requirements**: MODEL-05, MODEL-09, TILE-06, TILE-07, TILE-14, TILE-15, TILE-16, TILE-21, TILE-23, TILE-24, TILE-25, TILE-26, ZOOM-11
 **Depends on:** Phase 8.1
 **Success Criteria** (what must be TRUE):
   1. No Desktop tile appears in any layout; docked windows share the whole visible frame

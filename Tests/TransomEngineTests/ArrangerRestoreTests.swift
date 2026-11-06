@@ -724,3 +724,83 @@ extension ArrangerRestoreTests {
         #expect(frame != Self.preDock)
     }
 }
+
+/// 8.1.1 D-02, RESEARCH Pitfall 2: a floating window a hidden Desktop tile parked comes back at its home frame at the
+/// first restore after the update, once, as an OS fact.
+extension ArrangerRestoreTests {
+    private static let park = Rect(x: 1439, y: 899, width: 150, height: 120)
+    private static let mainDisplay = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visibleFrame, currentSpaceID: nil)
+
+    /// The fake with the main display and `frames` open, nothing arranged yet.
+    private func fakeWith(_ frames: [UInt32: Rect]) async -> FakeWindowSystem {
+        let fake = FakeWindowSystem()
+        await fake.setDisplays([Self.mainDisplay])
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        for (id, frame) in frames.sorted(by: { $0.key < $1.key }) { await fake.open(.standard(id: id, pid: pid, frame: frame)) }
+        await fake.refreshAll()
+        return fake
+    }
+
+    /// A migrated desk: no tree, `c` floating at `frame`.
+    private func floating(at frame: Rect) throws -> World {
+        var layer = DesktopLayer()
+        try layer.add(c, frame: frame)
+        return try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree(), desktop: layer)])
+    }
+
+    private func setFrameCount(_ effects: [ArrangerEffect], _ window: WindowRef) -> Int {
+        performs(effects).joined().filter { if case .setFrame(window, _) = $0 { true } else { false } }.count
+    }
+
+    @Test func aParkedFloaterComesBackToItsHomeFrameOnANormalLaunch() async throws {
+        let fake = await fakeWith([3: Self.park])
+        try #require(Recovery.isStranded(Self.park, displays: [Self.mainDisplay]))
+        var restored = Arranger()
+        _ = restored.handle(.restore(try floating(at: Self.park), homeFrames: [c.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        let back = Recovery.destination(for: Self.park, home: Self.home, display: Self.mainDisplay)
+        #expect(performs(effects).joined().contains(.setFrame(c, back)), "\(effects)")
+        #expect(restored.world[key]?.desktop.frame(of: c) == back)
+        #expect(restored.homeFrames[c.identity] == nil)
+        #expect(restored.history.depth(for: key) == 0)
+
+        await fake.perform(performs(effects).joined().map { $0 })
+        await fake.refreshAll()
+        let again = restored.handle(.inventory(await fake.inventory()), now: .now)
+        #expect(setFrameCount(again, c) == 0, "\(again)")
+    }
+
+    @Test func aFloaterOnScreenWithAHomeFrameStaysWhereItIs() async throws {
+        let onScreen = Rect(x: 900, y: 300, width: 150, height: 120)
+        let fake = await fakeWith([3: onScreen])
+        var restored = Arranger()
+        _ = restored.handle(.restore(try floating(at: onScreen), homeFrames: [c.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        #expect(setFrameCount(effects, c) == 0, "\(effects)")
+        #expect(restored.world[key]?.desktop.frame(of: c) == onScreen)
+    }
+
+    @Test func aStrandedDockedWindowIsLeftToThePlan() async throws {
+        let fake = await fakeWith([1: Self.park])
+        let tree = try LayoutTree(root: NodeID(raw: 1), nodes: [NodeID(raw: 1): .panel(a)], states: [a.identity: .present])
+        let saved = try World(ids: IDSource(next: 2), desks: [key: Desk(tree: tree)])
+        var restored = Arranger()
+        _ = restored.handle(.restore(saved, homeFrames: [a.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        let back = Recovery.destination(for: Self.park, home: Self.home, display: Self.mainDisplay)
+        #expect(!performs(effects).joined().contains(.setFrame(a, back)), "\(effects)")
+        let tile = try #require(setFrames(effects)[a])
+        #expect(inside(tile, visibleFrame))
+    }
+
+    @Test func aRescuedWindowIsNotBroughtBackTwice() async throws {
+        let fake = await fakeWith([3: Self.park])
+        var restored = Arranger()
+        _ = restored.handle(.launch(.recovery), now: .now)
+        _ = restored.handle(.restore(try floating(at: Self.park), homeFrames: [c.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        let back = Recovery.destination(for: Self.park, home: Self.home, display: Self.mainDisplay)
+        #expect(performs(effects).first == [.setFrame(c, back)], "the rescue comes first: \(effects)")
+        #expect(setFrameCount(effects, c) == 1, "\(effects)")
+    }
+}

@@ -11,11 +11,11 @@
 - [x] **MODEL-02**: A window can be inserted beside any tile on any of its four edges, creating or extending a split
 - [x] **MODEL-03**: Removing a window gives its space back and collapses single-child splits automatically
 - [x] **MODEL-04**: Tile rects are computed for a given area with gaps, respecting each window's minimum size without overlap
-- [x] **MODEL-05**: Each desk has a floating Desktop layer that holds non-docked windows
+- [ ] **MODEL-05**: Each desk has a floating layer that holds non-docked windows
 - [x] **MODEL-06**: A tile can hold a tab group of several windows with one selected
 - [x] **MODEL-07**: Desks are keyed by display UUID plus optional Space ID
 - [x] **MODEL-08**: Windows have lifecycle states (present, absent, fullscreen, closed) so an absent window keeps its reserved slot
-- [x] **MODEL-09**: Layout state serialises to versioned JSON and round-trips exactly
+- [ ] **MODEL-09**: Layout state serialises to versioned JSON and round-trips exactly, and a layout saved by an earlier version migrates on first load
 - [x] **MODEL-10**: Every layout change can be undone back to the previous layout
 
 ### Window Control
@@ -37,24 +37,27 @@
 - [x] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
 - [x] **TILE-04**: User can set the gap between windows
 - [x] **TILE-05**: Dragging the gap between two windows resizes both
-- [x] **TILE-06**: The green button toggles a window between docked and floating on the Desktop
-- [x] **TILE-07**: New windows open floating on the Desktop tile, never auto-split into the layout
+- [ ] **TILE-06**: The green button toggles a window between docked and floating
+- [ ] **TILE-07**: New windows open floating where their app puts them, never auto-split into the layout
 - [x] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [x] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
 - [x] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
 - [x] **TILE-11**: User can swap two docked windows' tiles, by hotkey or by dragging with a modifier
 - [x] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
 - [x] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
-- [x] **TILE-14**: Floating windows on the Desktop tile can be snapped by hotkey to halves, thirds, quarters, maximised and centred
-- [x] **TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL
-- [x] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" returns every window to the Desktop as a normal Mac layout
+- [ ] **TILE-14**: Floating windows can be snapped by hotkey to halves, thirds, quarters, maximised and centred on the screen's visible frame
+- [x] ~~**TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL~~ Superseded in Phase 8.1.1 by TILE-24 (no Desktop tile)
+- [ ] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" floats every docked window where its tile was, as a normal Mac layout
 - [x] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
 - [x] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
 - [x] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
 - [x] **TILE-20**: A minimised docked window lets its neighbours take its space and returns to the same tile when restored
-- [x] **TILE-21**: User can choose whether new windows tile automatically or float on the Desktop tile until docked (default: float)
+- [ ] **TILE-21**: User can choose whether new windows tile automatically or float until docked (default: float). With nothing docked, a tiled new window fills the screen
 - [x] **TILE-22**: User can choose whether a drag shows the docking regions automatically or only while a key is held (default: automatic). In hold-a-key mode, a plain drag pulls a docked window out to floating and just moves a floating one
-- [x] **TILE-23**: User can dock a window to the 1st, 2nd, 3rd or 4th fourth, or to the middle half, as columns or rows, by keyboard or by dragging; windows already docked shrink to fit
+- [ ] **TILE-23**: User can dock a window to the 1st, 2nd, 3rd or 4th fourth, or to the middle half, as columns or rows, by keyboard or by dragging; windows already docked shrink to fit
+- [ ] **TILE-24**: Docked windows share the whole visible frame. Floating windows sit over them in normal macOS stacking; Transom never hides, parks, raises or clamps a floating window
+- [ ] **TILE-25**: User can dock the focused window to a half or a third of the screen, as a column or a row, by hotkey, menu, URL and CLI; windows already docked shrink to fit
+- [ ] **TILE-26**: The menu bar menu lists every docking position (where it is, halves, thirds, fourths) with its hotkey in one Dock Window submenu
 
 ### Safety & Recovery
 
@@ -77,7 +80,7 @@
 - [x] **ZOOM-08**: Zoom hotkeys are rebindable
 - [x] **ZOOM-09**: User can move the view to the neighbouring area left, right, up or down by hotkey and URL
 - [x] **ZOOM-10**: User can frame the focused window on its own and toggle back, by hotkey, URL or double-clicking its title bar
-- [x] **ZOOM-11**: User can frame the Desktop on its own and toggle back, by hotkey, URL or double-clicking the Desktop
+- [x] ~~**ZOOM-11**: User can frame the Desktop on its own and toggle back, by hotkey, URL or double-clicking the Desktop~~ Retired in Phase 8.1.1 (D-13): no Desktop tile to frame
 - [x] **ZOOM-12**: Esc cancels a ⌘⇧-drag rectangle zoom in progress
 - [x] **ZOOM-13**: A tile too small for its window's minimum size shows as a collapsed block in the app's colour with its icon, and double-clicking it zooms in to it
 
@@ -142,7 +145,7 @@
 | Mac App Store | Private APIs required |
 | Features needing SIP disabled | Keeps install safe and simple |
 | Moving windows between native Spaces | Needs SIP since macOS 14.5 |
-| Auto-tiling every new window by default | Research: top source of user frustration; new windows go to the Desktop tile unless the user opts in (TILE-21) |
+| Auto-tiling every new window by default | Research: top source of user frustration; new windows float unless the user opts in (TILE-21) |
 | Animating real windows during zoom | Causes resize storms; only the snapshot overlay animates |
 | Borders drawn around other apps' windows | Fragile, performance cost, low value |
 | Scripting language / text-config DSL as main interface | Transom is GUI-first; URL commands cover automation |
@@ -160,11 +163,11 @@ Populated by the roadmapper on 2026-10-23.
 | MODEL-02 | Phase 1 | Complete |
 | MODEL-03 | Phase 1 | Complete |
 | MODEL-04 | Phase 1 | Complete |
-| MODEL-05 | Phase 1 | Complete |
+| MODEL-05 | Phase 8.1.1 | Pending |
 | MODEL-06 | Phase 1 | Complete |
 | MODEL-07 | Phase 1 | Complete |
 | MODEL-08 | Phase 1 | Complete |
-| MODEL-09 | Phase 1 | Complete |
+| MODEL-09 | Phase 8.1.1 | Pending |
 | MODEL-10 | Phase 1 | Complete |
 | WIN-01 | Phase 2 | Complete |
 | WIN-02 | Phase 2 | Complete |
@@ -180,24 +183,27 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-03 | Phase 3 | Complete |
 | TILE-04 | Phase 3 | Complete |
 | TILE-05 | Phase 3 | Complete |
-| TILE-06 | Phase 3 | Complete |
-| TILE-07 | Phase 3 | Complete |
+| TILE-06 | Phase 8.1.1 | Pending |
+| TILE-07 | Phase 8.1.1 | Pending |
 | TILE-08 | Phase 3 | Complete |
 | TILE-09 | Phase 3 | Complete |
 | TILE-10 | Phase 3 | Complete |
 | TILE-11 | Phase 3 | Complete |
 | TILE-12 | Phase 3 | Complete |
 | TILE-13 | Phase 3 | Complete |
-| TILE-14 | Phase 3 | Complete |
-| TILE-15 | Phase 3 | Complete |
-| TILE-16 | Phase 3 | Complete |
+| TILE-14 | Phase 8.1.1 | Pending |
+| TILE-15 | Phase 3 | Superseded (8.1.1) |
+| TILE-16 | Phase 8.1.1 | Pending |
 | TILE-17 | Phase 3 | Complete |
 | TILE-18 | Phase 3 | Complete |
 | TILE-19 | Phase 3 | Complete |
 | TILE-20 | Phase 3 | Complete |
-| TILE-21 | Phase 8.1 | Complete |
+| TILE-21 | Phase 8.1.1 | Pending |
 | TILE-22 | Phase 8.1 | Complete |
-| TILE-23 | Phase 8.1 | Complete |
+| TILE-23 | Phase 8.1.1 | Pending |
+| TILE-24 | Phase 8.1.1 | Pending |
+| TILE-25 | Phase 8.1.1 | Pending |
+| TILE-26 | Phase 8.1.1 | Pending |
 | SAFE-01 | Phase 3 | Complete |
 | SAFE-02 | Phase 3 | Complete |
 | SAFE-03 | Phase 3 | Complete |
@@ -214,7 +220,7 @@ Populated by the roadmapper on 2026-10-23.
 | ZOOM-08 | Phase 4 | Complete |
 | ZOOM-09 | Phase 4 | Complete |
 | ZOOM-10 | Phase 4 | Complete |
-| ZOOM-11 | Phase 4 | Complete |
+| ZOOM-11 | Phase 4 | Retired (8.1.1) |
 | ZOOM-12 | Phase 4 | Complete |
 | ZOOM-13 | Phase 4 | Complete |
 | GEST-01 | Phase 5 | Complete |
@@ -248,10 +254,10 @@ Populated by the roadmapper on 2026-10-23.
 | SHIP-08 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 90 total
-- Mapped to phases: 90
+- v1 requirements: 93 total (TILE-15 superseded, ZOOM-11 retired)
+- Mapped to phases: 93
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-23*
-*Last updated: 2026-10-25 — added TILE-11..14, OVER-06, VIEW-05 (features from other macOS window managers); TILE-15..20, ZOOM-09..13, TABS-06, SHIP-06..08 (features from the TrellisWM website)*
+*Last updated: 2026-11-06 — Phase 8.1.1: amended MODEL-05, MODEL-09, TILE-06, TILE-07, TILE-14, TILE-16, TILE-21, TILE-23; superseded TILE-15; retired ZOOM-11 (D-13); added TILE-24..26*
