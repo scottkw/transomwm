@@ -102,4 +102,23 @@ private func touches(_ window: WindowRef, _ harness: Harness) async -> [WindowCo
         #expect(await harness.frame(a) == tile)
         #expect(await touches(f, harness).isEmpty)
     }
+
+    /// D-14: zoomed into a's leaf, docked b is parked; floating f stays where it is, above the zoomed tile.
+    @Test func aZoomedInViewLeavesFloatingWindowsOnScreen() async throws {
+        let b = ref(3)
+        var harness = await Harness.started(frames: [
+            1: Rect(x: 40, y: 80, width: 320, height: 232), 2: overA, 3: Rect(x: 900, y: 500, width: 300, height: 200),
+        ])
+        await harness.send(.command(.dock, focused: a))
+        await harness.send(.command(.dock, focused: b))
+        await harness.send(.zoomEnabled(true))
+        let leaf = try #require(harness.arranger.world[key]?.tree.leaf(containing: a))
+        let zoom = await harness.send(.zoomTo(.node(leaf), displayUUID: "main"))
+        let move = try #require(zoom.compactMap { if case .cameraMove(let move) = $0 { move } else { nil } }.first)
+        await harness.send(.cameraSettle(displayUUID: "main", moveID: move.id))
+
+        #expect(await harness.fake.parked == [b.identity])
+        #expect(await touches(f, harness).isEmpty)
+        #expect(await harness.frame(f) == overA)
+    }
 }

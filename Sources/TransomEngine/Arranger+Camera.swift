@@ -120,11 +120,12 @@ extension Arranger {
         camera.paths[key] = if case .node(let id) = view, let tree = world[key]?.tree { Navigator.ancestors(of: id, in: tree) } else { nil }
     }
 
-    /// CONTEXT E: a window outside its display's view (the pending target while a move is pending) moves the camera to the
-    /// smallest view holding both. A `new` one stays unparked until a move settles on its desk (Pitfall 3).
+    /// CONTEXT E: a docked window outside its display's view (the pending target while a move is pending) moves the camera
+    /// to the smallest view holding both. A `new` one stays unparked until a move settles on its desk (Pitfall 3). A
+    /// floating window is never parked by a view (D-14), so it never widens one.
     mutating func widen(toShow window: WindowRef, new: Bool) -> [ArrangerEffect] {
         guard camera.enabled, pauseReasons.isEmpty, !sessionPaused, windows[window.identity]?.isExcluded == false,
-            let key = deskKey(of: window), let display = display(for: key), let tree = world[key]?.tree, let leaf = leafNode(of: window)
+            let key = deskKey(of: window), let display = display(for: key), let tree = world[key]?.tree, let leaf = tree.leaf(containing: window)
         else { return [] }
         let view = currentView(display.uuid, key)
         let target = Navigator.widenTarget(view: view, leaf: leaf, tree: tree)
@@ -188,11 +189,9 @@ extension Arranger {
         camera.paths = [:]
         camera.unparkedNew = []
         camera.collapsible = []  // they float with N1: Phase 3 has no collapsed tiles (Surface 3)
-        // Paused, the replan writes nothing: camera-parked and collapsed windows come on screen now (D-D, CR-02). A hidden
-        // Desktop's floaters keep Phase 3's park.
+        // Paused, the replan writes nothing: camera-parked and collapsed windows come on screen now (D-D, CR-02).
         let paused = !pauseReasons.isEmpty || sessionPaused
-        let hidden = Set(world.desks.values.filter { $0.tree.isDesktopHidden == true }.flatMap { $0.desktop.windows.map(\.window.identity) })
-        let rescued = paused ? rescueStranded(desks: world, sparing: hidden) : []
+        let rescued = paused ? rescueStranded(desks: world) : []
         return (rescued.isEmpty ? [] : [.perform(rescued)]) + replan() + showBlocks([:])  // blocks go also when paused
     }
 

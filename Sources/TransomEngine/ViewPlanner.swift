@@ -1,7 +1,7 @@
 import TransomModel
 
 /// What the camera shows on one display (D-A). Home is a case, not a NodeID: the root's ID changes on every split
-/// (RESEARCH Pattern 2). `.node(.desktop)` is the Desktop view.
+/// (RESEARCH Pattern 2). No view hides floating windows (D-14).
 public enum ViewTarget: Hashable, Sendable {
     case home
     case node(NodeID)
@@ -41,7 +41,8 @@ public struct ViewPlan: Equatable, Sendable {
 }
 
 /// Pure camera layout (RESEARCH Pattern 1): `.home` is exactly `Planner.plan`; `.node(X)` resolves X's subtree in the
-/// whole `area` and parks every present window outside it at its own size (a hidden tab at its home content size).
+/// whole `area` and parks every present docked window outside it at its own size (a hidden tab at its home content
+/// size). Floating windows are never parked by a view: they stay on screen above the zoomed tiles (D-14).
 public enum ViewPlanner {
     public static func plan(
         desk: Desk, view: ViewTarget, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:],
@@ -54,11 +55,10 @@ public enum ViewPlanner {
         }
         let home = try self.plan(desk: desk, view: .home, area: area, gap: gap, mins: mins, wanted: wanted, collapsible: collapsible)
         let tree = try desk.tree.subtree(at: id)
-        let showsDesktop = tree.nodes[.desktop] != nil
-        let viewDesk = Desk(tree: tree, desktop: showsDesktop ? desk.desktop : DesktopLayer())
+        // The floating layer comes along so a floating group's hidden members still park through the Planner.
+        let viewDesk = Desk(tree: tree, desktop: desk.desktop)
         var plan = try collapsing(desk: viewDesk, area: area, gap: gap, mins: mins, wanted: wanted, collapsible: collapsible)
         let outside = desk.tree.windows.filter { tree.states[$0.identity] == nil && desk.tree.state(of: $0) == .present }
-            + (showsDesktop ? [] : desk.desktop.windows.filter { $0.state == .present }.map(\.window))
         plan.parks = (plan.parks + outside).sorted { $0.identity < $1.identity }
         // A hidden tab outside the view keeps its home content size, so it is never parked twice (Pitfall 12).
         plan.parkSizes.merge(home.parkSizes.filter { outside.contains($0.key) }) { view, _ in view }

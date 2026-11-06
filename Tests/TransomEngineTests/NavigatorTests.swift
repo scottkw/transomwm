@@ -544,7 +544,8 @@ private let e = ref(5)
         #expect(moves(await harness.send(.event(.windowFocused(c)))).isEmpty)
     }
 
-    @Test func aNewWindowOutsideTheViewWidensAndIsNotParkedFirst() async throws {
+    /// D-14: a new floating window is never parked by a view, so the camera stays where it is.
+    @Test func aNewFloatingWindowWhileZoomedInIsNotParkedAndDoesNotMoveTheCamera() async throws {
         var harness = try await nested()
         try await harness.go(.node(try column(harness)))
         #expect(await harness.fake.parked.contains(a.identity))
@@ -555,16 +556,11 @@ private let e = ref(5)
         effects += await harness.refresh()
 
         #expect(harness.arranger.world[key]?.desktop.contains(e) == true)
-        let move = try #require(moves(effects).first)
-        #expect(moves(effects).count == 1)
-        #expect(move.to == .home)
+        #expect(moves(effects).isEmpty)
         #expect(!effects.contains { if case .perform(let commands) = $0 { commands.contains(.park(e, displayUUID: "main")) } else { false } })
-        #expect(!(await harness.fake.parked.contains(e.identity)), "the new window was parked before the camera showed it")
-
-        await harness.settle(effects)
-        #expect(harness.arranger.view(on: "main") == .home)
-        #expect(!(await harness.fake.parked.contains(e.identity)))
-        #expect(!(await harness.fake.parked.contains(a.identity)))
+        #expect(!(await harness.fake.parked.contains(e.identity)), "the new floating window was parked")
+        #expect(harness.arranger.view(on: "main") == .node(try column(harness)))
+        #expect(await harness.fake.parked.contains(a.identity))
     }
 
     @Test func aViewWhoseNodeDisappearedFallsBackToTheDeepestLiveAncestor() async throws {

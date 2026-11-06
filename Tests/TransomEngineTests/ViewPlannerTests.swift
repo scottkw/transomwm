@@ -104,25 +104,18 @@ private func split(of window: WindowRef, in desk: Desk) throws -> NodeID {
         #expect(plan.homeResolution == home.resolution)
     }
 
-    @Test func floatersAreParkedWhenTheDesktopIsOutOfView() throws {
+    /// D-14: a node view parks only the docked windows outside it; floaters get no frame and no park, in any view.
+    @Test func floatersStayOnScreenInANodeView() throws {
         let g = ref(5)
-        let desk = try threeDocked(floating: [(g, Rect(x: 1200, y: 400, width: 200, height: 150)), (f, Rect(x: 1200, y: 100, width: 300, height: 200))])
+        let desk = try threeDocked(floating: [(g, Rect(x: 1200, y: 400, width: 200, height: 150)), (f, Rect(x: 200, y: 100, width: 300, height: 200))])
 
-        let plan = try ViewPlanner.plan(desk: desk, view: .node(try #require(desk.tree.leaf(containing: a))), area: area, gap: 8, mins: [:])
+        let leafA = try ViewPlanner.plan(desk: desk, view: .node(try #require(desk.tree.leaf(containing: a))), area: area, gap: 8, mins: [:])
+        #expect(leafA.frames == [a: inner])
+        #expect(leafA.parks == [b, c], "parks are sorted by identity")
 
-        #expect(plan.frames == [a: inner])
-        #expect(plan.parks == [b, c, f, g], "parks are sorted by identity")
-    }
-
-    @Test func floatersKeepTheirWantedFramesWhenTheDesktopIsInView() throws {
-        let recorded = Rect(x: 1100, y: 100, width: 300, height: 200), wanted = Rect(x: 200, y: 300, width: 300, height: 200)
-        let desk = try threeDocked(floating: [(f, recorded)])
-
-        let plan = try ViewPlanner.plan(desk: desk, view: .node(.desktop), area: area, gap: 8, mins: [:], wanted: [f.identity: wanted])
-
-        #expect(plan.desktopRect == inner)
-        #expect(plan.frames.isEmpty, "a floater is never planned (D-05)")
-        #expect(plan.parks == [a, b, c])
+        let desktop = try ViewPlanner.plan(desk: desk, view: .node(.desktop), area: area, gap: 8, mins: [:])
+        #expect(desktop.frames.isEmpty)
+        #expect(desktop.parks == [a, b, c])
     }
 
     /// a's 1000 pt minimum cannot sit beside b's 500 pt one: a collapses into its weighted share, b keeps its minimum.
