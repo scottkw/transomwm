@@ -1858,10 +1858,15 @@ public struct Arranger: Sendable {
         case .fourth, .corner: true
         case .tile, .layoutEdge, .emptyLayout, .fill: false
         }
+        // E4 + E6: a leaf docked on this desk dragged into an empty area swaps places with it in one edit.
+        let filled: NodeID? = if case .fill(let spacer) = target { spacer } else { nil }
         try candidate.edit(key, history: &candidateHistory) { desk, ids throws(LayoutError) in
             if let group {
                 let moved: (node: Node, states: [WindowIdentity: WindowState])
-                if let taken {
+                if taken == nil, !group.floating, let filled {
+                    try desk.tree.move(group.key.node, into: filled)
+                    return
+                } else if let taken {
                     moved = taken
                 } else if vacates, !group.floating {
                     moved = try desk.tree.vacate(group.key.node)
@@ -1874,7 +1879,10 @@ public struct Arranger: Sendable {
             if desk.desktop.contains(window) {
                 try desk.desktop.remove(window)
             } else if desk.tree.state(of: window) != nil {
-                if vacates, let leaf = desk.tree.leaf(containing: window), case .panel? = desk.tree.node(leaf) {
+                if let filled, let leaf = desk.tree.leaf(containing: window), case .panel? = desk.tree.node(leaf) {
+                    try desk.tree.move(leaf, into: filled)
+                    return
+                } else if vacates, let leaf = desk.tree.leaf(containing: window), case .panel? = desk.tree.node(leaf) {
                     _ = try desk.tree.vacate(leaf)
                 } else {
                     try desk.tree.remove(window)

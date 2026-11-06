@@ -157,6 +157,21 @@ extension LayoutTree {
         self = next
     }
 
+    /// Rules E4 + E6 (8.1.1 D-16): the docked leaf `id` takes the empty area `spacer`'s place and weight, and an empty
+    /// area takes its own, in one edit. Vacating first could merge `spacer` away before the fill.
+    public mutating func move(_ id: NodeID, into spacer: NodeID) throws(LayoutError) {
+        guard let leaf = nodes[id] else { throw .nodeNotFound(id) }
+        guard Self.members(of: leaf) != nil else { throw .notALeaf(id) }
+        guard let current = nodes[spacer] else { throw .nodeNotFound(spacer) }
+        guard current == .spacer else { throw .notALeaf(spacer) }
+        var next = self
+        next.nodes[spacer] = leaf
+        next.nodes[id] = .spacer
+        next.normalize()
+        try next.validate()
+        self = next
+    }
+
     /// Adds `window` as the last, selected tab of the leaf `target` (MODEL-06). A panel becomes a
     /// tab group `[existing, window]` under the same NodeID; tab order is insertion order.
     public mutating func group(_ window: WindowRef, into target: NodeID) throws(LayoutError) {

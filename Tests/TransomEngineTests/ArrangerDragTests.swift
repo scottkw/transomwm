@@ -500,3 +500,37 @@ extension ArrangerDragTests {
         #expect(!writes(during + up, f))
     }
 }
+
+extension ArrangerDragTests {
+    /// Review WR-01 (E4, E6, E1): a docked window dragged to the screen edge over the empty area beside it previews that
+    /// area, docks into it at exactly its span, and leaves an empty area where it was: [a | _] becomes [_ | a] and
+    /// [_ | a | _] (the center third) becomes [_ | a], a in exactly the right third.
+    @Test(arguments: [(FourthSlot.firstHalf, FourthSlot.secondHalf), (.middleThird, .lastThird)])
+    func aDockedWindowDraggedIntoTheEmptyAreaBesideItMovesThere(from slot: FourthSlot, to expected: FourthSlot) async throws {
+        var reference = await Harness.started(frames: [1: frameA])
+        await reference.send(.command(.dockFourth(expected, .horizontal), focused: a))
+        let target = try #require(await reference.frame(a))
+        var harness = await Harness.started(frames: [1: frameA])
+        await harness.send(.command(.dockFourth(slot, .horizontal), focused: a))
+        let start = try #require(await harness.frame(a))
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        _ = await drag(&harness, a, from: start, to: Point(x: 1430, y: 460))
+        harness.now += .milliseconds(150)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.dock(target)], "tick gave \(tick)")
+        let up = await harness.send(pointer(.up, 1430, 460))
+
+        let tree = try #require(harness.arranger.world[mainKey]?.tree)
+        guard case let .split(_, children, weights)? = tree.node(try #require(tree.root)) else {
+            Issue.record("no root split: \(tree)")
+            return
+        }
+        #expect(children.map { tree.node($0) } == [.spacer, .panel(a)])
+        #expect(weights == (reference.arranger.world[mainKey]?.tree.root).flatMap { root in
+            if case let .split(_, _, w)? = reference.arranger.world[mainKey]?.tree.node(root) { w } else { nil }
+        })
+        #expect(setFrames(up)[a] == target)
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+    }
+}
