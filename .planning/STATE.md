@@ -4,16 +4,16 @@ current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
 current_plan: 18
 status: verifying
-stopped_at: Completed 08.1.1-22-PLAN.md
-last_updated: "2026-11-06T22:01:39.828Z"
+stopped_at: Completed 08.1.1-23-PLAN.md
+last_updated: "2026-11-06T22:12:30.959Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: 5db488a95a742a34ab52d6985286a8d33e1235ca
+state_head: ff5fbe3e1519cddbb5fb725983561b6c7f63ed8b
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 132
-  completed_plans: 127
+  completed_plans: 128
   percent: 82
 ---
 
@@ -186,6 +186,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P20 | 9min | 3 tasks | 21 files |
 | Phase 08.1.1 P21 | 24min | 3 tasks | 7 files |
 | Phase 08.1.1 P22 | 8min | 3 tasks | 15 files |
+| Phase 08.1.1 P23 | 8min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -526,6 +527,8 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-22: DropZones.target clamps the point into the root's rect only for the empty-area check, so .fill covers the outer gap and every non-empty result is unchanged
 - [Phase 08.1.1]: 08.1.1-22: A drag keeps .fill only within DropZones.displayEdgeBand (as .emptyLayout); the keyboard Dock keeps it everywhere
 - [Phase 08.1.1]: 08.1.1-22: The Finder split with a docked window focused keeps today's insert (siblings share weight, an empty area in that split shrinks too)
+- [Phase 08.1.1]: 08.1.1-23: insertFourth's body became insertShare(within:) over any node; a corner is insertShare inside a docked child spanning its half, else insertFourth along the first axis then the window leaf split with an empty area
+- [Phase 08.1.1]: 08.1.1-23: Arranger.dockFourth takes a DropTarget (.fourth or .corner); corners have no drag band
 
 ### Quick Tasks Completed
 
@@ -571,8 +574,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T22:01:38.807Z
-Stopped at: Completed 08.1.1-22-PLAN.md
+Last session: 2026-11-06T22:12:29.983Z
+Stopped at: Completed 08.1.1-23-PLAN.md
 Resume file: None
 
 ## Deferred Verification
