@@ -147,9 +147,9 @@ enum DropAction: Equatable, Sendable {
     /// The window joins the target as its selected tab (D-03).
     case group(DeskKey, GroupTarget)
     case swap(WindowRef)
-    /// ⇧ on a docked window: it floats at its release frame, clamped inside the Desktop tile if it crosses a tile.
+    /// ⇧ on a docked window, or Hold ⌥'s plain pull-out: it floats at its release frame.
     case undock
-    /// The miss rules: a docked window snaps back, a floating one stays where released (clamped if it crosses a tile).
+    /// The miss rules: a docked window snaps back, a floating one stays where released.
     case miss
     /// A torn-off tab with no dock or group target: it floats at its landing frame on this desk (D-10).
     case tearOffFloat(DeskKey)
@@ -164,8 +164,6 @@ struct Hover: Equatable, Sendable {
     var swapWith: WindowRef?
     /// The modifiers that apply: ⇧, and ⌘ for a docked window.
     var modifiers: Modifiers = []
-    /// A floating (or ⇧-undocking) window's frame crosses a docked tile.
-    var crossesTiles = false
     /// The centre under the pointer that groups after `DragSession.groupDwell`; `target` is nil meanwhile.
     var groupTarget: GroupTarget?
     /// A tear-off's pointer is back over its source strip: no preview, and a release cancels (D-10).
@@ -180,7 +178,7 @@ struct Decision: Equatable, Sendable {
     var action: DropAction
     /// The display the preview is drawn on.
     var display: String?
-    /// When set, the preview is a clamp ghost that follows the window: its frame clamped into this Desktop rect.
+    /// The tear-off landing: the preview is a ghost of the landing frame clamped onto this rect, the visible frame.
     var clampInto: Rect?
 }
 

@@ -153,18 +153,15 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         #expect(desk.desktop.contains(b))
     }
 
-    /// UI-SPEC Surface 2: the neighbour reflows into what the window left, and the release frame crosses it. D-05: the
-    /// window floats at its release frame; the clamp ghost still shows until 08.1.1-08 retires it.
+    /// UI-SPEC Surface 2 row 2: the neighbour reflows into what the window left, and the release frame crosses it. D-05:
+    /// no ghost while dragging, and the window floats at its release frame.
     @Test func aPlainDragThatWouldCrossATileFloatsAtItsReleaseFrameAndAnnounces() async throws {
         var (harness, plan) = try await docked()
         let rb = try #require(plan.frames[b])
-        _ = await drag(&harness, b, from: rb, by: 20)
+        let during = await drag(&harness, b, from: rb, by: 20)
         harness.now += .milliseconds(150)
         let tick = await harness.send(.tick)
-        guard case .clamp = previews(tick).first else {
-            Issue.record("no clamp ghost: \(tick)")
-            return
-        }
+        #expect(previews(during + tick).isEmpty, "a pull-out showed a preview")
         let released = await up(&harness, from: rb, by: 20)
         let desk = try #require(harness.arranger.world[mainKey])
         #expect(desk.tree.state(of: b) == nil)
@@ -426,7 +423,8 @@ extension ArrangerHoldOptionTests {
         let dx = to.x - grab(rb).x, dy = to.y - grab(rb).y
         _ = await drag(&harness, b, from: rb, by: dx, dy, held)
         harness.now += .milliseconds(150)
-        await harness.send(.tick)
+        let tick = await harness.send(.tick)
+        #expect(!previews(tick).contains { if case .clamp = $0 { true } else { false } }, "a clamp ghost: \(tick)")
         let depth = harness.arranger.history.depth(for: mainKey)
 
         let released = await up(&harness, from: rb, by: dx, dy, held)
@@ -434,7 +432,7 @@ extension ArrangerHoldOptionTests {
         let desk = try #require(harness.arranger.world[mainKey])
         switch outcome {
         case .floats:
-            #expect(desk.tree.state(of: b) == nil && desk.desktop.contains(b), "b did not float")
+            #expect(desk.tree.state(of: b) == nil && desk.desktop.frame(of: b) == shifted(rb, dx, dy), "b did not float at its release frame")
             #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
         case .swaps:
             #expect(desk.tree.windows == [b, a], "no swap: \(desk.tree.windows)")
@@ -457,7 +455,8 @@ extension ArrangerHoldOptionTests {
         let dx = to.x - grab(smallF).x, dy = to.y - grab(smallF).y
         _ = await drag(&harness, f, from: smallF, by: dx, dy, held)
         harness.now += .milliseconds(150)
-        await harness.send(.tick)
+        let tick = await harness.send(.tick)
+        #expect(!previews(tick).contains { if case .clamp = $0 { true } else { false } }, "a clamp ghost: \(tick)")
         let depth = harness.arranger.history.depth(for: mainKey)
 
         _ = await up(&harness, from: smallF, by: dx, dy, held)
@@ -467,7 +466,7 @@ extension ArrangerHoldOptionTests {
             #expect(desk.tree.state(of: f) != nil, "f did not dock")
             #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
         } else {
-            #expect(desk.desktop.contains(f), "f left the Desktop tile")
+            #expect(desk.desktop.frame(of: f) == shifted(smallF, dx, dy), "f did not stay where released")
             #expect(harness.arranger.history.depth(for: mainKey) == depth)
         }
     }
@@ -503,8 +502,8 @@ extension ArrangerHoldOptionTests {
 
     // MARK: The plain drag's refusals
 
-    @Test func aPlainDragOfAWindowTooBigForTheDesktopIsBlockedAndSnapsBack() throws {
-        // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
+    /// UI-SPEC Surface 2 row 4 (row gone): a pull-out never lacks room, whatever the window's minimum.
+    @Test func aPlainDragOfAWindowTooBigForAnyRoomStillFloatsAtItsReleaseFrame() throws {
         var tree = LayoutTree.withDesktop()
         var ids = IDSource()
         try tree.insert(a, at: .top, of: .desktop, ids: &ids)
@@ -517,8 +516,6 @@ extension ArrangerHoldOptionTests {
         let infos = [info(1, frame: frameA, minimum: mins[a]), info(3, frame: frameB, minimum: mins[b])]
         _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: start)
         _ = arranger.handle(.dragToDock(.holdOption), now: start)
-        let restored = try #require(arranger.world[mainKey])
-        let ra = try #require(try Planner.plan(desk: restored, area: area, gap: 8, mins: mins).frames[a])
         let from = try #require(arranger.windows[a.identity]).frame
         let press = grab(from), to = Point(x: 700, y: 800)
 
@@ -528,10 +525,10 @@ extension ArrangerHoldOptionTests {
         let tick = arranger.handle(.tick, now: start + .milliseconds(150))
         let released = arranger.handle(pointer(.up, to.x, to.y), now: start + .milliseconds(200))
 
-        #expect(previews(tick).contains { if case .blocked = $0 { true } else { false } }, "tick gave \(tick)")
-        #expect(announced(released) == ["Not enough room to dock here"])
-        #expect(arranger.world[mainKey]?.tree.state(of: a) == .present)
-        #expect(setFrames(released)[a] == ra)
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
+        #expect(announced(released) == [FourthCopy.floating])
+        #expect(arranger.world[mainKey]?.tree.state(of: a) == nil)
+        #expect(arranger.world[mainKey]?.desktop.frame(of: a) == shifted(from, to.x - press.x, to.y - press.y))
     }
 
     // MARK: Group dwell (D-09)

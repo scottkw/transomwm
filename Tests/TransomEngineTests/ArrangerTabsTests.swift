@@ -260,7 +260,8 @@ extension ArrangerTabsTests {
         #expect(groupPreviews(await harness.send(.tick)).isEmpty)
         await harness.send(pointer(.up, rb.midX, rb.midY, [.shift]))
         let desk = try #require(harness.arranger.world[mainKey])
-        #expect(desk.desktop.contains(a), "⇧ did not undock")
+        // D-05: it floats at its release frame, over b's tile.
+        #expect(desk.desktop.frame(of: a) == shifted(ra, rb.midX - ra.midX, rb.midY - ra.minY - 10), "⇧ did not undock at the release frame")
         #expect(desk.tree.node(try #require(desk.tree.leaf(containing: b))) == .panel(b))
     }
 
@@ -1464,6 +1465,21 @@ private func groupDocked(_ arranger: Arranger, _ leaf: NodeID, at edge: Edge, of
         #expect(group.frame == TabBand.frame(ofContent: shifted(content, 300)), "group frame \(group.frame)")
         #expect(harness.arranger.world[mainKey]?.tree.windows == [a])
         #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    /// D-05 (UI-SPEC Surface 2 row 2): released over a's tile, the group floats at its release group frame, no ghost.
+    @Test func aShiftDragFloatsTheWholeGroupOverATileWithNoClamp() async throws {
+        var (harness, _, ra, content) = try await dockedGroup()
+        let grab = Point(x: content.midX, y: content.minY + 10)
+        let point = centre(ra)
+        let during = await drag(&harness, f, from: content, to: point, [.shift])
+        harness.now += DragSession.dwell
+        #expect(previews(during + (await harness.send(.tick))).isEmpty, "a pull-out showed a preview")
+        await harness.send(pointer(.up, point.x, point.y, [.shift]))
+        let group = try #require(harness.arranger.world[mainKey]?.desktop.groups.first, "the group did not float")
+        let outer = TabBand.frame(ofContent: shifted(content, point.x - grab.x, point.y - grab.y))
+        #expect(outer.overlaps(ra))
+        #expect(group.frame == outer, "group frame \(group.frame)")
     }
 
     @Test func aCommandDragSwapsTheGroupWithAPlainPanel() async throws {

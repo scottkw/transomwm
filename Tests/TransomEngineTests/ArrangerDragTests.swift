@@ -270,15 +270,14 @@ extension ArrangerDragTests {
         #expect(setFrames(up)[f] == nil)
     }
 
-    /// D-05: the release keeps the frame even across a tile; the clamp ghost still shows until 08.1.1-08 retires it.
+    /// D-05 (UI-SPEC Surface 2 row 1): no clamp ghost while dragging, and the release keeps the frame across a tile.
     @Test func aFloatingWindowWhoseReleaseFrameCrossesATileStaysWhereItIsReleased() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
+        let rb = try #require(plan.frames[b])
         let point = centre(rb)
         _ = await drag(&harness, f, from: smallF, to: point)
         harness.now += .milliseconds(150)
-        let clamped = Planner.clamp(released(smallF, at: point), into: desktop)
-        #expect(previews(await harness.send(.tick)) == [.clamp(clamped)])
+        #expect(previews(await harness.send(.tick)).isEmpty)
         let up = await harness.send(pointer(.up, point.x, point.y))
         #expect(harness.arranger.world[mainKey]?.desktop.frame(of: f) == released(smallF, at: point))
         #expect(setFrames(up)[f] == nil)
@@ -300,6 +299,29 @@ extension ArrangerDragTests {
         #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
     }
 
+    /// D-05 (UI-SPEC Surface 2 row 2): ⇧ pulls a docked window out at its release frame over another tile, with no
+    /// ghost, no clamp and one undo step; the tile left takes the room.
+    @Test func shiftPullsADockedWindowOutAtItsReleaseFrameOverAnotherTile() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        let point = Point(x: rb.midX, y: rb.minY + 40)
+        #expect(released(ra, at: point).overlaps(rb), "the release frame is not over b")
+        let during = await drag(&harness, a, from: ra, to: point, [.shift])
+        harness.now += .milliseconds(150)
+        #expect(previews(during + (await harness.send(.tick))).isEmpty, "a pull-out showed a preview")
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        let up = await harness.send(pointer(.up, point.x, point.y, [.shift]))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.state(of: a) == nil)
+        #expect(desk.desktop.frame(of: a) == released(ra, at: point))
+        #expect(setFrames(up)[a] == nil, "the pulled-out window was moved")
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+        let refilled = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[b])
+        #expect(refilled.width > rb.width)
+        #expect(await harness.frame(b) == refilled)
+    }
+
     /// WR-02 (review 03-26): undoing a ⇧-undock docks the window again with its pre-dock frame, where Float sends it.
     @Test func undoingAShiftUndockGivesBackThePreDockFrame() async throws {
         var (harness, plan) = try await docked()
@@ -316,8 +338,8 @@ extension ArrangerDragTests {
         #expect(await harness.frame(b) == frameB)
     }
 
-    @Test func shiftWithAWindowTooBigForTheDesktopShowsBlockedOverTheDesktop() throws {
-        // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
+    /// UI-SPEC Surface 2 row 4 (row gone): pulling a window out of the layout never lacks room, whatever its minimum.
+    @Test func shiftWithAWindowTooBigForAnyRoomStillUndocksAtItsReleaseFrame() throws {
         var tree = LayoutTree.withDesktop()
         var ids = IDSource()
         try tree.insert(a, at: .top, of: .desktop, ids: &ids)
@@ -326,22 +348,16 @@ extension ArrangerDragTests {
         let mins = [a: Size(width: 100, height: 600), b: Size(width: 100, height: 300)]
         let start = ContinuousClock.now
         var arranger = bare([info(1, frame: frameA, minimum: mins[a]), info(3, frame: frameB, minimum: mins[b])], world: world)
-        let restored = try #require(arranger.world[mainKey])
-        let ra = try #require(try Planner.plan(desk: restored, area: area, gap: 8, mins: mins).frames[a])
         let infoA = try #require(arranger.windows[a.identity])
+        let point = Point(x: 700, y: 800)
 
-        _ = drag(&arranger, a, from: infoA.frame, to: Point(x: 700, y: 800), [.shift], at: start)
+        _ = drag(&arranger, a, from: infoA.frame, to: point, [.shift], at: start)
         let tick = arranger.handle(.tick, now: start + .milliseconds(150))
-
-        var undocked = try #require(arranger.world[mainKey])
-        try undocked.tree.remove(a)
-        try undocked.desktop.add(a, frame: infoA.frame)
-        let desktop = try #require(try Planner.plan(desk: undocked, area: area, gap: 8, mins: mins).desktopRect)
-        #expect(previews(tick) == [.blocked(desktop)], "tick gave \(tick)")
-        let up = arranger.handle(pointer(.up, 700, 800, [.shift]), now: start + .milliseconds(200))
-        #expect(up.contains(.announce(noRoom)))
-        #expect(arranger.world[mainKey]?.tree.state(of: a) == .present)
-        #expect(setFrames(up)[a] == ra)
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
+        let up = arranger.handle(pointer(.up, point.x, point.y, [.shift]), now: start + .milliseconds(200))
+        #expect(!up.contains(.announce(noRoom)))
+        #expect(arranger.world[mainKey]?.tree.state(of: a) == nil)
+        #expect(arranger.world[mainKey]?.desktop.frame(of: a) == released(infoA.frame, at: point))
     }
 
     @Test func shiftPressedAfterADockPreviewWithdrawsItAndRestartsTheDwell() async throws {
