@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
-current_plan: 7
+current_plan: 8
 status: executing
-stopped_at: Completed 08.1.1-06-PLAN.md
-last_updated: "2026-11-06T16:04:38.729Z"
+stopped_at: Completed 08.1.1-07-PLAN.md
+last_updated: "2026-11-06T16:13:56.322Z"
 last_activity: 2026-11-06
 last_activity_desc: Phase 08.1.1 execution started
-state_head: e0499f6400c7c70f2b5f78c7d48ae508f33c2dd6
+state_head: 34554b1d296d43ce60ec884c7ce7874848083765
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 123
-  completed_plans: 111
+  completed_plans: 112
   percent: 82
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-24)
 ## Current Position
 
 Phase: 08.1.1 (Remove the Desktop Tile) — EXECUTING
-Current Plan: 7
+Current Plan: 8
 Total Plans in Phase: 18
 Status: Ready to execute
 Last activity: 2026-11-06 — Phase 08.1.1 execution started
@@ -170,6 +170,7 @@ Progress: [████████░░] 82%
 | Phase 08.1.1 P04 | 6min | 2 tasks | 12 files |
 | Phase 08.1.1 P05 | 10min | 3 tasks | 20 files |
 | Phase 08.1.1 P06 | 12min | 3 tasks | 20 files |
+| Phase 08.1.1 P07 | 7min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -478,6 +479,9 @@ Recent decisions affecting current work:
 - [Phase 08.1.1]: 08.1.1-06: Planner and ViewPlanner never frame, clamp, size for or park a floating window; FramePlan.frames holds docked windows only (D-05, D-14)
 - [Phase 08.1.1]: 08.1.1-06: widen(toShow:) acts for docked windows only, so a new floater never moves the camera
 - [Phase 08.1.1]: 08.1.1-06: lost-room floats are one pass, clamped into the visible frame; cascades start at the visible frame's top-left
+- [Phase 08.1.1]: Split with New Finder Window with no focused docked tile splits the largest tile; with no tile it docks at the layout edge, the root on an empty desk
+- [Phase 08.1.1]: autoTile always floats the new window first so the undo snapshot holds it where it opened
+- [Phase 08.1.1]: Tear-off landing keeps its clamp preview, now the display's visible frame
 
 ### Quick Tasks Completed
 
@@ -523,8 +527,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-06T16:04:37.897Z
-Stopped at: Completed 08.1.1-06-PLAN.md
+Last session: 2026-11-06T16:13:55.480Z
+Stopped at: Completed 08.1.1-07-PLAN.md
 Resume file: None
 
 ## Deferred Verification

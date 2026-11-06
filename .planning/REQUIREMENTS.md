@@ -37,7 +37,7 @@
 - [x] **TILE-03**: When a docked window closes, its neighbours reflow to fill the space
 - [x] **TILE-04**: User can set the gap between windows
 - [x] **TILE-05**: Dragging the gap between two windows resizes both
-- [ ] **TILE-06**: The green button toggles a window between docked and floating
+- [x] **TILE-06**: The green button toggles a window between docked and floating
 - [x] **TILE-07**: New windows open floating where their app puts them, never auto-split into the layout
 - [x] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [x] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
@@ -45,9 +45,9 @@
 - [x] **TILE-11**: User can swap two docked windows' tiles, by hotkey or by dragging with a modifier
 - [x] **TILE-12**: User can balance a split's sizes, rotate a split between horizontal and vertical, and flip its order
 - [x] **TILE-13**: From the keyboard, user can move the focused window into a neighbouring tile and grow or shrink its tile
-- [ ] **TILE-14**: Floating windows can be snapped by hotkey to halves, thirds, quarters, maximised and centred on the screen's visible frame
+- [x] **TILE-14**: Floating windows can be snapped by hotkey to halves, thirds, quarters, maximised and centred on the screen's visible frame
 - [x] ~~**TILE-15**: User can hide and show the Desktop tile by hotkey, menu and URL~~ Superseded in Phase 8.1.1 by TILE-24 (no Desktop tile)
-- [ ] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" floats every docked window where its tile was, as a normal Mac layout
+- [x] **TILE-16**: "Arrange all windows" docks every eligible window, and "Float all windows" floats every docked window where its tile was, as a normal Mac layout
 - [x] **TILE-17**: User can split the current tile with a new Finder window by hotkey and URL
 - [x] **TILE-18**: The menu offers "Don't Arrange" for the frontmost app, adding it to the exclusion list in one click
 - [x] **TILE-19**: ⌥-clicking the green button performs the normal macOS zoom instead of toggling docked/floating
@@ -183,7 +183,7 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-03 | Phase 3 | Complete |
 | TILE-04 | Phase 3 | Complete |
 | TILE-05 | Phase 3 | Complete |
-| TILE-06 | Phase 8.1.1 | Pending |
+| TILE-06 | Phase 8.1.1 | Complete |
 | TILE-07 | Phase 8.1.1 | Complete |
 | TILE-08 | Phase 3 | Complete |
 | TILE-09 | Phase 3 | Complete |
@@ -191,9 +191,9 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-11 | Phase 3 | Complete |
 | TILE-12 | Phase 3 | Complete |
 | TILE-13 | Phase 3 | Complete |
-| TILE-14 | Phase 8.1.1 | Pending |
+| TILE-14 | Phase 8.1.1 | Complete |
 | TILE-15 | Phase 3 | Superseded (8.1.1) |
-| TILE-16 | Phase 8.1.1 | Pending |
+| TILE-16 | Phase 8.1.1 | Complete |
 | TILE-17 | Phase 3 | Complete |
 | TILE-18 | Phase 3 | Complete |
 | TILE-19 | Phase 3 | Complete |
