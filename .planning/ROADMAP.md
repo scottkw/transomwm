@@ -467,10 +467,18 @@ Plans:
   3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
   4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
 **Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT. User request (2026-11-05): the menu-bar menu should offer every supported docking configuration with its hotkey. Dock to Fourth (10 items with hotkeys) exists; discuss adding halves and thirds as docking commands (today they snap floating windows only), and making the menu easier to find.
-**Plans:** 0 plans
+**Plans:** 9 plans
 
-Plans:
-- [ ] TBD (run /gsd-plan-phase 08.1.1 to break down)
+Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
+- [ ] 08.1.1-01-PLAN.md — Migration: schema 1–3 layout.json loses its Desktop tile (legacy decode, World 2, layout.json 4), parked windows come back, requirement amendments
+- [ ] 08.1.1-02-PLAN.md — Remove Hide/Show Desktop Tile and Frame Desktop from every route; toast and tooltip copy say "floating"
+- [ ] 08.1.1-03-PLAN.md — Halves and thirds on every route and the Dock Window submenu with hotkeys; D-12 regression row
+- [ ] 08.1.1-04-PLAN.md — Floating windows are never framed, sized, parked or hidden by a zoomed view; hidden-Desktop paths deleted
+- [ ] 08.1.1-05-PLAN.md — Commands on the visible frame and on an empty desk (Tile, Dock, Arrange All, Finder split, snap, Float, tab floats)
+- [ ] 08.1.1-06-PLAN.md — Drags: no clamp ghost or undock refusal, empty-desk edge band, front floating window wins the group dwell
+- [ ] 08.1.1-07-PLAN.md — The flip: new desks are empty; every test re-derived without a Desktop share
+- [ ] 08.1.1-08-PLAN.md — Contract: delete the Desktop node kind and its API; a schema-4 file naming one is set aside
+- [ ] 08.1.1-09-PLAN.md — Live suites and the migration on real windows in both VMs, README, source docs, Phase 9 note, host UAT checklist
 
 ### Phase 9: Polish & Ship
 
