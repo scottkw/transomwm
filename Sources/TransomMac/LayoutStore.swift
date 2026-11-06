@@ -166,6 +166,23 @@ public enum LayoutStoreError: Error, Equatable {
             guard home.frame.isValidGeometry else { throw .invalidEntry("home frame \(index): not finite or out of range") }
             guard seen.insert(home.window).inserted else { throw .invalidEntry("home frame \(index): duplicate window") }
         }
+        // A hidden legacy Desktop left its floaters' stored frames at the park rect; the home frame is where each belongs, so
+        // it comes back even when it shows up after launch (8.1.1 D-02, WR-01).
+        if version < LayoutFile.schemaVersion {
+            for (index, home) in contents.homeFrames.enumerated() {
+                let window = WindowRef(identity: home.window)
+                do throws(LayoutError) {
+                    if contents.world.desks.values.contains(where: { $0.desktop.contains(window) }) {
+                        try contents.world.recordFloatingFrame(home.frame, for: window)
+                    }
+                    for i in contents.layoutSets.indices where contents.layoutSets[i].world.desks.values.contains(where: { $0.desktop.contains(window) }) {
+                        try contents.layoutSets[i].world.recordFloatingFrame(home.frame, for: window)
+                    }
+                } catch {
+                    throw .invalidEntry("home frame \(index): \(error)")
+                }
+            }
+        }
         seen = []
         for (index, wanted) in contents.wantedFrames.enumerated() {
             guard wanted.frame.isValidGeometry else { throw .invalidEntry("wanted frame \(index): not finite or out of range") }

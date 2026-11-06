@@ -243,6 +243,14 @@ private func sampleFile() throws -> LayoutFile {
 
 /// G-03-11, SAFE-06: wanted frames in layout.json. A file from before them loads with none.
 extension LayoutStoreTests {
+    /// The sample's World as a legacy file loads: a floater with a home frame was parked by a hidden Desktop, so the
+    /// home frame becomes its stored frame (8.1.1 D-02, WR-01).
+    static func withHomeFrameFloating(_ world: World) throws -> World {
+        var world = world
+        try world.recordFloatingFrame(Rect(x: 50, y: 60, width: 400, height: 300), for: ref(2))
+        return world
+    }
+
     @Test func aFileFromBeforeWantedFramesLoadsWithNone() throws {
         let dir = Directory()
         let sample = try sampleFile()
@@ -258,7 +266,7 @@ extension LayoutStoreTests {
         #expect(fresh.loadError == nil)
         let contents = try #require(fresh.contents)
         #expect(contents.wantedFrames.isEmpty)
-        #expect(contents.world == sample.world)
+        #expect(contents.world == (try Self.withHomeFrameFloating(sample.world)))
         #expect(contents.homeFrames == sample.homeFrames)
     }
 
@@ -432,7 +440,7 @@ extension LayoutStoreTests {
         let contents = try #require(store.contents)
         #expect(contents.session.bootSession == nil)
         #expect(contents.views.isEmpty, "a schema-2 file has no saved views")
-        #expect(contents.world == (try sampleFile()).world)
+        #expect(contents.world == (try Self.withHomeFrameFloating(sampleFile().world)))
         #expect(contents.world.desks.values.allSatisfy { desk in
             (desk.tree.windows + desk.desktop.windows.map(\.window)).allSatisfy { $0.titleHint.isEmpty }
         })
@@ -477,7 +485,8 @@ extension LayoutStoreTests {
         #expect(desk.tree.nodes[NodeID(raw: 0)] == nil)
         #expect(desk.tree.windows == [a, b])
         #expect(desk.desktop.frame(of: window(3, "Calendar")) == Rect(x: 900, y: 300, width: 400, height: 300))
-        #expect(desk.desktop.frame(of: window(4, "FileZilla")) == Rect(x: 1439, y: 899, width: 600, height: 400))
+        // Parked by the hidden Desktop: its stored frame is its home frame, so it comes back even if it shows up after launch (WR-01).
+        #expect(desk.desktop.frame(of: window(4, "FileZilla")) == Rect(x: 200, y: 150, width: 600, height: 400))
 
         let set = try #require(contents.layoutSets.first?.world.desks.values.first)
         #expect(set.tree.root == nil)
