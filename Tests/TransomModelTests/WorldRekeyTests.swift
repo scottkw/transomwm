@@ -4,6 +4,7 @@ import Testing
 private let x = makeWindow(1)
 private let t = makeWindow(2)
 private let y = makeWindow(9)
+private let z = makeWindow(3)
 private let k1 = DeskKey(displayUUID: "D1", spaceID: nil)
 private let k2 = DeskKey(displayUUID: "D2", spaceID: nil)
 private let frame = Rect(x: 10, y: 20, width: 400, height: 300)
@@ -12,14 +13,23 @@ private func onAnyDesk(_ window: WindowRef, _ world: World) -> Bool {
     world.desks.values.contains { $0.contains(window) }
 }
 
-/// Desk k1 with `x` docked beside the Desktop tile (one snapshot: the empty desk).
+/// Desk k1 with `x` docked as the root (one snapshot: the empty desk).
 private func dockedX(history: inout UndoHistory) throws -> World {
     var world = World()
     try world.addDesk(k1)
     try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(x, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: x, ids: &ids)
     }
     return world
+}
+
+/// Docks z beside x so the root is a split, then moves its boundary: one undo step.
+private func dockZAndResize(_ world: inout World, history: inout UndoHistory) throws {
+    try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
+        try desk.tree.applyDrop(.layoutEdge(.right), window: z, ids: &ids)
+        guard let root = desk.tree.root else { throw .windowNotFound(z) }
+        try desk.tree.resizeBoundary(in: root, after: 0, by: 0.1)
+    }
 }
 
 @Suite struct WorldRekeyTests {
@@ -28,19 +38,17 @@ private func dockedX(history: inout UndoHistory) throws -> World {
     @Test func aDockedWindowKeepsItsPanelAndStateAndUndoStillFindsIt() throws {
         var history = UndoHistory()
         var world = try dockedX(history: &history)
-        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in
-            try desk.tree.resizeBoundary(in: desk.tree.root!, after: 0, by: 0.1)
-        }
+        try dockZAndResize(&world, history: &history)
         try world.apply(.absent, for: x, on: k1, history: &history)
         let depth = history.depth(for: k1)
 
         try world.rekey(from: x, to: y, history: &history)
-        #expect(world[k1]?.tree.windows == [y])
+        #expect(world[k1]?.tree.windows == [y, z])
         #expect(world[k1]?.state(of: y) == .absent)
         #expect(!onAnyDesk(x, world))
         #expect(history.depth(for: k1) == depth)
 
-        // Undo of the resize restores the snapshot under the new ID: nothing is revived.
+        // Undo of z's dock and the resize restores the snapshot under the new ID: nothing is revived.
         #expect(try world.undo(k1, history: &history) == [])
         #expect(world[k1]?.tree.windows == [y])
         #expect(world[k1]?.state(of: y) == .absent)
@@ -77,9 +85,7 @@ private func dockedX(history: inout UndoHistory) throws -> World {
         try world.addDesk(k2)
         try world.edit(k2, history: &history) { desk, _ throws(LayoutError) in try desk.desktop.add(y, frame: frame) }
         let k2Before = world[k2]
-        try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in
-            try desk.tree.resizeBoundary(in: desk.tree.root!, after: 0, by: 0.1)
-        }
+        try dockZAndResize(&world, history: &history)
 
         try world.rekey(from: x, to: y, history: &history)
         #expect(!onAnyDesk(x, world))

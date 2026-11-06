@@ -120,7 +120,7 @@ private func expectInvalidLayout(_ data: Data, _ name: String) {
         try world.addDesk(key)
         var history = UndoHistory()
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(window(1), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: window(1), ids: &ids)
             try desk.desktop.add(window(4), frame: Rect(x: 900, y: 300, width: 400, height: 300))
             try desk.desktop.add(window(5), frame: Rect(x: 950, y: 350, width: 300, height: 200))
             try desk.desktop.add(window(6), frame: Rect(x: -1440, y: -0.5, width: 800.25, height: 600))

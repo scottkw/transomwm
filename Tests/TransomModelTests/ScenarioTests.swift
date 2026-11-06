@@ -94,13 +94,13 @@ private func expectRoundTrip(_ world: World) throws {
         func layout() throws -> Resolution { try resolve(desk().tree, in: area, mins: [:], gap: gap) }
         try expectRoundTrip(world)
 
-        // 1. Drop A on the left band of the Desktop tile, which fills a new desk (D-24).
-        let desktop = try #require(layout().desktopRect)
-        let leftBand = Point(x: desktop.minX + desktop.width * 0.1, y: desktop.midY)
+        // 1. Drop A on a new desk, which has no tree (8.1.1 D-01): A becomes the root and fills the area.
+        let leftBand = Point(x: area.minX + area.width * 0.1, y: area.midY)
         let first = try #require(DropZones.target(at: leftBand, in: area, tree: desk().tree, resolution: layout()))
-        #expect(first == .tile(.desktop, .edge(.left)))
+        #expect(first == .emptyLayout)
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in try desk.tree.applyDrop(first, window: a, ids: &ids) }
         let leafA = try #require(desk().tree.leaf(containing: a))
+        #expect(try layout().windowRects[a] == Rect(x: gap, y: gap, width: area.width - 2 * gap, height: area.height - 2 * gap))
         try expectRoundTrip(world)
 
         // 2. Drop B on the right band of A.
@@ -132,13 +132,11 @@ private func expectRoundTrip(_ world: World) throws {
         #expect(!a4.overlaps(tabs4))
         #expect(docked.unfit.isEmpty)
 
-        // 5. A goes absent: the tab group and the Desktop share A's space, A keeps its node.
+        // 5. A goes absent: the tab group takes A's space and fills the area, A keeps its node.
         try world.apply(.absent, for: a, on: key, history: &history)
         let hidden = try layout()
         #expect(hidden.windowRects[a] == nil)
-        let half = (area.width - 3 * gap) / 2
-        #expect(hidden.nodeRects[leafB] == Rect(x: gap, y: gap, width: half, height: area.height - 2 * gap))
-        #expect(hidden.desktopRect == Rect(x: 2 * gap + half, y: gap, width: half, height: area.height - 2 * gap))
+        #expect(hidden.nodeRects[leafB] == Rect(x: gap, y: gap, width: area.width - 2 * gap, height: area.height - 2 * gap))
         #expect(try desk().tree.leaf(containing: a) == leafA)
         try expectRoundTrip(world)
 
@@ -148,7 +146,7 @@ private func expectRoundTrip(_ world: World) throws {
         try expectRoundTrip(world)
 
         // 8. (Step 7, the JSON round-trip, runs after every step.) Three user edits, three undos back to the
-        // Desktop tile alone; the lifecycle reports of steps 5 and 6 are not on the stack, and a fourth has nothing to undo.
+        // empty desk; the lifecycle reports of steps 5 and 6 are not on the stack, and a fourth has nothing to undo.
         #expect(history.depth(for: key) == 3)
         for _ in 0..<3 {
             #expect(try world.undo(key, history: &history) != nil)
@@ -164,7 +162,7 @@ private func expectRoundTrip(_ world: World) throws {
         try world.addDesk(key)
         var history = UndoHistory()
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            try desk.tree.applyDrop(.tile(.desktop, .edge(.left)), window: a, ids: &ids)
+            try desk.tree.applyDrop(.emptyLayout, window: a, ids: &ids)
             try desk.desktop.add(d, frame: Rect(x: 0, y: 0, width: 100, height: 100))
         }
         let before = world

@@ -142,11 +142,11 @@ private func hinted(_ id: UInt32, title: String, ax: String?, order: UInt64) -> 
 }
 
 private func richWorld() throws -> World {
-    // D1: nested splits from inserts only. H[D, A, V[B, C], Desktop].
+    // D1: nested splits from inserts only. H[D, A, V[B, C]].
     var ids = IDSource()
-    var nested = LayoutTree.withDesktop()
+    var nested = LayoutTree()
     let a = makeWindow(1), b = makeWindow(2), c = makeWindow(3), d = makeWindow(4)
-    try nested.insert(a, at: .left, of: .desktop, ids: &ids)
+    try nested.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
     try nested.insert(b, at: .right, of: #require(nested.leaf(containing: a)), ids: &ids)
     try nested.insert(c, at: .bottom, of: #require(nested.leaf(containing: b)), ids: &ids)
     try nested.insert(d, at: .left, of: #require(nested.leaf(containing: a)), ids: &ids)
@@ -241,7 +241,7 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         try world.addDesk(perDisplay)
         try world.addDesk(perSpace)
         var history = UndoHistory()
-        try world.edit(perSpace, history: &history) { desk, ids throws(LayoutError) in try desk.tree.insert(makeWindow(1), at: .left, of: .desktop, ids: &ids) }
+        try world.edit(perSpace, history: &history) { desk, ids throws(LayoutError) in try desk.tree.applyDrop(.layoutEdge(.right), window: makeWindow(1), ids: &ids) }
         #expect(world.desks.count == 2)
 
         let decoded = try World.decode(from: world.encoded())

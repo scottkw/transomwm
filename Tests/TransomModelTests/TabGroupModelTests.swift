@@ -306,7 +306,7 @@ private func decodeLayer(_ json: String) throws -> DesktopLayer {
         let key = DeskKey(displayUUID: "D1", spaceID: nil)
         var ids = IDSource()
         var desk = Desk()
-        try desk.tree.insert(d, at: .left, of: .desktop, ids: &ids)  // the tree takes node 1
+        try desk.tree.applyDrop(.layoutEdge(.right), window: d, ids: &ids)  // the tree takes node 1
         try desk.desktop.add(a, frame: floatA)
         try desk.desktop.group(id: n(1), target: a, adding: b)
         #expect(throws: LayoutError.self, "a group ID equal to a tree node validated") {
@@ -380,7 +380,7 @@ private func decodeLayer(_ json: String) throws -> DesktopLayer {
     @Test func theLastDockedLeafLeavingShowsAHiddenDesktop() throws {
         var tree = LayoutTree.withDesktop()
         var ids = IDSource()
-        try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         try tree.group(b, into: try #require(tree.leaf(containing: a)))
         try tree.setDesktopHidden(true)
         _ = try tree.removeLeaf(try #require(tree.leaf(containing: a)))
@@ -421,17 +421,17 @@ private func decodeLayer(_ json: String) throws -> DesktopLayer {
 
 @Suite struct WholeGroupDropTests {
     @Test func aLeafDropDocksTheWholeGroupOnAnEdgeAndNeverOnACentre() throws {
-        var tree = LayoutTree.withDesktop()
+        var tree = LayoutTree()
         var ids = IDSource()
         let group = Node.tabs(windows: [a, b], selected: 1), states = [a.identity: WindowState.present, b.identity: .present]
-        try tree.insert(c, at: .left, of: .desktop, ids: &ids)
+        try tree.applyDrop(.layoutEdge(.right), window: c, ids: &ids)
         let target = try #require(tree.leaf(containing: c))
         let before = tree
         #expect(throws: LayoutError.notALeaf(target)) { try tree.applyDrop(.tile(target, .center), leaf: group, states: states, ids: &ids) }
         #expect(tree == before)
         try tree.applyDrop(.tile(target, .edge(.bottom)), leaf: group, states: states, ids: &ids)
         #expect(tree.node(try #require(tree.leaf(containing: a))) == group)
-        var other = LayoutTree.withDesktop()
+        var other = LayoutTree()
         try other.applyDrop(.layoutEdge(.right), leaf: group, states: states, ids: &ids)
         #expect(other.node(try #require(other.leaf(containing: b))) == group)
     }

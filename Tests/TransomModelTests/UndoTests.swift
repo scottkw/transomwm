@@ -10,12 +10,12 @@ private let k1 = DeskKey(displayUUID: "D1", spaceID: nil)
 private let k2 = DeskKey(displayUUID: "D2", spaceID: nil)
 private let frame = Rect(x: 0, y: 0, width: 400, height: 300)
 
-/// Docks `window` beside the Desktop tile, or to the right of the first window already in the tree.
+/// Docks `window` as the root of an empty tree, or to the right of the first window already in the tree.
 private func dock(_ window: WindowRef, _ desk: inout Desk, _ ids: inout IDSource) throws(LayoutError) {
     if let first = desk.tree.windows.first, let leaf = desk.tree.leaf(containing: first) {
         try desk.tree.insert(window, at: .right, of: leaf, ids: &ids)
     } else {
-        try desk.tree.insert(window, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: window, ids: &ids)
     }
 }
 
@@ -150,8 +150,8 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
         var history = UndoHistory()
         try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in try dock(a, &desk, &ids) }
         try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
-            // b joins the existing split [a, Desktop] as a sibling, so it takes one ID.
-            ids = IDSource(next: .max - 1)
+            // b docks beside the lone panel a, so it takes two IDs: its panel and the new split [a, b].
+            ids = IDSource(next: .max - 2)
             try dock(b, &desk, &ids)
         }
         #expect(world.ids.next == .max)
@@ -232,7 +232,7 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
             try dock(w, &desk, &ids)
         }
         try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.tree.remove(w) }
-        try world.edit(k2, history: &history) { desk, ids throws(LayoutError) in try desk.tree.insert(w, at: .left, of: .desktop, ids: &ids) }
+        try world.edit(k2, history: &history) { desk, ids throws(LayoutError) in try desk.tree.applyDrop(.layoutEdge(.right), window: w, ids: &ids) }
         #expect(try world.undo(k2, history: &history) != nil)
         #expect(world[k1]?.contains(w) == false)
         #expect(world[k2]?.contains(w) == false)
@@ -257,7 +257,7 @@ private func worldWithDesks(_ keys: DeskKey...) throws -> World {
             try dock(w, &desk, &ids)
         }
         try world.edit(k1, history: &history) { desk, _ throws(LayoutError) in try desk.tree.remove(w) }
-        try world.edit(k2, history: &history) { desk, ids throws(LayoutError) in try desk.tree.insert(w, at: .left, of: .desktop, ids: &ids) }
+        try world.edit(k2, history: &history) { desk, ids throws(LayoutError) in try desk.tree.applyDrop(.layoutEdge(.right), window: w, ids: &ids) }
         try world.apply(.absent, for: w, on: k2, history: &history)
         #expect(try world.undo(k2, history: &history) == [])
         #expect(throws: LayoutError.windowNotFound(w)) { try world.apply(.absent, for: w, on: k1, history: &history) }

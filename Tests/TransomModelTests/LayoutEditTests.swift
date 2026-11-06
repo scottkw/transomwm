@@ -42,13 +42,13 @@ private func expectWeights(_ actual: [Double], _ expected: [Double], tolerance: 
     for (x, y) in zip(actual, expected) { #expect(abs(x - y) <= tolerance, "\(actual) != \(expected)") }
 }
 
-/// A World whose desk is [a | b | Desktop] side by side.
+/// A World whose desk is [a | b] side by side.
 private func worldABDesktop() throws -> World {
     var world = World()
     try world.addDesk(k1)
     var history = UndoHistory()
     try world.edit(k1, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         try desk.tree.insert(b, at: .right, of: desk.tree.leaf(containing: a)!, ids: &ids)
     }
     return world
