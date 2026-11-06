@@ -4,11 +4,11 @@ current_phase: 08.1.1
 current_phase_name: Remove the Desktop Tile
 current_plan: Not started
 status: planning
-stopped_at: Phase 08.1 complete, ready to plan Phase 08.1.1
-last_updated: "2026-11-06T00:31:31.646Z"
+stopped_at: Phase 08.1.1 UI-SPEC approved
+last_updated: "2026-11-06T14:33:56.089Z"
 last_activity: 2026-11-05
 last_activity_desc: Phase 08.1 complete, transitioned to Phase 08.1.1
-state_head: 0d7aed99ab94dc2ac1134335e3a7e6fff4eb0cdf
+state_head: 6d6be69bfbbe39fa37fa690bb85e91ce704f2247
 progress:
   total_phases: 11
   completed_phases: 9
@@ -32,7 +32,7 @@ Phase: 08.1.1 — Remove the Desktop Tile
 Current Plan: Not started
 Total Plans in Phase: 7
 Status: Ready to plan
-Last activity: 2026-11-05 — Phase 08.1 complete, transitioned to Phase 08.1.1
+Last activity: 2026-11-06 - Completed quick task 261106-bru: Fix menu bar icon clipped on non-Retina external display
 
 Progress: [████████░░] 82%
 
@@ -471,6 +471,7 @@ Recent decisions affecting current work:
 | 261027-ijh | Rename Pane to Transom (code 221fd39, docs 0d33bba) | 2026-10-27 | 0d33bba | [261027-ijh-rename-the-app-from-pane-to-transom-acro](./quick/261027-ijh-rename-the-app-from-pane-to-transom-acro/) |
 | 5 | Write a comprehensive README.md for Transom | 2026-10-27 | 739295b | — |
 | 6 | Add the MIT LICENSE file | 2026-10-27 | fb0e29b | — |
+| 261106-bru | Fix menu bar icon clipped on non-Retina external display | 2026-11-06 | 6d6be69 | [261106-bru-fix-menu-bar-icon-clipped-on-non-retina-](./quick/261106-bru-fix-menu-bar-icon-clipped-on-non-retina-/) |
 
 ### Pending Todos
 
@@ -504,9 +505,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T01:34:28.762Z
-Stopped at: Phase 08.1 complete, ready to plan Phase 08.1.1
-Resume file: None
+Last session: 2026-11-06T01:22:44.639Z
+Stopped at: Phase 08.1.1 UI-SPEC approved
+Resume file: .planning/phases/08.1.1-remove-the-desktop-tile/08.1.1-UI-SPEC.md
 
 ## Deferred Verification
 
