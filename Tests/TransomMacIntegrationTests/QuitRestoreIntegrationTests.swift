@@ -58,7 +58,16 @@ private func listedFrame(_ fixture: FixtureProcess, _ index: Int) async throws -
         try #require(controller.arranger.isFloating(refs[1]), "window 1 is not floating")
         let displays = Displays.current()
         let display = try #require(displays.first { $0.uuid == key.displayUUID })
-        let dockedFrame = try #require(try await listedFrame(fixture, 0))
+        // The dock's frame write lands a moment after the command: read window 0 once it is at its tile, not mid-move.
+        let desk = try #require(controller.arranger.world[key])
+        let tile = try #require(try Planner.plan(desk: desk, area: display.visibleFrame, gap: controller.arranger.gap, mins: [:]).frames[refs[0]])
+        var dockedAt: Rect?
+        let atTile = await waitUntil(timeout: .seconds(3)) {
+            dockedAt = try? await listedFrame(fixture, 0)
+            return dockedAt.map { near($0, tile) } ?? false
+        }
+        try #require(atTile, "window 0 never reached its tile \(tile): \(String(describing: dockedAt))")
+        let dockedFrame = try #require(dockedAt)
         // Paused, so Transom does not put the floater back itself before the quit.
         await controller.dispatch(.togglePause, focused: nil)
         let floating = try #require(try await listedFrame(fixture, 1))

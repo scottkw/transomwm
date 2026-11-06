@@ -27,9 +27,9 @@ import Testing
         let drag = PostedDrag()
         defer { drag.finish() }
         try await drag.press(at: grab)
-        // One tile's width right, so the release frame fits where the Desktop tile is once window 0 has reflowed: a shorter
-        // drag on the VM's 1024 pt display crosses window 0's new tile and is rightly clamped.
-        try await drag.move(to: CGPoint(x: grab.x + tile.width + 8, y: grab.y + 25))
+        // Half a tile left, so the release frame stays on screen: window 1 is the right half of [0 | 1], and a drag right
+        // would leave it off the edge, where it is rightly clamped back. A floater may cover window 0's tile (D-05).
+        try await drag.move(to: CGPoint(x: grab.x - tile.width / 2, y: grab.y + 25))
         try await Task.sleep(for: .milliseconds(100))  // the window catches up with the pointer
         let last = try #require(DragFramePoller.bounds(of: id), "the dragged window has no CG bounds")
         drag.release()
@@ -65,7 +65,7 @@ import Testing
         let grab = try LiveArrange.titleBar(of: ref.windowID, frame: frame)
         try await drag.press(at: grab)
         try await drag.move(to: CGPoint(x: grab.x + 40, y: grab.y + 20), each: sample)
-        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .always }, "the press was never a move")
+        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .always }, "the press was never a move: strip \(arrange.arranger.dragOptionStrip), drag \(String(describing: arrange.arranger.drag)), session flags \(CGEventSource.flagsState(.combinedSessionState).rawValue)")
         try await drag.hold(.option)
         try await drag.move(to: Self.leftBand(try LiveArrange.visibleFrame()), each: sample)
         try await Self.rest(each: sample)
@@ -104,7 +104,7 @@ import Testing
         let grab = try LiveArrange.titleBar(of: ref.windowID, frame: frame)
         try await drag.press(at: grab)
         try await drag.move(to: CGPoint(x: grab.x + 40, y: grab.y + 20), each: sample)
-        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .withControl }, "the press was never a move")
+        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .withControl }, "the press was never a move: strip \(arrange.arranger.dragOptionStrip), drag \(String(describing: arrange.arranger.drag)), session flags \(CGEventSource.flagsState(.combinedSessionState).rawValue)")
         try await drag.hold(.option)
         try await drag.move(to: Self.leftBand(try LiveArrange.visibleFrame()), each: sample)
         try await Self.rest(each: sample)
@@ -166,10 +166,16 @@ import Testing
         try #require(value == nil || (value as? Bool) == true, "EnableTilingOptionAccelerator is off in this guest")
     }
 
-    /// One fixture window, floating in the middle of the main display, with a controller tracking it.
+    /// Fixture window 0, floating in the middle of the main display, with a controller tracking it. Window 1 is docked
+    /// behind it and fills the desk, so ⌥ has a tile to dock into away from the screen edge: an empty desk docks only
+    /// from its edge band, where macOS's own edge tiling draws its guide (RESEARCH E1).
     private static func floatingWindow() async throws -> (FixtureProcess, ArrangeController, TransomModel.WindowRef, Rect) {
-        let fixture = try await FixtureProcess.launch(["standard"])
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
         let (arrange, refs) = try await LiveArrange.start(fixture)
+        await arrange.dispatch(.dock, focused: refs[1])
+        let key = try #require(arrange.arranger.deskKey(of: refs[1]))
+        try #require(arrange.arranger.world[key]?.tree.windows == [refs[1]], "window 1 did not dock alone")
+        _ = try await fixture.send("order-back 1")
         let visible = try LiveArrange.visibleFrame()
         let size = try #require(fixture.windows.first).frame.size
         let x = (visible.midX - size.width / 2).rounded(), y = (visible.midY - size.height / 2).rounded()
@@ -182,7 +188,7 @@ import Testing
         return (fixture, arrange, refs[0], try #require(try await LiveArrange.frame(fixture, 0)))
     }
 
-    /// The Desktop tile's left band, with nothing docked, and clear of the screen edge where macOS's edge tiling acts (RESEARCH E1).
+    /// Window 1's tile's left band, clear of the screen edge where macOS's edge tiling acts (RESEARCH E1).
     private static func leftBand(_ visible: Rect) -> CGPoint { CGPoint(x: visible.minX + visible.width / 8, y: visible.midY) }
 
     /// 300 ms with the pointer at rest, past the dwell, sampling as it goes.

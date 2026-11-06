@@ -158,18 +158,26 @@ import Testing
         try await show(first, on: display)
         do {
             try await show(second, on: display)
+            // A second docked window, so the saved leaf is not the whole desk (alone it would be the home view). It is
+            // another app launched first, so the fixture's window 0 stays the focused one: focusing the other would
+            // widen the camera to show it.
+            let other = try await FixtureProcess.launch(["standard"])
+            defer { other.terminate() }
             let fixture = try await FixtureProcess.launch(["standard"])
             defer { fixture.terminate() }
-            let fixturePID = fixture.pid
-            let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+            let pids = [other.pid, fixture.pid]
+            let system = AXWindowSystem(appFilter: { pid, _ in pids.contains(pid) })
             await system.start()
+            let beside = try #require(try await tracked(system, other).first)
             let window = try #require(try await tracked(system, fixture).first)
             let arrange = ArrangeController(system: system, zoomEnabled: true)
             defer { withExtendedLifetime(arrange) {} }
             await arrange.start()
             await drainEvents(arrange)
             let slot = ViewSlot(4)!
+            await arrange.dispatch(.dock, focused: beside)
             await arrange.dispatch(.dock, focused: window)
+            try #require(arrange.arranger.deskKey(of: window).flatMap { arrange.arranger.world[$0]?.tree.windows.count } == 2, "the two fixture windows did not both dock")
             let key = try #require(arrange.arranger.deskKey(of: window))
             try #require(key.spaceID == second, "the fixture window is on \(key), not Space \(second)")
             let leaf = try #require(arrange.arranger.leafNode(of: window))

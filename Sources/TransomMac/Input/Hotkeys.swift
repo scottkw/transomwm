@@ -229,9 +229,15 @@ enum Hotkeys {
 
     /// The zoom and docking-position defaults macOS also uses (⌃⌥⌘, and ⌃⌥⌘. when the contrast shortcuts are on); macOS takes them.
     static func logSystemConflicts() {
-        for name in zoomNames + fourthNames {
-            guard let chord = name.initialShortcut, chord.isTakenBySystem else { continue }
+        let taken = Set(systemConflictNames())
+        for name in zoomNames + fourthNames where taken.contains(name.rawValue) {
+            guard let chord = name.initialShortcut else { continue }
             logger.info("hotkey \(name.rawValue, privacy: .public) \(chord.description, privacy: .public) is also a macOS shortcut; macOS takes it")
         }
+    }
+
+    /// The raw names among the zoom and docking-position hotkeys whose default chord macOS also uses (the VM check reads this).
+    static func systemConflictNames() -> [String] {
+        (zoomNames + fourthNames).filter { $0.initialShortcut?.isTakenBySystem == true }.map(\.rawValue)
     }
 }
