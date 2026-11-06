@@ -38,7 +38,7 @@
 - [x] **TILE-04**: User can set the gap between windows
 - [x] **TILE-05**: Dragging the gap between two windows resizes both
 - [ ] **TILE-06**: The green button toggles a window between docked and floating
-- [ ] **TILE-07**: New windows open floating where their app puts them, never auto-split into the layout
+- [x] **TILE-07**: New windows open floating where their app puts them, never auto-split into the layout
 - [x] **TILE-08**: User can pause and resume arranging from the menu bar without quitting
 - [x] **TILE-09**: Core commands (dock, float, focus neighbour, undo) are available as hotkeys and menu items through one command dispatcher
 - [x] **TILE-10**: Tiling works fully with zoom and Screen Recording turned off
@@ -184,7 +184,7 @@ Populated by the roadmapper on 2026-10-23.
 | TILE-04 | Phase 3 | Complete |
 | TILE-05 | Phase 3 | Complete |
 | TILE-06 | Phase 8.1.1 | Pending |
-| TILE-07 | Phase 8.1.1 | Pending |
+| TILE-07 | Phase 8.1.1 | Complete |
 | TILE-08 | Phase 3 | Complete |
 | TILE-09 | Phase 3 | Complete |
 | TILE-10 | Phase 3 | Complete |
