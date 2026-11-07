@@ -124,6 +124,10 @@ import os
         let settings = NSMenuItem(title: SettingsCopy.menuItem, action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
+        let report = NSMenuItem(title: MenuCopy.reportProblem, action: #selector(reportProblem), keyEquivalent: "")
+        report.target = self
+        report.toolTip = MenuCopy.reportProblemTooltip
+        menu.addItem(report)
         let quit = NSMenuItem(title: "Quit Transom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
@@ -537,13 +541,7 @@ import os
         submenu.addItem(Self.info(ZoomCopy.lastSettleLine(zoom?.lastSettle)))
         let cache = zoom?.cacheStats ?? (windows: 0, bytes: 0)
         submenu.addItem(Self.info(ZoomCopy.snapshotCacheLine(windows: cache.windows, bytes: cache.bytes)))
-        let source: GestureCopy.Source =
-            if !arrange.isZoomEnabled { .offZoom } else if arrange.isGestureTapRunning {
-                arrange.isMultitouchRunning ? .onWithMultitouch : .on
-            } else if arrange.gestureTapFailedToStart {
-                .unavailable
-            } else { .offTapNotRunning }
-        submenu.addItem(Self.info(GestureCopy.gesturesLine(source)))
+        submenu.addItem(Self.info(GestureCopy.gesturesLine(gestureSource())))
         let gestures = arrange.gestures
         submenu.addItem(Self.info(GestureCopy.takenLine(taken: gestures.taken, timeouts: gestures.timeouts)))
         submenu.addItem(Self.info(gestures.lastGesture.map(Self.lastGestureLine) ?? GestureCopy.lastGestureNone))
@@ -579,6 +577,58 @@ import os
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
+    }
+
+    /// The Debug submenu's gesture source, also used by Report a Problem.
+    private func gestureSource() -> GestureCopy.Source {
+        if !arrange.isZoomEnabled { .offZoom } else if arrange.isGestureTapRunning {
+            arrange.isMultitouchRunning ? .onWithMultitouch : .on
+        } else if arrange.gestureTapFailedToStart {
+            .unavailable
+        } else { .offTapNotRunning }
+    }
+
+    /// Report a Problem… (D-15): opens the prefilled issue and copies its Details block. No alert, no toast.
+    @objc private func reportProblem() {
+        let info = Bundle.main.infoDictionary
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        let accessibility: ReportProblem.Accessibility =
+            switch permission.state.phase {
+            case .ready, .probing: .on
+            case .notTrusted, .waitingForGrant: .off
+            case .staleTrustedButFailing, .resetting: .notWorking
+            }
+        #if arch(arm64)
+            let appleSilicon = true  // shortcut: an Intel slice forced under Rosetta reads as Intel; fine for a bug report
+        #else
+            let appleSilicon = false
+        #endif
+        let details = ReportProblem.details(
+            inventory: latest, version: info?["CFBundleShortVersionString"] as? String ?? "unbundled",
+            build: info?["CFBundleVersion"] as? String ?? "-", homebrew: updates.installedWithHomebrew,
+            macOSVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)", macOSBuild: Self.osBuild(),
+            appleSilicon: appleSilicon, accessibility: accessibility,
+            screenRecording: SnapshotCapture.isGranted(), zoom: arrange.isZoomEnabled,
+            gestures: GestureCopy.gesturesLine(gestureSource()),
+            lines: [
+                MenuCopy.capabilityItem(windowIDLookupAvailable: system.capabilityReport[.axWindowID] == true),
+                MenuCopy.spacesItem(available: system.capabilityReport[.spaces] == true),
+                MenuCopy.tapItem(running: arrange.isTapRunning),
+                OverviewCopy.takeoverLine(arrange.takeover?.debugLine ?? .unavailable),
+                ViewCopy.cliLine(listening: arrange.cliListener?.isListening == true),
+            ])
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ReportProblem.detailsBlock(details), forType: .string)
+        NSWorkspace.shared.open(ReportProblem.issueURL(body: ReportProblem.body(details)))
+    }
+
+    /// The macOS build ("26C55") from `kern.osversion`.
+    private static func osBuild() -> String {
+        var size = 0
+        sysctlbyname("kern.osversion", nil, &size, nil, 0)
+        var buffer = [UInt8](repeating: 0, count: size)
+        sysctlbyname("kern.osversion", &buffer, &size, nil, 0)
+        return String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
     }
 
     /// The capture half of the "Zoom: on, …" line. Before the first move there is no controller and its state would be a
