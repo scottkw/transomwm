@@ -428,6 +428,28 @@ private func closeKeptAlive(_ fake: FakeWindowSystem, _ id: UInt32, spaces: Set<
         #expect(destroyed(await drain(fake.events)) == [ref(1)])
     }
 
+    /// 27.2 (`.build/09-30-tabs-vm27.log`): the first refresh after the close still sees the shown tab on screen in
+    /// CG. The group is rechecked, never decided absent, so a refresh follows and the group closes within 1 s.
+    @Test func aKeptAliveTabGroupStillOnScreenAtTheFirstRefreshIsRechecked() async throws {
+        let fake = await tabGroupFake()
+        await fake.lingerInCG(1, spaces: [1])
+        await fake.lingerInCG(2, spaces: [])
+        await fake.lingerInCG(3, spaces: [])
+        await fake.update(1) { $0.onScreen = true }
+        await fake.refreshAll()
+        #expect(await fake.needsQuickRecheck(pid: pid), "no follow-up refresh was asked for")
+        #expect(try #require(await fake.windowInfo(ref(1))).state == .present)
+        await fake.update(1) { $0.onScreen = false }
+        await fake.advance(by: .milliseconds(250))
+        await fake.refreshAll()
+        #expect(await fake.windowInfo(ref(1)) != nil, "closed before the look held settleDelay")
+        #expect(await fake.needsQuickRecheck(pid: pid))
+        await fake.advance(by: .milliseconds(250))
+        await fake.refreshAll()
+        #expect(await fake.windowInfo(ref(1)) == nil)
+        #expect(destroyed(await drain(fake.events)) == [ref(1)])
+    }
+
     /// The transient AppKit may show after a Cmd-W: the shown tab is gone before the next tab is listed.
     @Test func cmdWInAKeptAliveTabGroupFollowsTheNextTab() async throws {
         let fake = await tabGroupFake()

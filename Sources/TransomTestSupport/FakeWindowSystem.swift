@@ -447,6 +447,11 @@ public actor FakeWindowSystem: WindowSystem {
         return change
     }
 
+    /// Whether the tracker asks for a refresh `settleDelay` later, as `AXWindowSystem` schedules one.
+    public func needsQuickRecheck(pid: Int32) -> Bool {
+        tracker.needsQuickRecheck(pid: pid)
+    }
+
     public func refreshAll() {
         for pid in apps.keys.sorted() { refresh(pid: pid) }
         yield(tracker.recheckTerminated(context: context()))
