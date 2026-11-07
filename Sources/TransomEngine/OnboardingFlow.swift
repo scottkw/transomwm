@@ -19,7 +19,7 @@ public enum OnboardingFlow {
     /// neither does the lone Accessibility step shown after completion.
     public static func caption(for step: OnboardingStep, in steps: [OnboardingStep]) -> (number: Int, total: Int)? {
         let numbered = steps.filter { (s: OnboardingStep) -> Bool in s != .move && s != .done }
-        guard steps.count > 1, let index = numbered.firstIndex(of: step) else { return nil }
+        guard numbered.count > 1, let index = numbered.firstIndex(of: step) else { return nil }
         return (index + 1, numbered.count)
     }
 

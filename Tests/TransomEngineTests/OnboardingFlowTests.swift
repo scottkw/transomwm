@@ -32,6 +32,7 @@ import Testing
     @Test func afterCompletionOnlyAccessibilityShows() {
         #expect(OnboardingFlow.steps(completed: true, conflictsActive: true) == [.accessibility])
         #expect(OnboardingFlow.caption(for: .accessibility, in: [.accessibility]) == nil)
+        #expect(OnboardingFlow.caption(for: .accessibility, in: [.move, .accessibility]) == nil, "WR-03: no Step 1 of 1")
     }
 
     @Test func captionsCountOnlyNumberedSteps() {
