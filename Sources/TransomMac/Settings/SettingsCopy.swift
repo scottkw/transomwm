@@ -26,7 +26,7 @@ nonisolated public enum SettingsCopy {
     public static let cliInstalled = "Installed"
     public static let cliNotInstalled = "Not installed"
     public static let copyInstallCommand = "Copy Install Command"
-    public static let cliFooter = "Run Transom commands from Terminal, for example transom view 3. Homebrew installs it for you."
+    public static let cliFooter = "Run Transom commands from Terminal, for example transom view 3."
     /// A fixed string naming only the bundled tool (T-09-15); Transom never runs it.
     public static let cliInstallCommand =
         "sudo mkdir -p /usr/local/bin && sudo ln -sf /Applications/Transom.app/Contents/Helpers/transom /usr/local/bin/transom"

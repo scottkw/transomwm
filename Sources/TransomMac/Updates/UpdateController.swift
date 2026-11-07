@@ -94,7 +94,10 @@ import os
 
     /// `manual` is a Check for Updates click: only its failure is shown. An automatic check's failure is only logged.
     func checkNow(manual: Bool = true) async {
-        guard isEnabled, machine.begin(.check) else { return }
+        guard isEnabled else { return }
+        // The daily check would turn "Quit Transom" back into "Download and Open" after the DMG was opened.
+        if !manual, case .opened = machine.status { return }
+        guard machine.begin(.check) else { return }
         defer { lastChecked = Date() }
         let check: UpdateCheck
         do {
