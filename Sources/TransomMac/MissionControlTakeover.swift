@@ -1,5 +1,6 @@
 import Foundation
 import KeyboardShortcuts
+import Observation
 import TransomEngine
 import TransomPrivate
 import os
@@ -58,8 +59,9 @@ struct LiveHotKeyBackend: HotKeyBackend {
 
 /// The Mission Control takeover (OVER-02, D-05, D-07): disables macOS's Mission Control shortcuts and catches their
 /// chords as Carbon hotkeys, so they reach `onTrigger`. The only writer of symbolic-hotkey state. Every disable is
-/// preceded by stored originals and followed by a read-back (TakeoverPolicy).
-@MainActor final class MissionControlTakeover {
+/// preceded by stored originals and followed by a read-back (TakeoverPolicy). Observable so Settings ▸ Zoom & Gestures
+/// and the Arranging tab's Restore button follow `state`.
+@Observable @MainActor final class MissionControlTakeover {
     enum State: Equatable {
         case off, on(keys: [Int32]), liftedForZoom, offAfterCrash, offApplyFailed, unavailable
     }
@@ -75,19 +77,19 @@ struct LiveHotKeyBackend: HotKeyBackend {
     /// The canary tripped at launch and N10 has not shown for it yet (06-11 posts it, then calls `crashNoticeShown`).
     private(set) var pendingCrashNotice = false
     /// A taken chord was pressed (after the drift check).
-    var onTrigger: () -> Void = {}
+    @ObservationIgnored var onTrigger: () -> Void = {}
     /// Queues a toast (N10, N11); set by ArrangeController.
-    var post: (Notice) -> Void = { _ in }
+    @ObservationIgnored var post: (Notice) -> Void = { _ in }
     /// A VoiceOver announcement; set by ArrangeController.
-    var announce: (String) -> Void = { _ in }
+    @ObservationIgnored var announce: (String) -> Void = { _ in }
 
-    private let defaults: UserDefaults
-    private let backend: any HotKeyBackend
-    private let store: UserDefaultsTakeoverStore
-    private let canary: MissionControlCanary
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let backend: any HotKeyBackend
+    @ObservationIgnored private let store: UserDefaultsTakeoverStore
+    @ObservationIgnored private let canary: MissionControlCanary
     private var zoomOn: Bool
-    private var keyTasks: [Task<Void, Never>] = []
-    private let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
+    @ObservationIgnored private var keyTasks: [Task<Void, Never>] = []
+    @ObservationIgnored private let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
 
     init(defaults: UserDefaults = .standard, backend: any HotKeyBackend = LiveHotKeyBackend(), zoomOn: Bool) {
         self.defaults = defaults

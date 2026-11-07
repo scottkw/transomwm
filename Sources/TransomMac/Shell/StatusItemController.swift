@@ -179,13 +179,14 @@ import os
     private func takeoverMenuItem() -> NSMenuItem? {
         guard let takeover = arrange.takeover else { return nil }
         guard takeover.isAvailable else { return Self.info(OverviewCopy.replaceMissionControlUnavailable) }
-        let item = NSMenuItem(title: OverviewCopy.replaceMissionControl, action: #selector(toggleTakeover), keyEquivalent: "")
+        let item = NSMenuItem(title: OverviewCopy.replaceMissionControl, action: #selector(chooseTakeover), keyEquivalent: "")
         item.target = self
         item.state = takeover.isOn ? .on : .off
         return item
     }
 
-    @objc private func toggleTakeover() {
+    /// Replace Mission Control's one flow (Surface 5): the explanation alert, then `choose` decides.
+    @objc private func chooseTakeover() {
         guard let takeover = arrange.takeover, takeoverAlert == nil else { return }
         takeover.choose { [weak self] answered in
             guard let self else { return }
@@ -395,7 +396,12 @@ import os
             .zoom: {
                 // The menu's toggleZoom path: announcement and the Turn Off flow included.
                 let setZoomEnabled: (Bool) -> Void = { on in Task { await self.arrange.setZoomEnabled(on) } }
-                return SettingsWindowController.hosting(ZoomGesturesTab(setZoomEnabled: setZoomEnabled, gestures: self.arrange.gesturePreference))
+                // The flow the Replace Mission Control menu item used: the explanation alert, then `choose`.
+                let choose: () -> Void = { [weak self] in self?.chooseTakeover() }
+                return SettingsWindowController.hosting(
+                    ZoomGesturesTab(
+                        setZoomEnabled: setZoomEnabled, gestures: self.arrange.gesturePreference, takeover: self.arrange.takeover,
+                        chooseTakeover: choose))
             },
             .shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) },
         ]

@@ -26,6 +26,14 @@ nonisolated public enum SettingsCopy {
     public static let gestureOption = "Pinch and pan with \u{2325} held"
     public static let gestureOptionFooter = "Hold \u{2325} and pinch to zoom, or move two fingers to pan, over any window."
     public static let gestureWallpaper = "Pinch and pan on the wallpaper without \u{2325}"
+    public static let missionControlSection = "Mission Control"
+    public static let useMissionControlKeys = "Use the Mission Control keys for the overview"
+    public static let takeoverUnavailable = "Not available on this version of macOS."
+
+    /// {keys} is `OverviewCopy.takeoverAlertKeys`, the user's real chord.
+    public static func takeoverFooter(_ keys: String) -> String {
+        "\(keys) show Transom's overview instead of Mission Control. Swiping up with four fingers still opens Mission Control."
+    }
 
     /// Sentence case, as the UI-SPEC writes the rows (the menu and toasts keep `ConflictCopy.featureName`).
     public static func featureName(_ conflict: Conflict) -> String {

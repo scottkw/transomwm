@@ -6,6 +6,10 @@ import TransomEngine
 struct ZoomGesturesTab: View {
     let setZoomEnabled: (Bool) -> Void
     let gestures: GesturePreference
+    /// Observable, so the Mission Control toggle follows `state`; nil when the app has no takeover.
+    let takeover: MissionControlTakeover?
+    /// StatusItemController's explanation-alert flow (`choose(explain:)` with TakeoverAlert).
+    let chooseTakeover: () -> Void
     @AppStorage(ZoomController.enabledKey) private var zoomEnabled = true
     /// Read lazily by ZoomInput on each double-click, with no onChange, so `@AppStorage` is safe.
     @AppStorage(ShortcutsModel.doubleClickKey) private var doubleClick = true
@@ -20,6 +24,21 @@ struct ZoomGesturesTab: View {
 
     static func wallpaperBinding(_ gestures: GesturePreference) -> Binding<Bool> {
         Binding(get: { gestures.takesWallpaper }, set: { (on: Bool) -> Void in gestures.setWallpaper(on) })
+    }
+
+    /// Every write runs the takeover's own flow, whatever was asked: it shows on only once `state` is `.on` (T-09-11).
+    static func takeoverBinding(isOn: Bool, choose: @escaping () -> Void) -> Binding<Bool> {
+        Binding(get: { isOn }, set: { (_: Bool) -> Void in choose() })
+    }
+
+    static func takeoverUsable(_ takeover: MissionControlTakeover?, zoomOn: Bool) -> Bool {
+        takeover?.isAvailable == true && zoomOn
+    }
+
+    static func takeoverFooter(_ takeover: MissionControlTakeover?, zoomOn: Bool) -> String {
+        guard let takeover, takeover.isAvailable else { return SettingsCopy.takeoverUnavailable }
+        guard zoomOn else { return ZoomCopy.doubleClickFooterZoomOff }
+        return SettingsCopy.takeoverFooter(OverviewCopy.takeoverAlertKeys(takeover.currentChord))
     }
 
     static func trackpadFooter(zoomOn: Bool) -> String {
@@ -53,6 +72,16 @@ struct ZoomGesturesTab: View {
                 Text(ZoomCopy.mouseSection)
             } footer: {
                 Self.rowFooter(Self.mouseFooter(zoomOn: zoomEnabled))
+            }
+            Section {
+                Toggle(
+                    SettingsCopy.useMissionControlKeys,
+                    isOn: Self.takeoverBinding(isOn: takeover?.isOn == true, choose: chooseTakeover)
+                ).disabled(!Self.takeoverUsable(takeover, zoomOn: zoomEnabled))
+            } header: {
+                Text(SettingsCopy.missionControlSection)
+            } footer: {
+                Self.rowFooter(Self.takeoverFooter(takeover, zoomOn: zoomEnabled))
             }
         }
         .formStyle(.grouped)
