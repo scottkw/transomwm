@@ -32,6 +32,22 @@ import Testing
         #expect(later.model.current == .move)
     }
 
+    /// WR-03: Move's Not Now continues, so a copy that can't or shouldn't move still reaches Accessibility.
+    @Test func notNowOnMoveContinuesToSetup() {
+        #expect(OnboardingCopy.moveNotNowButton == "Not Now")
+        let defaults = throwawayDefaults()
+        let firstRun = SetupWindowController(permission: permission(.notTrusted), defaults: defaults, place: .diskImage)
+        _ = firstRun.makeWindow()
+        #expect(firstRun.model.current == .move)
+        firstRun.advance()
+        #expect(firstRun.model.current == .welcome)
+        defaults.set(true, forKey: SetupWindowController.completedKey)
+        let later = SetupWindowController(permission: permission(.notTrusted), defaults: defaults, place: .downloads)
+        _ = later.makeWindow()
+        later.advance()
+        #expect(later.model.current == .accessibility)
+    }
+
     @Test func afterCompletionOnlyAMissingGrantOpensTheSingleStep() {
         #expect(!SetupWindowController.launchDecision(completed: true, phase: .ready, conflictsActive: true).show)
         let missing = SetupWindowController.launchDecision(completed: true, phase: .notTrusted, conflictsActive: true)

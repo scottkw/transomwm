@@ -17,6 +17,8 @@ nonisolated public enum OnboardingCopy {
     }
     public static let moveButton = "Move to Applications"
     public static let moveQuitButton = "Quit"
+    /// Continues setup without moving, so a copy that can't move still reaches Accessibility (WR-03).
+    public static let moveNotNowButton = "Not Now"
     public static let moveFailed = "Couldn't move Transom. Drag it to the Applications folder yourself, then open it from there."
     public static let replaceMessage = "Replace the Transom in Applications?"
     public static let replaceInformative = "The copy that's there now goes to the Trash."

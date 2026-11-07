@@ -81,6 +81,7 @@ struct OnboardingView: View {
                 }
             } buttons: {
                 Button(OnboardingCopy.moveQuitButton) { NSApp.terminate(nil) }
+                Button(OnboardingCopy.moveNotNowButton, action: advance)
                 defaultButton(OnboardingCopy.moveButton, action: moveToApplications)
             }
         case .welcome:
