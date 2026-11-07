@@ -100,6 +100,89 @@ private final class Opened { var urls: [URL] = [] }
         #expect(DownloadStub.requests == [Self.url])
     }
 
+    @Test func aWrongDigestDeletesTheFileAndOpensNothing() async {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let opened = Opened()
+        let swapped = UpdateRelease(
+            version: "0.9.0", url: Self.url, size: Self.release.size, sha256: String(repeating: "0", count: 64))
+        let updates = await controller(swapped, opened: opened)
+        await updates.downloadAndOpen()
+        #expect(updates.error == .verifyFailed)
+        #expect(updates.status == .available(swapped))
+        #expect(opened.urls.isEmpty)
+        #expect(leftovers().isEmpty)
+    }
+
+    @Test func aShortDownloadDeletesTheFile() async {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // One byte short of the asset size, then one byte over it.
+        for size in [Self.release.size + 1, Self.release.size - 1] {
+            let opened = Opened()
+            let wrongSize = UpdateRelease(version: "0.9.0", url: Self.url, size: size, sha256: Self.release.sha256)
+            let updates = await controller(wrongSize, opened: opened)
+            await updates.downloadAndOpen()
+            #expect(updates.error == .verifyFailed, "size \(size)")
+            #expect(opened.urls.isEmpty)
+            #expect(leftovers().isEmpty, "size \(size)")
+        }
+    }
+
+    @Test func aRedirectOffTheAllowListIsRefused() async {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let evil = URL(string: "https://evil.example/x.dmg")!
+        DownloadStub.redirect = evil
+        let opened = Opened()
+        let updates = await controller(opened: opened)
+        await updates.downloadAndOpen()
+        #expect(updates.error == .downloadFailed(version: "0.9.0"))
+        #expect(updates.status == .available(Self.release))
+        #expect(!DownloadStub.requests.contains(evil))
+        #expect(opened.urls.isEmpty)
+        #expect(leftovers().isEmpty)
+        // An allow-listed CDN redirect is followed.
+        DownloadStub.redirect = URL(string: "https://release-assets.githubusercontent.com/x")!
+        await updates.downloadAndOpen()
+        #expect(updates.status == .opened(Self.release))
+    }
+
+    @Test func aFailedSignatureDeletesTheFileAndOpensNothing() async {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let opened = Opened()
+        // errSecCSReqFailed: another team's signature.
+        let updates = await controller(verify: { _ in -67050 }, opened: opened)
+        await updates.downloadAndOpen()
+        #expect(updates.error == .verifyFailed)
+        #expect(updates.status == .available(Self.release))
+        #expect(opened.urls.isEmpty)
+        #expect(leftovers().isEmpty)
+    }
+
+    @Test func aFailedOpenGoesBackToAvailable() async {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let opened = Opened()
+        let updates = await controller(opened: opened, openResult: false)
+        await updates.downloadAndOpen()
+        #expect(updates.error == .openFailed)
+        #expect(updates.status == .available(Self.release))
+        #expect(opened.urls.count == 1)
+    }
+
+    @Test func cleanRemovesOnlyTransomsOwnFiles() throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let files = FileManager.default
+        try files.createDirectory(at: directory, withIntermediateDirectories: true)
+        let own = ["Transom-0.8.0-universal.dmg", "Transom-0.9.0-universal.dmg.part"]
+        let others = ["notes.txt", "Transom-0.9.0-arm64.dmg", "Gifsmith-1.0.0-arm64.dmg", "Transom.dmg"]
+        for name in own + others { try Data("x".utf8).write(to: directory.appending(path: name)) }
+        // A folder that matches the pattern is not a file Transom wrote.
+        try files.createDirectory(at: directory.appending(path: "Transom-1.0.0-universal.dmg"), withIntermediateDirectories: false)
+        try downloader().clean()
+        #expect(Set(leftovers()) == Set(others + ["Transom-1.0.0-universal.dmg"]))
+        // A missing folder is fine.
+        try files.removeItem(at: directory)
+        try downloader().clean()
+    }
+
     private func xattr(_ file: URL, _ name: String) -> String? {
         let size = getxattr(file.path, name, nil, 0, 0, 0)
         guard size > 0 else { return nil }

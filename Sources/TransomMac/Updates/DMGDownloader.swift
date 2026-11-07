@@ -39,6 +39,8 @@ final class DMGDownloader {
         return final
     }
 
+    func clean() throws {}
+
     nonisolated static func sha256Hex(of file: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: file)
         defer { try? handle.close() }
