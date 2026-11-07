@@ -500,7 +500,7 @@ Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 
 ### Phase 9: Polish & Ship
 
-**Goal**: As a new user, I want to install Transom with Homebrew and be guided through setup, so that it starts at login and keeps itself updated.
+**Goal**: As a new user, I want to install Transom from its signed DMG and be guided through setup, so that it starts at login and keeps itself updated.
 **Mode:** mvp
 **Depends on**: Phase 5, Phase 6, Phase 7, Phase 8, Phase 8.1
 **Requirements**: SHIP-01, SHIP-02, SHIP-03, SHIP-04, SHIP-05, SHIP-06, SHIP-07, SHIP-08
