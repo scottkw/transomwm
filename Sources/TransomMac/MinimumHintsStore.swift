@@ -85,14 +85,17 @@ public enum HintsError: Error, Equatable {
 
     /// Size cap, then a version probe, then the full decode, then every entry (Persistence.swift's order).
     private static func decode(_ url: URL) throws(HintsError) -> [String: Size] {
+        // No typed throw inside a do/catch: on the CI runner (Swift 6.3, release) that shape crashed the test process.
+        let fileSize: Int?
+        do {
+            fileSize = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int
+        } catch {
+            throw .corrupt("unreadable: \(error.localizedDescription)")
+        }
+        if let fileSize, fileSize > maxBytes { throw .tooLarge(fileSize) }
         let data: Data
         do {
-            if let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int, size > maxBytes {
-                throw HintsError.tooLarge(size)
-            }
             data = try Data(contentsOf: url)
-        } catch let error as HintsError {
-            throw error
         } catch {
             throw .corrupt("unreadable: \(error.localizedDescription)")
         }
