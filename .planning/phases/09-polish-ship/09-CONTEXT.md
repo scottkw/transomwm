@@ -83,6 +83,13 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
   CI until the repo goes public at v0.9.0 (09-27), when macOS minutes are free. Until then the full host `swift test`
   after each plan is the gate; 09-27 runs CI (and the D-21 parallel diagnostic) once the repo is public.
 
+- **D-23 (user, 2026-11-07, after 09-25):** Fix before v0.9.0: on macOS 27 a window an app closes by hiding (kept alive)
+  leaves the AX list and the screen but stays in the full CG window list, so `CloseRule` never confirms the close and
+  the tile stays (09-25 deferred-items). Change the close rule so this counts as closed on macOS 27 without breaking
+  macOS 14/15 behaviour or hidden tabs/minimised windows; prove it in both VMs (TabGroup live suite).
+- **D-24 (user, 2026-11-07):** The Overview live-test helper exit on macOS 27.2 (test-only) is deferred until after the
+  release; it stays recorded in deferred-items.md.
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.
