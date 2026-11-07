@@ -225,6 +225,87 @@ private func blank(_ fake: FakeWindowSystem, gate: Bool, axInvalid: Bool = false
         #expect(destroyed(await drain(fake.events)).isEmpty)
         #expect(await fake.windowInfo(ref(1)) != nil)
     }
+
+    /// D-23: macOS 27 keeps a closed window its app retains in the CG list, offscreen on its Space. With AX -25202 and
+    /// the Space shown, that is the second source: it closes in one refresh.
+    @Test func aKeptAliveWindowClosesOnceOffscreenOnTheShownSpace() async {
+        let fake = await shownSpaceFake()
+        await fake.lingerInCG(1, spaces: [1])
+        await fake.refreshAll()
+        #expect(destroyed(await drain(fake.events)) == [ref(1)])
+        #expect(await fake.windowInfo(ref(2)) != nil)
+    }
+
+    /// D-23: the kept-alive window shown again later is a new window.
+    @Test func aKeptAliveWindowShownAgainIsANewWindow() async throws {
+        let fake = await shownSpaceFake()
+        await fake.lingerInCG(1, spaces: [1])
+        await fake.refreshAll()
+        await fake.update(1) {
+            $0.axValid = true
+            $0.listedInAX = true
+            $0.onScreen = true
+        }
+        await fake.refreshAll()
+        await fake.advance(by: .milliseconds(300))
+        await fake.refreshAll()
+        let events = await drain(fake.events)
+        let destroyedAt = try #require(events.firstIndex(of: .windowDestroyed(ref(1))))
+        #expect(created(Array(events[destroyedAt...])).first?.window == ref(1))
+    }
+
+    /// An element being rebuilt, or WindowServer lag: invalid in AX but still on screen is kept.
+    @Test func anInvalidWindowStillOnScreenIsKept() async {
+        let fake = await shownSpaceFake()
+        await fake.update(1) {
+            $0.axValid = false
+            $0.listedInAX = false
+        }
+        await refreshFiveTimes(fake)
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+        #expect(await fake.windowInfo(ref(1)) != nil)
+    }
+
+    @Test func aKeptAliveGhostOnAnotherSpaceIsKept() async {
+        let fake = await shownSpaceFake()
+        await fake.lingerInCG(1, spaces: [2])
+        await refreshFiveTimes(fake)
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+        #expect(await fake.windowInfo(ref(1)) != nil)
+    }
+
+    /// Two sources: CG alone (offscreen on the shown Space) never closes an AX-valid window.
+    @Test func anAXValidWindowOffscreenOnTheShownSpaceIsKept() async {
+        let fake = await shownSpaceFake()
+        await fake.update(1) {
+            $0.listedInAX = false
+            $0.onScreen = false
+        }
+        await refreshFiveTimes(fake)
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+        #expect(await fake.windowInfo(ref(1)) != nil)
+    }
+}
+
+private func refreshFiveTimes(_ fake: FakeWindowSystem) async {
+    for _ in 0..<5 {
+        await fake.advance(by: .seconds(1))
+        await fake.refreshAll()
+    }
+}
+
+/// `spacesFake()` with one display showing Space 1 (D-23).
+private func shownSpaceFake() async -> FakeWindowSystem {
+    let fake = FakeWindowSystem()
+    await fake.setSpacesAvailable(true)
+    await fake.setDisplays([DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900),
+                                        visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: 1)])
+    await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+    for id: UInt32 in [1, 2] {
+        await fake.open(.standard(id: id, pid: pid, frame: Rect(x: Double(id) * 10, y: 25, width: 400, height: 300), space: 1))
+    }
+    await fake.refreshAll()
+    return fake
 }
 
 /// One app with windows 1 and 2 on Space 1, Spaces data on, after the initial sweep.
