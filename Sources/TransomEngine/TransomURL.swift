@@ -52,6 +52,7 @@ public enum TransomURL {
         ("Zoom", "overview", "", "Open or close the overview"),
         ("Arrange", "split-finder", "", "Split with a new Finder window"),
         ("Arrange", "restore", "", "Restore all windows"),
+        ("App", "settings", "[pane]", "Open Settings, at a pane if one is named"),
         ("Dock", "dock-left-half", "", "Dock the focused window to the left half"),
         ("Dock", "dock-right-half", "", "Dock the focused window to the right half"),
         ("Dock", "dock-top-half", "", "Dock the focused window to the top half"),

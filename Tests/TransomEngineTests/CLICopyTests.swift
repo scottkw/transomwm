@@ -32,6 +32,9 @@ import Testing
               split-finder         Split with a new Finder window
               restore              Restore all windows
 
+            App
+              settings [pane]      Open Settings, at a pane if one is named
+
             Dock
               dock-left-half       Dock the focused window to the left half
               dock-right-half      Dock the focused window to the right half
@@ -78,11 +81,17 @@ import Testing
 
     /// D-09: every allow-listed command has exactly one help line.
     @Test func everyCommandHasExactlyOneHelpLine() {
-        let allowed = Set(TransomURL.commands.keys).union(["view", "save-view", "help"])
+        let allowed = Set(TransomURL.commands.keys).union(["view", "save-view", "help", "settings"])
         let listed = TransomURL.helpLines.map(\.command)
         #expect(listed.count == allowed.count)
         #expect(Set(listed) == allowed)
         #expect(TransomURL.commands.count == 40, "8.1.1 D-17: 40 parameterless commands")
+    }
+
+    @Test func theSettingsHelpLineIsExact() {
+        let line = "  settings [pane]      Open Settings, at a pane if one is named"
+        #expect(line.count == 63)
+        #expect(CLICopy.help.split(separator: "\n").contains(Substring(line)))
     }
 
     @Test func asciiStraightensTheAppsTypography() {
