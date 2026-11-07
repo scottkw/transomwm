@@ -395,7 +395,7 @@ import os
             .zoom: {
                 // The menu's toggleZoom path: announcement and the Turn Off flow included.
                 let setZoomEnabled: (Bool) -> Void = { on in Task { await self.arrange.setZoomEnabled(on) } }
-                return SettingsWindowController.hosting(ZoomGesturesTab(setZoomEnabled: setZoomEnabled))
+                return SettingsWindowController.hosting(ZoomGesturesTab(setZoomEnabled: setZoomEnabled, gestures: self.arrange.gesturePreference))
             },
             .shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) },
         ]

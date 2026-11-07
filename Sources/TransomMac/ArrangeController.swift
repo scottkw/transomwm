@@ -422,16 +422,23 @@ import os
         gestures.publish()
     }
 
-    /// Starts the gesture tap when zoom is on and the mouse tap runs, else stops it (D-07). A tap macOS took down is
-    /// started again.
+    /// Starts the gesture tap when zoom is on, the mouse tap runs and a Trackpad switch is on, else stops it (D-07,
+    /// 09-06). A tap macOS took down is started again.
     func updateGestureTap(reason: String) {
-        if zoomEnabled && tap.isRunning {
+        if Self.wantsGestureTap(
+            zoomEnabled: zoomEnabled, tapRunning: tap.isRunning, option: gesturePreference.takesOption, wallpaper: gesturePreference.takesWallpaper)
+        {
             guard !gestureTap.isRunning else { return }
             gestures.stop(reason: reason)
             gestureTapFailedToStart = !gestures.start()
         } else {
             gestures.stop(reason: reason)
         }
+    }
+
+    /// Both Trackpad switches off means no gesture tap, as with zoom off.
+    nonisolated static func wantsGestureTap(zoomEnabled: Bool, tapRunning: Bool, option: Bool, wallpaper: Bool) -> Bool {
+        zoomEnabled && tapRunning && (option || wallpaper)
     }
 
     /// The green buttons the tap last got, so an unchanged set is not swapped in again.

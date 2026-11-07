@@ -5,12 +5,25 @@ import TransomEngine
 /// `setZoomEnabled`, the menu's Turn On/Off Zoom path, so the announcement and the Turn Off flow run (D-02, T-09-08).
 struct ZoomGesturesTab: View {
     let setZoomEnabled: (Bool) -> Void
+    let gestures: GesturePreference
     @AppStorage(ZoomController.enabledKey) private var zoomEnabled = true
     /// Read lazily by ZoomInput on each double-click, with no onChange, so `@AppStorage` is safe.
     @AppStorage(ShortcutsModel.doubleClickKey) private var doubleClick = true
 
     static func zoomBinding(isOn: Bool, setZoomEnabled: @escaping (Bool) -> Void) -> Binding<Bool> {
         Binding(get: { isOn }, set: { (on: Bool) -> Void in setZoomEnabled(on) })
+    }
+
+    static func optionBinding(_ gestures: GesturePreference) -> Binding<Bool> {
+        Binding(get: { gestures.takesOption }, set: { (on: Bool) -> Void in gestures.setOption(on) })
+    }
+
+    static func wallpaperBinding(_ gestures: GesturePreference) -> Binding<Bool> {
+        Binding(get: { gestures.takesWallpaper }, set: { (on: Bool) -> Void in gestures.setWallpaper(on) })
+    }
+
+    static func trackpadFooter(zoomOn: Bool) -> String {
+        zoomOn ? SettingsCopy.gestureOptionFooter : ZoomCopy.doubleClickFooterZoomOff
     }
 
     static func mouseFooter(zoomOn: Bool) -> String {
@@ -25,6 +38,14 @@ struct ZoomGesturesTab: View {
                 Text(SettingsCopy.zoomSection)
             } footer: {
                 Self.rowFooter(SettingsCopy.useZoomFooter)
+            }
+            Section {
+                Toggle(SettingsCopy.gestureOption, isOn: Self.optionBinding(gestures)).disabled(!zoomEnabled)
+                Toggle(SettingsCopy.gestureWallpaper, isOn: Self.wallpaperBinding(gestures)).disabled(!zoomEnabled)
+            } header: {
+                Text(SettingsCopy.trackpadSection)
+            } footer: {
+                Self.rowFooter(Self.trackpadFooter(zoomOn: zoomEnabled))
             }
             Section {
                 Toggle(ZoomCopy.doubleClickToggle, isOn: $doubleClick).disabled(!zoomEnabled)

@@ -22,6 +22,10 @@ nonisolated public enum SettingsCopy {
     public static let zoomSection = "Zoom"
     public static let useZoom = "Use zoom"
     public static let useZoomFooter = "Zoom lets you see every window at once and step in to any of them. Tiling works with zoom off."
+    public static let trackpadSection = "Trackpad"
+    public static let gestureOption = "Pinch and pan with \u{2325} held"
+    public static let gestureOptionFooter = "Hold \u{2325} and pinch to zoom, or move two fingers to pan, over any window."
+    public static let gestureWallpaper = "Pinch and pan on the wallpaper without \u{2325}"
 
     /// Sentence case, as the UI-SPEC writes the rows (the menu and toasts keep `ConflictCopy.featureName`).
     public static func featureName(_ conflict: Conflict) -> String {
