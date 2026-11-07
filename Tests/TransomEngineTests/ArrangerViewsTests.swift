@@ -127,6 +127,34 @@ private func zoom(_ harness: inout Harness, to target: ViewTarget) async throws 
         #expect(destination.target == .home && destination.allGone == false, "a and c share only the root")
     }
 
+    /// D-14, 09 UI-SPEC Surface 4: the menu bar fills the badge of the saved view the display's camera shows.
+    @Test func theCurrentSlotIsTheSavedViewOnScreen() async throws {
+        var harness = try await fourDocked()
+        let node = try await savedCAndD(&harness)
+        harness.arranger.camera.savedViews.save(SavedView(slot: ViewSlot(1)!, desk: key, home: true, windows: []))
+        try await zoom(&harness, to: .node(node))
+
+        #expect(harness.arranger.savedViewSlots == [1, 3])
+        #expect(harness.arranger.currentViewSlot(displayUUID: "main") == three)
+        #expect(harness.arranger.currentViewSlot(displayUUID: "unplugged") == nil)
+    }
+
+    @Test func noSlotIsCurrentAtHomeOrAtAnUnsavedView() async throws {
+        var harness = try await fourDocked()
+        let node = try await savedCAndD(&harness)
+        harness.arranger.camera.savedViews.save(SavedView(slot: ViewSlot(1)!, desk: key, home: true, windows: []))
+
+        #expect(harness.arranger.currentViewSlot(displayUUID: "main") == nil, "a saved home view is never filled")
+        try await zoom(&harness, to: .node(try #require(harness.arranger.leafNode(of: a))))
+        #expect(harness.arranger.currentViewSlot(displayUUID: "main") == nil)
+        // The same node shown on another Space's desk is not slot 3's view.
+        let other = DeskKey(displayUUID: "main", spaceID: 7)
+        await harness.send(.event(.spaceChanged(displayUUID: "main", spaceID: 7)))
+        harness.arranger.camera.views[other] = .node(node)
+        try #require(harness.arranger.view(on: "main") == .node(node))
+        #expect(harness.arranger.currentViewSlot(displayUUID: "main") == nil)
+    }
+
     @Test func oneSavedWindowClosedGoesToTheSurvivorsLeafWithNoOtherNotice() async throws {
         var harness = try await fourDocked()
         _ = try await savedCAndD(&harness)

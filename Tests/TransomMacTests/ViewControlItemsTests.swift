@@ -1,4 +1,5 @@
 import Foundation
+import TransomEngine
 @testable import TransomMac
 import Testing
 
@@ -60,5 +61,25 @@ import Testing
                 #expect(defaults.object(forKey: MenuBarPreference.itemsKey) == nil)
             }
         }
+    }
+
+    private let views = [MenuBarItem(control: .views, enabled: true)]
+
+    @Test func savedViewsShowOneBadgePerSlotWithTheCurrentFilled() {
+        let specs = layout(views, slots: [1, 3], current: 3)
+        #expect(specs.map(\.symbol) == ["1.square", "3.square.fill"])
+        #expect(specs.map(\.description) == ["View 1", "View 3, current"])
+        #expect(specs.map(\.command) == [.camera(.view(ViewSlot(1)!)), .camera(.view(ViewSlot(3)!))])
+        #expect(layout(views, slots: [1, 3]).map(\.symbol) == ["1.square", "3.square"])
+    }
+
+    @Test func iconOnlyHidesTheNumbers() {
+        let specs = layout(views, iconOnly: true, slots: [1, 3], current: 3)
+        #expect(specs.map(\.symbol) == ["square", "square.fill"])
+        #expect(specs.map(\.description) == ["View 1", "View 3, current"])
+    }
+
+    @Test func noSavedViewsGivesNoBadges() {
+        #expect(layout(views, slots: []).isEmpty)
     }
 }
