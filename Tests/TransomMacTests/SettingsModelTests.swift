@@ -122,4 +122,36 @@ private final class Count: @unchecked Sendable { var value = 0 }
         #expect(ZoomGesturesTab.mouseFooter(zoomOn: true) == ZoomCopy.doubleClickFooterOn)
         #expect(ZoomGesturesTab.mouseFooter(zoomOn: false) == "Turn on zoom to use this.")
     }
+
+    @Test func bothTrackpadSwitchesOffMeansNoGestureTap() {
+        #expect(!ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: true, option: false, wallpaper: false))
+        #expect(ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: true, option: true, wallpaper: false))
+        #expect(ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: true, option: false, wallpaper: true))
+        #expect(!ArrangeController.wantsGestureTap(zoomEnabled: false, tapRunning: true, option: true, wallpaper: true))
+        #expect(!ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: false, option: true, wallpaper: true))
+    }
+
+    @Test func theOptionToggleWritesItsKeyAndFiresOnce() throws {
+        try withDefaults { defaults in
+            let gestures = GesturePreference(defaults: defaults)
+            #expect(gestures.takesOption && gestures.takesWallpaper, "both default on")
+            var changes = 0
+            gestures.onChange = { changes += 1 }
+            let binding = ZoomGesturesTab.optionBinding(gestures)
+            binding.wrappedValue = false
+            #expect(!binding.wrappedValue)
+            #expect(defaults.object(forKey: GesturePreference.optionKey) as? Bool == false)
+            #expect(defaults.object(forKey: GesturePreference.wallpaperKey) == nil)
+            #expect(changes == 1)
+            #expect(!GesturePreference(defaults: defaults).takesOption)
+        }
+    }
+
+    @Test func aStoredGestureSwitchThatIsNotABoolIsRemoved() throws {
+        try withDefaults { defaults in
+            defaults.set(0, forKey: GesturePreference.wallpaperKey)
+            #expect(GesturePreference(defaults: defaults).takesWallpaper)
+            #expect(defaults.object(forKey: GesturePreference.wallpaperKey) == nil)
+        }
+    }
 }
