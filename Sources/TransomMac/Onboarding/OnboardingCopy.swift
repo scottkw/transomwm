@@ -19,6 +19,11 @@ nonisolated public enum OnboardingCopy {
     public static let skipButton = "Skip"
     public static let backButton = "Back"
 
+    public static let featuresHeading = "Turn off macOS features that move windows"
+    public static let featuresBody =
+        "These move windows by themselves and fight with Transom. You can turn them back on any time with Restore macOS Window Settings in the Transom menu."
+    public static let openDesktopDockButton = "Open Desktop & Dock Settings"
+
     public static let launchHeading = "Open Transom when you log in"
     public static let launchBody =
         "Transom arranges windows only while it's running. You can change this in Settings \u{25B8} General."

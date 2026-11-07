@@ -7,9 +7,10 @@ public enum OnboardingStep: String, CaseIterable, Sendable {
 /// Pure: the window controller reads `onboarding.completed` and drives the window.
 public enum OnboardingFlow {
     /// The first run walks every applicable step; after completion only the Accessibility step ever shows.
+    /// The macOS window features step shows only while a conflicting feature is on.
     public static func steps(completed: Bool, conflictsActive: Bool) -> [OnboardingStep] {
         if completed { return [.accessibility] }
-        return [.welcome, .accessibility, .screenRecording, .launchAtLogin, .done]
+        return [.welcome, .accessibility, .screenRecording] + (conflictsActive ? [.features] : []) + [.launchAtLogin, .done]
     }
 
     /// Welcome…Launch at login are numbered, counting only the ones in `steps`. Move and Done have no caption, and

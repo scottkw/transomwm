@@ -24,6 +24,7 @@ final class OnboardingModel: ObservableObject {
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
     let permission: PermissionController
+    let conflicts: ConflictController?
     let appName: String
     let advance: () -> Void
     let back: () -> Void
@@ -77,6 +78,16 @@ struct OnboardingView: View {
                     defaultButton(OnboardingCopy.allowScreenRecordingButton, action: allowScreenRecording)
                 }
             }
+        case .features:
+            page(caption: caption, heading: OnboardingCopy.featuresHeading, text: OnboardingCopy.featuresBody, back: back) {
+                Image(systemName: "macwindow.on.rectangle")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+            } detail: {
+                if let conflicts { featureRows(conflicts) }
+            } buttons: {
+                defaultButton(OnboardingCopy.continueButton, action: advance)
+            }
         case .launchAtLogin:
             page(caption: caption, heading: OnboardingCopy.launchHeading, text: nil, back: back) {
                 Image(systemName: "power")
@@ -113,6 +124,36 @@ struct OnboardingView: View {
             }
         default:
             SetupView(permission: permission, appName: appName, caption: caption, close: close)
+        }
+    }
+
+    /// All three features in fixed order, as Settings ▸ Arranging lists them. Turn Off is the menu line's immediate action
+    /// (Phase 3 D-19), so Restore macOS Window Settings undoes it.
+    private func featureRows(_ conflicts: ConflictController) -> some View {
+        ForEach(ArrangingTab.featureRows(conflicts), id: \.conflict) { row in
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: row.name).font(.headline)
+                        secondary(row.detail)
+                    }
+                    Spacer()
+                    if row.isOn {
+                        Button(ConflictCopy.turnOffButton) { Task { await conflicts.turnOff(row.conflict) } }
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color(nsColor: .systemGreen))
+                                .accessibilityHidden(true)
+                            Text(verbatim: SettingsCopy.featureOff)
+                        }
+                    }
+                }
+                if row.isOn {
+                    // x-apple.systempreferences:com.apple.Desktop-Settings.extension, through the controller's opener.
+                    Button(OnboardingCopy.openDesktopDockButton) { conflicts.openSettings(ConflictController.desktopAndDock) }
+                        .buttonStyle(.link)
+                }
+            }
         }
     }
 

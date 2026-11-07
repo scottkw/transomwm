@@ -27,6 +27,10 @@ import os
     var openSettings: ((SettingsPane?) -> Void)?
     /// Launch at login (SHIP-03), injected so tests never register the real login item.
     var loginItem: (any LoginItemService)?
+    /// The macOS features that move windows (D-05), read at launch to decide whether their step shows.
+    var conflicts: ConflictController?
+    /// Decided once at launch, so turning the last feature off keeps the step, its rows reading Off.
+    private var featuresStep = false
     private var screenRecordingPoll: Task<Void, Never>?
 
     init(permission: PermissionController, defaults: UserDefaults = .standard) {
@@ -42,20 +46,24 @@ import os
     /// Call right after `.launched`. A trusted launch waits for its probe, so a working grant never
     /// flashes the window; any other outcome shows it. The first run shows it either way.
     func decideAtLaunch() {
-        if !completed { go(to: OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: model.steps)) }
+        featuresStep = !(conflicts?.active.isEmpty ?? true)
+        if !completed {
+            model.steps = OnboardingFlow.steps(completed: false, conflictsActive: featuresStep)
+            go(to: OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: model.steps))
+        }
         awaitingLaunchDecision = true
         stateChanged(permission.state)
     }
 
     /// Whether the window opens by itself once the launch probe has settled, and with which steps. The first run
     /// always opens (step 2 passes by itself when access is ready); later launches only when access isn't ready.
-    static func launchDecision(completed: Bool, phase: PermissionPhase) -> (show: Bool, steps: [OnboardingStep]) {
-        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed, conflictsActive: false))
+    static func launchDecision(completed: Bool, phase: PermissionPhase, conflictsActive: Bool) -> (show: Bool, steps: [OnboardingStep]) {
+        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed, conflictsActive: conflictsActive))
     }
 
     /// Opens the steps for the current completion state: after completion, the lone Accessibility step.
     func show() {
-        let steps = Self.launchDecision(completed: completed, phase: permission.state.phase).steps
+        let steps = Self.launchDecision(completed: completed, phase: permission.state.phase, conflictsActive: featuresStep).steps
         if model.steps != steps {
             model.steps = steps
             go(to: steps[0])
@@ -75,7 +83,7 @@ import os
         }
         guard awaitingLaunchDecision, state.phase != .probing else { return }
         awaitingLaunchDecision = false
-        if Self.launchDecision(completed: completed, phase: state.phase).show && !userClosed { show() }
+        if Self.launchDecision(completed: completed, phase: state.phase, conflictsActive: featuresStep).show && !userClosed { show() }
     }
 
     /// Continue: the next step, passing the Accessibility step when access is already ready.
@@ -164,7 +172,7 @@ import os
         if let window { return window }  // a second window would orphan the first, still delegate-wired
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? ProcessInfo.processInfo.processName
         let view = OnboardingView(
-            model: model, permission: permission, appName: appName,
+            model: model, permission: permission, conflicts: conflicts, appName: appName,
             advance: { [weak self] in self?.advance() },
             back: { [weak self] in self?.back() },
             allowScreenRecording: { [weak self] in self?.allowScreenRecording() },

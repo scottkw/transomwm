@@ -159,8 +159,8 @@ import Testing
         let (defaults, cleanUp) = ConflictControllerTests.defaults()
         defer { cleanUp() }
         let prefs = MemoryPreferences()
-        prefs.values = ["GloballyEnabled": .bool(true)]
-        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        prefs.values = ["GloballyEnabled": .bool(true), "EnableStandardClickToShowDesktop": .bool(false)]
+        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 14, readBackDelay: .zero)
         conflicts.poll()
         // Probing keeps decideAtLaunch from showing the window.
         let controller = SetupWindowController(permission: permission(.probing), defaults: throwawayDefaults())
@@ -184,7 +184,9 @@ import Testing
     @Test func noActiveConflictSkipsTheFeaturesStep() {
         let (defaults, cleanUp) = ConflictControllerTests.defaults()
         defer { cleanUp() }
-        let conflicts = ConflictController(store: MemoryPreferences(), defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        let prefs = MemoryPreferences()
+        prefs.values = ["EnableStandardClickToShowDesktop": .bool(false)]
+        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 14, readBackDelay: .zero)
         conflicts.poll()
         let controller = SetupWindowController(permission: permission(.probing), defaults: throwawayDefaults())
         controller.conflicts = conflicts
