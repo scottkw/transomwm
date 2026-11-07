@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons (completed 2026-11-03)
 - [x] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `transom://` commands, layouts restored across restarts and reboots (completed 2026-11-04)
 - [x] **Phase 08.1: Window Behaviour Options** (completed 2026-11-05)
-- [ ] **Phase 08.1.1: Remove the Desktop Tile** - Docked windows fill the screen; floating windows sit on top like normal macOS windows
+- [x] **Phase 08.1.1: Remove the Desktop Tile** - Docked windows fill the screen; floating windows sit on top like normal macOS windows (completed 2026-11-06)
 - [ ] **Phase 9: Polish & Ship** - Settings, onboarding, launch at login, GitHub Releases update check, Homebrew cask
 
 ## Phase Details
@@ -467,7 +467,7 @@ Plans:
   3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
   4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
 **Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT. User request (2026-11-05): the menu-bar menu should offer every supported docking configuration with its hotkey. Dock to Fourth (10 items with hotkeys) exists; discuss adding halves and thirds as docking commands (today they snap floating windows only), and making the menu easier to find.
-**Plans:** 27/27 plans executed
+**Plans:** 27/27 plans complete
 
 Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
 - [x] 08.1.1-01-PLAN.md — Migration: schema 1–3 layout.json loses its Desktop tile (legacy decode, World 2, layout.json 4), parked windows come back, requirement amendments
