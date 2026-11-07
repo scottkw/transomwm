@@ -114,6 +114,17 @@ import os
         go(to: step)
     }
 
+    /// Move's Not Now: picks up at the stored step among the steps after Move, as a relaunch without Move would, so
+    /// Screen Recording's Quit & Reopen doesn't restart at Welcome (WR-02). Ready access passes Accessibility, as in `advance()`.
+    func skipMove() {
+        let rest = model.steps.filter { (s: OnboardingStep) -> Bool in s != .move }
+        var step = OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: rest)
+        if step == .accessibility, permission.state.phase == .ready, let after = OnboardingFlow.next(after: step, in: rest) {
+            step = after
+        }
+        go(to: step)
+    }
+
     /// Done: the first run is over; later launches keep Phase 2's rule.
     func finish() {
         defaults.set(true, forKey: Self.completedKey)
@@ -234,7 +245,8 @@ import os
             continueLaunchAtLogin: { [weak self] in self?.continueLaunchAtLogin() },
             openLoginItems: { [weak self] in self?.loginItem?.openSystemSettingsLoginItems() },
             close: { [weak self] in self?.closeAccessibilityStep() },
-            moveToApplications: { [weak self] in self?.moveToApplications() })
+            moveToApplications: { [weak self] in self?.moveToApplications() },
+            skipMove: { [weak self] in self?.skipMove() })
         let hosting = NSHostingController(rootView: view)
         // The hosting controller publishes SwiftUI's size as preferredContentSize, which the window applies,
         // so its height follows each state's content (G-02-1).

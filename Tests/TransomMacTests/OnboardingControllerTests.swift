@@ -39,13 +39,25 @@ import Testing
         let firstRun = SetupWindowController(permission: permission(.notTrusted), defaults: defaults, place: .diskImage)
         _ = firstRun.makeWindow()
         #expect(firstRun.model.current == .move)
-        firstRun.advance()
+        firstRun.skipMove()
         #expect(firstRun.model.current == .welcome)
         defaults.set(true, forKey: SetupWindowController.completedKey)
         let later = SetupWindowController(permission: permission(.notTrusted), defaults: defaults, place: .downloads)
         _ = later.makeWindow()
-        later.advance()
+        later.skipMove()
         #expect(later.model.current == .accessibility)
+    }
+
+    /// WR-02: after Screen Recording's Quit & Reopen, Not Now resumes past it instead of restarting at Welcome.
+    @Test func notNowOnMoveResumesTheStoredStep() {
+        let defaults = throwawayDefaults()
+        defaults.set("screenRecording", forKey: SetupWindowController.stepKey)
+        let controller = SetupWindowController(permission: permission(.probing), defaults: defaults, place: .diskImage)
+        controller.loginItem = FakeLoginItem(status: .notRegistered)
+        controller.decideAtLaunch()
+        #expect(controller.model.current == .move)
+        controller.skipMove()
+        #expect(controller.model.current == .launchAtLogin)
     }
 
     @Test func afterCompletionOnlyAMissingGrantOpensTheSingleStep() {

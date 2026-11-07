@@ -53,6 +53,7 @@ struct OnboardingView: View {
     let openLoginItems: () -> Void
     let close: () -> Void
     let moveToApplications: () -> Void
+    let skipMove: () -> Void
     @AccessibilityFocusState private var headingFocused: Bool
 
     var body: some View {
@@ -81,7 +82,7 @@ struct OnboardingView: View {
                 }
             } buttons: {
                 Button(OnboardingCopy.moveQuitButton) { NSApp.terminate(nil) }
-                Button(OnboardingCopy.moveNotNowButton, action: advance)
+                Button(OnboardingCopy.moveNotNowButton, action: skipMove)
                 defaultButton(OnboardingCopy.moveButton, action: moveToApplications)
             }
         case .welcome:
