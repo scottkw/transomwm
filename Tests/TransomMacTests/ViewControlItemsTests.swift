@@ -1,0 +1,126 @@
+import Foundation
+import TransomEngine
+@testable import TransomMac
+import Testing
+
+/// SHIP-06, D-13, D-14, UI-SPEC Surface 4 and Tab 6: the menu-bar view controls are a pure layout of the Menu Bar
+/// choices and the camera. No test creates a real status item.
+@Suite @MainActor struct ViewControlItemsTests {
+    /// A throwaway defaults domain, never the user's.
+    private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
+        let suite = "com.eightabyte.transom.tests.menubar.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try body(defaults)
+    }
+
+    private func layout(
+        _ items: [MenuBarItem], iconOnly: Bool = false, zoomOn: Bool = true, paused: Bool = false, slots: [Int] = [], current: Int? = nil,
+        back: Bool = true, forward: Bool = true
+    ) -> [ViewControlSpec] {
+        ViewControlItems.layout(
+            items: items, iconOnly: iconOnly, zoomOn: zoomOn, paused: paused, slots: slots, current: current, backAvailable: back,
+            forwardAvailable: forward)
+    }
+
+    @Test func nothingShowsByDefault() throws {
+        try withDefaults { defaults in
+            let preference = MenuBarPreference(defaults: defaults)
+            #expect(preference.items.map(\.control) == [.back, .forward, .views])
+            #expect(preference.items.allSatisfy { !$0.enabled })
+            #expect(!preference.iconOnly)
+            #expect(layout(preference.items, slots: [1, 2]).isEmpty)
+        }
+    }
+
+    @Test func backEnabledGivesOneBackControlWhileZoomIsOn() throws {
+        try withDefaults { defaults in
+            let preference = MenuBarPreference(defaults: defaults)
+            var changes = 0
+            preference.onChange = { changes += 1 }
+            preference.setEnabled(.back, true)
+            #expect(changes == 1)
+            #expect(MenuBarPreference(defaults: defaults).items == preference.items)
+            let specs = layout(preference.items)
+            #expect(specs == [ViewControlSpec(kind: .back, symbol: "chevron.backward", description: "Back", appearsDisabled: false)])
+            #expect(specs.first?.command == .camera(.back))
+        }
+    }
+
+    @Test func zoomOffHidesEveryControl() {
+        let all = MenuBarControl.allCases.map { MenuBarItem(control: $0, enabled: true) }
+        #expect(layout(all, zoomOn: false, slots: [1, 3], current: 3).isEmpty)
+    }
+
+    @Test func aCorruptStoredListIsReplacedByTheDefault() throws {
+        let duplicate = Data(#"[{"control":"back","enabled":true},{"control":"back","enabled":true},{"control":"views","enabled":true}]"#.utf8)
+        for stored in [duplicate, Data("nonsense".utf8)] as [Any] + ["back"] {
+            try withDefaults { defaults in
+                defaults.set(stored, forKey: MenuBarPreference.itemsKey)
+                #expect(MenuBarPreference(defaults: defaults).items == MenuBarPreference.defaultItems)
+                #expect(defaults.object(forKey: MenuBarPreference.itemsKey) == nil)
+            }
+        }
+    }
+
+    private let views = [MenuBarItem(control: .views, enabled: true)]
+
+    @Test func savedViewsShowOneBadgePerSlotWithTheCurrentFilled() {
+        let specs = layout(views, slots: [1, 3], current: 3)
+        #expect(specs.map(\.symbol) == ["1.square", "3.square.fill"])
+        #expect(specs.map(\.description) == ["View 1", "View 3, current"])
+        #expect(specs.map(\.command) == [.camera(.view(ViewSlot(1)!)), .camera(.view(ViewSlot(3)!))])
+        #expect(layout(views, slots: [1, 3]).map(\.symbol) == ["1.square", "3.square"])
+    }
+
+    @Test func iconOnlyHidesTheNumbers() {
+        let specs = layout(views, iconOnly: true, slots: [1, 3], current: 3)
+        #expect(specs.map(\.symbol) == ["square", "square.fill"])
+        #expect(specs.map(\.description) == ["View 1", "View 3, current"])
+    }
+
+    @Test func noSavedViewsGivesNoBadges() {
+        #expect(layout(views, slots: []).isEmpty)
+    }
+
+    @Test func rowsReorderAndPersist() throws {
+        try withDefaults { defaults in
+            let preference = MenuBarPreference(defaults: defaults)
+            var changes = 0
+            preference.onChange = { changes += 1 }
+            preference.move(fromOffsets: [2], toOffset: 0)
+            #expect(preference.items.map(\.control) == [.views, .back, .forward])
+            #expect(changes == 1)
+            #expect(MenuBarPreference(defaults: defaults).items.map(\.control) == [.views, .back, .forward])
+        }
+    }
+
+    @Test func moveUpAndDownStopAtTheEnds() throws {
+        try withDefaults { defaults in
+            let preference = MenuBarPreference(defaults: defaults)
+            var changes = 0
+            preference.onChange = { changes += 1 }
+            #expect(!preference.canMoveUp(.back) && !preference.canMoveDown(.views))
+            preference.moveUp(.back)
+            preference.moveDown(.views)
+            #expect(preference.items.map(\.control) == [.back, .forward, .views] && changes == 0)
+            preference.moveDown(.back)
+            preference.moveUp(.views)
+            #expect(preference.items.map(\.control) == [.forward, .views, .back] && changes == 2)
+        }
+    }
+
+    @Test func pausedDimsEveryControl() {
+        let all = MenuBarControl.allCases.map { MenuBarItem(control: $0, enabled: true) }
+        let specs = layout(all, paused: true, slots: [2], current: 2)
+        #expect(specs.count == 3)
+        #expect(specs.map(\.appearsDisabled) == [true, true, true])
+        #expect(layout(all, slots: [2], current: 2).map(\.appearsDisabled) == [false, false, false])
+    }
+
+    @Test func emptyHistoryDimsBackButKeepsIt() {
+        let specs = layout([MenuBarItem(control: .back, enabled: true), MenuBarItem(control: .forward, enabled: true)], back: false)
+        #expect(specs.map(\.kind) == [.back, .forward])
+        #expect(specs.map(\.appearsDisabled) == [true, false])
+    }
+}

@@ -393,4 +393,56 @@ private let gesture = GestureEventFields.gestureType
         #expect(GestureTapRules.surface(at: point, in: [entry(7, 20, full)], excludingPID: own, display: display) == .wallpaper)
         #expect(GestureTapRules.surface(at: point, in: [entry(8, 25, small), entry(5, 0, small)], excludingPID: own, display: display) == .overlay)
     }
+
+    // MARK: - Settings ▸ Trackpad switches (09-06)
+
+    private func switches(option: Bool, wallpaper: Bool) -> GestureTapState {
+        var state = armed
+        state.takesOptionGestures = option
+        state.takesWallpaperGestures = wallpaper
+        return state
+    }
+
+    private func pinchStart(_ latch: inout GestureTapRules.Latch, flags: CGEventFlags, state: GestureTapState, surface: Surface) -> GestureTapRules.Decision {
+        decide(&latch, type: gesture, hid: GestureEventFields.hidZoom, gesturePhase: 1, zoom: 0.05, flags: flags, state: state, surface: surface)
+    }
+
+    @Test func anOptionPinchOverAWindowPassesWhenOptionGesturesAreOff() {
+        var latch = GestureTapRules.Latch.none
+        #expect(pinchStart(&latch, flags: option, state: switches(option: false, wallpaper: true), surface: Surface(.window)) == .pass)
+        #expect(latch.pinch?.passReason == .windowUnderPointer)
+    }
+
+    @Test func anOptionPinchOverTheWallpaperIsStillTakenWhenOnlyWallpaperIsOn() {
+        var latch = GestureTapRules.Latch.none
+        guard case .consume(let sample?) = pinchStart(&latch, flags: option, state: switches(option: false, wallpaper: true), surface: Surface(.wallpaper))
+        else { Issue.record("⌥ wallpaper pinch not taken"); return }
+        #expect(sample.reason == .wallpaper)
+    }
+
+    @Test func aBareWallpaperPinchPassesWhenWallpaperGesturesAreOff() {
+        var latch = GestureTapRules.Latch.none
+        #expect(pinchStart(&latch, flags: [], state: switches(option: true, wallpaper: false), surface: Surface(.wallpaper)) == .pass)
+        #expect(latch.pinch?.passReason == .turnedOff)
+        latch = .none
+        #expect(decide(&latch, phase: 1, state: switches(option: true, wallpaper: false), surface: Surface(.wallpaper)) == .pass)
+        #expect(latch.pan?.passReason == .turnedOff)
+        // ⌥ still takes it while its own switch is on.
+        latch = .none
+        #expect(isConsume(pinchStart(&latch, flags: option, state: switches(option: true, wallpaper: false), surface: Surface(.window))))
+    }
+
+    @Test func bothOnIsTodaysBehaviour() {
+        #expect(GestureTapState().takesOptionGestures && GestureTapState().takesWallpaperGestures)
+        var latch = GestureTapRules.Latch.none
+        guard case .consume(let held?) = pinchStart(&latch, flags: option, state: armed, surface: Surface(.window)) else {
+            Issue.record("⌥ pinch not taken"); return
+        }
+        #expect(held.reason == .optionHeld)
+        latch = .none
+        guard case .consume(let bare?) = pinchStart(&latch, flags: [], state: armed, surface: Surface(.wallpaper)) else {
+            Issue.record("wallpaper pinch not taken"); return
+        }
+        #expect(bare.reason == .wallpaper)
+    }
 }

@@ -264,7 +264,7 @@ public final class StagePanel: NSPanel {
             ring.cornerRadius = mark.radius
             ring.borderWidth = 2
             let alpha: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0.85
-            ring.borderColor = NSColor.controlAccentColor.withAlphaComponent(alpha).cgColor
+            ring.borderColor = HighlightColor.current.withAlphaComponent(alpha).cgColor
             container.addSublayer(ring)
             if let rect = mark.titleRect {
                 container.addSublayer(capsule(mark.title, in: localRect(rect), font: .systemFont(ofSize: 13), color: .labelColor))

@@ -40,6 +40,8 @@ import Testing
     @Test(.timeLimit(.minutes(1)))
     func theStripShowsOnlyOnItsGroupsSpace() async throws {
         let (display, first, second) = try desktops()
+        let relay = SpaceChangeRelay(display: display)  // D-17: the strip panels hear Space changes over SSH on 27.2
+        defer { relay.stop() }
         try #require(await show(first, on: display), "could not start on the first desktop")
         let group = try await SavedGroup.start()
         defer { group.close() }

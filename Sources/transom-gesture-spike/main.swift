@@ -348,6 +348,7 @@ func passText(_ reason: GestureTapRules.PassReason?) -> String {
     case .windowUnderPointer: requireAlt ? "no ⌥ (--require-alt)" : "window under pointer"
     case .overlayUnderPointer: "menu or popover under pointer"
     case .shortCircuit: "app under pointer"
+    case .turnedOff: "turned off in Settings"
     case nil: "–"
     }
 }
@@ -532,7 +533,7 @@ final class FixtureWindow {
 func wallpaperPoint(avoiding avoid: CGRect) -> CGPoint? {
     let display = CGDisplayBounds(CGMainDisplayID())
     guard let list = CGWindowList.onScreenFrontToBack() else { return nil }
-    var best: (CGPoint, Double)?
+    var best: (CGPoint, CGFloat)?
     for x in stride(from: display.minX + 4, to: display.maxX, by: 8) {
         for y in stride(from: display.minY + 4, to: display.maxY, by: 8) {
             let p = CGPoint(x: x, y: y)

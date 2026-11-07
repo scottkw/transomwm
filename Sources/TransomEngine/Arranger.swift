@@ -389,6 +389,7 @@ public struct Arranger: Sendable {
                 case (.togglePause, _): return togglePause()
                 case (.restoreAll, _): return try restoreAll()
                 case (.toggleExcludeFrontmost, _): return [.fault("toggleExcludeFrontmost reached the Arranger; the shell handles it")]
+                case (.settings, _): return [.fault("settings reached the Arranger; the shell handles it")]
                 case (.camera, _): return [.fault("camera command without a display")]  // answered above
                 case (.tabs, _): return [.fault("tab command reached the command switch")]  // answered above
                 case (.dock, nil), (.float, nil), (.focus, nil), (.moveOrSnap, nil), (.dockFourth, nil), (.dockCorner, nil), (.swapPrevious, nil), (.growTile, nil),
@@ -923,7 +924,7 @@ public struct Arranger: Sendable {
             return desk.desktop.contains(focused) && desk.state(of: focused) == .present
         case .finderSplit:
             return targetKey(focused).flatMap(display(for:)) != nil
-        case .togglePause, .toggleExcludeFrontmost, .restoreAll:
+        case .togglePause, .toggleExcludeFrontmost, .restoreAll, .settings:
             return true  // answered above
         case .camera(let command):
             return cameraAvailable(command, context: context)

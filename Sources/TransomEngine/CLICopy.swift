@@ -16,6 +16,7 @@ public enum CLICopy {
     }
     public static func needsSlot(_ command: String) -> String { "transom: \(command) needs a slot from 1 to 9, as in \"transom \(command) 3\"." }
     public static func takesNoArgument(_ command: String) -> String { "transom: \(command) takes no argument." }
+    public static let settingsTooManyArguments = "transom: settings takes at most one argument."
 
     /// Output is safe in any terminal, log or script: the app's curly quotes and "…" go straight, and anything else that
     /// isn't printable ASCII, such as a control character from whoever answered on the port, becomes "?".

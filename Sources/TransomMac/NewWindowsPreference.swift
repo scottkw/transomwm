@@ -1,16 +1,17 @@
 import Foundation
+import Observation
 import TransomEngine
 import os
 
 /// New Windows (D-01, D-19), kept in UserDefaults. The plist is user-writable: anything but the two modes is logged and
 /// replaced by the default.
-@MainActor final class NewWindowsPreference {
+@Observable @MainActor final class NewWindowsPreference {
     static let key = "newWindows"
     static let defaultValue = NewWindowsMode.float
     private(set) var value: NewWindowsMode
     /// Fires after every change; choosing the current value is not one.
-    var onChange: ((NewWindowsMode) -> Void)?
-    private let defaults: UserDefaults
+    @ObservationIgnored var onChange: ((NewWindowsMode) -> Void)?
+    @ObservationIgnored private let defaults: UserDefaults
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "preferences")
 
     init(defaults: UserDefaults = .standard) {

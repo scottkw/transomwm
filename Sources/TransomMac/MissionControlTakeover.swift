@@ -1,5 +1,6 @@
 import Foundation
 import KeyboardShortcuts
+import Observation
 import TransomEngine
 import TransomPrivate
 import os
@@ -58,15 +59,16 @@ struct LiveHotKeyBackend: HotKeyBackend {
 
 /// The Mission Control takeover (OVER-02, D-05, D-07): disables macOS's Mission Control shortcuts and catches their
 /// chords as Carbon hotkeys, so they reach `onTrigger`. The only writer of symbolic-hotkey state. Every disable is
-/// preceded by stored originals and followed by a read-back (TakeoverPolicy).
-@MainActor final class MissionControlTakeover {
+/// preceded by stored originals and followed by a read-back (TakeoverPolicy). Observable so Settings ▸ Zoom & Gestures
+/// and the Arranging tab's Restore button follow `state`.
+@Observable @MainActor final class MissionControlTakeover {
     enum State: Equatable {
         case off, on(keys: [Int32]), liftedForZoom, offAfterCrash, offApplyFailed, unavailable
     }
 
     enum LiftReason { case toggleOff, zoomOff, restoreSettings, quit }
 
-    /// Replace Mission Control (off by default, D-06). Only the menu toggle (06-11) and tests write it; no URL.
+    /// Replace Mission Control (off by default, D-06). Only the Settings toggle (09-07) and tests write it; no URL.
     static let enabledKey = "takeover.enabled"
     /// The explanation alert was confirmed once (Surface 5); saved only on confirm.
     static let explainedKey = "takeover.explained"
@@ -75,19 +77,19 @@ struct LiveHotKeyBackend: HotKeyBackend {
     /// The canary tripped at launch and N10 has not shown for it yet (06-11 posts it, then calls `crashNoticeShown`).
     private(set) var pendingCrashNotice = false
     /// A taken chord was pressed (after the drift check).
-    var onTrigger: () -> Void = {}
+    @ObservationIgnored var onTrigger: () -> Void = {}
     /// Queues a toast (N10, N11); set by ArrangeController.
-    var post: (Notice) -> Void = { _ in }
+    @ObservationIgnored var post: (Notice) -> Void = { _ in }
     /// A VoiceOver announcement; set by ArrangeController.
-    var announce: (String) -> Void = { _ in }
+    @ObservationIgnored var announce: (String) -> Void = { _ in }
 
-    private let defaults: UserDefaults
-    private let backend: any HotKeyBackend
-    private let store: UserDefaultsTakeoverStore
-    private let canary: MissionControlCanary
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let backend: any HotKeyBackend
+    @ObservationIgnored private let store: UserDefaultsTakeoverStore
+    @ObservationIgnored private let canary: MissionControlCanary
     private var zoomOn: Bool
-    private var keyTasks: [Task<Void, Never>] = []
-    private let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
+    @ObservationIgnored private var keyTasks: [Task<Void, Never>] = []
+    @ObservationIgnored private let log = Logger(subsystem: "com.eightabyte.transom", category: "missionControl")
 
     init(defaults: UserDefaults = .standard, backend: any HotKeyBackend = LiveHotKeyBackend(), zoomOn: Bool) {
         self.defaults = defaults
@@ -99,7 +101,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
 
     var preferenceOn: Bool { defaults.bool(forKey: Self.enabledKey) }
     var isOn: Bool { if case .on = state { true } else { false } }
-    /// The private symbols resolve (O2 reads "(unavailable)" otherwise).
+    /// The private symbols resolve (the Settings toggle is disabled otherwise).
     var isAvailable: Bool { backend.isAvailable }
 
     /// OVER-03, before the Arranger starts: stored originals mean the last run did not lift, so they are restored
@@ -126,7 +128,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
         }
     }
 
-    /// The menu toggle: on clears a tripped canary and applies (or waits for zoom); off lifts.
+    /// The preference: on clears a tripped canary and applies (or waits for zoom); off lifts.
     func setPreference(_ on: Bool) {
         defaults.set(on, forKey: Self.enabledKey)
         guard on else { return lift(reason: .toggleOff) }
@@ -135,7 +137,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
         if zoomOn { apply() } else { state = .liftedForZoom }
     }
 
-    /// O2 (Surface 5): on turns off at once; off turns on after the one-time explanation, unless it was confirmed
+    /// The Settings toggle (Surface 5, D-04): on turns off at once; off turns on after the one-time explanation, unless it was confirmed
     /// before or a crash turned the takeover off. `explain` shows the alert and answers whether the user confirmed.
     func choose(explain: (_ answered: @escaping (Bool) -> Void) -> Void) {
         if isOn {
@@ -261,7 +263,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
             let state = readBack(ids)
             restore(originals)
             self.state = .offApplyFailed
-            defaults.set(false, forKey: Self.enabledKey)  // WR-03: O2 can turn it on again; N11 does not repeat every launch
+            defaults.set(false, forKey: Self.enabledKey)  // WR-03: Settings can turn it on again; N11 does not repeat every launch
             log.error("takeover apply failed: read-back \(String(describing: state), privacy: .public); originals restored")
             post(.takeoverApplyFailed)
             return false

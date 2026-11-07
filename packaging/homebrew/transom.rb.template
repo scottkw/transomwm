@@ -1,0 +1,28 @@
+cask "transom" do
+  version "{{VERSION}}"
+  sha256 "{{SHA256}}"
+
+  url "https://github.com/scottkw/transomwm/releases/download/v#{version}/Transom-#{version}-universal.dmg"
+  name "Transom"
+  desc "Tiling window manager with nested tiles and a zoomable desk"
+  homepage "https://github.com/scottkw/transomwm"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  depends_on macos: :sonoma
+
+  app "Transom.app"
+  binary "#{appdir}/Transom.app/Contents/Helpers/transom"
+
+  uninstall quit:       "com.eightabyte.transom",
+            login_item: "Transom"
+
+  zap trash: [
+    "~/Library/Application Support/Transom",
+    "~/Library/Caches/com.eightabyte.transom",
+    "~/Library/Preferences/com.eightabyte.transom.plist",
+  ]
+end

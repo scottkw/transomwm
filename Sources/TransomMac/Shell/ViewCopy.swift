@@ -29,4 +29,10 @@ nonisolated public enum ViewCopy {
 
     /// One line for VoiceOver when going to a view moves the camera: the view, then the Phase 4 reveal.
     public static func joinedAnnouncement(slot: Int, reveal: String) -> String { "View \(slot). \(reveal)" }
+
+    // Menu-bar view controls (09 UI-SPEC Surface 4, Tab 6).
+    public static let back = "Back"
+    public static let forward = "Forward"
+    public static func viewControl(_ slot: Int, current: Bool) -> String { current ? "View \(slot), current" : "View \(slot)" }
+    public static let menuBarFooter = "These show next to the Transom icon while zoom is on, in this order from left to right."
 }

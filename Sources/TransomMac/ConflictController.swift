@@ -1,25 +1,27 @@
 import AppKit
+import Observation
 import TransomEngine
 import os
 
 /// Watches the macOS features that fight Transom (SAFE-04, D-19 to D-22): polls com.apple.WindowManager every 2 s and on
 /// activation, pauses arranging while Stage Manager is on, and turns a feature off on request, recording each key's
 /// original once, before the first write, and reading the write back. `ConflictPolicy` decides; this does the I/O.
-@MainActor final class ConflictController: NSObject, NSWindowDelegate {
+/// Observable so Settings ▸ Arranging follows `active` and `originals` like the menu (D-02); nothing else is tracked.
+@Observable @MainActor final class ConflictController: NSObject, NSWindowDelegate {
     static let originalsKey = "windowManagerOriginals"
 
     /// `.setPaused(.stageManager, on)`, sent when Stage Manager's state first becomes known and on every change.
-    var setStageManagerPaused: (Bool) -> Void = { _ in }
+    @ObservationIgnored var setStageManagerPaused: (Bool) -> Void = { _ in }
     /// Toasts N7 and N8.
-    var post: (Notice) -> Void = { _ in }
-    var openSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
+    @ObservationIgnored var post: (Notice) -> Void = { _ in }
+    @ObservationIgnored var openSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
     static let notNowKey = "conflictNotNow"
     /// Shows one alert; nil shows none (unit tests). TransomMacApp sets `showModelessAlert`.
-    var presentAlert: ((Conflict) -> Void)?
+    @ObservationIgnored var presentAlert: ((Conflict) -> Void)?
     /// A due alert waits while this is true and shows after mouse-up (D-19).
-    var isDragging: () -> Bool = { false }
+    @ObservationIgnored var isDragging: () -> Bool = { false }
     /// The alert that is up, if any: only one at a time.
-    private(set) var shownAlert: Conflict?
+    @ObservationIgnored private(set) var shownAlert: Conflict?
     static let desktopAndDock = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!
     private(set) var active: Set<Conflict> = []
     /// Each written key's value before Transom first wrote it; `.absent` means Restore deletes the key.
@@ -29,17 +31,17 @@ import os
     private let defaults: UserDefaults
     private let osMajor: Int
     private let readBackDelay: Duration
-    private var reportedStageManager: Bool?
+    @ObservationIgnored private var reportedStageManager: Bool?
     /// Answered Not Now during the current on-episode; kept across relaunches (`conflictNotNow`).
-    private var notNow: Set<Conflict>
+    @ObservationIgnored private var notNow: Set<Conflict>
     /// Turned back on by Restore, so this on-episode raises no alert.
-    private var restoredByTransom: Set<Conflict> = []
-    private var queue: [Conflict] = []
-    private var alert: NSAlert?
+    @ObservationIgnored private var restoredByTransom: Set<Conflict> = []
+    @ObservationIgnored private var queue: [Conflict] = []
+    @ObservationIgnored private var alert: NSAlert?
     private let dragRetry = WakeTimer()
-    private var reportedBadKeys: Set<String> = []
-    private var pollTask: Task<Void, Never>?
-    private var activationObserver: NSObjectProtocol?
+    @ObservationIgnored private var reportedBadKeys: Set<String> = []
+    @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var activationObserver: NSObjectProtocol?
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "conflicts")
 
     /// Edge tiling exists from macOS 15 (Pitfall 12): gated on the OS version, never on key presence.
@@ -199,7 +201,7 @@ import os
     }
 
     /// Restore macOS Window Settings also turns the Mission Control takeover off (Surface 5); set by the app.
-    var takeover: MissionControlTakeover?
+    @ObservationIgnored var takeover: MissionControlTakeover?
 
     /// Restore macOS Window Settings is enabled only with something recorded, while the takeover is on, or while its
     /// originals are still stored because a restore did not take (WR-02).

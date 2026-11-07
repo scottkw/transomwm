@@ -92,7 +92,7 @@ import os
     public var isZoomEnabled: Bool { zoomEnabled }
     private let zoomInputLog = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
     private let cameraLog = Logger(subsystem: "com.eightabyte.transom", category: "camera")
-    /// Fires after each reveal and when zoom turns off (the status item's "zoomed in" description).
+    /// Fires after each reveal, when zoom turns on or off and when a view is saved (the status glyph, the view controls).
     public var onViewChanged: (() -> Void)?
     /// Turn Off Zoom in progress: the displays whose move home has not revealed yet.
     private var turningOff = false
@@ -122,6 +122,8 @@ import os
     /// The gesture session tap (05-03): runs only while zoom is on and the mouse tap runs (D-07).
     private let gestureTap = GestureTap()
     private(set) lazy var gestures = GestureController(tap: gestureTap, controller: self)
+    /// Settings ▸ Trackpad's two switches (09-06); this file owns the one instance.
+    let gesturePreference = GesturePreference()
     public var isGestureTapRunning: Bool { gestureTap.isRunning }
     /// Multitouch devices are open (05-07): only while the gesture tap runs, never with zoom off (D-07).
     public var isMultitouchRunning: Bool { gestures.multitouch.isRunning }
@@ -170,6 +172,10 @@ import os
         tabStripPanels.bounds = { [weak self] window in
             let id = self?.arranger.windows[window.identity]?.visibleMemberID ?? window.windowID
             return id < WindowIdentity.syntheticIDBase ? DragFramePoller.bounds(of: id) : nil
+        }
+        gesturePreference.onChange = { [weak self] in
+            self?.gestures.publish()
+            self?.updateGestureTap(reason: "settings")
         }
     }
 
@@ -416,16 +422,23 @@ import os
         gestures.publish()
     }
 
-    /// Starts the gesture tap when zoom is on and the mouse tap runs, else stops it (D-07). A tap macOS took down is
-    /// started again.
+    /// Starts the gesture tap when zoom is on, the mouse tap runs and a Trackpad switch is on, else stops it (D-07,
+    /// 09-06). A tap macOS took down is started again.
     func updateGestureTap(reason: String) {
-        if zoomEnabled && tap.isRunning {
+        if Self.wantsGestureTap(
+            zoomEnabled: zoomEnabled, tapRunning: tap.isRunning, option: gesturePreference.takesOption, wallpaper: gesturePreference.takesWallpaper)
+        {
             guard !gestureTap.isRunning else { return }
             gestures.stop(reason: reason)
             gestureTapFailedToStart = !gestures.start()
         } else {
             gestures.stop(reason: reason)
         }
+    }
+
+    /// Both Trackpad switches off means no gesture tap, as with zoom off.
+    nonisolated static func wantsGestureTap(zoomEnabled: Bool, tapRunning: Bool, option: Bool, wallpaper: Bool) -> Bool {
+        zoomEnabled && tapRunning && (option || wallpaper)
     }
 
     /// The green buttons the tap last got, so an unchanged set is not swapped in again.
@@ -617,6 +630,9 @@ import os
     /// The refusal sound; a seam for tests.
     var beep: () -> Void = { NSSound.beep() }
 
+    /// Opens Settings on a pane, or the last one when nil (D-04); the status item sets it to `showSettings(_:from:)`.
+    var openSettings: ((SettingsPane?, CommandSource) -> Void)?
+
     /// Every route (hotkey, menu item, URL) calls this. A command that cannot act beeps (UI-SPEC: no hotkey fails
     /// silently), except from a URL, whose user may not be at the keyboard (Pitfall 21).
     public func dispatch(_ command: Command, from source: CommandSource = .hotkey) async {
@@ -648,6 +664,11 @@ import os
     }
 
     private func refusableEffects(of command: Command, from source: CommandSource, afterSwitch: Bool) -> [ArrangerEffect] {
+        // Before the overview interrupt, so a settings URL never closes the overview first.
+        if case .settings(let pane) = command {
+            openSettings?(pane, source)
+            return []
+        }
         if command == .toggleExcludeFrontmost {
             // The store's onChange hands the list to the window system, whose windowChanged events float the windows.
             if let exclusions, Self.toggleExclusion(of: NSWorkspace.shared.frontmostApplication, in: exclusions) { return [] }
@@ -841,6 +862,7 @@ import os
                 logger.info("\(message, privacy: .public)")
             case .notice(let notice):
                 post(notice)
+                if case .viewSaved = notice { onViewChanged?() }  // a new saved-view badge in the menu bar
             case .save(.debounced):
                 saveTimer.set(.now + .milliseconds(500)) { [weak self] in self?.write() }
             case .save(.now):
@@ -1088,6 +1110,7 @@ import os
         takeover?.zoomChanged(on: true)
         postAnnouncement(ZoomCopy.zoomOnAnnouncement)
         cameraLog.info("zoom on")
+        onViewChanged?()  // the menu-bar view controls appear with zoom
     }
 
     private func finishZoomOff() async {

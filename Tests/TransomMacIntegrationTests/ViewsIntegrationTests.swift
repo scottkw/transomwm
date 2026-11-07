@@ -155,6 +155,8 @@ import Testing
         .timeLimit(.minutes(1)), .enabled(if: IntegrationEnv.inVM, "VM only: posts Mission Control chords and switches Spaces"))
     func aViewOnAnotherSpaceSwitchesFirst() async throws {
         let (display, first, second) = try desktops()
+        let relay = SpaceChangeRelay(display: display)  // D-17: the Arranger hears Space changes over SSH on 27.2
+        defer { relay.stop() }
         try await show(first, on: display)
         do {
             try await show(second, on: display)

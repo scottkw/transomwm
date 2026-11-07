@@ -17,12 +17,19 @@ import Testing
         let woken = waiters
         waiters = []
         for waiter in woken { waiter.resume() }
-        for _ in 0..<10 { await Task.yield() }
+        // A fixed few yields was enough locally but not on the CI runner in release builds.
+        for _ in 0..<200 { await Task.yield() }
     }
 
     /// Lets a just-started quiet task reach its sleep.
+    /// Yields until no new sleep has started for 20 yields in a row (at most 2000), so a slow runner still gets there.
     func settle() async {
-        for _ in 0..<10 { await Task.yield() }
+        var quiet = 0
+        for _ in 0..<2000 where quiet < 20 {
+            let before = durations.count
+            await Task.yield()
+            quiet = durations.count == before ? quiet + 1 : 0
+        }
     }
 }
 

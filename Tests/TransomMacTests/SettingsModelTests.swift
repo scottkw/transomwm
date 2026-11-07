@@ -1,0 +1,245 @@
+import Foundation
+import Observation
+import TransomEngine
+@testable import TransomMac
+import Testing
+
+/// Counts observation callbacks, which arrive in a `@Sendable` closure; the change fires synchronously on this actor.
+private final class Count: @unchecked Sendable { var value = 0 }
+
+/// D-02, SHIP-01: Settings ▸ Arranging and the menu share one store, and a Settings write takes the menu's path.
+@Suite @MainActor struct SettingsModelTests {
+    /// A throwaway defaults domain, never the user's.
+    private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
+        let suite = "com.eightabyte.transom.tests.settings.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try body(defaults)
+    }
+
+    @Test func aGapChosenInSettingsFiresTheSameChangeAsTheMenu() throws {
+        try withDefaults { defaults in
+            let gaps = GapPreference(defaults: defaults)
+            var changes: [Double] = []
+            gaps.onChange = { changes.append($0) }
+            ArrangingTab.gapBinding(gaps).wrappedValue = 16
+            #expect(gaps.value == 16)
+            #expect(defaults.double(forKey: GapPreference.key) == 16)
+            #expect(changes == [16])
+        }
+    }
+
+    @Test func aGapChosenInTheMenuIsSeenBySettings() throws {
+        try withDefaults { defaults in
+            let gaps = GapPreference(defaults: defaults)
+            let told = Count()
+            withObservationTracking({ _ = gaps.value }, onChange: { told.value += 1 })
+            _ = gaps.set(4)
+            #expect(told.value == 1)
+            #expect(ArrangingTab.gapBinding(gaps).wrappedValue == 4)
+        }
+    }
+
+    @Test func newWindowsChosenInSettingsFiresOnce() throws {
+        try withDefaults { defaults in
+            let newWindows = NewWindowsPreference(defaults: defaults)
+            var changes: [NewWindowsMode] = []
+            newWindows.onChange = { changes.append($0) }
+            ArrangingTab.newWindowsBinding(newWindows).wrappedValue = .tile
+            ArrangingTab.newWindowsBinding(newWindows).wrappedValue = .tile
+            #expect(newWindows.value == .tile)
+            #expect(changes == [.tile], "choosing the current mode again fires nothing")
+            #expect(NewWindowsPreference(defaults: defaults).value == .tile)
+        }
+    }
+
+    @Test func dragToDockChosenInSettingsFiresOnce() throws {
+        try withDefaults { defaults in
+            let dragToDock = DragToDockPreference(defaults: defaults)
+            var changes: [DragToDockMode] = []
+            dragToDock.onChange = { changes.append($0) }
+            ArrangingTab.dragToDockBinding(dragToDock).wrappedValue = .holdOption
+            #expect(dragToDock.value == .holdOption)
+            #expect(changes == [.holdOption])
+            #expect(DragToDockPreference(defaults: defaults).value == .holdOption)
+        }
+    }
+
+    @Test func theModeFootersAreTheMenuTooltips() {
+        for mode in NewWindowsMode.allCases { #expect(ArrangingTab.footer(mode) == MenuCopy.newWindowsTooltip(mode)) }
+        for mode in DragToDockMode.allCases { #expect(ArrangingTab.footer(mode) == MenuCopy.dragToDockTooltip(mode)) }
+    }
+
+    @Test func turningAFeatureOffIsSeenBySettings() async {
+        let (defaults, cleanUp) = ConflictControllerTests.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = ["GloballyEnabled": .bool(true), "EnableStandardClickToShowDesktop": .bool(false)]
+        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 14, readBackDelay: .zero)
+        let told = Count()
+        withObservationTracking({ _ = conflicts.active }, onChange: { told.value += 1 })
+        conflicts.poll()
+        #expect(told.value == 1)
+        #expect(conflicts.active == [.stageManager])
+
+        withObservationTracking({ _ = conflicts.active }, onChange: { told.value += 1 })
+        await conflicts.turnOff(.stageManager)
+        #expect(told.value == 2)
+        #expect(!conflicts.active.contains(.stageManager))
+    }
+
+    @Test func theFeatureRowsAreTheThreeConflictsInOrder() async {
+        let (defaults, cleanUp) = ConflictControllerTests.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = ["GloballyEnabled": .bool(true), "EnableStandardClickToShowDesktop": .bool(false)]
+        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 14, readBackDelay: .zero)
+        conflicts.poll()
+        let rows = ArrangingTab.featureRows(conflicts)
+        #expect(rows.map(\.conflict) == [.stageManager, .edgeTiling, .clickWallpaper])
+        #expect(rows.map(\.name) == ["Stage Manager", "macOS edge tiling", "Click wallpaper to reveal desktop"])
+        #expect(rows.map(\.detail) == Conflict.allCases.map(ConflictCopy.tooltip))
+        #expect(rows.map(\.isOn) == [true, false, false])
+        #expect(!conflicts.canRestore, "nothing turned off yet, nothing to restore")
+
+        await conflicts.turnOff(.stageManager)
+        #expect(ArrangingTab.featureRows(conflicts).map(\.isOn) == [false, false, false])
+        #expect(conflicts.canRestore)
+    }
+
+    @Test func theZoomToggleCallsTheMenuPathAndWritesNoKeyItself() throws {
+        try withDefaults { defaults in
+            var calls: [Bool] = []
+            let binding = ZoomGesturesTab.zoomBinding(isOn: true) { (on: Bool) -> Void in calls.append(on) }
+            #expect(binding.wrappedValue)
+            binding.wrappedValue = false
+            #expect(calls == [false])
+            #expect(defaults.object(forKey: ZoomController.enabledKey) == nil)
+        }
+    }
+
+    @Test func theMouseFooterFollowsZoom() {
+        #expect(ZoomGesturesTab.mouseFooter(zoomOn: true) == ZoomCopy.doubleClickFooterOn)
+        #expect(ZoomGesturesTab.mouseFooter(zoomOn: false) == "Turn on zoom to use this.")
+    }
+
+    @Test func bothTrackpadSwitchesOffMeansNoGestureTap() {
+        #expect(!ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: true, option: false, wallpaper: false))
+        #expect(ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: true, option: true, wallpaper: false))
+        #expect(ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: true, option: false, wallpaper: true))
+        #expect(!ArrangeController.wantsGestureTap(zoomEnabled: false, tapRunning: true, option: true, wallpaper: true))
+        #expect(!ArrangeController.wantsGestureTap(zoomEnabled: true, tapRunning: false, option: true, wallpaper: true))
+    }
+
+    @Test func theOptionToggleWritesItsKeyAndFiresOnce() throws {
+        try withDefaults { defaults in
+            let gestures = GesturePreference(defaults: defaults)
+            #expect(gestures.takesOption && gestures.takesWallpaper, "both default on")
+            var changes = 0
+            gestures.onChange = { changes += 1 }
+            let binding = ZoomGesturesTab.optionBinding(gestures)
+            binding.wrappedValue = false
+            #expect(!binding.wrappedValue)
+            #expect(defaults.object(forKey: GesturePreference.optionKey) as? Bool == false)
+            #expect(defaults.object(forKey: GesturePreference.wallpaperKey) == nil)
+            #expect(changes == 1)
+            #expect(!GesturePreference(defaults: defaults).takesOption)
+        }
+    }
+
+    @Test func aStoredGestureSwitchThatIsNotABoolIsRemoved() throws {
+        try withDefaults { defaults in
+            defaults.set(0, forKey: GesturePreference.wallpaperKey)
+            #expect(GesturePreference(defaults: defaults).takesWallpaper)
+            #expect(defaults.object(forKey: GesturePreference.wallpaperKey) == nil)
+        }
+    }
+
+    @Test func exclusionRowsSortByNameAndShowUninstalledAppsByBundleID() throws {
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            for id in ["com.example.zed", "com.example.gone", "com.example.alpha"] { try store.add(id) }
+            let names = ["com.example.zed": "Zed", "com.example.alpha": String(repeating: "A", count: 40)]
+            let rows = ExclusionsTab.rows(store) { names[$0] }
+            // An uninstalled app sorts by its bundle ID, its title, as in the menu.
+            #expect(rows.map(\.bundleID) == ["com.example.alpha", "com.example.gone", "com.example.zed"])
+            #expect(rows[0].title == MenuCopy.truncatedAppName(String(repeating: "A", count: 40)))
+            #expect(rows[0].installed && rows[2].installed)
+            #expect(rows[1] == ExclusionsTab.Row(bundleID: "com.example.gone", title: "com.example.gone", installed: false))
+        }
+    }
+
+    @Test func removingInSettingsUnexcludesTheAppAndFiresOnChange() throws {
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            try store.add("com.apple.Safari")
+            var changes = 0
+            store.onChange = { changes += 1 }
+            store.remove("com.apple.Safari")
+            #expect(!store.contains("com.apple.Safari"))
+            #expect(ExclusionsTab.rows(store) { _ in nil }.isEmpty)
+            #expect(ExclusionStore(defaults: defaults).bundleIDs.isEmpty, "the menu's store reads the same defaults")
+            #expect(changes == 1)
+        }
+    }
+
+    @Test func addingTransomItselfIsRefused() throws {
+        let own = "com.eightabyte.transom"
+        #expect(ExclusionsTab.decide(bundleID: own, own: own) == .refuseSelf)
+        #expect(ExclusionsTab.decide(bundleID: "COM.eightabyte.Transom", own: own) == .refuseSelf, "compared case-insensitively")
+        #expect(ExclusionsTab.decide(bundleID: "\(own).debug", own: "\(own).debug") == .refuseSelf)
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            let refusal = ExclusionsTab.exclude([(bundleID: own, name: "Transom")], own: own, in: store)
+            #expect(refusal == SettingsCopy.cantExcludeSelf)
+            #expect(store.bundleIDs.isEmpty)
+        }
+    }
+
+    @Test func anAppWithNoBundleIDIsRefused() throws {
+        #expect(ExclusionsTab.decide(bundleID: nil, own: "com.eightabyte.transom") == .refuseNoBundleID)
+        #expect(ExclusionsTab.decide(bundleID: "unbundled:Foo", own: "com.eightabyte.transom") == .refuseNoBundleID)
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            let refusal = ExclusionsTab.exclude(
+                [(bundleID: nil, name: "Tool"), (bundleID: "com.apple.Safari", name: "Safari")], own: "com.eightabyte.transom", in: store)
+            #expect(refusal == "Tool has no bundle ID, so it can't be excluded.")
+            #expect(store.bundleIDs == ["com.apple.Safari"], "the other chosen app is still added")
+        }
+    }
+
+    @Test func anAppIsAddedOnce() throws {
+        #expect(ExclusionsTab.decide(bundleID: "com.apple.Safari", own: "com.eightabyte.transom") == .add("com.apple.Safari"))
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            var changes = 0
+            store.onChange = { changes += 1 }
+            let safari: [(bundleID: String?, name: String)] = [(bundleID: "com.apple.Safari", name: "Safari")]
+            #expect(ExclusionsTab.exclude(safari, own: "com.eightabyte.transom", in: store) == nil)
+            #expect(ExclusionsTab.exclude(safari, own: "com.eightabyte.transom", in: store) == nil)
+            #expect(store.bundleIDs == ["com.apple.Safari"])
+            #expect(changes == 1, "adding an app already excluded fires nothing")
+        }
+    }
+
+    @Test func theAccessibilityRowFollowsEveryPhase() {
+        func row(_ phase: PermissionPhase, formB: Bool = false) -> (status: String, button: String?) {
+            var state = PermissionState()
+            state.phase = phase
+            state.showStaleFormB = formB
+            return GeneralTab.accessibilityRow(state)
+        }
+        #expect(row(.ready) == ("On", nil))
+        #expect(row(.notTrusted) == ("Off", "Set Up\u{2026}"))
+        #expect(row(.waitingForGrant) == ("Off", "Set Up\u{2026}"))
+        #expect(row(.probing) == ("Off", "Set Up\u{2026}"))
+        #expect(row(.staleTrustedButFailing) == ("Not working", "Fix\u{2026}"))
+        #expect(row(.resetting) == ("Not working", "Fix\u{2026}"))
+        #expect(row(.waitingForGrant, formB: true) == ("Not working", "Fix\u{2026}"))
+    }
+
+    @Test func theScreenRecordingRowOffersAllow() {
+        #expect(GeneralTab.screenRecordingRow(granted: true) == ("On", nil))
+        #expect(GeneralTab.screenRecordingRow(granted: false) == ("Off", "Allow\u{2026}"))
+    }
+}

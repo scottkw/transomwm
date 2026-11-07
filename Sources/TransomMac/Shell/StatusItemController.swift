@@ -18,11 +18,18 @@ import os
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
     private let conflicts: ConflictController
+    private let updates: UpdateController
     private let showSetup: () -> Void
     private let showTrackedWindows: () -> Void
+    private let loginItem: any LoginItemService = SystemLoginItem()
+    private let menuBar = MenuBarPreference()
+    private let viewControls: ViewControlItems
     private var permissionSubscription: AnyCancellable?
+    private var updateSubscription: AnyCancellable?
     /// The last access state the subscription saw (it fires before `permission.state` updates).
     private var ready = false
+    /// The last update status the subscription saw, for the same reason.
+    private var updateStatus: UpdateStatus = .idle
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "shell")
     private(set) var latest = WindowInventory(displays: [], windows: []) {
@@ -36,18 +43,19 @@ import os
     private var nudgePlanner = NudgePlanner()
     /// Installed apps' display names by bundle ID, so a menu rebuild does not ask Launch Services per row (02-UI-REVIEW).
     private var displayNames: [String: String] = [:]
-    private lazy var shortcutsWindow = ShortcutsWindowController()
+    private lazy var settingsWindow = SettingsWindowController(tabs: settingsTabs())
     /// The Replace Mission Control explanation while it is up or waiting to show.
     private var takeoverAlert: TakeoverAlert?
 
     /// `showSetup` opens the "Set Up Transom" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
         system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
-        gaps: GapPreference, dragToDock: DragToDockPreference, newWindows: NewWindowsPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        gaps: GapPreference, dragToDock: DragToDockPreference, newWindows: NewWindowsPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, updates: UpdateController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.arrange = arrange
         commands = CommandMenu(dispatch: dispatch)
+        viewControls = ViewControlItems(dispatch: dispatch)
         self.permission = permission
         self.gaps = gaps
         self.dragToDock = dragToDock
@@ -55,6 +63,7 @@ import os
         self.exclusions = exclusions
         self.freezeTest = freezeTest
         self.conflicts = conflicts
+        self.updates = updates
         self.showTrackedWindows = showTrackedWindows
         self.showSetup = showSetup
         super.init()
@@ -63,8 +72,26 @@ import os
                 self?.ready = ready
                 self?.updateGlyph()
             }
-        arrange.onPauseChanged = { [weak self] in self?.updateGlyph() }
-        arrange.onViewChanged = { [weak self] in self?.updateGlyph() }
+        // @Published fires before the change lands, so the dot is read from the emitted value.
+        updateSubscription = updates.$machine.map(\.status).removeDuplicates()
+            .sink { [weak self] status in
+                self?.updateStatus = status
+                self?.updateGlyph()
+            }
+        updates.startAutomatic()
+        arrange.onPauseChanged = { [weak self] in
+            self?.updateGlyph()
+            self?.refreshViewControls()
+        }
+        arrange.onViewChanged = { [weak self] in
+            self?.updateGlyph()
+            self?.refreshViewControls()
+        }
+        menuBar.onChange = { [weak self] in self?.refreshViewControls() }
+        arrange.openSettings = { [weak self] pane, source in
+            let word = switch source { case .hotkey: "hotkey"; case .menu: "menu"; case .url: "url"; case .cli: "cli" }
+            self?.showSettings(pane, from: word)
+        }
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -73,6 +100,21 @@ import os
     /// The latest inventory, re-read by `ArrangeController` after each event (it is the only events reader).
     func update(_ inventory: WindowInventory) {
         latest = inventory
+        refreshViewControls()  // a no-op unless the controls changed; covers the layout restored at launch
+    }
+
+    /// The view-control status items from the Menu Bar choices and the pointer display's camera (UI-SPEC Surface 4).
+    private func refreshViewControls() {
+        let arranger = arrange.arranger
+        let uuid = arrange.pointerDisplay().uuid
+        let context = CommandContext(focused: nil, ready: ready, displayUUID: uuid)
+        viewControls.refresh(
+            ViewControlItems.layout(
+                items: menuBar.items, iconOnly: menuBar.iconOnly, zoomOn: arrange.isZoomEnabled,
+                paused: ready && !arranger.pauseReasons.isEmpty, slots: arranger.savedViewSlots,
+                current: uuid.flatMap { arranger.currentViewSlot(displayUUID: $0)?.number },
+                backAvailable: arranger.availability(.camera(.back), context: context),
+                forwardAvailable: arranger.availability(.camera(.forward), context: context)))
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -103,9 +145,14 @@ import os
             menu.addItem(debugMenuItem())
         }
         menu.addItem(.separator())
-        let shortcuts = NSMenuItem(title: ZoomCopy.shortcutsItem, action: #selector(openShortcuts), keyEquivalent: "")
-        shortcuts.target = self
-        menu.addItem(shortcuts)
+        addUpdateItems(to: menu)
+        let settings = NSMenuItem(title: SettingsCopy.menuItem, action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
+        let report = NSMenuItem(title: MenuCopy.reportProblem, action: #selector(reportProblem), keyEquivalent: "")
+        report.target = self
+        report.toolTip = MenuCopy.reportProblemTooltip
+        menu.addItem(report)
         let quit = NSMenuItem(title: "Quit Transom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
@@ -167,21 +214,12 @@ import os
         let uuid = context.displayUUID
         let section = commands.zoomSection(
             enabled: on, framingWindow: uuid.map { arranger.isFramingFocused(displayUUID: $0, focused: context.focused) } ?? false,
-            takeover: takeoverMenuItem(), previews: previews, toggle: toggle)
+            previews: previews, toggle: toggle)
         for item in section { menu.addItem(item) }
     }
 
-    /// O2: checked while the takeover is on; "(unavailable)" and disabled without the private symbols.
-    private func takeoverMenuItem() -> NSMenuItem? {
-        guard let takeover = arrange.takeover else { return nil }
-        guard takeover.isAvailable else { return Self.info(OverviewCopy.replaceMissionControlUnavailable) }
-        let item = NSMenuItem(title: OverviewCopy.replaceMissionControl, action: #selector(toggleTakeover), keyEquivalent: "")
-        item.target = self
-        item.state = takeover.isOn ? .on : .off
-        return item
-    }
-
-    @objc private func toggleTakeover() {
+    /// Settings ▸ Zoom & Gestures' Mission Control toggle (D-04, Surface 5): the explanation alert, then `choose` decides.
+    private func chooseTakeover() {
         guard let takeover = arrange.takeover, takeoverAlert == nil else { return }
         takeover.choose { [weak self] answered in
             guard let self else { return }
@@ -258,22 +296,115 @@ import os
         dragToDock.set(DragToDockMode.allCases[sender.tag])
     }
 
+    /// The asset-catalog glyph for a state (UI-SPEC Surface 8): nil (the warning symbol) until access is ready;
+    /// paused keeps the normal glyph (dimmed by appearsDisabled); the zoomed variant only while zoomed in.
+    nonisolated static func glyphName(ready: Bool, paused: Bool, zoomed: Bool) -> String? {
+        !ready ? nil : zoomed && !paused ? "TransomZoomedTemplate" : "TransomTemplate"
+    }
+
     /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.
     /// While the pointer display's view is not home it reads "Transom: zoomed in" (paused and not ready win).
-    /// No explicit symbol size: the default (18 x 14 pt) fits the 22 pt square item on every menu bar; a forced 16 pt image measured 23 x 18 pt and lost its bottom edge on a 1x display.
+    /// The Transom templates are drawn on the 18 x 18 pt menu-bar canvas. No explicit size on SF Symbols: the default (18 x 14 pt) fits the 22 pt square item on every menu bar; a forced 16 pt image measured 23 x 18 pt and lost its bottom edge on a 1x display.
     private func updateGlyph() {
         guard let button = statusItem.button else { return }
         let paused = ready && !arrange.arranger.pauseReasons.isEmpty
         let zoomed = arrange.isZoomEnabled && arrange.pointerDisplay().uuid.map { arrange.arranger.view(on: $0) != .home } == true
-        let (symbol, description) =
-            !ready ? ("exclamationmark.triangle", "Transom: Accessibility access needed")
-            : paused ? ("rectangle.split.2x1", MenuCopy.pausedGlyphDescription)
-            : zoomed ? ("rectangle.split.2x1", ZoomCopy.zoomedInDescription) : ("rectangle.split.2x1", "Transom")
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        let dot = Self.showsDot(updateStatus, ready: ready)
+        let suffix = dot ? UpdateCopy.updateAvailableSuffix : ""
+        let description =
+            (!ready ? "Transom: Accessibility access needed"
+            : paused ? MenuCopy.pausedGlyphDescription
+            : zoomed ? ZoomCopy.zoomedInDescription : "Transom") + suffix
+        var image: NSImage?
+        // A copy: NSImage(named:) hands out one shared instance. No catalog under `swift run`, so the symbol stays.
+        if let name = Self.glyphName(ready: ready, paused: paused, zoomed: zoomed),
+           let named = NSImage(named: name)?.copy() as? NSImage {
+            named.size = NSSize(width: 18, height: 18)
+            image = named
+        } else {
+            image = NSImage(systemSymbolName: ready ? "rectangle.split.2x1" : "exclamationmark.triangle", accessibilityDescription: description)
+        }
+        if dot, let glyph = image { image = Self.withUpdateDot(glyph) }
         image?.isTemplate = true
+        image?.accessibilityDescription = description
         button.image = image
         button.appearsDisabled = paused
-        button.toolTip = ready && !paused && !zoomed ? Self.bundleName(logger: logger) : description
+        button.toolTip = ready && !paused && !zoomed ? Self.bundleName(logger: logger) + suffix : description
+    }
+
+    /// The menu-bar dot (Surface 3, SHIP-07): while a newer release is known, never over the not-ready warning.
+    nonisolated static func showsDot(_ status: UpdateStatus, ready: Bool) -> Bool {
+        guard ready else { return false }
+        switch status {
+        case .available, .downloading, .verifying, .opened: return true
+        case .idle, .checking, .current: return false
+        }
+    }
+
+    /// The glyph centred on the 18 x 18 pt canvas, erased 1 pt around a 6 pt dot centred at (15, 3), as a template.
+    static func withUpdateDot(_ glyph: NSImage) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            let size = glyph.size
+            glyph.draw(in: NSRect(x: (18 - size.width) / 2, y: (18 - size.height) / 2, width: size.width, height: size.height))
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: NSRect(x: 11, y: -1, width: 8, height: 8)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: NSRect(x: 12, y: 0, width: 6, height: 6)).fill()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = glyph.accessibilityDescription
+        return image
+    }
+
+    nonisolated enum UpdateMenuAction: Equatable {
+        case info
+        case downloadAndOpen
+        case copyBrewCommand
+    }
+
+    /// The update items at the top of the bottom group (Surface 3, D-10); none unless a newer release is known.
+    nonisolated static func updateItems(_ status: UpdateStatus, homebrew: Bool) -> [(title: String, enabled: Bool, action: UpdateMenuAction)] {
+        let release: UpdateRelease
+        switch status {
+        case .available(let known), .downloading(let known, _), .verifying(let known), .opened(let known): release = known
+        case .idle, .checking, .current: return []
+        }
+        if homebrew {
+            return [
+                (title: UpdateCopy.homebrewAvailable(release.version), enabled: false, action: .info),
+                (title: UpdateCopy.copyBrewItem, enabled: true, action: .copyBrewCommand),
+            ]
+        }
+        return [(title: UpdateCopy.updateTo(release.version), enabled: true, action: .downloadAndOpen)]
+    }
+
+    private func addUpdateItems(to menu: NSMenu) {
+        for entry in Self.updateItems(updateStatus, homebrew: updates.installedWithHomebrew) {
+            let selector: Selector? =
+                switch entry.action {
+                case .info: nil
+                case .downloadAndOpen: #selector(updateNow)
+                case .copyBrewCommand: #selector(copyBrewCommand)
+                }
+            let item = NSMenuItem(title: entry.title, action: entry.enabled ? selector : nil, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = entry.enabled
+            if entry.action == .copyBrewCommand { item.toolTip = UpdateCopy.copyBrewTooltip }
+            menu.addItem(item)
+        }
+    }
+
+    /// Progress and errors show in Settings ▸ Updates, so the download starts there in view.
+    @objc private func updateNow() {
+        showSettings(.updates, from: "menu")
+        Task { await updates.downloadAndOpen() }
+    }
+
+    @objc private func copyBrewCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(UpdateCopy.homebrewCommand, forType: .string)
     }
 
     private func addStatusItems(to menu: NSMenu) {
@@ -351,7 +482,7 @@ import os
     }
 
     /// The installed app's display name, or nil when no app has this bundle ID (not cached, so a later install shows).
-    private func displayName(of bundleID: String) -> String? {
+    func displayName(of bundleID: String) -> String? {
         if let name = displayNames[bundleID] { return name }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
         let name = FileManager.default.displayName(atPath: url.path)
@@ -371,8 +502,50 @@ import os
         arrange.turnMultitouchBackOn()
     }
 
-    @objc private func openShortcuts() {
-        shortcutsWindow.show()
+    @objc private func openSettings() {
+        showSettings(nil, from: "menu")
+    }
+
+    /// The one way into Settings (D-01, D-04): `pane`'s tab, or the last tab shown when nil.
+    func showSettings(_ pane: SettingsPane?, from source: String) {
+        settingsWindow.show(pane, from: source)
+    }
+
+    /// One factory per Settings tab built so far; later plans add their panes here.
+    private func settingsTabs() -> [SettingsPane: () -> NSViewController] {
+        [
+            .general: {
+                SettingsWindowController.hosting(
+                    GeneralTab(
+                        loginItem: self.loginItem, permission: self.permission, showSetup: self.showSetup,
+                        screenRecordingGranted: { SnapshotCapture.isGranted() },
+                        allowScreenRecording: { [weak self] in self?.allowPreviews() }))
+            },
+            .arranging: {
+                SettingsWindowController.hosting(
+                    ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts),
+                    height: 640)
+            },
+            .zoom: {
+                // The menu's toggleZoom path: announcement and the Turn Off flow included.
+                let setZoomEnabled: (Bool) -> Void = { on in Task { await self.arrange.setZoomEnabled(on) } }
+                // The flow the Replace Mission Control menu item used: the explanation alert, then `choose`.
+                let choose: () -> Void = { [weak self] in self?.chooseTakeover() }
+                return SettingsWindowController.hosting(
+                    ZoomGesturesTab(
+                        setZoomEnabled: setZoomEnabled, gestures: self.arrange.gesturePreference, takeover: self.arrange.takeover,
+                        chooseTakeover: choose))
+            },
+            .shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) },
+            .exclusions: {
+                SettingsWindowController.hosting(
+                    ExclusionsTab(exclusions: self.exclusions, displayName: { [weak self] in self?.displayName(of: $0) }), height: 560)
+            },
+            .menubar: {
+                SettingsWindowController.hosting(MenuBarTab(preference: self.menuBar, hasSavedViews: { !self.arrange.arranger.savedViewSlots.isEmpty }))
+            },
+            .updates: { SettingsWindowController.hosting(UpdatesTab(controller: self.updates)) },
+        ]
     }
 
     private func debugMenuItem() -> NSMenuItem {
@@ -389,18 +562,14 @@ import os
         submenu.addItem(Self.info(MenuCopy.capabilityItem(windowIDLookupAvailable: available)))
         submenu.addItem(Self.info(MenuCopy.spacesItem(available: system.capabilityReport[.spaces] == true)))
         submenu.addItem(Self.info(MenuCopy.tapItem(running: arrange.isTapRunning)))
+        submenu.addItem(Self.info(SettingsCopy.loginItemDebugLine(loginItem.status)))
+        submenu.addItem(Self.info(UpdateCopy.debugLine(status: updates.status, lastChecked: updates.lastChecked)))
         let zoom = arrange.zoomController
         submenu.addItem(Self.info(ZoomCopy.zoomStateLine(enabled: arrange.isZoomEnabled, capture: arrange.isZoomEnabled ? captureLine(zoom) : "")))
         submenu.addItem(Self.info(ZoomCopy.lastSettleLine(zoom?.lastSettle)))
         let cache = zoom?.cacheStats ?? (windows: 0, bytes: 0)
         submenu.addItem(Self.info(ZoomCopy.snapshotCacheLine(windows: cache.windows, bytes: cache.bytes)))
-        let source: GestureCopy.Source =
-            if !arrange.isZoomEnabled { .offZoom } else if arrange.isGestureTapRunning {
-                arrange.isMultitouchRunning ? .onWithMultitouch : .on
-            } else if arrange.gestureTapFailedToStart {
-                .unavailable
-            } else { .offTapNotRunning }
-        submenu.addItem(Self.info(GestureCopy.gesturesLine(source)))
+        submenu.addItem(Self.info(GestureCopy.gesturesLine(gestureSource())))
         let gestures = arrange.gestures
         submenu.addItem(Self.info(GestureCopy.takenLine(taken: gestures.taken, timeouts: gestures.timeouts)))
         submenu.addItem(Self.info(gestures.lastGesture.map(Self.lastGestureLine) ?? GestureCopy.lastGestureNone))
@@ -436,6 +605,58 @@ import os
         let item = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
+    }
+
+    /// The Debug submenu's gesture source, also used by Report a Problem.
+    private func gestureSource() -> GestureCopy.Source {
+        if !arrange.isZoomEnabled { .offZoom } else if arrange.isGestureTapRunning {
+            arrange.isMultitouchRunning ? .onWithMultitouch : .on
+        } else if arrange.gestureTapFailedToStart {
+            .unavailable
+        } else { .offTapNotRunning }
+    }
+
+    /// Report a Problem… (D-15): opens the prefilled issue and copies its Details block. No alert, no toast.
+    @objc private func reportProblem() {
+        let info = Bundle.main.infoDictionary
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        let accessibility: ReportProblem.Accessibility =
+            switch permission.state.phase {
+            case .ready, .probing: .on
+            case .notTrusted, .waitingForGrant: .off
+            case .staleTrustedButFailing, .resetting: .notWorking
+            }
+        #if arch(arm64)
+            let appleSilicon = true  // shortcut: an Intel slice forced under Rosetta reads as Intel; fine for a bug report
+        #else
+            let appleSilicon = false
+        #endif
+        let details = ReportProblem.details(
+            inventory: latest, version: info?["CFBundleShortVersionString"] as? String ?? "unbundled",
+            build: info?["CFBundleVersion"] as? String ?? "-", homebrew: updates.installedWithHomebrew,
+            macOSVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)", macOSBuild: Self.osBuild(),
+            appleSilicon: appleSilicon, accessibility: accessibility,
+            screenRecording: SnapshotCapture.isGranted(), zoom: arrange.isZoomEnabled,
+            gestures: GestureCopy.gesturesLine(gestureSource()),
+            lines: [
+                MenuCopy.capabilityItem(windowIDLookupAvailable: system.capabilityReport[.axWindowID] == true),
+                MenuCopy.spacesItem(available: system.capabilityReport[.spaces] == true),
+                MenuCopy.tapItem(running: arrange.isTapRunning),
+                OverviewCopy.takeoverLine(arrange.takeover?.debugLine ?? .unavailable),
+                ViewCopy.cliLine(listening: arrange.cliListener?.isListening == true),
+            ])
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ReportProblem.detailsBlock(details), forType: .string)
+        NSWorkspace.shared.open(ReportProblem.issueURL(body: ReportProblem.body(details)))
+    }
+
+    /// The macOS build ("26C55") from `kern.osversion`.
+    private static func osBuild() -> String {
+        var size = 0
+        sysctlbyname("kern.osversion", nil, &size, nil, 0)
+        var buffer = [UInt8](repeating: 0, count: size)
+        sysctlbyname("kern.osversion", &buffer, &size, nil, 0)
+        return String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
     }
 
     /// The capture half of the "Zoom: on, …" line. Before the first move there is no controller and its state would be a

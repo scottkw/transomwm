@@ -12,8 +12,8 @@ settings:
     # Merged into the generated Info.plist: only CFBundleURLTypes, with the per-configuration TRANSOM_URL_SCHEME.
     INFOPLIST_FILE: Transom-Info.plist
     INFOPLIST_KEY_LSUIElement: YES
-    MARKETING_VERSION: "0.3.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.9.0"
+    CURRENT_PROJECT_VERSION: "2"
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "Developer ID Application"
     DEVELOPMENT_TEAM: S2K7P43927
@@ -25,6 +25,8 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - ../Sources/TransomApp
+      # App icon and the menu-bar template glyphs (UI-SPEC Surface 8), copied from design-template/icons.
+      - Assets.xcassets
     dependencies:
       - package: Transom
         product: TransomMac
@@ -42,6 +44,8 @@ targets:
         com.apple.security.app-sandbox: false
     scheme: {}
     settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Debug:
           PRODUCT_NAME: "Transom Debug"

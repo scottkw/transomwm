@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import KeyboardShortcuts
+import Observation
 import TransomEngine
 @testable import TransomMac
 import TransomPrivate
@@ -28,6 +29,9 @@ import Testing
         return AsyncStream { $0.finish() }
     }
 }
+
+/// Counts observation callbacks, which arrive in a `@Sendable` closure.
+private final class Count: @unchecked Sendable { var value = 0 }
 
 /// OVER-02, D-06 (Surface 5): the O2 menu choice → explanation alert → takeover → Debug S5, on an injected backend.
 @Suite(.serialized) @MainActor struct TakeoverMenuTests {
@@ -121,18 +125,60 @@ import Testing
         #expect(backend.writes.isEmpty)
     }
 
-    @Test func o2SitsAfterFrameFocusedWindowBeforeAllowWindowPreviews() {
+    /// D-04: the Settings toggle runs `choose(explain:)`; Not Now leaves it off, confirming turns it on, and the
+    /// observable `state` tells the view.
+    @Test func theSettingsToggleTurnsTheTakeoverOnOnlyAfterConfirming() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let backend = FakeHotKeys()
+        let takeover = Self.takeover(defaults, backend)
+        var answer = false
+        let choose: () -> Void = { takeover.choose { answered in answered(answer) } }
+
+        ZoomGesturesTab.takeoverBinding(isOn: takeover.isOn, choose: choose).wrappedValue = true
+        #expect(!takeover.isOn, "Not Now leaves it off")
+        #expect(backend.writes.isEmpty)
+
+        let changed = Count()
+        withObservationTracking({ _ = takeover.state }, onChange: { changed.value += 1 })
+        answer = true
+        ZoomGesturesTab.takeoverBinding(isOn: takeover.isOn, choose: choose).wrappedValue = true
+        #expect(takeover.isOn)
+        #expect(changed.value == 1, "the toggle follows state")
+        #expect(ZoomGesturesTab.takeoverBinding(isOn: takeover.isOn, choose: choose).wrappedValue)
+
+        ZoomGesturesTab.takeoverBinding(isOn: takeover.isOn, choose: choose).wrappedValue = false
+        #expect(!takeover.isOn, "off lifts at once")
+        #expect(backend.enabled == [32: true, 108: true])
+    }
+
+    @Test func theSettingsFooterNamesTheRealChord() {
+        let (defaults, cleanUp) = Self.defaults()
+        defer { cleanUp() }
+        let backend = FakeHotKeys()
+        let takeover = Self.takeover(defaults, backend)
+        #expect(takeover.currentChord == .standard)
+        #expect(
+            ZoomGesturesTab.takeoverFooter(takeover, zoomOn: true)
+                == "The Mission Control key (F3) and Control-Up Arrow show Transom's overview instead of Mission Control. Swiping up with four fingers still opens Mission Control.")
+        #expect(ZoomGesturesTab.takeoverUsable(takeover, zoomOn: true))
+        #expect(ZoomGesturesTab.takeoverFooter(takeover, zoomOn: false) == ZoomCopy.doubleClickFooterZoomOff)
+        #expect(!ZoomGesturesTab.takeoverUsable(takeover, zoomOn: false))
+        backend.isAvailable = false
+        #expect(ZoomGesturesTab.takeoverFooter(takeover, zoomOn: true) == "Not available on this version of macOS.")
+        #expect(!ZoomGesturesTab.takeoverUsable(takeover, zoomOn: true))
+        #expect(ZoomGesturesTab.takeoverFooter(nil, zoomOn: true) == "Not available on this version of macOS.")
+    }
+
+    /// Surface 5 (09): Replace Mission Control left the menu for Settings ▸ Zoom & Gestures.
+    @Test func theZoomSectionHasNoMissionControlItem() {
         let menu = CommandMenu { _ in }
-        let item = { (title: String) in NSMenuItem(title: title, action: nil, keyEquivalent: "") }
+        let item = { (title: String) -> NSMenuItem in NSMenuItem(title: title, action: nil, keyEquivalent: "") }
         let titles = menu.zoomSection(
-            enabled: true, framingWindow: false, takeover: item("Replace Mission Control"),
-            previews: item("Allow Window Previews\u{2026}"), toggle: item("Turn Off Zoom")
+            enabled: true, framingWindow: false, previews: item("Allow Window Previews\u{2026}"), toggle: item("Turn Off Zoom")
         ).map(\.title)
-        #expect(Array(titles.suffix(4)) == ["Frame Focused Window", "Replace Mission Control", "Allow Window Previews\u{2026}", "Turn Off Zoom"])
-        let off = menu.zoomSection(
-            enabled: false, framingWindow: false, takeover: item("Replace Mission Control"), previews: nil,
-            toggle: item("Turn On Zoom"))
-        #expect(!off.map(\.title).contains("Replace Mission Control"), "rendered only with zoom on")
+        #expect(Array(titles.suffix(3)) == ["Frame Focused Window", "Allow Window Previews\u{2026}", "Turn Off Zoom"])
+        #expect(!titles.contains { $0.contains("Mission Control") })
     }
 
     @Test func aRefusedApplyRestoresTheOriginalsAndPostsN11() {

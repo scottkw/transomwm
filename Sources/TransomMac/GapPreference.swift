@@ -1,16 +1,18 @@
 import Foundation
+import Observation
 import os
 
 /// The gap between tiles (D-27, TILE-04), kept in UserDefaults. The plist is user-writable (T-03-25): only the six
-/// allowed values are accepted; anything else is logged and replaced by the default.
-@MainActor final class GapPreference {
+/// allowed values are accepted; anything else is logged and replaced by the default. Observable so Settings and the
+/// menu read one value (D-02).
+@Observable @MainActor final class GapPreference {
     static let key = "gap"
     static let allowed: [Double] = [0, 4, 8, 12, 16, 24]
     static let defaultValue: Double = 8
     private(set) var value: Double
     /// Fires after every accepted change.
-    var onChange: ((Double) -> Void)?
-    private let defaults: UserDefaults
+    @ObservationIgnored var onChange: ((Double) -> Void)?
+    @ObservationIgnored private let defaults: UserDefaults
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "preferences")
 
     init(defaults: UserDefaults = .standard) {

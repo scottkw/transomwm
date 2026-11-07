@@ -3,6 +3,7 @@ import Foundation
 import TransomEngine
 @testable import TransomMac
 import TransomModel
+import TransomPrivate
 import Testing
 
 private func intersection(_ a: Rect, _ b: Rect) -> (width: Double, height: Double) {
@@ -192,9 +193,23 @@ private func near(_ a: Rect, _ b: Rect, within tolerance: Double) -> Bool {
         let state = await system.windowInfo(refs[1])?.state
         #expect(minimized, "window 1 never read back minimised: \(String(describing: state))")
 
+        // D-23: window 0's own element, so the facts after the close are the inputs of CloseRule's ordered-out row.
+        var listed: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(AXUIElementCreateApplication(fixturePID), kAXWindowsAttribute as CFString, &listed)
+        let element = (listed as? [AXUIElement] ?? []).first { candidate in
+            var id: CGWindowID = 0
+            return AXWindowID.function?(candidate, &id) == .success && id == refs[0].windowID
+        }
+
         let pressed = ContinuousClock.now
         await system.perform([.close(refs[0])])
         let closed = await waitUntil(timeout: .seconds(3)) { await system.windowInfo(refs[0]) == nil }
+        var role: CFTypeRef?
+        let axFact = element.map { String(AXUIElementCopyAttributeValue($0, kAXRoleAttribute as CFString, &role).rawValue) } ?? "no element"
+        let entry = CGWindowList.snapshot()?.first { $0.windowID == refs[0].windowID }
+        let spaces = SkyLightSpaces.spaces(of: [refs[0].windowID])?[refs[0].windowID]
+        let shown = Set(Displays.current().compactMap(\.currentSpaceID))
+        print("closed window 0 facts: AXRole error \(axFact), in CG list \(entry != nil), onScreen \(String(describing: entry?.onScreen)), spaces \(String(describing: spaces)), shown Spaces \(shown)")
         let latency = pressed.duration(to: .now)
         print("close-confirmation latency: \(latency)")
         #expect(closed, "window 0 was never confirmed closed")

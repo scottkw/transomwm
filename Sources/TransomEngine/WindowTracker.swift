@@ -26,6 +26,8 @@ public struct WindowTracker: Sendable {
     /// Windows folded into another window's tab group, not destroyed yet: the group's shown tab and how many
     /// consecutive full refreshes they stayed folded under it.
     private var foldPending: [WindowIdentity: (shown: UInt32, refreshes: Int)] = [:]
+    /// D-25: tab groups whose whole group looked closed, and when it first did.
+    private var closingGroups: [WindowIdentity: ContinuousClock.Instant] = [:]
     private var learner = MinimumSizeLearner()
     /// The exclusion list, lowercased (D-12).
     private var excluded: Set<String> = []
@@ -211,7 +213,10 @@ public struct WindowTracker: Sendable {
         learner.dropDue(pid: app.pid, at: context.now)
         let byID = Dictionary(app.windows.compactMap { o in o.windowID.map { ($0, o) } }, uniquingKeysWith: { a, b in a.listedInAXWindows ? a : b })
         let liveness: AppLiveness = terminatedPIDs.contains(app.pid) ? .terminated : .alive
-        events += decide(pid: app.pid, app: liveness, context: context, skipping: created) { windowID in
+        let groupCloses: (pending: Set<WindowIdentity>, confirmed: Set<WindowIdentity>) = liveness == .alive
+            ? confirmClosedTabGroups(app: app, byID: byID, cgByID: cgByID, context: context) : ([], [])
+        events += decide(pid: app.pid, app: liveness, context: context, skipping: created,
+                         pendingGroups: groupCloses.pending, closedGroups: groupCloses.confirmed) { windowID in
             guard app.listFailure == nil, let observation = byID[windowID] else { return .timedOut }
             switch observation.read {
             case .success(let snapshot):
@@ -267,6 +272,7 @@ public struct WindowTracker: Sendable {
             foldPending[to] = foldPending[from]
         }
         (lastReliable[from], rechecks[from], foldPending[from], pending[from]) = (nil, nil, nil, nil)
+        closingGroups[from] = nil  // a corrected ID starts its confirmation again
         learner.rekey(from: from, to: to)
         info.learnedMinimum = learner.minimum(for: to)
         info.persistableMinimum = learner.persistableMinimum(for: to)
@@ -355,22 +361,82 @@ public struct WindowTracker: Sendable {
         windows.filter { $0.key.pid == pid }.map { $0.value.visibleMemberID ?? $0.key.windowID }.sorted()
     }
 
+    /// D-25: the tab groups of `app` closed whole while their app keeps the windows alive (macOS 27 and 15.7 keep
+    /// them in the CG list). A group looks closed when its shown tab answers -25202, no tab of it is listed in
+    /// AXWindows or on screen, a member is still in the CG list, and its Spaces at its last listing include a Space a
+    /// display shows now. A live group always has a selected tab that answers and, while its Space shows, is listed,
+    /// so it never looks closed. A look that still holds `settleDelay` later is confirmed (a Cmd-W's next tab is
+    /// listed sooner); until then the group is pending. A group that looks closed but for a tab still on screen (macOS
+    /// 27 orders the shown tab out after AX reports it gone) is pending too, with no clock started. A failed list says nothing and changes nothing; a hidden app's
+    /// groups, a group on a Space no display shows and a group with no Space data (lookup off) are never confirmed.
+    /// Measured: `.build/09-30-tabs-vm27-measure.log`, `.build/09-30-tabs-vm15-measure.log`.
+    private mutating func confirmClosedTabGroups(
+        app: AppObservation, byID: [UInt32: WindowObservation], cgByID: [UInt32: CGWindowEntry], context: ObservationContext
+    ) -> (pending: Set<WindowIdentity>, confirmed: Set<WindowIdentity>) {
+        guard app.listFailure == nil else { return ([], []) }
+        guard !app.appHidden else {
+            closingGroups = closingGroups.filter { $0.key.pid != app.pid }
+            return ([], [])
+        }
+        let listed = Set(app.windows.compactMap { $0.listedInAXWindows ? $0.windowID : nil })
+        let shownSpaces = Set(context.displays.compactMap(\.currentSpaceID))
+        var pendingGroups: Set<WindowIdentity> = []
+        var confirmed: Set<WindowIdentity> = []
+        for identity in windows.keys.sorted() where identity.pid == app.pid {
+            let members = tabGroups.members(of: identity)
+            guard !members.isEmpty, let info = windows[identity] else {
+                closingGroups[identity] = nil
+                continue
+            }
+            let shown = info.visibleMemberID ?? identity.windowID
+            let group = members.union([shown])
+            var shownGone = false
+            if case .failure(.invalidElement)? = byID[shown]?.read { shownGone = true }
+            let lingering = group.compactMap { cgByID[$0] }
+            let goneFromAX = shownGone && group.isDisjoint(with: listed) && !lingering.isEmpty
+                && info.spaces.map { !$0.isEmpty && !$0.isDisjoint(with: shownSpaces) } == true
+            guard goneFromAX else {
+                closingGroups[identity] = nil
+                continue
+            }
+            // 27.2: CG orders the shown tab out after AX reports it gone. Recheck, with no clock started yet.
+            guard !lingering.contains(where: \.onScreen) else {
+                closingGroups[identity] = nil
+                pendingGroups.insert(identity)
+                continue
+            }
+            let since = closingGroups[identity] ?? context.now
+            closingGroups[identity] = since
+            if context.now >= since + settleDelay { confirmed.insert(identity) } else { pendingGroups.insert(identity) }
+        }
+        return (pendingGroups, confirmed)
+    }
+
     /// Applies `CloseRule` to every tracked window of `pid` except `skipping` (reported this pass), through the
-    /// window ID it shows: for a tab group, the visible tab, which `fact` describes.
+    /// window ID it shows: for a tab group, the visible tab, which `fact` describes. A group in `pendingGroups` is
+    /// rechecked without CloseRule; one in `closedGroups` is decided as no tab group and, once closed, destroyed whole
+    /// (D-25).
     private mutating func decide(
         pid: Int32, app: AppLiveness, context: ObservationContext, skipping: Set<WindowIdentity> = [],
+        pendingGroups: Set<WindowIdentity> = [], closedGroups: Set<WindowIdentity> = [],
         fact: (UInt32) -> AXWindowFact
     ) -> [WindowEvent] {
         let inCG = Set(context.cgWindows.map(\.windowID))
+        let cgByID = Dictionary(context.cgWindows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+        let shownSpaces = Set(context.displays.compactMap(\.currentSpaceID))
         var events: [WindowEvent] = []
         for identity in windows.keys.sorted() where identity.pid == pid && !skipping.contains(identity) {
             let shown = windows[identity]?.visibleMemberID ?? identity.windowID
-            let decision = CloseRule.decide(
+            // D-23: nil Spaces or no shown Space is unknown, never ordered out.
+            let orderedOut = cgByID[shown].map { !$0.onScreen } == true
+                && context.windowSpaces?[shown].map { !$0.isDisjoint(with: shownSpaces) } == true
+            let decision = pendingGroups.contains(identity) ? CloseDecision.recheck : CloseRule.decide(
                 sessionActive: context.sessionActive, app: app, ax: fact(shown),
                 inCGList: inCG.contains(shown),
                 // nil (lookup off, or not asked) is unknown, never empty.
                 cgSpacesKnownEmpty: inCG.contains(shown) && context.windowSpaces?[shown] == [],
-                isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid)
+                cgOrderedOut: orderedOut,
+                isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid) && !closedGroups.contains(identity)
             )
             if decision == .recheck { rechecks[identity, default: 0] += 1 } else { rechecks[identity] = nil }
             switch decision {
@@ -379,7 +445,8 @@ public struct WindowTracker: Sendable {
                 // listed tab rebinds it. It closes only when its last member is gone.
                 tabGroups.memberClosed(shown, pid: pid)
                 // A dead app's member on no Space is a ghost too (G-03-9, WR-10); an alive app's hidden tabs have no Space.
-                let remaining = tabGroups.members(of: identity).intersection(inCG).filter { app == .alive || context.windowSpaces?[$0] != [] }
+                let remaining: Set<UInt32> = closedGroups.contains(identity) ? []
+                    : tabGroups.members(of: identity).intersection(inCG).filter { app == .alive || context.windowSpaces?[$0] != [] }
                 if !remaining.isEmpty {
                     guard var info = windows[identity], info.tabCount != remaining.count else { continue }
                     info.tabCount = remaining.count
@@ -410,6 +477,7 @@ public struct WindowTracker: Sendable {
         rechecks[identity] = nil
         learner.forget(identity)
         foldPending[identity] = nil
+        closingGroups[identity] = nil
         closedIDs.insert(identity, at: now)
         return info
     }

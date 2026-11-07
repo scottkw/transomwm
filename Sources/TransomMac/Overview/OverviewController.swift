@@ -148,9 +148,9 @@ import os
             let waiting = display.placeholders.map { placeholder($0, input: input, appKit: appKit) }
             if panel.isVisible { panel.freezeAtPresentation() }  // a close still fading: cancel its order-out
             panel.show(tiles: waiting + tiles + strips)
-            let strip = overlay(display, input: input, image: image, appKit: appKit)
-            overlays[display.uuid] = strip
-            panel.showOverview(strip)
+            let overview = overlay(display, input: input, image: image, appKit: appKit)
+            overlays[display.uuid] = overview
+            panel.showOverview(overview)
             // Reduce Motion: the real-frame tiles fade out as the overview fades in, nothing moving (Surface 1 Motion).
             let first = !timed
             timed = true

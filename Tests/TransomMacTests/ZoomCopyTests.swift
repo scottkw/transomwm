@@ -55,7 +55,6 @@ import Testing
         #expect(ZoomCopy.allowWindowPreviews == "Allow Window Previews\u{2026}")
         #expect(ZoomCopy.turnOffZoom == "Turn Off Zoom")
         #expect(ZoomCopy.turnOnZoom == "Turn On Zoom")
-        #expect(ZoomCopy.shortcutsItem == "Shortcuts\u{2026}")
         #expect(ZoomCopy.zoomedInDescription == "Transom: zoomed in")
         #expect(ZoomCopy.zoomOffAnnouncement == "Zoom off")
         #expect(ZoomCopy.zoomOnAnnouncement == "Zoom on")

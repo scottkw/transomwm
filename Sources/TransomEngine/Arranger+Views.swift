@@ -64,6 +64,18 @@ extension Arranger {
     /// The filled slots, in order (the Debug line).
     public var savedViewSlots: [Int] { camera.savedViews.sorted.map(\.slot.number) }
 
+    /// The saved view that display's camera shows (the menu bar's filled badge, D-14): the lowest slot whose destination
+    /// is the shown desk and the committed view. Never one at home.
+    public func currentViewSlot(displayUUID uuid: String) -> ViewSlot? {
+        guard let display = displays.first(where: { $0.uuid == uuid }) else { return nil }
+        let shown = view(on: uuid)
+        guard shown != .home else { return nil }
+        return camera.savedViews.sorted.first { (saved: SavedView) -> Bool in
+            let destination = viewDestination(saved)
+            return destination.key == Self.key(display) && destination.target == shown
+        }?.slot
+    }
+
     /// Zooms that display's camera to the view in `slot`: one camera move, so it joins Back/Forward history (`.navigate`)
     /// and is never an undo step.
     mutating func goView(_ slot: ViewSlot, displayUUID uuid: String, focused: WindowRef?) -> [ArrangerEffect] {

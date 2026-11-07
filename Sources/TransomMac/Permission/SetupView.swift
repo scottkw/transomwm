@@ -7,7 +7,10 @@ struct SetupView: View {
     @ObservedObject var permission: PermissionController
     /// `<App>` in the copy: CFBundleName, "Transom" or "Transom Debug".
     let appName: String
+    /// "Step n of total" above the heading during onboarding; nil for the lone Accessibility step.
+    var caption: String? = nil
     let close: () -> Void
+    @AccessibilityFocusState private var headingFocused: Bool
 
     var body: some View {
         let state = permission.state
@@ -18,7 +21,12 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 16) {
             hero(shown)
             VStack(alignment: .leading, spacing: 12) {
+                if let caption {
+                    Text(verbatim: caption).font(.subheadline).foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                }
                 Text(verbatim: heading(shown, afterReset: state.afterReset)).font(.title).fontWeight(.semibold)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityFocused($headingFocused)
                 if let text = bodyText(shown, afterReset: state.afterReset) { secondary(text) }
             }
             if firstRun { steps }
@@ -31,6 +39,7 @@ struct SetupView: View {
         .disabled(resetting)
         .frame(width: 440, alignment: .leading)
         .padding(20)
+        .onAppear { headingFocused = true }
     }
 
     // MARK: - Blocks

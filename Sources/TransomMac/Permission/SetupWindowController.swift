@@ -2,45 +2,251 @@ import AppKit
 import Combine
 import TransomEngine
 import SwiftUI
+import os
 
-/// Owns the "Set Up Transom" window (02-UI-SPEC Surface 2). It opens by itself at most once, at launch,
-/// and only when access isn't ready; after that only `show()` (menu, Tracked Windows) opens it.
+/// Owns the "Set Up Transom" window (02-UI-SPEC Surface 2, 09 UI-SPEC Surface 2). On the first run it opens at
+/// launch at Welcome and walks the onboarding steps; after completion it opens by itself at most once, at launch,
+/// and only when access isn't ready, showing only the Accessibility step. After that only `show()` (menu, Tracked
+/// Windows) opens it.
 @MainActor final class SetupWindowController: NSObject, NSWindowDelegate {
+    static let completedKey = "onboarding.completed"
+    /// The last step reached, so a relaunch mid-setup resumes (UI-SPEC Surface 2).
+    static let stepKey = "onboarding.step"
     private let permission: PermissionController
+    private let defaults: UserDefaults
+    private let logger = Logger(subsystem: "com.eightabyte.transom", category: "onboarding")
+    let model: OnboardingModel
     private var window: NSWindow?
     private var userClosed = false
     private var awaitingLaunchDecision = false
     private var subscription: AnyCancellable?
+    /// Screen Recording through `SnapshotCapture`, injected so tests never touch it (RESEARCH Pitfall 5).
+    var screenRecordingGranted: (() -> Bool)?
+    var requestScreenRecording: (() -> Bool)?
+    /// Done's Open Settings: nil opens the last tab shown.
+    var openSettings: ((SettingsPane?) -> Void)?
+    /// Launch at login (SHIP-03), injected so tests never register the real login item.
+    var loginItem: (any LoginItemService)?
+    /// The macOS features that move windows (D-05), read at launch to decide whether their step shows.
+    var conflicts: ConflictController?
+    /// Decided once at launch, so turning the last feature off keeps the step, its rows reading Off.
+    private var featuresStep = false
+    private var screenRecordingPoll: Task<Void, Never>?
+    /// Where this Transom runs from; a disk image, Downloads or a translocated path puts Move first (D-08).
+    private let needsMove: Bool
 
-    init(permission: PermissionController) {
+    init(
+        permission: PermissionController, defaults: UserDefaults = .standard,
+        place: InstallLocation.Place = InstallLocation.classify(
+            bundleID: Bundle.main.bundleIdentifier, bundlePath: Bundle.main.bundlePath, home: NSHomeDirectory())
+    ) {
         self.permission = permission
+        self.defaults = defaults
+        needsMove = InstallLocation.needsMove(place)
+        model = OnboardingModel(
+            steps: OnboardingFlow.steps(completed: defaults.bool(forKey: Self.completedKey), conflictsActive: false, needsMove: needsMove))
+        model.place = place
         super.init()
-        subscription = permission.$state.sink { [weak self] state in self?.launchDecision(state) }
+        subscription = permission.$state.sink { [weak self] state in self?.stateChanged(state) }
     }
+
+    private var completed: Bool { defaults.bool(forKey: Self.completedKey) }
 
     /// Call right after `.launched`. A trusted launch waits for its probe, so a working grant never
-    /// flashes the window; any other outcome shows it.
+    /// flashes the window; any other outcome shows it. The first run shows it either way.
     func decideAtLaunch() {
+        featuresStep = !(conflicts?.active.isEmpty ?? true)
+        if !completed {
+            model.steps = OnboardingFlow.steps(completed: false, conflictsActive: featuresStep, needsMove: needsMove)
+            go(to: OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: model.steps))
+        }
         awaitingLaunchDecision = true
-        launchDecision(permission.state)
+        stateChanged(permission.state)
     }
 
+    /// Whether the window opens by itself once the launch probe has settled, and with which steps. The first run
+    /// always opens (step 2 passes by itself when access is ready); later launches only when access isn't ready.
+    static func launchDecision(
+        completed: Bool, phase: PermissionPhase, conflictsActive: Bool, needsMove: Bool = false
+    ) -> (show: Bool, steps: [OnboardingStep]) {
+        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed, conflictsActive: conflictsActive, needsMove: needsMove))
+    }
+
+    /// Opens the steps for the current completion state: after completion, the lone Accessibility step.
     func show() {
+        let steps = Self.launchDecision(
+            completed: completed, phase: permission.state.phase, conflictsActive: featuresStep, needsMove: needsMove
+        ).steps
+        if model.steps != steps {
+            model.steps = steps
+            go(to: steps[0])
+        }
         let window = window ?? makeWindow()
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
     }
 
-    private func launchDecision(_ state: PermissionState) {
+    /// `state` is the new value: `@Published` delivers it before `permission.state` changes.
+    private func stateChanged(_ state: PermissionState) {
+        // Mid-flow, ready access moves on by itself, with no "Transom is ready" stop on the Accessibility step.
+        if model.current == .accessibility, state.phase == .ready,
+            let next = OnboardingFlow.next(after: .accessibility, in: model.steps)
+        {
+            go(to: next)
+        }
         guard awaitingLaunchDecision, state.phase != .probing else { return }
         awaitingLaunchDecision = false
-        if state.phase != .ready && !userClosed { show() }
+        if Self.launchDecision(completed: completed, phase: state.phase, conflictsActive: featuresStep, needsMove: needsMove).show
+            && !userClosed
+        {
+            show()
+        }
+    }
+
+    /// Continue: the next step, passing the Accessibility step when access is already ready.
+    func advance() {
+        guard var step = OnboardingFlow.next(after: model.current, in: model.steps) else { return }
+        if step == .accessibility, permission.state.phase == .ready,
+            let after = OnboardingFlow.next(after: step, in: model.steps)
+        {
+            step = after
+        }
+        go(to: step)
+    }
+
+    /// Move's Not Now: picks up at the stored step among the steps after Move, as a relaunch without Move would, so
+    /// Screen Recording's Quit & Reopen doesn't restart at Welcome (WR-02). Ready access passes Accessibility, as in `advance()`.
+    func skipMove() {
+        let rest = model.steps.filter { (s: OnboardingStep) -> Bool in s != .move }
+        var step = OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: rest)
+        if step == .accessibility, permission.state.phase == .ready, let after = OnboardingFlow.next(after: step, in: rest) {
+            step = after
+        }
+        go(to: step)
+    }
+
+    /// Done: the first run is over; later launches keep Phase 2's rule.
+    func finish() {
+        defaults.set(true, forKey: Self.completedKey)
+        logger.info("completed")
+        window?.performClose(nil)
+    }
+
+    /// Done's Open Settings: completes onboarding, closes the window, then opens Settings on its last tab.
+    func openSettingsFromDone() {
+        guard let openSettings else { preconditionFailure("openSettings not wired") }
+        finish()
+        openSettings(nil)
+    }
+
+    /// Launch at login's Continue: registers only while ticked (D-07). A refusal or pending approval keeps the step to
+    /// show why; the next Continue moves on.
+    func continueLaunchAtLogin() {
+        guard let loginItem else { preconditionFailure("loginItem not wired") }
+        guard model.launchAtLogin, model.loginResult == nil else { return advance() }
+        let result = LoginItemToggle.toggled(true, service: loginItem)
+        if result.status == .enabled { advance() } else { model.loginResult = result }
+    }
+
+    /// Move to Applications (D-08): the Replace alert when a copy is already there, then copy, relaunch and quit. Cancel or
+    /// a failed copy keeps the step.
+    func moveToApplications() {
+        let destination = URL(fileURLWithPath: "/Applications/Transom.app")
+        if FileManager.default.fileExists(atPath: destination.path), !Self.confirmReplace() { return }
+        guard
+            model.copyForMove({ () throws -> Void in
+                try AppMover.copy(from: Bundle.main.bundleURL, to: destination, trash: AppMover.moveToTrash)
+            })
+        else { return }
+        logger.info("moved to Applications")
+        AppMover.relaunchAndQuit(path: destination.path)
+    }
+
+    /// The destructive confirmation (UI-SPEC Copywriting): Cancel holds Return and Esc; only a click on Replace replaces.
+    private static func confirmReplace() -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = OnboardingCopy.replaceMessage
+        alert.informativeText = OnboardingCopy.replaceInformative
+        let replace = alert.addButton(withTitle: OnboardingCopy.replaceButton)
+        replace.keyEquivalent = ""
+        replace.hasDestructiveAction = true
+        let cancel = alert.addButton(withTitle: "Cancel")
+        cancel.keyEquivalent = "\r"
+        // Cancel holds Return, so map Esc (key code 53) to it while the alert is up.
+        let escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            cancel.performClick(nil)
+            return nil
+        }
+        let response = alert.runModal()
+        if let escape { NSEvent.removeMonitor(escape) }
+        return response == .alertFirstButtonReturn
+    }
+
+    /// Back: the step before this one.
+    func back() {
+        guard let index = model.steps.firstIndex(of: model.current), index > 0 else { return }
+        go(to: model.steps[index - 1])
+    }
+
+    /// Allow Screen Recording: one system request per click; after that the step only polls (D-06).
+    func allowScreenRecording() {
+        guard let request = requestScreenRecording else { preconditionFailure("requestScreenRecording not wired") }
+        model.screenRecordingAsked = true
+        model.screenRecordingOn = request()
+        logger.info("screen recording requested")
+    }
+
+    /// One poll tick: preflight only, never a prompt. The 1 s loop calls it while the step shows.
+    func pollScreenRecording() {
+        guard let granted = screenRecordingGranted else { preconditionFailure("screenRecordingGranted not wired") }
+        model.screenRecordingOn = granted()
+    }
+
+    private func go(to step: OnboardingStep) {
+        guard model.current != step else { return }
+        model.current = step
+        defaults.set(step.rawValue, forKey: Self.stepKey)
+        screenRecordingPoll?.cancel()
+        screenRecordingPoll = nil
+        logger.info("step \(step.rawValue, privacy: .public)")
+        if step == .screenRecording { enterScreenRecording() }
+        if step == .launchAtLogin {
+            guard loginItem != nil else { preconditionFailure("loginItem not wired") }
+            model.loginResult = nil
+        }
+    }
+
+    /// Reaching the step answers the Phase 4 previews alert, so it never asks again (UI-SPEC Surface 2).
+    private func enterScreenRecording() {
+        guard requestScreenRecording != nil else { preconditionFailure("requestScreenRecording not wired") }
+        defaults.set(true, forKey: ZoomController.explainerShownKey)
+        pollScreenRecording()
+        screenRecordingPoll = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                self.pollScreenRecording()
+            }
+        }
     }
 
     func makeWindow() -> NSWindow {
         if let window { return window }  // a second window would orphan the first, still delegate-wired
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? ProcessInfo.processInfo.processName
-        let view = SetupView(permission: permission, appName: appName) { [weak self] in self?.window?.performClose(nil) }
+        let view = OnboardingView(
+            model: model, permission: permission, conflicts: conflicts, appName: appName,
+            advance: { [weak self] in self?.advance() },
+            back: { [weak self] in self?.back() },
+            allowScreenRecording: { [weak self] in self?.allowScreenRecording() },
+            finish: { [weak self] in self?.finish() },
+            openSettings: { [weak self] in self?.openSettingsFromDone() },
+            continueLaunchAtLogin: { [weak self] in self?.continueLaunchAtLogin() },
+            openLoginItems: { [weak self] in self?.loginItem?.openSystemSettingsLoginItems() },
+            close: { [weak self] in self?.closeAccessibilityStep() },
+            moveToApplications: { [weak self] in self?.moveToApplications() },
+            skipMove: { [weak self] in self?.skipMove() })
         let hosting = NSHostingController(rootView: view)
         // The hosting controller publishes SwiftUI's size as preferredContentSize, which the window applies,
         // so its height follows each state's content (G-02-1).
@@ -64,12 +270,24 @@ import SwiftUI
         return window
     }
 
+    /// The Accessibility step's Done (shown on ready): mid-flow, after Back from Screen Recording, it moves on.
+    private func closeAccessibilityStep() {
+        if OnboardingFlow.next(after: model.current, in: model.steps) != nil { advance() } else { window?.performClose(nil) }
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         permission.state.phase != .resetting
     }
 
+    /// Closing from Screen Recording onward completes the first run; closing earlier leaves it pending. Quits nothing.
     func windowWillClose(_ notification: Notification) {
         userClosed = true
+        if [.screenRecording, .features, .launchAtLogin, .done].contains(model.current) {
+            defaults.set(true, forKey: Self.completedKey)
+            logger.info("completed by close")
+        }
+        screenRecordingPoll?.cancel()
+        screenRecordingPoll = nil
     }
 }
 

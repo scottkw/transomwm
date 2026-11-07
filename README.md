@@ -11,9 +11,9 @@ Transom was renamed from Pane on 2026-10-27.
 
 ## Status
 
-Transom is pre-release. There is no public download yet. A notarised 0.3.0 build (the version set in `scripts/release.sh`) has been made locally, but its public release is held.
+Transom 0.9.0 is the first public release. Its notes are in [docs/release-notes-0.9.0.md](docs/release-notes-0.9.0.md).
 
-Phases 1-8.1 of the roadmap are complete, so tiling, zoom, trackpad gestures, the overview, tab groups, saved views, the `transom` command-line tool, restoring layouts after a reboot and the window behaviour options work today.
+Phases 1-9 of the roadmap are complete, so tiling, zoom, trackpad gestures, the overview, tab groups, saved views, the `transom` command-line tool, restoring layouts after a reboot, the window behaviour options, Settings, first-run setup, launch at login and the update check work today.
 
 | Phase | Name | Status |
 |---|---|---|
@@ -27,9 +27,15 @@ Phases 1-8.1 of the roadmap are complete, so tiling, zoom, trackpad gestures, th
 | 8 | Saved Views, URLs & Persistence | Complete |
 | 8.1 | Window Behaviour Options | Complete |
 | 8.1.1 | Remove the Desktop Tile | Complete |
-| 9 | Polish & Ship | Planned |
+| 9 | Polish & Ship | Complete |
 
 Known gap: testing so far has used a single display. The multi-display re-checks from Phases 2, 3 and 6 (unplug and re-plug, per-arrangement layouts, "Displays have separate Spaces" off, Tab between displays) are still outstanding, so treat behaviour on a second display as unverified.
+
+## Install
+
+Download the disk image from the latest GitHub release, open it, and drag Transom to Applications. Transom needs macOS 14 or later.
+
+On first launch, Set Up Transom walks you through the Accessibility permission, optional Screen Recording and opening at login. If you open Transom from the disk image or your Downloads folder, it offers to move itself to Applications first.
 
 ## What works today
 
@@ -56,7 +62,7 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Per display and Space | There is one layout per display and Space, kept across Space switches, sleep and wake, and restarts. Fullscreen Spaces get no layout. A desk that changes while its Space is hidden is re-arranged when you next show it. |
 | Display arrangements | Layouts are remembered per set of connected displays and switched automatically when you dock or undock. When a display is unplugged, its windows float on a remaining display and go back to their tiles when it returns. Transom waits about 1.5 s for the displays to settle, and never acts while the Mac is asleep or locked. Works with "Displays have separate Spaces" on or off. |
 | Overview | ⌃⌥⌘A (or menu ▸ Show Overview, or `transom://overview`) shows every window on every display and Space, with a strip of that display's Spaces along the top. Windows on other Spaces show the last snapshot taken this session, or their app-colour tile. Click a window to go to it (switching Space if needed), or click a Space to switch to it. The arrow keys move the selection, Tab moves to the next display, Return opens the selected window and Esc closes the overview. VoiceOver uses ⌃⌥ for its own commands, so with VoiceOver on, open the overview from the menu or rebind it. |
-| Replace Mission Control | Off by default. Turn it on from the menu and F3, ⌃↑ and ⇧F3 open Transom's overview instead of Mission Control; when the overview can't open, Mission Control opens as usual. The four-finger swipe stays with macOS. Transom stores the original shortcut settings first and restores them when you turn it off, on quit and on the next launch after a crash; a crash while it is on turns it off until you turn it back on. Switching Spaces from the overview uses macOS's Move left/right a space shortcuts, so it needs them on. |
+| Replace Mission Control | Off by default. Turn on Use the Mission Control keys for the overview in Settings ▸ Zoom & Gestures and F3, ⌃↑ and ⇧F3 open Transom's overview instead of Mission Control; when the overview can't open, Mission Control opens as usual. The four-finger swipe stays with macOS. Transom stores the original shortcut settings first and restores them when you turn it off, on quit and on the next launch after a crash; a crash while it is on turns it off until you turn it back on. Switching Spaces from the overview uses macOS's Move left/right a space shortcuts, so it needs them on. |
 | Tab groups | Drag a window onto the middle of another window (docked or floating) and hold until the outline reads "Group as tabs" (about half a second), then release: both share the tile under one tab strip, from any apps. Click a tab to switch; hidden tabs are moved off screen, never minimised, and come back on quit. A window activated another way (⌘Tab, the Dock) becomes the selected tab. Drag a tab out of the strip to dock or float it again; right-click a tab for Close Tab and Move Out of Group. The strip's buttons close, minimise and float/dock the whole group; Close Group asks first (with "Do not show this again") and waits for any save prompt, continuing after Save or Delete and stopping on Cancel. A Safari window with several tabs joins as one tab. ⌃⌥⌘T / ⇧⌃⌥⌘T switch to the next / previous tab, ⌃⌥⌘L moves the focused tab out, also under menu ▸ Arrange ▸ Tabs. Groups are saved and come back on relaunch. VoiceOver reads the strip as a tab group. |
 | Saved views | ⇧⌥1–9 saves the current view to a slot and ⌥1–9 goes back to it, also from another Space: Transom switches there first, then zooms to the windows you saved, even after splits and moves. Saving over a slot replaces it, and saved views survive restarts. `transom://view/3` and `transom://save-view/3` do the same. With zoom off, these keys reach your apps. |
 | Command-line tool | `transom view 3` runs any `transom://` command in the running app and reports errors with an exit code. See Command-line tool below. |
@@ -69,10 +75,13 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Trackpad gestures | Hold ⌥ and pinch on the trackpad over any app to zoom the desk one level in or out, or ⌥-two-finger pan to slide to a neighbouring area. Over the bare wallpaper, pinch and pan work without ⌥. The desk follows your fingers live, then snaps to the next level or neighbour, or springs back if the gesture was short. The app under your fingers never sees a gesture Transom takes. Other modifiers (⌃, ⌘) and mouse wheels pass through to macOS. Gestures keep working after sleep, and with Reduce Motion the finish is a fade. They work with Trackpad ▸ "Zoom in or out" on or off; with it off, Transom reads the pinch from the trackpad directly. Built-in trackpad tested; an external Magic Trackpad is untested. Pans follow your natural-scrolling setting, like scrolled content. |
 | Zoom off | Turn Off Zoom (menu) brings every window home and disables zoom entirely: no overlay, no Screen Recording use, and tiling behaves exactly as without zoom. |
 | Slow apps | Each app's Accessibility calls run off the main thread with a timeout, so a frozen app cannot stall Transom or the arranging of other apps' windows. |
+| Settings | Click the Transom icon and choose Settings… (⌘,). Tabs: General, Arranging, Zoom & Gestures, Shortcuts, Exclusions, Menu Bar and Updates. Gaps, New Windows and Drag to Dock are also in the menu, and both always show the same value. |
+| Updates | Transom checks GitHub for a new release when it opens and once a day (turn this off in Settings ▸ Updates). A dot on the menu-bar icon means one is ready. |
+| Menu bar controls | Optional Back, Forward and saved-view buttons next to the Transom icon. Turn them on and order them in Settings ▸ Menu Bar. |
 
 ### Menu
 
-The status menu has four sections. Arrange starts with Dock Window, which lists every docking position with its hotkey: where the window is, halves, corners, thirds and fourths. Arrange also holds the other layout commands, Clear Waiting Tiles, which closes the waiting tiles on the Spaces showing, and the Gaps, New Windows and Drag to Dock submenus. Zoom holds the zoom commands, Turn Off or Turn On Zoom, Allow Window Previews… (Screen Recording) and Shortcuts…, a window where you can rebind every hotkey. Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, the state of the window-ID lookup, the Spaces lookup and the event tap, the zoom and snapshot state, and the gesture state (gestures taken, the gesture tap, and multitouch), the Spaces and Displays state (current Spaces, display arrangement, settling), the Mission Control takeover state, the last overview's open time, saved views, windows waiting to come back, and whether the command-line tool is listening. If multitouch was switched off after a crash, Turn Multitouch Back On re-enables it.
+The status menu has four sections. Arrange starts with Dock Window, which lists every docking position with its hotkey: where the window is, halves, corners, thirds and fourths. Arrange also holds the other layout commands, Clear Waiting Tiles, which closes the waiting tiles on the Spaces showing, and the Gaps, New Windows and Drag to Dock submenus. Zoom holds the zoom commands, Turn Off or Turn On Zoom, and Allow Window Previews… (Screen Recording). Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. The menu ends with Settings…, Report a Problem…, which opens a GitHub issue with your Transom and macOS versions (never window titles or app names), and Quit. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, the state of the window-ID lookup, the Spaces lookup and the event tap, the zoom and snapshot state, and the gesture state (gestures taken, the gesture tap, and multitouch), the Spaces and Displays state (current Spaces, display arrangement, settling), the Mission Control takeover state, the last overview's open time, saved views, windows waiting to come back, whether the command-line tool is listening, the update check's state and the login item's state. If multitouch was switched off after a crash, Turn Multitouch Back On re-enables it.
 
 ### URL commands
 
@@ -97,6 +106,7 @@ open transom://dock-row-1      # also dock-row-2, -3, -4, dock-row-middle
 open transom://dock-left-half  # also dock-right-half, dock-top-half, dock-bottom-half
 open transom://dock-top-left   # also dock-top-right, dock-bottom-left, dock-bottom-right
 open transom://dock-left-third # also dock-center-third, -right-third, -top-third, -middle-third, -bottom-third
+open "transom://settings?pane=updates"  # general, arranging, zoom, shortcuts, exclusions, menubar, updates
 ```
 
 Zoom URLs act on the display under the pointer. Dock URLs act on the focused window.
@@ -105,7 +115,7 @@ Debug builds register `transom-debug://` instead.
 
 ### Command-line tool
 
-Transom ships a `transom` command that runs the same commands as the `transom://` URLs and reports errors with an exit code. Install it with:
+Transom ships a `transom` command that runs the same commands as the `transom://` URLs and reports errors with an exit code. Settings ▸ General shows whether it's installed. To install it, run:
 
 ```sh
 sudo mkdir -p /usr/local/bin && sudo ln -sf /Applications/Transom.app/Contents/Helpers/transom /usr/local/bin/transom
@@ -115,7 +125,7 @@ Run `transom help` to see every command. It never starts Transom: if Transom isn
 
 ### Hotkeys
 
-These are the default global hotkeys. Rebind any of them in the Shortcuts window (status menu ▸ Zoom ▸ Shortcuts…).
+These are the default global hotkeys. Rebind any of them in Settings ▸ Shortcuts.
 
 | Hotkey | Command |
 |---|---|
@@ -173,15 +183,7 @@ These are the default global hotkeys. Rebind any of them in the Shortcuts window
 | `⌥1–9` | Go to view 1–9 |
 | `⇧⌥1–9` | Save view 1–9 |
 
-On macOS 15.0 and 15.1 the defaults are ⌃⌥1–9 and ⇧⌃⌥1–9. If ⌥ with a number types a character you need on your keyboard, rebind them in Shortcuts.
-
-## Planned features
-
-Phase 9 is not in the code yet. Each line summarises the goal in `.planning/ROADMAP.md`.
-
-| Phase | Feature | Status |
-|---|---|---|
-| 9 | Polish & Ship: a Settings window (gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement, New Windows, Drag to Dock), first-run onboarding, launch at login, an update check against GitHub Releases, a Homebrew cask, and a `transom://settings` URL that opens a given Settings section. | Planned |
+On macOS 15.0 and 15.1 the defaults are ⌃⌥1–9 and ⇧⌃⌥1–9. If ⌥ with a number types a character you need on your keyboard, rebind them in Settings ▸ Shortcuts.
 
 ## Requirements
 
@@ -209,7 +211,7 @@ Building the signed `.app` uses XcodeGen and Xcode:
 | `scripts/generate.sh` | Runs XcodeGen on `xcode/project.yml` to generate `xcode/Transom.xcodeproj`. The generated project is gitignored. Install XcodeGen with `brew install xcodegen`. |
 | `scripts/build-debug.sh` | Builds the signed "Transom Debug.app" (bundle ID `com.eightabyte.transom.debug`), or with `--release` the signed "Transom.app" (`com.eightabyte.transom`). It then verifies the signature and designated requirement and prints the app path. |
 | `scripts/run-debug.sh` | Builds "Transom Debug.app" and launches it through LaunchServices, so macOS attributes the permission grant to Transom and not to your terminal. Extra arguments are passed to the app, for example `--disable-private=AXWindowID`. `--no-build` skips the build. |
-| `scripts/release.sh` | The local release pipeline: builds the universal Developer ID app, notarises and staples it, builds `build/Transom-0.3.0.dmg`, signs, notarises and staples the DMG, and prints its sha256. `--build-only` stops after building and verifying the app. `--skip-notarize` does everything except notarising and stapling. It uploads nothing. |
+| `scripts/release.sh` | The release pipeline, also run by the GitHub Actions release job (see [docs/releasing.md](docs/releasing.md)): builds the universal Developer ID app, checks its designated requirement against `xcode/designated-requirement.txt`, notarises and staples it, builds `build/Transom-<version>-universal.dmg` (the version is `MARKETING_VERSION` in `xcode/project.yml`), signs, notarises and staples the DMG, and writes and prints its sha256. `--build-only` stops after building and verifying the app. `--skip-notarize` does everything except notarising and stapling. It uploads nothing. |
 | `scripts/check-no-appkit.sh` | Fails if `TransomModel` or `TransomEngine` imports a UI framework. |
 | `scripts/vm-live-test.sh` | Runs the live integration tests inside a Tart VM (see Testing). |
 | `scripts/vm-cli-check.sh` | Builds "Transom Debug.app" and checks its `transom` command's exit codes against the running app inside a Tart VM. |
@@ -226,7 +228,7 @@ Signing notes:
 |---|---|---|
 | `TransomModel` | library | The pure layout model: nested split tree with weights, the floating-window layer, tab groups, desks keyed by display and Space, resolving tiles to non-overlapping rects with minimum sizes, undo and versioned JSON. Foundation only. |
 | `TransomEngine` | library | Behaviour with no UI: the Arranger, the one `Command` enum every route dispatches, drag sessions, window tracking and classification, crash recovery, layout restore, the `transom://` parser and the `WindowSystem` protocol. |
-| `TransomMac` | library | The AppKit layer: Accessibility window system, event tap, hotkeys, status menu, overlays (drop preview, gap handles, toasts), the zoom stage and snapshot capture, the Shortcuts window, permission flow, stores and conflict handling. |
+| `TransomMac` | library | The AppKit layer: Accessibility window system, event tap, hotkeys, status menu, overlays (drop preview, gap handles, toasts), the zoom stage and snapshot capture, the Settings window, onboarding, the update check, permission flow, stores and conflict handling. |
 | `TransomPrivate` | library | Every private API, each behind a fallback (see Private APIs). |
 | `TransomApp` | executable | The app entry point; it starts `TransomMac`. |
 | `TransomFixtureApp` | executable | A test fixture that opens real windows of every shape the integration tests need and reports their IDs and frames. |
@@ -244,7 +246,7 @@ Two rules shape the layout:
 
 ## Testing
 
-`swift test` runs the headless suites (model, engine and Mac unit tests) on any Mac, with no permissions needed. CI (`.github/workflows/ci.yml`, on `macos-26`) runs `scripts/check-no-appkit.sh`, then `swift build` and `swift test` in both debug and release.
+`swift test` runs the headless suites (model, engine and Mac unit tests) on any Mac, with no permissions needed. CI (`.github/workflows/ci.yml`, on `macos-26`) runs `scripts/check-no-appkit.sh`, then `swift build` and `swift test` in both debug and release. GitHub Actions is paused for this repository until it goes public, so for now these checks run locally.
 
 The live Accessibility suites in `Tests/TransomMacIntegrationTests` skip unless the process is trusted for Accessibility and `TRANSOM_LIVE=1` is set. They open and move real windows, so run them only inside a Tart macOS VM through `scripts/vm-live-test.sh`, never on your own Mac:
 
@@ -282,6 +284,8 @@ Files in `~/Library/Application Support/Transom`:
 
 Both files are validated on load. A file that fails validation is moved aside with a `.corrupt` suffix and Transom starts empty. A `layout.json` from a newer schema is left untouched and nothing is saved that session.
 
+Disk images you choose to download from Settings ▸ Updates go to `~/Library/Caches/com.eightabyte.transom/Updates`. A download that fails any check is deleted.
+
 Preferences in Transom's user defaults:
 
 | Key | Contents |
@@ -298,6 +302,12 @@ Preferences in Transom's user defaults:
 | `tabs.confirmCloseGroup` | Whether Close Group asks first (false after "Do not show this again") |
 | `takeover.enabled`, `takeover.explained`, `takeover.originals` | Whether Replace Mission Control is on, whether its explanation was shown, and the original Mission Control shortcut settings to restore |
 | `privateCanary.Multitouch`, `privateCanary.MissionControl` | Crash markers: set while multitouch or the takeover runs, so a crash turns that feature off on the next launch |
+| `settings.lastPane` | The Settings tab shown last, so Settings reopens on it |
+| `appearance.highlight` | Your custom highlight color as `#RRGGBB`; absent means the macOS accent color |
+| `gestures.option`, `gestures.wallpaper` | Whether pinch and pan work with ⌥ held, and on the wallpaper without ⌥ (both on by default) |
+| `updates.automatic` | Whether Transom checks for updates when it opens and once a day (default on) |
+| `menuBar.items`, `menuBar.iconOnly` | Which menu bar controls show, in order, and whether saved views show as plain squares |
+| `onboarding.completed`, `onboarding.step` | Whether first-run setup is done, and the step to resume at after macOS's Quit & Reopen |
 | `freezeTestPID` | Debug builds only: the app paused by the Debug menu's freeze test, so it is resumed after a crash |
 | `KeyboardShortcuts_<name>` | Hotkey bindings, stored by the KeyboardShortcuts library |
 
@@ -307,7 +317,9 @@ When you choose Turn Off for a macOS conflict, Transom writes only these boolean
 
 - Without Screen Recording, Transom does not read window contents or capture the screen. With it granted and zoom on, Transom takes one-shot snapshots of on-screen windows only to draw the zoom overlay. Snapshots stay in memory (a 128 MB cache), are never written to disk, and use no continuous stream, so the macOS screen-sharing indicator never shows.
 - The zoom overlay itself is visible to system screen recordings on macOS 15.
-- It has no network code and sends nothing anywhere.
+- Transom makes one kind of network request on its own: it asks GitHub for the latest release of `scottkw/transomwm` (the public release JSON) when it opens and once a day. The request is unauthenticated and carries nothing about you or your Mac. Turn it off in Settings ▸ Updates.
+- It downloads a disk image only when you choose Download and Open, from GitHub, and checks its SHA-256, Developer ID team and notarization before opening it.
+- Report a Problem… opens a GitHub issue page in your browser, prefilled with your Transom and macOS versions and counts only (never window titles or app names). Nothing is sent until you submit it.
 - Through Accessibility it reads window metadata: each app's window list and, per window, role, subrole, modal, main, minimised and fullscreen state, identifier, title, position, size, title-bar buttons and child elements. To split with a new Finder window it presses Finder's menu item through Accessibility, with no Apple Events.
 - Window titles help classify windows, match windows when the private window-ID lookup is off, and label rows in the Debug menu's Tracked Windows list. The only place they are written is `layout.json`, readable only by you, to match windows to their tiles after a restart.
 - Logs go to the macOS unified log under the `com.eightabyte.transom` subsystem.

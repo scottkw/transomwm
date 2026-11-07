@@ -10,6 +10,7 @@ struct CloseRow: Sendable, CustomTestStringConvertible {
     let ax: AXWindowFact
     let inCGList: Bool
     var knownEmpty = false
+    var orderedOut = false
     var tabMember = false
     let expected: CloseDecision
 
@@ -51,6 +52,15 @@ private let rows: [CloseRow] = [
     CloseRow(name: "timeout, CG present, no Space", ax: .timedOut, inCGList: true, knownEmpty: true, expected: .noChange),
     CloseRow(name: "paused overrides invalid, no Space", sessionActive: false, ax: .invalidElement, inCGList: true, knownEmpty: true, expected: .noChange),
     CloseRow(name: "paused overrides terminated, no Space", sessionActive: false, app: .terminated, ax: .timedOut, inCGList: true, knownEmpty: true, expected: .noChange),
+    // D-23: a CG entry offscreen on a shown Space is the second source only when AX says the element is gone.
+    CloseRow(name: "invalid, ordered out", ax: .invalidElement, inCGList: true, orderedOut: true, expected: .closed),
+    CloseRow(name: "invalid, ordered out, tab member", ax: .invalidElement, inCGList: true, orderedOut: true, tabMember: true, expected: .state(.absent)),
+    CloseRow(name: "valid, unlisted, ordered out", ax: valid(listed: false), inCGList: true, orderedOut: true, expected: .noChange),
+    CloseRow(name: "valid, minimised, ordered out", ax: valid(minimized: true), inCGList: true, orderedOut: true, expected: .state(.absent)),
+    CloseRow(name: "valid, app hidden, ordered out", ax: valid(appHidden: true), inCGList: true, orderedOut: true, expected: .state(.absent)),
+    CloseRow(name: "timeout, ordered out", ax: .timedOut, inCGList: true, orderedOut: true, expected: .noChange),
+    CloseRow(name: "terminated, ordered out", app: .terminated, ax: .timedOut, inCGList: true, orderedOut: true, expected: .recheck),
+    CloseRow(name: "paused overrides invalid, ordered out", sessionActive: false, ax: .invalidElement, inCGList: true, orderedOut: true, expected: .noChange),
 ]
 
 private let identity = WindowIdentity(windowID: 100, pid: 42, bundleID: "com.example.app")
@@ -61,7 +71,7 @@ private let t0 = ContinuousClock.now
     func theTableDecides(row: CloseRow) {
         let decision = CloseRule.decide(
             sessionActive: row.sessionActive, app: row.app, ax: row.ax, inCGList: row.inCGList, cgSpacesKnownEmpty: row.knownEmpty,
-            isKnownTabMember: row.tabMember
+            cgOrderedOut: row.orderedOut, isKnownTabMember: row.tabMember
         )
         #expect(decision == row.expected)
     }
@@ -69,10 +79,14 @@ private let t0 = ContinuousClock.now
     @Test func noSingleSourceEverCloses() {
         // AX alone (invalid but still listed by CG) and CG alone (absent but AX valid or silent) never close.
         for ax in [valid(), valid(listed: false), .timedOut, .otherFailure] {
-            #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: ax, inCGList: false, cgSpacesKnownEmpty: false, isKnownTabMember: false) != .closed)
+            #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: ax, inCGList: false, cgSpacesKnownEmpty: false, cgOrderedOut: false, isKnownTabMember: false) != .closed)
         }
-        #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: .invalidElement, inCGList: true, cgSpacesKnownEmpty: false, isKnownTabMember: false) != .closed)
-        #expect(CloseRule.decide(sessionActive: true, app: .terminated, ax: .timedOut, inCGList: true, cgSpacesKnownEmpty: false, isKnownTabMember: false) != .closed)
+        #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: .invalidElement, inCGList: true, cgSpacesKnownEmpty: false, cgOrderedOut: false, isKnownTabMember: false) != .closed)
+        #expect(CloseRule.decide(sessionActive: true, app: .terminated, ax: .timedOut, inCGList: true, cgSpacesKnownEmpty: false, cgOrderedOut: false, isKnownTabMember: false) != .closed)
+        // CG alone ordered out on a shown Space (D-23) never closes either.
+        for ax in [valid(), valid(listed: false), .timedOut, .otherFailure] {
+            #expect(CloseRule.decide(sessionActive: true, app: .alive, ax: ax, inCGList: true, cgSpacesKnownEmpty: false, cgOrderedOut: true, isKnownTabMember: false) != .closed)
+        }
     }
 
     @Test func aClosedIdentityIsContainedForJustUnder60s() {

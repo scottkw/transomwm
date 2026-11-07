@@ -53,6 +53,7 @@ nonisolated public enum MenuCopy {
         case .finderSplit: "Split with New Finder Window"
         case .togglePause: pauseToggle(paused: false)
         case .toggleExcludeFrontmost: dontArrangeFallback
+        case .settings: SettingsCopy.menuItem
         case .restoreAll: "Restore All Windows"
         case .camera(let command): cameraTitle(command)
         case .tabs(.next): TabCopy.nextTab
@@ -206,6 +207,11 @@ nonisolated public enum MenuCopy {
     public static func degradedLine(count apps: Int) -> String? {
         apps == 0 ? nil : "\(count(apps, "app")) not responding"
     }
+
+    /// The bottom group's report item (Surface 5, D-15).
+    public static let reportProblem = "Report a Problem\u{2026}"
+    public static let reportProblemTooltip =
+        "Opens a new GitHub issue with your Transom and macOS versions. Window titles and app names are never included. The same details are copied to the clipboard."
 
     public static func capabilityItem(windowIDLookupAvailable: Bool) -> String {
         windowIDLookupAvailable ? "Window ID lookup: available" : "Window ID lookup: off, matching by frame"

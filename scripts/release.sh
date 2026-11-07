@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Local release pipeline for Transom 0.3.0 (D-30): builds the universal Developer ID Release app through
-# build-debug.sh --release, refuses to continue on any signing problem (RESEARCH Pitfall 1), then
-# notarises and staples the app, builds build/Transom-0.3.0.dmg, signs, notarises and staples it, and
-# prints the DMG's sha256 last. Nothing is uploaded. Notarisation needs credentials stored once with
-# `xcrun notarytool store-credentials pane-notary`.
+# Release pipeline for Transom, run locally and by the GitHub Actions release job (D-11): builds the
+# universal Developer ID Release app through build-debug.sh --release, refuses to continue on any signing
+# problem (RESEARCH Pitfall 1), then notarises and staples the app, builds
+# build/Transom-<version>-universal.dmg, signs, notarises and staples it, writes its sha256 to
+# build/Transom-<version>-universal.dmg.sha256 and prints that last. Nothing is uploaded.
+# The version comes from MARKETING_VERSION in xcode/project.yml. The app's designated requirement must
+# equal xcode/designated-requirement.txt exactly: a different one would cost every user the Accessibility
+# grant on update, so change that file only on purpose. Notarisation uses the keychain profile named by
+# TRANSOM_NOTARY_PROFILE (default pane-notary, stored once with `xcrun notarytool store-credentials`).
 # Usage: scripts/release.sh [--build-only | --skip-notarize]
 #   --build-only     build and verify the app, print its path, stop
 #   --skip-notarize  everything except notarising and stapling (no credentials needed)
@@ -22,15 +26,17 @@ case "${1:-}" in
 esac
 [ $# -le 1 ] || { echo "release: too many arguments" >&2; exit 2; }
 
-version=0.3.0
-identifier=com.eightabyte.transom
+fail() { echo "release: $1" >&2; exit 1; }
+
+version="$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"$/\1/p' xcode/project.yml)"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "xcode/project.yml: MARKETING_VERSION '$version' is not MAJOR.MINOR.PATCH"
 team=S2K7P43927
 signer="Developer ID Application: Ken Scott ($team)"
-# The notary keychain profile was stored before the rename and keeps that name; no new store-credentials run is needed.
-profile=pane-notary
-dmg="build/Transom-$version.dmg"
+# The local notary keychain profile was stored before the rename and keeps that name; CI sets its own.
+profile="${TRANSOM_NOTARY_PROFILE:-pane-notary}"
+# The name the updater and the cask download; the .sha256 beside it is written after stapling.
+dmg="build/Transom-$version-universal.dmg"
 staging=build/dmg-staging
-fail() { echo "release: $1" >&2; exit 1; }
 
 # 1. Build and verify. build-debug.sh already checks the designated requirement (identifier + team).
 # An incremental build can keep an old signed copy of the tool in Contents/Helpers (08-05), so start from no bundle.
@@ -42,8 +48,11 @@ app="$(scripts/build-debug.sh --release | tail -n 1)"
 details="$(codesign -dvv "$app" 2>&1)"
 grep -q '^Timestamp=' <<<"$details" || fail "no secure timestamp on $app"
 codesign --verify --strict --deep --verbose=2 "$app" >&2 || fail "codesign --verify --strict --deep failed"
-requirement="$(codesign -d -r- "$app" 2>&1)"
-case "$requirement" in *"identifier \"$identifier\""*"$team"*) ;; *) fail "designated requirement changed: $requirement" ;; esac
+requirement="$(codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => //p')"
+expected="$(cat xcode/designated-requirement.txt)"
+[ "$requirement" = "$expected" ] || fail "designated requirement changed (users would lose the Accessibility grant):
+  built:     $requirement
+  committed: $expected"
 entitlements="$(codesign -d --entitlements - "$app" 2>/dev/null)"
 for forbidden in get-task-allow disable-library-validation automation.apple-events; do
     case "$entitlements" in *"$forbidden"*) fail "forbidden entitlement present: $forbidden" ;; esac
@@ -88,6 +97,20 @@ notarize() {
     fail "notarisation of $1 not accepted (submission ${id:-unknown}); see: xcrun notarytool log ${id:-<id>} --keychain-profile $profile"
 }
 
+# Runs `xcrun stapler staple|validate $2` up to 5 times, 20 s apart: on GitHub's macOS runners the
+# ticket lookup sometimes drops (NSURLError -1005, stapler error 68).
+staple_retry() {
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        xcrun stapler "$1" "$2" >&2 && return 0
+        if [ "$attempt" -lt 5 ]; then
+            echo "stapler $1 failed (attempt $attempt of 5), retrying in 20 s" >&2
+            sleep 20
+        fi
+    done
+    fail "stapler $1 $2 failed after 5 attempts"
+}
+
 mkdir -p build
 
 # 2. Notarise and staple the app, so a copy dragged out of the DMG passes Gatekeeper offline.
@@ -95,19 +118,22 @@ if [ "$notarize" = 1 ]; then
     rm -f build/Transom.zip
     ditto -c -k --keepParent "$app" build/Transom.zip
     notarize build/Transom.zip
-    xcrun stapler staple "$app" >&2 || fail "stapler staple failed for $app"
+    staple_retry staple "$app"
 fi
 
 # 3. DMG, signed (and notarised and stapled unless skipping).
-rm -rf "$staging" "$dmg"
+rm -rf "$staging" "$dmg" "$dmg.sha256"
 mkdir -p "$staging"
 ditto "$app" "$staging/Transom.app"
 if command -v create-dmg >/dev/null 2>&1; then
     # --app-drop-link adds the /Applications link itself; --skip-jenkins avoids a Finder AppleScript
-    # and its Automation prompt. --notarize submits, waits and staples.
+    # and its Automation prompt. --notarize submits, waits and staples. Layout: UI-SPEC Surface 8.
+    # shortcut: --skip-jenkins also skips the AppleScript that applies the window size, icon positions and
+    # hidden extension, so those flags are inert; drop --skip-jenkins on a Mac that grants Finder automation.
     extra=()
     [ "$notarize" = 1 ] && extra=(--notarize "$profile")
-    create-dmg --volname "Transom $version" --app-drop-link 400 120 --skip-jenkins \
+    create-dmg --volname "Transom $version" --window-size 540 380 --icon-size 128 \
+        --icon "Transom.app" 140 180 --hide-extension "Transom.app" --app-drop-link 400 180 --skip-jenkins \
         --codesign "$signer" ${extra[@]+"${extra[@]}"} "$dmg" "$staging/" >&2 || fail "create-dmg failed"
 else
     echo "release: create-dmg not found, falling back to hdiutil" >&2
@@ -117,7 +143,7 @@ else
     codesign --timestamp --sign "$signer" "$dmg" >&2 || fail "codesign of $dmg failed"
     if [ "$notarize" = 1 ]; then
         notarize "$dmg"
-        xcrun stapler staple "$dmg" >&2 || fail "stapler staple failed for $dmg"
+        staple_retry staple "$dmg"
     fi
 fi
 
@@ -129,6 +155,8 @@ if [ "$notarize" = 1 ]; then
     assessment="$(spctl -a -vvv -t exec "$app" 2>&1)" || true
     echo "$assessment" >&2
     grep -q 'source=Notarized Developer ID' <<<"$assessment" || fail "spctl does not report Notarized Developer ID"
-    xcrun stapler validate "$dmg" >&2 || fail "stapler validate failed for $dmg"
+    staple_retry validate "$dmg"
 fi
-shasum -a 256 "$dmg"
+# Relative name inside build/, so `shasum -c` works there and in the release job.
+(cd build && shasum -a 256 "Transom-$version-universal.dmg") > "$dmg.sha256"
+cat "$dmg.sha256"

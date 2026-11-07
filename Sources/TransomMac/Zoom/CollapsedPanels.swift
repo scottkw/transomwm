@@ -9,9 +9,9 @@ private final class BlockPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// One collapsed block at rest (UI-SPEC Surface 3): app-colour fill, radius min(12, shorter side / 2), 1 pt separator
-/// border, the app icon at min(32, shorter side - 8) hidden below 16, no title. Hover adds a 2 pt accent ring and the
-/// pointing hand; a double-click zooms in.
+/// One collapsed block at rest (UI-SPEC Surfaces 3 and 7): app-colour fill, radius min(12, shorter side / 2), 1 pt
+/// separator border, the app icon at min(32, shorter side - 8) hidden below 16, and under it a label card (title and
+/// "Collapsed") when it fits. Hover adds a 2 pt accent ring and the pointing hand; a double-click zooms in.
 final class CollapsedBlockView: NSView {
     var block: CollapsedBlock {
         didSet { needsDisplay = true }
@@ -19,6 +19,9 @@ final class CollapsedBlockView: NSView {
     var onDoubleClick: ((TransomModel.WindowRef) -> Void)?
     private let icon = CALayer()
     private let ring = CALayer()
+    private let card = CALayer()
+    private let line1 = CATextLayer()
+    private let line2 = CATextLayer()
 
     init(_ block: CollapsedBlock) {
         self.block = block
@@ -26,7 +29,18 @@ final class CollapsedBlockView: NSView {
         wantsLayer = true
         ring.opacity = 0
         ring.borderWidth = 2
+        for text in [line1, line2] {
+            text.truncationMode = .end
+            text.alignmentMode = .center
+            card.addSublayer(text)
+        }
+        line1.font = Self.titleFont
+        line1.fontSize = Self.titleFont.pointSize
+        line2.font = Self.stateFont
+        line2.fontSize = Self.stateFont.pointSize
+        card.borderWidth = 1
         layer?.addSublayer(icon)
+        layer?.addSublayer(card)
         layer?.addSublayer(ring)
     }
 
@@ -41,6 +55,29 @@ final class CollapsedBlockView: NSView {
         let app = "\u{201C}\(MenuCopy.truncatedAppName(appName))\u{201D}, collapsed"
         return title.isEmpty ? app : "\(app): \(title)"
     }
+
+    // MARK: Label card (UI-SPEC Surface 7)
+
+    nonisolated enum LabelFit: Equatable { case full, lineOne, iconOnly }
+
+    /// Line 1 is the title, else the app's name; line 2 says it is collapsed, and how many windows for a group.
+    nonisolated static func labelLines(title: String, appName: String, groupSize: Int) -> (String, String) {
+        let first = title.isEmpty ? MenuCopy.truncatedAppName(appName) : title
+        return (first, groupSize > 1 ? TabCopy.collapsedWindows(groupSize) : TabCopy.collapsed)
+    }
+
+    /// What fits under an `icon`-sized icon (0 when hidden), keeping `TileLayer.clearance` from every edge.
+    nonisolated static func labelFit(block: CGSize, icon: CGFloat, fullCard: CGSize, lineCard: CGSize) -> LabelFit {
+        let clearance = 2 * TileLayer.clearance
+        let gap: CGFloat = icon > 0 ? 8 : 0
+        let fits: (CGSize) -> Bool = { (card: CGSize) -> Bool in
+            block.width >= card.width + clearance && block.height >= icon + gap + card.height + clearance
+        }
+        return fits(fullCard) ? .full : fits(lineCard) ? .lineOne : .iconOnly
+    }
+
+    private static var titleFont: NSFont { NSFont.preferredFont(forTextStyle: .body) }
+    private static var stateFont: NSFont { NSFont.preferredFont(forTextStyle: .subheadline) }
 
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
@@ -75,12 +112,50 @@ final class CollapsedBlockView: NSView {
         layer.borderColor = NSColor.separatorColor.cgColor
         ring.frame = bounds
         ring.cornerRadius = radius
-        ring.borderColor = NSColor.controlAccentColor.withAlphaComponent(contrast ? 1 : 0.85).cgColor
+        ring.borderColor = HighlightColor.current.withAlphaComponent(contrast ? 1 : 0.85).cgColor
         icon.isHidden = side < TileLayer.minIcon || app?.icon == nil
         icon.frame = CGRect(x: (bounds.width - side) / 2, y: (bounds.height - side) / 2, width: max(side, 0), height: max(side, 0))
         icon.contents = app?.icon?.layerContents(forContentsScale: window?.backingScaleFactor ?? 2)
         icon.contentsGravity = .resizeAspect
+        layoutCard(iconSide: icon.isHidden ? 0 : side, contrast: contrast)
         CATransaction.commit()
+    }
+
+    /// The icon and the card centred as one group (y grows upward); the card width is the wider line + 16, capped.
+    private func layoutCard(iconSide: CGFloat, contrast: Bool) {
+        let name = NSRunningApplication(processIdentifier: block.window.pid)?.localizedName ?? block.window.bundleID
+        let (first, second) = Self.labelLines(title: block.window.titleHint, appName: name, groupSize: block.groupSize)
+        let size1 = NSAttributedString(string: first, attributes: [.font: Self.titleFont]).size()
+        let size2 = NSAttributedString(string: second, attributes: [.font: Self.stateFont]).size()
+        let height1 = ceil(size1.height), height2 = ceil(size2.height)
+        // Never narrower than one character of text, so a narrow block falls back instead of showing a sliver.
+        let cap: (CGFloat) -> CGFloat = { (natural: CGFloat) -> CGFloat in
+            max(min(ceil(natural) + 16, self.bounds.width - 2 * TileLayer.clearance), 16 + Self.titleFont.pointSize)
+        }
+        let full = CGSize(width: cap(max(size1.width, size2.width)), height: height1 + height2 + 8)
+        let lineOne = CGSize(width: cap(size1.width), height: height1 + 8)
+        let fit = Self.labelFit(block: bounds.size, icon: iconSide, fullCard: full, lineCard: lineOne)
+        card.isHidden = fit == .iconOnly
+        let size = fit == .full ? full : lineOne
+        let gap: CGFloat = iconSide > 0 && fit != .iconOnly ? 8 : 0
+        let groupHeight = iconSide + (fit == .iconOnly ? 0 : gap + size.height)
+        let bottom = (bounds.height - groupHeight) / 2
+        icon.frame.origin.y = bottom + groupHeight - icon.frame.height
+        guard fit != .iconOnly else { return }
+        let scale = window?.backingScaleFactor ?? 2
+        card.frame = CGRect(x: (bounds.width - size.width) / 2, y: bottom, width: size.width, height: size.height)
+        card.cornerRadius = fit == .full ? 8 : size.height / 2
+        card.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        card.borderColor = (contrast ? NSColor.labelColor : NSColor.separatorColor).cgColor
+        line1.string = first
+        line1.foregroundColor = NSColor.labelColor.cgColor
+        line1.contentsScale = scale
+        line1.frame = CGRect(x: 8, y: size.height - 4 - height1, width: size.width - 16, height: height1)
+        line2.isHidden = fit != .full
+        line2.string = second
+        line2.foregroundColor = NSColor.secondaryLabelColor.cgColor
+        line2.contentsScale = scale
+        line2.frame = CGRect(x: 8, y: 4, width: size.width - 16, height: height2)
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -140,6 +215,7 @@ final class CollapsedBlockView: NSView {
         }
         observers = [
             (center, center.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main, using: redraw)),
+            (center, center.addObserver(forName: HighlightColor.didChange, object: nil, queue: .main, using: redraw)),
             (workspace, workspace.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main, using: redraw)),
         ]
     }

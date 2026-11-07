@@ -5,6 +5,11 @@ import Testing
 
 /// UI-SPEC Copywriting Contract and Accessibility: the tab-group announcements.
 @Suite struct TabCopyTests {
+    @Test func collapsedCopyIsTheUISpecText() {
+        #expect(TabCopy.collapsed == "Collapsed")
+        #expect(TabCopy.collapsedWindows(3) == "3 windows, collapsed")
+    }
+
     private func spoken(_ announcement: TabAnnouncement) -> String {
         TabCopy.announcement(announcement, appName: { _ in "Safari" })
     }

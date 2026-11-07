@@ -37,6 +37,9 @@ public enum TransomMacApp {
         // Tracking starts only through the reducer's startTracking effect, once access is confirmed.
         let permissionController = PermissionController(system: system)
         let setupController = SetupWindowController(permission: permissionController)
+        // The only Screen Recording reads onboarding makes; tests inject fakes instead (RESEARCH Pitfall 5).
+        setupController.screenRecordingGranted = { SnapshotCapture.isGranted() }
+        setupController.requestScreenRecording = { SnapshotCapture.request() }
         let exclusions = ExclusionStore()
         // The window system enforces the list (D-12); the store only validates and keeps it.
         system.setExcludedBundleIDs(Set(exclusions.bundleIDs))
@@ -87,13 +90,24 @@ public enum TransomMacApp {
         conflictController.takeover = takeover
         conflictController.isDragging = { arrangeController.arranger.isDragging }
         conflictController.presentAlert = { [unowned conflictController] in conflictController.showModelessAlert($0) }
+        // Off outside a Release bundle (T-09-19); `swift run` has no Info.plist, hence "dev" (Capabilities' convention).
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String
+        let updates = UpdateController(
+            client: GitHubReleaseClient(configuration: GitHubReleaseClient.configuration(), userAgent: "Transom/\(version ?? "dev")"),
+            currentVersion: version ?? "dev", build: info?["CFBundleVersion"] as? String ?? "?",
+            isEnabled: UpdateController.isEnabled(bundleID: Bundle.main.bundleIdentifier, version: version), defaults: .standard)
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
             dragToDock: dragToDock, newWindows: newWindows, exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController,
+            updates: updates,
             showTrackedWindows: { trackedController.show() },
             showSetup: { setupController.show() }
         )
         controller.onInventory = { trackedController.feed.inventory = $0 }
+        setupController.openSettings = { controller.showSettings($0, from: "onboarding") }
+        setupController.loginItem = SystemLoginItem()
+        setupController.conflicts = conflictController
         arrangeController.onInventory = { controller.update($0) }
         trackedWindows = trackedController
         statusItem = controller

@@ -46,7 +46,6 @@ nonisolated public enum ZoomCopy {
     public static let allowWindowPreviews = "Allow Window Previews\u{2026}"
     public static let turnOffZoom = "Turn Off Zoom"
     public static let turnOnZoom = "Turn On Zoom"
-    public static let shortcutsItem = "Shortcuts\u{2026}"
     public static let zoomedInDescription = "Transom: zoomed in"
     public static let zoomOffAnnouncement = "Zoom off"
     public static let zoomOnAnnouncement = "Zoom on"

@@ -16,6 +16,14 @@ public enum CLICommandLine {
             guard let slot = slots.first, TransomURL.slot(digit: slot) != nil else { return .usage(CLICopy.needsSlot(name)) }
             return .send("\(name)/\(slot)")
         }
+        if first == "settings" {
+            switch arguments.count {
+            case 1: return .send("settings")
+            // Only a known raw value reaches the URL, never the argument text; an unknown pane opens General (D-04).
+            case 2: return .send("settings?pane=\((SettingsPane(rawValue: arguments[1]) ?? .general).rawValue)")
+            default: return .usage(CLICopy.settingsTooManyArguments)
+            }
+        }
         let isHelp = ["help", "-h", "--help"].contains(first)
         guard isHelp || TransomURL.commands[first] != nil else { return .usage(CLICopy.unknownCommand(first)) }
         switch arguments.count {

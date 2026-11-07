@@ -216,4 +216,44 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         let admitted = attempts.map { limiter.admit($0.0, at: start + $0.1) }
         #expect(admitted == [true, true, true, false])
     }
+
+    /// D-04, SHIP-08 (09 UI-SPEC Surface 6): no query opens the last tab.
+    @Test func settingsAloneOpensTheLastTab() {
+        #expect(parse("transom://settings") == .settings(nil))
+        #expect(parse("transom://settings/") == .settings(nil))
+    }
+
+    @Test(arguments: SettingsPane.allCases)
+    func settingsWithEachPaneOpensThatPane(pane: SettingsPane) {
+        #expect(parse("transom://settings?pane=\(pane.rawValue)") == .settings(pane))
+    }
+
+    @Test(arguments: ["?pane=UPDATES", "?pane=foo", "?pane=", "?pane", "?pane=%75pdates"])
+    func anUnknownEmptyOrUppercasePaneOpensGeneral(_ query: String) {
+        #expect(parse("transom://settings\(query)") == .settings(.general))
+    }
+
+    /// T-09-03: only one item named exactly `pane`, no path, no fragment, only the registered scheme.
+    @Test(arguments: [
+        "transom://settings?tab=updates", "transom://settings?pane=general&pane=updates", "transom://settings?pane=general&x=1",
+        "transom://settings/updates", "transom://settings#x", "transom-debug://settings", "transom://SETTINGS",
+    ])
+    func settingsRefusesOtherKeysASecondPaneAPathOrAFragment(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
+    @Test func otherCommandsStillRefuseAnyQuery() {
+        #expect(parse("transom://restore?pane=general") == nil)
+        #expect(parse("transom://view/3?x=1") == nil)
+    }
+
+    /// T-09-04: opening Settings activates Transom, so every pane shares one second on both routes.
+    @Test func everySettingsURLSharesOneRateLimitSecond() {
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [(.settings(.updates), .zero), (.settings(.general), .milliseconds(500)), (.settings(nil), .milliseconds(1100))]
+        var opened = TransomURLRateLimiter()
+        #expect(attempts.map { opened.admitOpenedURL($0.0, at: start + $0.1) } == [true, false, true])
+        var cli = TransomURLRateLimiter()
+        #expect(attempts.map { cli.admit($0.0, at: start + $0.1) } == [true, false, true])
+    }
 }

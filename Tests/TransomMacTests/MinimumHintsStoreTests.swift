@@ -64,7 +64,9 @@ import Testing
 
     nonisolated static let entry = #"{"bundleID":"com.example.app","width":300,"height":200}"#
     nonisolated static let badFiles: [(String, String)] = [
-        ("too large", #"{"schemaVersion":1,"hints":[]}"# + String(repeating: " ", count: 70 * 1024)),
+        // A placeholder: the real 70 KB text is built in `text(_:)`, because Swift Testing prints each argument on one log
+        // line and GitHub's log viewer drops everything after a line that long, hiding later failures.
+        ("too large", "<70 KB>"),
         ("newer schema", #"{"schemaVersion":2,"hints":[]}"#),
         ("malformed", #"{"schemaVersion":1,"hints":["#),
         ("duplicate", #"{"schemaVersion":1,"hints":[\#(entry),\#(entry)]}"#),
@@ -73,8 +75,12 @@ import Testing
         ("bundle ID with a space", #"{"schemaVersion":1,"hints":[{"bundleID":"com.example app","width":300,"height":200}]}"#),
     ]
 
+    nonisolated static let tooLarge = #"{"schemaVersion":1,"hints":[]}"# + String(repeating: " ", count: 70 * 1024)
+    nonisolated static func text(_ text: String) -> String { text == "<70 KB>" ? tooLarge : text }
+
     @Test(arguments: badFiles)
-    func aBadFileIsRejectedWholeAndMovedAside(name: String, text: String) throws {
+    func aBadFileIsRejectedWholeAndMovedAside(name: String, text placeholder: String) throws {
+        let text = Self.text(placeholder)
         let dir = Directory()
         try dir.write(#"{"schemaVersion":1,"hints":[]}"#)
         try FileManager.default.moveItem(at: dir.file, to: dir.corrupt)  // an older .corrupt is replaced
@@ -93,9 +99,9 @@ import Testing
         try dir.write(#"{"schemaVersion":2,"hints":[]}"#)
         store.load()
         #expect(store.loadError == .newerVersion(2))
-        try dir.write(Self.badFiles[0].1)
+        try dir.write(Self.tooLarge)
         store.load()
-        #expect(store.loadError == .tooLarge(Self.badFiles[0].1.utf8.count))
+        #expect(store.loadError == .tooLarge(Self.tooLarge.utf8.count))
     }
 
     @Test func aRejectedFileReplacesLoadedHints() throws {

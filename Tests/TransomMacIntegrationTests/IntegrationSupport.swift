@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 import TransomModel
+import TransomPrivate
 import os
 
 /// Gate for suites that need a real Accessibility grant. Opt-in with `TRANSOM_LIVE=1`: these suites open and move real
@@ -181,4 +182,45 @@ nonisolated(nonsending) func waitUntil(timeout: Duration, _ condition: () async 
         try? await Task.sleep(for: .milliseconds(50))
     }
     return await condition()
+}
+
+/// D-17: on macOS 27.2 a test process run over SSH never gets `NSWorkspace.activeSpaceDidChangeNotification`, although the
+/// Space does switch and the real app in the guest's GUI session hears every one (`.build/09-24-probe-app-vm27.log`); 15.7
+/// delivers it. Until `stop()`, each SkyLight Space change on `display` that the system has not announced within 150 ms is
+/// posted on this process's workspace center, as the system would. On 15.7 the counts balance and nothing is posted.
+@MainActor final class SpaceChangeRelay {
+    private nonisolated static let marker = "transomTestRelay"
+    private var observer: (any NSObjectProtocol)?
+    private var task: Task<Void, Never>?
+    private var heard = 0, changes = 0, posted = 0
+
+    init(display: String) {
+        observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard note.userInfo?[Self.marker] == nil else { return }
+            MainActor.assumeIsolated { self?.heard += 1 }
+        }
+        task = Task { [weak self] in
+            var shown = SkyLightSpaces.currentSpace(displayUUID: display)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(20))
+                let now = SkyLightSpaces.currentSpace(displayUUID: display)
+                guard now != shown else { continue }
+                shown = now
+                self?.changes += 1
+                try? await Task.sleep(for: .milliseconds(150))
+                guard let self, self.heard + self.posted < self.changes else { continue }
+                self.posted += 1
+                NSWorkspace.shared.notificationCenter.post(
+                    name: NSWorkspace.activeSpaceDidChangeNotification, object: NSWorkspace.shared, userInfo: [Self.marker: true])
+            }
+        }
+    }
+
+    func stop() {
+        print("SpaceChangeRelay: \(changes) Space changes, \(heard) announced by the system, \(posted) posted")
+        task?.cancel()
+        if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+    }
 }

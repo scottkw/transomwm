@@ -83,14 +83,13 @@ import TransomModel
 
     /// The Zoom section (UI-SPEC Surface 6; 06 Surface 4 puts Show Overview first): the header, the camera items, `previews` (nil while Screen Recording is
     /// granted) and `toggle`; with zoom off only the header and Turn On Zoom. Enabled states come from `update`.
-    /// `takeover` is Replace Mission Control (O2), after Frame Focused Window.
-    func zoomSection(enabled: Bool, framingWindow: Bool, takeover: NSMenuItem? = nil, previews: NSMenuItem?, toggle: NSMenuItem) -> [NSMenuItem] {
+    func zoomSection(enabled: Bool, framingWindow: Bool, previews: NSMenuItem?, toggle: NSMenuItem) -> [NSMenuItem] {
         toggle.title = enabled ? ZoomCopy.turnOffZoom : ZoomCopy.turnOnZoom
         guard enabled else { return [.sectionHeader(title: ZoomCopy.zoomSection), toggle] }
         item(for: .camera(.frameWindow)).state = framingWindow ? .on : .off
         let steps = [CameraCommand.overview, .zoomOutAll, .stepOut, .stepIn, .back, .forward].map { item(for: .camera($0)) }
         let frame = item(for: .camera(.frameWindow))
-        return [.sectionHeader(title: ZoomCopy.zoomSection)] + steps + [moveViewMenu, frame] + [takeover, previews].compactMap { $0 } + [toggle]
+        return [.sectionHeader(title: ZoomCopy.zoomSection)] + steps + [moveViewMenu, frame] + [previews].compactMap { $0 } + [toggle]
     }
 
     func halfItem(_ edge: Edge) -> NSMenuItem {

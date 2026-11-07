@@ -34,7 +34,7 @@ private final class HandleView: NSView {
 
     /// Re-resolved in the current appearance, so the accent and dark mode follow.
     override func updateLayer() {
-        layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        layer?.backgroundColor = HighlightColor.current.cgColor
         layer?.cornerRadius = min(min(bounds.width, bounds.height) / 2, 4)
     }
 
@@ -136,13 +136,17 @@ private final class HandleView: NSView {
     var onDrag: ((GapHandle, Double, Bool) -> Void)?
     private var shown: [String: [HandlePanel]] = [:]
     private var pool: [HandlePanel] = []
-    private var observer: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
 
     init() {
-        observer = NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+        let redraw: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated {
                 for panel in self?.shown.values.flatMap({ $0 }) ?? [] { panel.contentView?.needsDisplay = true }
             }
+        }
+        // The accent changed, or the user's highlight override did.
+        observers = [NSColor.systemColorsDidChangeNotification, HighlightColor.didChange].map {
+            NotificationCenter.default.addObserver(forName: $0, object: nil, queue: .main, using: redraw)
         }
     }
 

@@ -136,6 +136,5 @@ import Testing
         #expect(
             OverviewCopy.takeoverAlertInformative(.off)
                 == "The Mission Control key (F3) will show Transom's overview instead of Mission Control. Swiping up with four fingers still opens Mission Control. Transom gives Mission Control its keys back when you turn this off or quit, and the next time it opens if it quits unexpectedly.")
-        #expect(OverviewCopy.replaceMissionControlUnavailable == "Replace Mission Control (unavailable)")
     }
 }
