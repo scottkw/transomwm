@@ -34,8 +34,9 @@ jobs:
       - name: Signing identity unchanged
         run: |
           # Whole lines (-x, leading spaces allowed), so the .debug and .cli IDs or a commented-out line can't stand in.
+          # No -q: grep must read all of sed's output, or sed's SIGPIPE fails the pipe under pipefail.
           for want in 'PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.transom' 'DEVELOPMENT_TEAM: S2K7P43927' 'CODE_SIGN_IDENTITY: "Developer ID Application"'; do
-            sed 's/^[[:space:]]*//; s/[[:space:]]*$//' xcode/project.yml | grep -qxF -- "$want" \
+            sed 's/^[[:space:]]*//; s/[[:space:]]*$//' xcode/project.yml | grep -xF -- "$want" >/dev/null \
               || { echo "::error::xcode/project.yml no longer has the line $want"; exit 1; }
           done
       - run: swift build
