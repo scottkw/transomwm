@@ -512,7 +512,38 @@ Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
   5. `brew install --cask` installs a Developer ID-signed, notarised Transom that opens without Gatekeeper warnings
   6. The menu bar shows back, forward and saved-view controls (current view highlighted) that the user can choose and reorder in Settings; the menu has "Report a Problem", the icon shows a dot when an update is waiting, and a `transom://settings` URL opens a given Settings section directly (query key as in SHIP-08)
 
-**Plans**: TBD
+**Plans:** 28 plans (one per wave: executors share one working tree, `.build` and the VM lock)
+
+Plans:
+- [ ] 09-01-PLAN.md — Settings window from the menu (⌘,) with the Shortcuts tab (SHIP-01, D-01)
+- [ ] 09-02-PLAN.md — `transom://settings?pane=` opens a Settings tab (SHIP-08, D-04)
+- [ ] 09-03-PLAN.md — `transom settings [pane]` and its help line (SHIP-08)
+- [ ] 09-04-PLAN.md — Arranging tab: Gaps, New windows, Drag to dock, Close Group, macOS features (D-02)
+- [ ] 09-05-PLAN.md — Zoom & Gestures tab: Use zoom and the title-bar double-click
+- [ ] 09-06-PLAN.md — Trackpad gesture switches (⌥ anywhere, bare wallpaper)
+- [ ] 09-07-PLAN.md — Mission Control replacement moves into Settings (D-04)
+- [ ] 09-08-PLAN.md — Exclusions tab with + / −
+- [ ] 09-09-PLAN.md — Highlight colour override, one resolver for every accent (D-03)
+- [ ] 09-10-PLAN.md — General: launch at login, permissions, command-line tool (SHIP-03)
+- [ ] 09-11-PLAN.md — Updates tab: Check for Updates against GitHub (SHIP-04 tracer, D-09)
+- [ ] 09-12-PLAN.md — Update check hardening: gifsmith rules, state machine, ETag, automatic toggle
+- [ ] 09-13-PLAN.md — Download, verify (sha256 + Team ID + notarised) and open; Homebrew branch (D-10)
+- [ ] 09-14-PLAN.md — release.sh: version from project.yml, exact DR file, -universal.dmg + .sha256 (D-11)
+- [ ] 09-15-PLAN.md — release.yml, tap.yml, cask template, CI guard and D-21 diagnostic, releasing doc (D-11, D-12)
+- [ ] 09-16-PLAN.md — App icon and menu-bar template glyphs
+- [ ] 09-17-PLAN.md — Update dot, update menu items, daily check, Report a Problem (SHIP-07, D-15)
+- [ ] 09-18-PLAN.md — Menu-bar view controls and the Menu Bar tab (SHIP-06, D-13, D-14)
+- [ ] 09-19-PLAN.md — Onboarding: Welcome → Accessibility → Done (SHIP-02, D-05, D-06)
+- [ ] 09-20-PLAN.md — Onboarding: Screen Recording step, resume, Open Settings
+- [ ] 09-21-PLAN.md — Onboarding: macOS features and launch at login, ticked by default (D-07)
+- [ ] 09-22-PLAN.md — Move to Applications before any permission (D-08)
+- [ ] 09-23-PLAN.md — Collapsed-block label (D-16)
+- [ ] 09-24-PLAN.md — Carried failures: FreezeTest, Views and Rematch on macOS 27 (D-17)
+- [ ] 09-25-PLAN.md — Carried failures: Overview, OverviewSpaceSwitch, TabStripSpace, TabGroup on macOS 27 (D-17)
+- [ ] 09-26-PLAN.md — 0.9.0: version, notes, local dry run, README, beta checklist, name record (D-18, D-20)
+- [ ] 09-27-PLAN.md — Human: confirm contracts, merge, go public, release environment and secrets, tap, dry run (D-19)
+- [ ] 09-28-PLAN.md — Human: tag and publish v0.9.0; verify release, tap and a clean Homebrew install
+
 **UI hint**: yes
 **Research**: Standard patterns; port gifsmith's GitHub Releases updater (`~/dev/gifsmith/internal/update`, `internal/services/updates.go`) to Swift; notarisation and Homebrew are well documented (Rectangle and Amethyst casks as models)
 **Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Transom" for existing macOS apps before release. From 08.1 UAT and 8.1.1 D-12: a collapsed block can read as a minimized window; the Desktop tile was not the cause (RESEARCH D-12 Investigation).
@@ -533,4 +564,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Tab Groups | 12/12 | Complete    | 2026-11-03 |
 | 8. Saved Views, URLs & Persistence | 7/7 | Complete    | 2026-11-04 |
 | 8.1. Window Behaviour Options (INSERTED) | 7/7 | Complete    | 2026-11-05 |
-| 9. Polish & Ship | 0/TBD | Not started | - |
+| 9. Polish & Ship | 0/28 | Planned | - |
