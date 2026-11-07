@@ -604,21 +604,26 @@ Check on a 1x display (the DELL) as quick 261106-bru did: the composite must sta
 | A11 | The `notarized` requirement in `SecStaticCodeCheckValidity` passes offline for a stapled DMG | Pattern 4 | If it needs a network lookup, an offline user gets a verify failure. The DMG is downloaded online, so low risk; Open Question 3 |
 | A12 | CryptoKit `SHA256` incremental API and the `NSImage(size:flipped:drawingHandler:)` usage as sketched | Code Examples | Compile errors caught at once |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **When does the repo go public, and who sets the secrets?**
    - What we know: the repo is private; the five secret names are fixed (D-11); gifsmith's values can't be copied by API.
    - Recommendation: one `checkpoint:human-action` before the release plan. Make the repo public, create environment `release` (required reviewer `scottkw`, deployment refs `main` + `v*`), set the five secrets there (`base64 -i cert.p12 | gh secret set MACOS_CERT_P12_BASE64 --env release --repo scottkw/transomwm`), create `scottkw/homebrew-transom`, add `HOMEBREW_TAP_TOKEN`, and add the tag ruleset (gifsmith "Release tags: maintainer only"). Then run a `workflow_dispatch` dry run.
+   - **RESOLVED (D-19):** the repo stays private until the v0.9.0 release; 09-27 is the human checkpoint that makes it public and sets up the `release` environment, five secrets, tap and `HOMEBREW_TAP_TOKEN`.
 2. **macOS 14 coverage.**
    - What we know: no macOS 14 runner and no 14 VM.
    - Recommendation: optional UAT item. Pull `ghcr.io/cirruslabs/macos-sonoma-vanilla` into Tart for one smoke run (install the DMG, onboarding, Settings), or accept the risk explicitly at verify time.
+   - **RESOLVED:** no macOS 14 VM for 0.9.0. The floor is claimed from the deployment target and the APIs' availability (all ≤14.0, checked in research); the risk is accepted and stated in the release notes. A Sonoma Tart smoke run is optional, not in this phase.
 3. **Does the in-process `notarized` requirement work offline?**
    - What we know: it passes online on a stapled DMG.
    - Recommendation: the release job's env-gated `UpdateRealDMGTests` runs online. Add a VM UAT with networking off after download, or drop `and notarized` and keep only the team requirement plus Gatekeeper at first launch (quarantine is set).
+   - **RESOLVED:** keep `and notarized` (09-13). The check runs immediately after the download, so the Mac is online whenever it runs; offline there is no download to verify. A failure fails closed (nothing is opened).
 4. **Release job runner: `macos-26` or `xcode-27`?**
    - Recommendation: `macos-26` (GA, matches PR CI). Revisit when `xcode-27` leaves preview.
+   - **RESOLVED:** `macos-26` (09-15), matching PR CI.
 5. **Build number.** `CURRENT_PROJECT_VERSION: "1"` (project.yml:16) is shown in "Transom {version} ({build})".
    - Recommendation: leave it manual (bump with the version) unless the user wants `GITHUB_RUN_NUMBER`. It doesn't affect the DR.
+   - **RESOLVED:** manual, bumped with the version (09-26 sets `CURRENT_PROJECT_VERSION: "2"` for 0.9.0).
 
 ## Environment Availability
 
