@@ -117,4 +117,9 @@ private final class Count: @unchecked Sendable { var value = 0 }
             #expect(defaults.object(forKey: ZoomController.enabledKey) == nil)
         }
     }
+
+    @Test func theMouseFooterFollowsZoom() {
+        #expect(ZoomGesturesTab.mouseFooter(zoomOn: true) == ZoomCopy.doubleClickFooterOn)
+        #expect(ZoomGesturesTab.mouseFooter(zoomOn: false) == "Turn on zoom to use this.")
+    }
 }

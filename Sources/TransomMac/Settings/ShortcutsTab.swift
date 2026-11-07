@@ -54,12 +54,9 @@ enum ShortcutsModel {
     }
 }
 
-/// One Recorder per hotkey, the Mouse toggle and Restore Defaults. Bindings are read synchronously (no loading state);
+/// One Recorder per hotkey and Restore Defaults. Bindings are read synchronously (no loading state);
 /// a system conflict shows KeyboardShortcuts' own "Use Anyway" dialog (default ConflictPolicy).
 struct ShortcutsView: View {
-    @AppStorage(ZoomController.enabledKey) private var zoomEnabled = true
-    @AppStorage(ShortcutsModel.doubleClickKey) private var doubleClick = true
-
     var body: some View {
         VStack(spacing: 0) {
             Form {
@@ -77,14 +74,6 @@ struct ShortcutsView: View {
                         if section.title == ZoomCopy.zoomSection { Text(ShortcutsModel.zoomFooter).font(.subheadline).foregroundStyle(.secondary) }
                         if section.title == ViewCopy.savedViewsSection { Text(ViewCopy.shortcutsFooter).font(.subheadline).foregroundStyle(.secondary) }
                     }
-                }
-                Section {
-                    Toggle(ZoomCopy.doubleClickToggle, isOn: $doubleClick).disabled(!zoomEnabled)
-                } header: {
-                    Text(ZoomCopy.mouseSection)
-                } footer: {
-                    Text(zoomEnabled ? ZoomCopy.doubleClickFooterOn : ZoomCopy.doubleClickFooterZoomOff)
-                        .font(.subheadline).foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)

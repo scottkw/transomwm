@@ -6,9 +6,15 @@ import TransomEngine
 struct ZoomGesturesTab: View {
     let setZoomEnabled: (Bool) -> Void
     @AppStorage(ZoomController.enabledKey) private var zoomEnabled = true
+    /// Read lazily by ZoomInput on each double-click, with no onChange, so `@AppStorage` is safe.
+    @AppStorage(ShortcutsModel.doubleClickKey) private var doubleClick = true
 
     static func zoomBinding(isOn: Bool, setZoomEnabled: @escaping (Bool) -> Void) -> Binding<Bool> {
         Binding(get: { isOn }, set: { (on: Bool) -> Void in setZoomEnabled(on) })
+    }
+
+    static func mouseFooter(zoomOn: Bool) -> String {
+        zoomOn ? ZoomCopy.doubleClickFooterOn : ZoomCopy.doubleClickFooterZoomOff
     }
 
     var body: some View {
@@ -19,6 +25,13 @@ struct ZoomGesturesTab: View {
                 Text(SettingsCopy.zoomSection)
             } footer: {
                 Self.rowFooter(SettingsCopy.useZoomFooter)
+            }
+            Section {
+                Toggle(ZoomCopy.doubleClickToggle, isOn: $doubleClick).disabled(!zoomEnabled)
+            } header: {
+                Text(ZoomCopy.mouseSection)
+            } footer: {
+                Self.rowFooter(Self.mouseFooter(zoomOn: zoomEnabled))
             }
         }
         .formStyle(.grouped)
