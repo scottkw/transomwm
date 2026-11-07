@@ -39,4 +39,34 @@ private final class Count: @unchecked Sendable { var value = 0 }
             #expect(ArrangingTab.gapBinding(gaps).wrappedValue == 4)
         }
     }
+
+    @Test func newWindowsChosenInSettingsFiresOnce() throws {
+        try withDefaults { defaults in
+            let newWindows = NewWindowsPreference(defaults: defaults)
+            var changes: [NewWindowsMode] = []
+            newWindows.onChange = { changes.append($0) }
+            ArrangingTab.newWindowsBinding(newWindows).wrappedValue = .tile
+            ArrangingTab.newWindowsBinding(newWindows).wrappedValue = .tile
+            #expect(newWindows.value == .tile)
+            #expect(changes == [.tile], "choosing the current mode again fires nothing")
+            #expect(NewWindowsPreference(defaults: defaults).value == .tile)
+        }
+    }
+
+    @Test func dragToDockChosenInSettingsFiresOnce() throws {
+        try withDefaults { defaults in
+            let dragToDock = DragToDockPreference(defaults: defaults)
+            var changes: [DragToDockMode] = []
+            dragToDock.onChange = { changes.append($0) }
+            ArrangingTab.dragToDockBinding(dragToDock).wrappedValue = .holdOption
+            #expect(dragToDock.value == .holdOption)
+            #expect(changes == [.holdOption])
+            #expect(DragToDockPreference(defaults: defaults).value == .holdOption)
+        }
+    }
+
+    @Test func theModeFootersAreTheMenuTooltips() {
+        for mode in NewWindowsMode.allCases { #expect(ArrangingTab.footer(mode) == MenuCopy.newWindowsTooltip(mode)) }
+        for mode in DragToDockMode.allCases { #expect(ArrangingTab.footer(mode) == MenuCopy.dragToDockTooltip(mode)) }
+    }
 }
