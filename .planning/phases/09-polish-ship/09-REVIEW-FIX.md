@@ -1,13 +1,16 @@
 ---
 phase: 09-polish-ship
-fixed_at: 2026-11-07T22:30:00Z
+fixed_at: 2026-11-07T21:39:15Z
 review_path: /Users/ken/dev/transomwm/.planning/phases/09-polish-ship/09-REVIEW.md
-iteration: 1
-findings_in_scope: 7
-fixed: 7
+iteration: 2
+findings_in_scope: 4
+fixed: 4
 skipped: 0
 status: all_fixed
 ---
+
+<!-- The frontmatter describes iteration 2. Iteration 1 (7 in scope, 7 fixed, fixed_at 2026-11-07T22:30:00Z) follows unchanged below it. -->
+
 
 # Phase 9: Code Review Fix Report
 
@@ -83,3 +86,65 @@ All gates ran in the isolated worktree (`.claude/worktrees/rf-09-*`, branch `gsd
 _Fixed: 2026-11-07T22:30:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+---
+
+# Iteration 2
+
+**Fixed at:** 2026-11-07T21:39:15Z
+**Source review:** /Users/ken/dev/transomwm/.planning/phases/09-polish-ship/09-REVIEW.md (iteration 2)
+**Iteration:** 2
+
+**Summary:**
+- Findings in scope: 4 (WR-01 to WR-04; IN-01 to IN-07 are out of scope for `critical_warning`)
+- Fixed: 4
+- Skipped: 0
+
+## Fixed Issues
+
+### WR-01: A rename that fails after a successful trash deletes the only good copy
+
+**Files modified:** `Sources/TransomMac/Onboarding/AppMover.swift`, `Tests/TransomMacTests/AppMoverTests.swift`
+**Commit:** 63c1fb3
+**Applied fix:** The `trash` closure now has the type `(URL) throws -> URL?` and returns where the old copy went. `moveToTrash` passes `resultingItemURL` to get that location. If the rename throws after the trash has succeeded, the `catch` moves the trashed copy back to `destination` and then removes the staged copy. I kept the single `do`/`catch` rather than the review's three blocks, because `trashed` is only set once the trash has succeeded. New test: `aFailedRenameAfterTheTrashRestoresTheInstalledCopy`. Its fake trash deletes the staged copy, so the rename fails, and the test checks that the installed copy's marker file is back and nothing else is left behind.
+**Remaining limit:** If something recreates `/Applications/Transom.app` between the trash and the rename (the review's example), the restore fails for the same reason. The old copy then stays in the Trash, where the user can still recover it. The original error is the one thrown.
+
+### WR-02: Not Now drops onboarding progress, so a relaunch mid-setup starts again at Welcome
+
+**Files modified:** `Sources/TransomMac/Permission/SetupWindowController.swift`, `Sources/TransomMac/Onboarding/OnboardingSteps.swift`, `Tests/TransomMacTests/OnboardingControllerTests.swift`
+**Commit:** cb0525c
+**Status:** fixed: requires human verification (step-flow logic; the button was not checked on screen)
+**Applied fix:** Added `skipMove()`. It runs `OnboardingFlow.resume(stored:in:)` over the steps with Move removed, and skips Accessibility when access is already ready, the same rule `advance()` uses. `OnboardingView` gets a `skipMove` closure, and Not Now now calls it. `notNowOnMoveContinuesToSetup` now calls `skipMove()`. New test: `notNowOnMoveResumesTheStoredStep` stores `screenRecording`, launches from a disk image with no conflicting features, expects Move, then expects Launch at login after Not Now.
+
+### WR-03: After completion, the lone Accessibility step shows "Step 1 of 1" when Move comes before it
+
+**Files modified:** `Sources/TransomEngine/OnboardingFlow.swift`, `Tests/TransomEngineTests/OnboardingFlowTests.swift`
+**Commit:** 2650c79
+**Applied fix:** The caption guard now checks `numbered.count > 1` instead of `steps.count > 1`. Added `caption(for: .accessibility, in: [.move, .accessibility]) == nil` to `afterCompletionOnlyAccessibilityShows`.
+
+### WR-04: The new CI guard fails with a false error under `pipefail` once `project.yml` passes about 16 KB
+
+**Files modified:** `.github/workflows/ci.yml`
+**Commit:** 3ebd2a1
+**Applied fix:** Changed `grep -qxF` to `grep -xF ... >/dev/null`, so `grep` reads all of `sed`'s output. The whole-line match is unchanged, and a one-line comment explains why there is no `-q`. I checked it under `bash --noprofile --norc -eo pipefail`: the real `project.yml` passes, a 209 KB padded copy passed 50 of 50 runs, and a copy with `DEVELOPMENT_TEAM` changed exits 1 with the error. The workflow still parses as YAML.
+
+## Not Fixed (out of scope)
+
+### IN-06: An interrupted Move leaves a hidden staging bundle in `/Applications`
+
+**File:** `Sources/TransomMac/Onboarding/AppMover.swift:12-13`
+**Reason:** This is not a one-liner. Removing old `.Transom.app.moving-*` siblings takes a loop that deletes files in `/Applications` by name prefix, and it could remove a staging copy that a second running instance is still writing. Moving the staging copy to `.itemReplacementDirectory` changes where it is staged and adds its own cleanup. Both are left for a human decision.
+
+## Verification
+
+The fixes were made and checked in the isolated worktree (`.claude/worktrees/rf-09-90060-*`, branch `gsd-reviewfix/09-90060`). There I ran the targeted suites for each fix: `AppMoverTests` (8 tests), `OnboardingFlowTests` (8) and `OnboardingControllerTests` (19), all passing. The commits were then fast-forwarded onto `gsd/phase-01-layout-model` and the worktree and temporary branch were removed. The **host gate ran in the main checkout** on that tree:
+- `env -u TRANSOM_LIVE -u TRANSOM_LIVE_DRAG swift test` exited 0 and printed four passing "Test run with" lines: 271, 607, 126 and 1345 tests. 607 is 605 plus the two new TransomMac tests.
+- `scripts/check-no-appkit.sh` printed `no-appkit: OK (69 files)`.
+- Toolchain: local Swift 6.4. The changes use no 6.4-only syntax (`NSURL?` inout for `trashItem`, a typed `filter` closure), but they have not been built with 6.3.
+- No live tests were run, and `TRANSOM_LIVE` was not set. The tests used temporary directories and a fake trash only, so nothing touched `/Applications` or the real Trash. Nothing was pushed.
+
+---
+
+_Fixed: 2026-11-07T21:39:15Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
