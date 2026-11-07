@@ -19,6 +19,10 @@ nonisolated public enum OnboardingCopy {
     public static let skipButton = "Skip"
     public static let backButton = "Back"
 
+    public static let launchHeading = "Open Transom when you log in"
+    public static let launchBody =
+        "Transom arranges windows only while it's running. You can change this in Settings \u{25B8} General."
+
     public static let doneHeading = "Transom is ready"
     public static let doneBody =
         "Transom lives in the menu bar. Drag a window to a screen edge to dock it, or click the Transom icon for every command and Settings."

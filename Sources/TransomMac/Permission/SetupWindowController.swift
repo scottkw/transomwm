@@ -25,12 +25,14 @@ import os
     var requestScreenRecording: (() -> Bool)?
     /// Done's Open Settings: nil opens the last tab shown.
     var openSettings: ((SettingsPane?) -> Void)?
+    /// Launch at login (SHIP-03), injected so tests never register the real login item.
+    var loginItem: (any LoginItemService)?
     private var screenRecordingPoll: Task<Void, Never>?
 
     init(permission: PermissionController, defaults: UserDefaults = .standard) {
         self.permission = permission
         self.defaults = defaults
-        model = OnboardingModel(steps: OnboardingFlow.steps(completed: defaults.bool(forKey: Self.completedKey)))
+        model = OnboardingModel(steps: OnboardingFlow.steps(completed: defaults.bool(forKey: Self.completedKey), conflictsActive: false))
         super.init()
         subscription = permission.$state.sink { [weak self] state in self?.stateChanged(state) }
     }
@@ -48,7 +50,7 @@ import os
     /// Whether the window opens by itself once the launch probe has settled, and with which steps. The first run
     /// always opens (step 2 passes by itself when access is ready); later launches only when access isn't ready.
     static func launchDecision(completed: Bool, phase: PermissionPhase) -> (show: Bool, steps: [OnboardingStep]) {
-        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed))
+        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed, conflictsActive: false))
     }
 
     /// Opens the steps for the current completion state: after completion, the lone Accessibility step.
@@ -101,6 +103,15 @@ import os
         openSettings(nil)
     }
 
+    /// Launch at login's Continue: registers only while ticked (D-07). A refusal or pending approval keeps the step to
+    /// show why; the next Continue moves on.
+    func continueLaunchAtLogin() {
+        guard let loginItem else { preconditionFailure("loginItem not wired") }
+        guard model.launchAtLogin, model.loginResult == nil else { return advance() }
+        let result = LoginItemToggle.toggled(true, service: loginItem)
+        if result.status == .enabled { advance() } else { model.loginResult = result }
+    }
+
     /// Back: the step before this one.
     func back() {
         guard let index = model.steps.firstIndex(of: model.current), index > 0 else { return }
@@ -129,6 +140,10 @@ import os
         screenRecordingPoll = nil
         logger.info("step \(step.rawValue, privacy: .public)")
         if step == .screenRecording { enterScreenRecording() }
+        if step == .launchAtLogin {
+            guard loginItem != nil else { preconditionFailure("loginItem not wired") }
+            model.loginResult = nil
+        }
     }
 
     /// Reaching the step answers the Phase 4 previews alert, so it never asks again (UI-SPEC Surface 2).
@@ -155,6 +170,8 @@ import os
             allowScreenRecording: { [weak self] in self?.allowScreenRecording() },
             finish: { [weak self] in self?.finish() },
             openSettings: { [weak self] in self?.openSettingsFromDone() },
+            continueLaunchAtLogin: { [weak self] in self?.continueLaunchAtLogin() },
+            openLoginItems: { [weak self] in self?.loginItem?.openSystemSettingsLoginItems() },
             close: { [weak self] in self?.closeAccessibilityStep() })
         let hosting = NSHostingController(rootView: view)
         // The hosting controller publishes SwiftUI's size as preferredContentSize, which the window applies,

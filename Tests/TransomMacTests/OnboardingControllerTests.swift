@@ -78,7 +78,7 @@ import Testing
         controller.allowScreenRecording()
         #expect(!controller.model.screenRecordingOn)
         controller.advance()
-        #expect(controller.model.current == .done)
+        #expect(controller.model.current == .launchAtLogin)
         controller.back()
         controller.back()
         #expect(controller.model.current == .accessibility)
@@ -109,16 +109,66 @@ import Testing
         var opened: [SettingsPane?] = []
         controller.openSettings = { opened.append($0) }
         controller.advance()
+        controller.advance()
         #expect(controller.model.current == .done)
         controller.openSettingsFromDone()
         #expect(opened == [nil])
         #expect(defaults.bool(forKey: SetupWindowController.completedKey))
     }
 
+    @Test func continueRegistersWhenTicked() {
+        let (controller, login) = atLaunchAtLogin()
+        #expect(controller.model.launchAtLogin, "ticked by default (D-07)")
+        #expect(login.registers == 0, "nothing registers before Continue")
+        controller.continueLaunchAtLogin()
+        #expect(login.registers == 1)
+        #expect(controller.model.current == .done)
+    }
+
+    @Test func untickedContinueRegistersNothing() {
+        let (controller, login) = atLaunchAtLogin()
+        controller.model.launchAtLogin = false
+        controller.continueLaunchAtLogin()
+        #expect(login.registers == 0)
+        #expect(login.unregisters == 0)
+        #expect(controller.model.current == .done)
+    }
+
+    @Test func needsApprovalStaysThenMovesOnSecondContinue() {
+        let (controller, login) = atLaunchAtLogin()
+        login.statusAfterRegister = .requiresApproval
+        controller.continueLaunchAtLogin()
+        #expect(controller.model.current == .launchAtLogin)
+        #expect(controller.model.loginResult?.needsApproval == true)
+        controller.continueLaunchAtLogin()
+        #expect(controller.model.current == .done)
+        #expect(login.registers == 1)
+    }
+
+    @Test func aRegisterErrorStaysThenMovesOn() {
+        let (controller, login) = atLaunchAtLogin()
+        login.registerError = FakeLoginItem.Refused()
+        controller.continueLaunchAtLogin()
+        #expect(controller.model.current == .launchAtLogin)
+        #expect(controller.model.loginResult?.footer == SettingsCopy.loginItemFailed)
+        controller.continueLaunchAtLogin()
+        #expect(controller.model.current == .done)
+    }
+
+    /// A first-run controller on the Launch at login step, with its login item faked.
+    private func atLaunchAtLogin() -> (SetupWindowController, FakeLoginItem) {
+        let (controller, _) = atScreenRecording()
+        let login = FakeLoginItem(status: .notRegistered)
+        controller.loginItem = login
+        controller.advance()
+        return (controller, login)
+    }
+
     /// A first-run controller on the Screen Recording step (ready access skips step 2), with fakes wired.
     private func atScreenRecording(_ defaults: UserDefaults? = nil) -> (SetupWindowController, FakeScreenRecording) {
         let controller = SetupWindowController(permission: permission(.ready), defaults: defaults ?? throwawayDefaults())
         let fake = FakeScreenRecording(controller)
+        controller.loginItem = FakeLoginItem(status: .notRegistered)
         controller.advance()
         return (controller, fake)
     }

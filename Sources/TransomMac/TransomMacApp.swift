@@ -106,6 +106,7 @@ public enum TransomMacApp {
         )
         controller.onInventory = { trackedController.feed.inventory = $0 }
         setupController.openSettings = { controller.showSettings($0, from: "onboarding") }
+        setupController.loginItem = SystemLoginItem()
         arrangeController.onInventory = { controller.update($0) }
         trackedWindows = trackedController
         statusItem = controller

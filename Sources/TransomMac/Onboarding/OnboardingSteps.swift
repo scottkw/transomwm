@@ -9,6 +9,9 @@ final class OnboardingModel: ObservableObject {
     /// Screen Recording step: Allow was clicked, and the last poll's answer.
     @Published var screenRecordingAsked = false
     @Published var screenRecordingOn = false
+    /// Launch at login step: the toggle (on by default, D-07) and the outcome of a Continue that didn't enable it.
+    @Published var launchAtLogin = true
+    @Published var loginResult: LoginItemToggle?
 
     init(steps: [OnboardingStep]) {
         self.steps = steps
@@ -27,6 +30,8 @@ struct OnboardingView: View {
     let allowScreenRecording: () -> Void
     let finish: () -> Void
     let openSettings: () -> Void
+    let continueLaunchAtLogin: () -> Void
+    let openLoginItems: () -> Void
     let close: () -> Void
     @AccessibilityFocusState private var headingFocused: Bool
 
@@ -44,7 +49,7 @@ struct OnboardingView: View {
                 defaultButton(OnboardingCopy.continueButton, action: advance)
             }
         case .screenRecording:
-            page(caption: caption, heading: OnboardingCopy.screenRecordingHeading, text: OnboardingCopy.screenRecordingBody) {
+            page(caption: caption, heading: OnboardingCopy.screenRecordingHeading, text: OnboardingCopy.screenRecordingBody, back: back) {
                 Image(systemName: "rectangle.dashed.badge.record")
                     .font(.system(size: 48))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
@@ -65,13 +70,34 @@ struct OnboardingView: View {
                     secondary(OnboardingCopy.screenRecordingWaitingHelp)
                 }
             } buttons: {
-                Button(OnboardingCopy.backButton, action: back)
                 if model.screenRecordingAsked || model.screenRecordingOn {
                     defaultButton(OnboardingCopy.continueButton, action: advance)  // never blocked (D-06)
                 } else {
                     Button(OnboardingCopy.skipButton, action: advance)
                     defaultButton(OnboardingCopy.allowScreenRecordingButton, action: allowScreenRecording)
                 }
+            }
+        case .launchAtLogin:
+            page(caption: caption, heading: OnboardingCopy.launchHeading, text: nil, back: back) {
+                Image(systemName: "power")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+            } detail: {
+                Toggle(SettingsCopy.openAtLogin, isOn: $model.launchAtLogin)
+                secondary(OnboardingCopy.launchBody)
+                if let result = model.loginResult {
+                    // The General tab's Startup message and button.
+                    HStack(spacing: 8) {
+                        if result.needsApproval {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
+                        }
+                        Text(verbatim: result.needsApproval ? SettingsCopy.needsApproval : SettingsCopy.loginItemFailed)
+                            .font(.body).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button(SettingsCopy.openLoginItems, action: openLoginItems)
+                }
+            } buttons: {
+                defaultButton(OnboardingCopy.continueButton, action: continueLaunchAtLogin)
             }
         case .done:
             page(caption: caption, heading: OnboardingCopy.doneHeading, text: OnboardingCopy.doneBody) {
@@ -92,7 +118,7 @@ struct OnboardingView: View {
 
     /// Phase 2's layout metrics: 48–64 pt hero, 16 pt stack, 12 pt text block, 24 pt above the buttons, 440 + 20 pt.
     private func page(
-        caption: String?, heading: String, text: String, @ViewBuilder hero: () -> some View,
+        caption: String?, heading: String, text: String?, back: (() -> Void)? = nil, @ViewBuilder hero: () -> some View,
         @ViewBuilder detail: () -> some View, @ViewBuilder buttons: () -> some View
     ) -> some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -104,10 +130,11 @@ struct OnboardingView: View {
                 Text(verbatim: heading).font(.title).fontWeight(.semibold)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityFocused($headingFocused)
-                secondary(text)
+                if let text { secondary(text) }
                 detail()
             }
             HStack(spacing: 12) {
+                if let back { Button(OnboardingCopy.backButton, action: back) }  // leftmost on steps 3–5
                 Spacer()
                 buttons()
             }

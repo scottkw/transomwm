@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 /// Stands in for the system login item: the host's real one is never registered from a test (T-09-16).
-private final class FakeLoginItem: LoginItemService {
+final class FakeLoginItem: LoginItemService {
     struct Refused: Error {}
 
     var status: LoginItemStatus
