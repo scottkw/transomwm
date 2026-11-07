@@ -13,6 +13,15 @@ nonisolated public enum UpdateCopy {
     public static let automaticFooter =
         "Transom asks GitHub for the latest release when it opens and once a day. Nothing about you or your Mac is sent."
 
+    /// Appended to the glyph's description and tooltip while the dot shows (Surface 3).
+    public static let updateAvailableSuffix = ", update available"
+    public static let copyBrewItem = "Copy \u{201C}brew upgrade --cask transom\u{201D}"
+    public static let copyBrewTooltip = "Paste it in Terminal to update."
+    /// The DMG install's menu item: opens Settings ▸ Updates and starts Download and Open.
+    public static func updateTo(_ version: String) -> String { "Update to Transom \(version)\u{2026}" }
+    /// The Homebrew install's disabled info line.
+    public static func homebrewAvailable(_ version: String) -> String { "Transom \(version) is available" }
+
     /// "Transom 0.9.0 (1)".
     public static func versionLine(_ version: String, _ build: String) -> String { "Transom \(version) (\(build))" }
 

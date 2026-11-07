@@ -23,8 +23,11 @@ import os
     private let showTrackedWindows: () -> Void
     private let loginItem: any LoginItemService = SystemLoginItem()
     private var permissionSubscription: AnyCancellable?
+    private var updateSubscription: AnyCancellable?
     /// The last access state the subscription saw (it fires before `permission.state` updates).
     private var ready = false
+    /// The last update status the subscription saw, for the same reason.
+    private var updateStatus: UpdateStatus = .idle
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "shell")
     private(set) var latest = WindowInventory(displays: [], windows: []) {
@@ -64,6 +67,12 @@ import os
         permissionSubscription = permission.$state.map { $0.phase == .ready }.removeDuplicates()
             .sink { [weak self] ready in
                 self?.ready = ready
+                self?.updateGlyph()
+            }
+        // @Published fires before the change lands, so the dot is read from the emitted value.
+        updateSubscription = updates.$machine.map(\.status).removeDuplicates()
+            .sink { [weak self] status in
+                self?.updateStatus = status
                 self?.updateGlyph()
             }
         arrange.onPauseChanged = { [weak self] in self?.updateGlyph() }
@@ -110,6 +119,7 @@ import os
             menu.addItem(debugMenuItem())
         }
         menu.addItem(.separator())
+        addUpdateItems(to: menu)
         let settings = NSMenuItem(title: SettingsCopy.menuItem, action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -269,11 +279,13 @@ import os
         guard let button = statusItem.button else { return }
         let paused = ready && !arrange.arranger.pauseReasons.isEmpty
         let zoomed = arrange.isZoomEnabled && arrange.pointerDisplay().uuid.map { arrange.arranger.view(on: $0) != .home } == true
+        let dot = Self.showsDot(updateStatus, ready: ready)
+        let suffix = dot ? UpdateCopy.updateAvailableSuffix : ""
         let description =
-            !ready ? "Transom: Accessibility access needed"
+            (!ready ? "Transom: Accessibility access needed"
             : paused ? MenuCopy.pausedGlyphDescription
-            : zoomed ? ZoomCopy.zoomedInDescription : "Transom"
-        let image: NSImage?
+            : zoomed ? ZoomCopy.zoomedInDescription : "Transom") + suffix
+        var image: NSImage?
         // A copy: NSImage(named:) hands out one shared instance. No catalog under `swift run`, so the symbol stays.
         if let name = Self.glyphName(ready: ready, paused: paused, zoomed: zoomed),
            let named = NSImage(named: name)?.copy() as? NSImage {
@@ -282,11 +294,87 @@ import os
         } else {
             image = NSImage(systemSymbolName: ready ? "rectangle.split.2x1" : "exclamationmark.triangle", accessibilityDescription: description)
         }
+        if dot, let glyph = image { image = Self.withUpdateDot(glyph) }
         image?.isTemplate = true
         image?.accessibilityDescription = description
         button.image = image
         button.appearsDisabled = paused
-        button.toolTip = ready && !paused && !zoomed ? Self.bundleName(logger: logger) : description
+        button.toolTip = ready && !paused && !zoomed ? Self.bundleName(logger: logger) + suffix : description
+    }
+
+    /// The menu-bar dot (Surface 3, SHIP-07): while a newer release is known, never over the not-ready warning.
+    nonisolated static func showsDot(_ status: UpdateStatus, ready: Bool) -> Bool {
+        guard ready else { return false }
+        switch status {
+        case .available, .downloading, .verifying, .opened: return true
+        case .idle, .checking, .current: return false
+        }
+    }
+
+    /// The glyph centred on the 18 x 18 pt canvas, erased 1 pt around a 6 pt dot centred at (15, 3), as a template.
+    static func withUpdateDot(_ glyph: NSImage) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            let size = glyph.size
+            glyph.draw(in: NSRect(x: (18 - size.width) / 2, y: (18 - size.height) / 2, width: size.width, height: size.height))
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: NSRect(x: 11, y: -1, width: 8, height: 8)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: NSRect(x: 12, y: 0, width: 6, height: 6)).fill()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = glyph.accessibilityDescription
+        return image
+    }
+
+    nonisolated enum UpdateMenuAction: Equatable {
+        case info
+        case downloadAndOpen
+        case copyBrewCommand
+    }
+
+    /// The update items at the top of the bottom group (Surface 3, D-10); none unless a newer release is known.
+    nonisolated static func updateItems(_ status: UpdateStatus, homebrew: Bool) -> [(title: String, enabled: Bool, action: UpdateMenuAction)] {
+        let release: UpdateRelease
+        switch status {
+        case .available(let known), .downloading(let known, _), .verifying(let known), .opened(let known): release = known
+        case .idle, .checking, .current: return []
+        }
+        if homebrew {
+            return [
+                (title: UpdateCopy.homebrewAvailable(release.version), enabled: false, action: .info),
+                (title: UpdateCopy.copyBrewItem, enabled: true, action: .copyBrewCommand),
+            ]
+        }
+        return [(title: UpdateCopy.updateTo(release.version), enabled: true, action: .downloadAndOpen)]
+    }
+
+    private func addUpdateItems(to menu: NSMenu) {
+        for entry in Self.updateItems(updateStatus, homebrew: updates.installedWithHomebrew) {
+            let selector: Selector? =
+                switch entry.action {
+                case .info: nil
+                case .downloadAndOpen: #selector(updateNow)
+                case .copyBrewCommand: #selector(copyBrewCommand)
+                }
+            let item = NSMenuItem(title: entry.title, action: entry.enabled ? selector : nil, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = entry.enabled
+            if entry.action == .copyBrewCommand { item.toolTip = UpdateCopy.copyBrewTooltip }
+            menu.addItem(item)
+        }
+    }
+
+    /// Progress and errors show in Settings ▸ Updates, so the download starts there in view.
+    @objc private func updateNow() {
+        showSettings(.updates, from: "menu")
+        Task { await updates.downloadAndOpen() }
+    }
+
+    @objc private func copyBrewCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(UpdateCopy.homebrewCommand, forType: .string)
     }
 
     private func addStatusItems(to menu: NSMenu) {
