@@ -95,6 +95,26 @@ import Testing
         #expect(defaults.bool(forKey: ZoomController.explainerShownKey))
     }
 
+    @Test func closingFromScreenRecordingCompletes() {
+        let defaults = throwawayDefaults()
+        let (controller, _) = atScreenRecording(defaults)
+        #expect(defaults.string(forKey: SetupWindowController.stepKey) == "screenRecording")
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        #expect(defaults.bool(forKey: SetupWindowController.completedKey))
+    }
+
+    @Test func openSettingsCompletesAndOpensSettings() {
+        let defaults = throwawayDefaults()
+        let (controller, _) = atScreenRecording(defaults)
+        var opened: [SettingsPane?] = []
+        controller.openSettings = { opened.append($0) }
+        controller.advance()
+        #expect(controller.model.current == .done)
+        controller.openSettingsFromDone()
+        #expect(opened == [nil])
+        #expect(defaults.bool(forKey: SetupWindowController.completedKey))
+    }
+
     /// A first-run controller on the Screen Recording step (ready access skips step 2), with fakes wired.
     private func atScreenRecording(_ defaults: UserDefaults? = nil) -> (SetupWindowController, FakeScreenRecording) {
         let controller = SetupWindowController(permission: permission(.ready), defaults: defaults ?? throwawayDefaults())

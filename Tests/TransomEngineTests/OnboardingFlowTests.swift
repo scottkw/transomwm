@@ -33,4 +33,18 @@ import Testing
         #expect(OnboardingFlow.next(after: .accessibility, in: [.accessibility]) == nil)
         #expect(OnboardingFlow.next(after: .move, in: firstRun) == nil)
     }
+
+    @Test func resumeSkipsPastScreenRecording() {
+        let firstRun = OnboardingFlow.steps(completed: false)
+        #expect(OnboardingFlow.resume(stored: "screenRecording", in: firstRun) == .done)
+        #expect(OnboardingFlow.resume(stored: "welcome", in: firstRun) == .welcome)
+        #expect(OnboardingFlow.resume(stored: "accessibility", in: firstRun) == .accessibility)
+    }
+
+    @Test func resumeFallsBackToTheFirstStep() {
+        let firstRun = OnboardingFlow.steps(completed: false)
+        #expect(OnboardingFlow.resume(stored: nil, in: firstRun) == .welcome)
+        #expect(OnboardingFlow.resume(stored: "nonsense", in: firstRun) == .welcome)
+        #expect(OnboardingFlow.resume(stored: "launchAtLogin", in: firstRun) == .welcome)
+    }
 }
