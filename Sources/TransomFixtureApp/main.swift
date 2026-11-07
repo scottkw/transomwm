@@ -13,6 +13,9 @@ import AppKit
 //   ok <command> | error <message>                               ends every command's reply
 // stdin commands (one per line; any window lines a command prints come before its ok):
 //   open <spec> | close <i> | move <i> <x> <y> | resize <i> <w> <h> | minimize <i> | deminimize <i>
+//   close-keep <i>: closes window i and keeps it alive
+//   close-group <i>: closes every tab of window i's native tab group and keeps them all alive, as an app with
+//     window controllers does
 //   fullscreen <i> | exit-fullscreen <i> (ok once the transition finished, 5 s limit)
 //   select-tab <i> | title <i> <text> | hide-app | unhide-app | list | quit
 //   frontmost: prints `frontmost index=<i>` while this app is active with window i key, else `frontmost none`
@@ -42,7 +45,8 @@ struct FixtureFailure: Error {
 
 final class Fixture: NSObject, NSApplicationDelegate {
     /// Every window ever opened; an index stays valid after its window closes. A closed window is released
-    /// (nil), as a real app does, so it leaves WindowServer and its AX element turns invalid.
+    /// (nil), as a real app does, so it leaves WindowServer and its AX element turns invalid. `close-keep` and
+    /// `close-group` keep the closed window: that retention is what exposes D-23 and D-25 on macOS 27.
     var entries: [(window: NSWindow?, kind: String, open: Bool)] = []
     let launchSpecs: [String]
     /// AppKit animates sheets and tab groups in; report frames once they settle.
@@ -204,6 +208,20 @@ final class Fixture: NSObject, NSApplicationDelegate {
                 if let index = entries.firstIndex(where: { $0.window === target }) {
                     entries[index].open = false
                     entries[index].window = nil
+                }
+            case "close-keep":
+                let target = try window(parts.dropFirst().first)
+                target.close()
+                if let index = entries.firstIndex(where: { $0.window === target }) { entries[index].open = false }
+            case "close-group":
+                // One main-actor turn, the selected tab last: AX and CG never see a hidden tab shown in between.
+                let target = try window(parts.dropFirst().first)
+                let selected = target.tabGroup?.selectedWindow ?? target
+                let group = target.tabGroup?.windows ?? [target]
+                for member in group where member !== selected { member.close() }
+                selected.close()
+                for index in entries.indices where group.contains(where: { $0 === entries[index].window }) {
+                    entries[index].open = false
                 }
             case "move":
                 let target = try window(parts.dropFirst().first)
