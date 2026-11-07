@@ -1,3 +1,4 @@
+import Foundation
 import TransomEngine
 import Testing
 
@@ -46,6 +47,25 @@ import Testing
         #expect(CLICommandLine.parse(["dock-column-1", "3"]) == .usage("transom: dock-column-1 takes no argument."))
         #expect(CLICommandLine.parse(["dock-left-half", "3"]) == .usage("transom: dock-left-half takes no argument."))
         #expect(CLICommandLine.parse(["dock-top-left", "extra"]) == .usage("transom: dock-top-left takes no argument."))
+    }
+
+    @Test func settingsAloneSendsSettings() {
+        #expect(CLICommandLine.parse(["settings"]) == .send("settings"))
+    }
+
+    @Test func settingsWithAPaneSendsThePaneQueryThatTheURLParses() throws {
+        #expect(CLICommandLine.parse(["settings", "updates"]) == .send("settings?pane=updates"))
+        // The same round trip the tool's main.swift does before sending.
+        let url = try #require(URL(string: "transom://settings?pane=updates"))
+        #expect(TransomURL.parse(url, scheme: "transom") == .settings(.updates))
+    }
+
+    @Test func settingsWithAnUnknownPaneSendsGeneral() {
+        #expect(CLICommandLine.parse(["settings", "Foo&x=1"]) == .send("settings?pane=general"))
+    }
+
+    @Test func settingsWithTwoArgumentsIsAUsageError() {
+        #expect(CLICommandLine.parse(["settings", "updates", "zoom"]) == .usage("transom: settings takes at most one argument."))
     }
 
     @Test(arguments: [["view", "3", "4"], ["view/3", "4"], ["zoom-out", "3", "4"]] as [[String]])
