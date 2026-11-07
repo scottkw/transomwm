@@ -2,5 +2,6 @@
 public enum InstallLocation {
     public static let caskroomPaths = ["/opt/homebrew/Caskroom/transom", "/usr/local/Caskroom/transom"]
 
-    public static func isHomebrew(exists: (String) -> Bool) -> Bool { false }
+    /// True when either Caskroom folder exists (09 UI-SPEC Surface 3 Homebrew detection).
+    public static func isHomebrew(exists: (String) -> Bool) -> Bool { caskroomPaths.contains(where: exists) }
 }

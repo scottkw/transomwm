@@ -5,10 +5,10 @@ nonisolated public enum UpdateCopy {
     public static let checkForUpdates = "Check for Updates"
     public static let releaseNotes = "Release Notes"
     public static let downloadAndOpen = "Download and Open"
-    public static let copyCommand = ""
-    public static let quitTransom = ""
-    public static let homebrewIntro = ""
-    public static let homebrewCommand = ""
+    public static let copyCommand = "Copy Command"
+    public static let quitTransom = "Quit Transom"
+    public static let homebrewIntro = "Transom was installed with Homebrew. To update, run this in Terminal:"
+    public static let homebrewCommand = "brew upgrade --cask transom"
     public static let automaticToggle = "Check for updates automatically"
     public static let automaticFooter =
         "Transom asks GitHub for the latest release when it opens and once a day. Nothing about you or your Mac is sent."
@@ -33,7 +33,9 @@ nonisolated public enum UpdateCopy {
         case .checking: "Checking for updates\u{2026}"
         case .current(let version): "Transom \(version) is up to date."
         case .available(let release): "Transom \(release.version) is available. You have \(current)."
-        case .downloading(let release, _): "Downloading Transom \(release.version)\u{2026}"
+        case .downloading(let release, let fraction):
+            // The percentage is left out while the size is unknown.
+            "Downloading Transom \(release.version)\u{2026}" + (fraction.map { " \(Int(($0 * 100).rounded()))%" } ?? "")
         case .verifying: "Checking the download's signature\u{2026}"
         case .opened(let release):
             "The Transom \(release.version) disk image is open. Quit Transom, then drag the new Transom to Applications and choose Replace."
