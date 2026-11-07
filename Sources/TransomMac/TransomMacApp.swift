@@ -93,7 +93,7 @@ public enum TransomMacApp {
         let updates = UpdateController(
             client: GitHubReleaseClient(configuration: GitHubReleaseClient.configuration(), userAgent: "Transom/\(version ?? "dev")"),
             currentVersion: version ?? "dev", build: info?["CFBundleVersion"] as? String ?? "?",
-            isEnabled: UpdateController.isEnabled(bundleID: Bundle.main.bundleIdentifier, version: version))
+            isEnabled: UpdateController.isEnabled(bundleID: Bundle.main.bundleIdentifier, version: version), defaults: .standard)
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
             dragToDock: dragToDock, newWindows: newWindows, exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController,

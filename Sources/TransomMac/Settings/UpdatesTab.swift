@@ -36,6 +36,11 @@ struct UpdatesTab: View {
                     }
                 }
             }
+            Section {
+                Toggle(UpdateCopy.automaticToggle, isOn: $controller.automatic)
+            } footer: {
+                Text(UpdateCopy.automaticFooter)
+            }
         }
         .formStyle(.grouped)
     }

@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import TransomEngine
 import os
 
@@ -13,13 +14,26 @@ import os
     /// False outside a Release bundle: the tab shows the version line and a disabled Check for Updates.
     let isEnabled: Bool
     private let client: GitHubReleaseClient
+    private let defaults: UserDefaults
+    /// On by default. The daily schedule that reads it lands in 09-17.
+    static let automaticKey = "updates.automatic"
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "update")
 
-    init(client: GitHubReleaseClient, currentVersion: String, build: String, isEnabled: Bool) {
+    init(client: GitHubReleaseClient, currentVersion: String, build: String, isEnabled: Bool, defaults: UserDefaults) {
         self.client = client
+        self.defaults = defaults
         self.currentVersion = currentVersion
         self.build = build
         self.isEnabled = isEnabled
+    }
+
+    /// The Settings ▸ Updates toggle.
+    var automatic: Bool {
+        get { defaults.object(forKey: Self.automaticKey) as? Bool ?? true }
+        set {
+            objectWillChange.send()
+            defaults.set(newValue, forKey: Self.automaticKey)
+        }
     }
 
     /// On only in a Release bundle with a version (Debug is `….debug`; `swift run` has no Info.plist), so a dev build

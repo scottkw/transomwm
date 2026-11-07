@@ -61,11 +61,11 @@ private final class StubURLProtocol: URLProtocol {
     }
 
     /// A throwaway defaults domain, never the user's.
-    private func withDefaults(_ body: (UserDefaults) async throws -> Void) async throws {
+    private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
         let suite = "com.eightabyte.transom.tests.updates.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        try await body(defaults)
+        try body(defaults)
     }
 
     private func controller(current: String, defaults: UserDefaults = UserDefaults(suiteName: "com.eightabyte.transom.tests.updates")!)
@@ -118,8 +118,8 @@ private final class StubURLProtocol: URLProtocol {
         await #expect(throws: (any Error).self) { try await client().latest() }
     }
 
-    @Test func theAutomaticSwitchDefaultsOnAndPersists() async throws {
-        try await withDefaults { defaults in
+    @Test func theAutomaticSwitchDefaultsOnAndPersists() throws {
+        try withDefaults { defaults in
             let updates = controller(current: "0.8.0", defaults: defaults)
             #expect(UpdateController.automaticKey == "updates.automatic")
             #expect(updates.automatic)

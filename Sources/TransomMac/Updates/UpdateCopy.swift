@@ -4,6 +4,9 @@ import TransomEngine
 nonisolated public enum UpdateCopy {
     public static let checkForUpdates = "Check for Updates"
     public static let releaseNotes = "Release Notes"
+    public static let automaticToggle = "Check for updates automatically"
+    public static let automaticFooter =
+        "Transom asks GitHub for the latest release when it opens and once a day. Nothing about you or your Mac is sent."
 
     /// "Transom 0.9.0 (1)".
     public static func versionLine(_ version: String, _ build: String) -> String { "Transom \(version) (\(build))" }
