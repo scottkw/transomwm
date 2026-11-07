@@ -1,3 +1,4 @@
+import Foundation
 import TransomEngine
 
 /// Settings ▸ Updates copy (09 UI-SPEC Surface 3). Pure strings, no AppKit types.
@@ -21,6 +22,24 @@ nonisolated public enum UpdateCopy {
     public static func updateTo(_ version: String) -> String { "Update to Transom \(version)\u{2026}" }
     /// The Homebrew install's disabled info line.
     public static func homebrewAvailable(_ version: String) -> String { "Transom \(version) is available" }
+
+    /// The ⌥ Debug line: "Updates: {state}, last checked {HH:mm}" or "never".
+    public static func debugLine(status: UpdateStatus, lastChecked: Date?) -> String {
+        let state =
+            switch status {
+            case .idle: "idle"
+            case .checking: "checking"
+            case .current: "current"
+            case .available(let release): "\(release.version) available"
+            case .downloading(let release, _): "downloading \(release.version)"
+            case .verifying(let release): "verifying \(release.version)"
+            case .opened(let release): "\(release.version) opened"
+            }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        let time = lastChecked.map(formatter.string(from:))
+        return "Updates: \(state), last checked \(time ?? "never")"
+    }
 
     /// "Transom 0.9.0 (1)".
     public static func versionLine(_ version: String, _ build: String) -> String { "Transom \(version) (\(build))" }

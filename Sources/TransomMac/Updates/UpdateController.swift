@@ -23,8 +23,14 @@ import os
     private let open: (URL) -> Bool
     /// Read once per launch: an available update shows the brew command instead of Download and Open (D-10).
     let installedWithHomebrew: Bool
-    /// On by default. The daily schedule that reads it lands in 09-17.
+    /// On by default; read by the daily schedule (`startAutomatic`).
     static let automaticKey = "updates.automatic"
+    /// When the last check finished, successful or not (the Debug "Updates" line).
+    private(set) var lastChecked: Date?
+    /// The running schedule; nil while automatic is off or before `startAutomatic`.
+    private(set) var automaticTask: Task<Void, Never>?
+    /// Kept so the Settings toggle can restart the schedule; set by `startAutomatic`.
+    private var sleep: ((Duration) async throws -> Void)?
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "update")
 
     init(
@@ -52,6 +58,29 @@ import os
         set {
             objectWillChange.send()
             defaults.set(newValue, forKey: Self.automaticKey)
+            restartAutomatic()
+        }
+    }
+
+    /// gifsmith `RunAutoUpdates`: about 10 s after launch, then every 24 hours, while automatic is on (D-09). A failure
+    /// shows nothing (`checkNow(manual: false)`). Called once at launch; `sleep` is injected by tests.
+    func startAutomatic(sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+        self.sleep = sleep
+        restartAutomatic()
+    }
+
+    private func restartAutomatic() {
+        automaticTask?.cancel()
+        automaticTask = nil
+        guard automatic, isEnabled, let sleep else { return }
+        automaticTask = Task { [weak self] in
+            var wait = Duration.seconds(10)
+            while true {
+                do { try await sleep(wait) } catch { return }
+                guard !Task.isCancelled, let self else { return }
+                await self.checkNow(manual: false)
+                wait = .seconds(24 * 60 * 60)
+            }
         }
     }
 
@@ -66,6 +95,7 @@ import os
     /// `manual` is a Check for Updates click: only its failure is shown. An automatic check's failure is only logged.
     func checkNow(manual: Bool = true) async {
         guard isEnabled, machine.begin(.check) else { return }
+        defer { lastChecked = Date() }
         let check: UpdateCheck
         do {
             check = try await client.latest()
