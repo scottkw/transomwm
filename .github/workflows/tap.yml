@@ -1,0 +1,84 @@
+name: Tap
+
+# Publishing a release (by the maintainer's own gh token, so the event fires) bumps
+# Casks/transom.rb in scottkw/homebrew-transom (D-12). workflow_dispatch re-runs it for a tag.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag (e.g. v0.9.0)'
+        required: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: tap
+  cancel-in-progress: false
+
+jobs:
+  cask:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Hashes the published asset itself (stapling changes the bytes, Pitfall 12) and requires it to
+      # match the .sha256 asset and, when the API exposes it, the asset digest.
+      - name: Verify the published DMG
+        id: dmg
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' is not vMAJOR.MINOR.PATCH"; exit 1; }
+          version="${TAG#v}"
+          dmg="Transom-$version-universal.dmg"
+          mkdir -p dl
+          gh release download "$TAG" --repo "$REPO" --dir dl --pattern "$dmg" --pattern "$dmg.sha256"
+          sha=$(sha256sum "dl/$dmg" | awk '{print $1}')
+          listed=$(awk '{print $1}' "dl/$dmg.sha256")
+          [ "$sha" = "$listed" ] || { echo "::error::$dmg hashes to $sha, its .sha256 asset says $listed"; exit 1; }
+          digest=$(DMG="$dmg" gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[] | select(.name == env.DMG) | .digest // ""')
+          if [ -n "$digest" ] && [ "$digest" != "sha256:$sha" ]; then
+            echo "::error::$dmg hashes to $sha, the release API digest is $digest"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: scottkw/homebrew-transom
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Render and push Casks/transom.rb
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.dmg.outputs.version }}
+          SHA256: ${{ steps.dmg.outputs.sha256 }}
+        run: |
+          mkdir -p Casks
+          sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{SHA256}}/$SHA256/g" \
+            ../packaging/homebrew/transom.rb.template > Casks/transom.rb
+          git add Casks/transom.rb
+          if git diff --cached --quiet; then
+            echo "Casks/transom.rb already has transom $VERSION"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "transom $VERSION"
+          git push
