@@ -25,6 +25,8 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - ../Sources/TransomApp
+      # App icon and the menu-bar template glyphs (UI-SPEC Surface 8), copied from design-template/icons.
+      - Assets.xcassets
     dependencies:
       - package: Transom
         product: TransomMac
@@ -42,6 +44,8 @@ targets:
         com.apple.security.app-sandbox: false
     scheme: {}
     settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
         Debug:
           PRODUCT_NAME: "Transom Debug"
