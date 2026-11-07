@@ -21,7 +21,8 @@ import Testing
     @Test func aDiskImageLaunchStartsAtMoveEvenAfterCompletion() {
         let defaults = throwawayDefaults()
         defaults.set("accessibility", forKey: SetupWindowController.stepKey)
-        let controller = SetupWindowController(permission: permission(.ready), defaults: defaults, place: .diskImage)
+        // Probing keeps decideAtLaunch from showing the window.
+        let controller = SetupWindowController(permission: permission(.probing), defaults: defaults, place: .diskImage)
         controller.decideAtLaunch()
         #expect(controller.model.current == .move)
         #expect(controller.model.place == .diskImage)

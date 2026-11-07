@@ -1,6 +1,26 @@
+import TransomEngine
+
 /// Onboarding copy (09 UI-SPEC Surface 2). The Accessibility step keeps the Phase 2 copy in `SetupView`.
 nonisolated public enum OnboardingCopy {
     public static func caption(number: Int, total: Int) -> String { "Step \(number) of \(total)" }
+
+    public static let moveHeading = "Move Transom to Applications"
+    public static func moveBody(_ place: InstallLocation.Place) -> String {
+        let name: String
+        switch place {
+        case .diskImage: name = "a disk image"
+        case .downloads: name = "your Downloads folder"
+        case .translocated: name = "a temporary folder"
+        case .applications, .other: preconditionFailure("no Move step from \(place)")
+        }
+        return "Transom is running from \(name). macOS can forget the permissions you give it there, so move it to the Applications folder first."
+    }
+    public static let moveButton = "Move to Applications"
+    public static let moveQuitButton = "Quit"
+    public static let moveFailed = "Couldn't move Transom. Drag it to the Applications folder yourself, then open it from there."
+    public static let replaceMessage = "Replace the Transom in Applications?"
+    public static let replaceInformative = "The copy that's there now goes to the Trash."
+    public static let replaceButton = "Replace"
 
     public static let welcomeHeading = "Welcome to Transom"
     public static let welcomeBody =

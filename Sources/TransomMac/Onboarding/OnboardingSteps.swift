@@ -1,6 +1,7 @@
 import AppKit
 import TransomEngine
 import SwiftUI
+import os
 
 /// The steps the Set Up Transom window walks and the one it shows (09 UI-SPEC Surface 2).
 final class OnboardingModel: ObservableObject {
@@ -12,10 +13,27 @@ final class OnboardingModel: ObservableObject {
     /// Launch at login step: the toggle (on by default, D-07) and the outcome of a Continue that didn't enable it.
     @Published var launchAtLogin = true
     @Published var loginResult: LoginItemToggle?
+    /// Move step: where Transom is running from, and the failure text after a copy that threw.
+    @Published var place: InstallLocation.Place = .other
+    @Published var moveFailure: String?
 
     init(steps: [OnboardingStep]) {
         self.steps = steps
         current = steps[0]
+    }
+
+    /// Move's copy: true when it landed; a throw keeps the step and shows the failure text (UI-SPEC callout E).
+    func copyForMove(_ copy: () throws -> Void) -> Bool {
+        do {
+            try copy()
+            moveFailure = nil
+            return true
+        } catch {
+            Logger(subsystem: "com.eightabyte.transom", category: "onboarding")
+                .error("move to Applications failed: \(error.localizedDescription, privacy: .public)")
+            moveFailure = OnboardingCopy.moveFailed
+            return false
+        }
     }
 }
 
@@ -34,12 +52,37 @@ struct OnboardingView: View {
     let continueLaunchAtLogin: () -> Void
     let openLoginItems: () -> Void
     let close: () -> Void
+    let moveToApplications: () -> Void
     @AccessibilityFocusState private var headingFocused: Bool
 
     var body: some View {
         let caption = OnboardingFlow.caption(for: model.current, in: model.steps)
             .map { (c: (number: Int, total: Int)) -> String in OnboardingCopy.caption(number: c.number, total: c.total) }
         switch model.current {
+        case .move:
+            page(caption: caption, heading: OnboardingCopy.moveHeading, text: OnboardingCopy.moveBody(model.place)) {
+                Image(systemName: "folder")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+            } detail: {
+                if let failure = model.moveFailure {
+                    // Callout E styling, as SetupView's reset failure.
+                    GroupBox {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "xmark.octagon.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(Color(nsColor: .systemRed))
+                                .accessibilityLabel("Error")
+                            Text(verbatim: failure).font(.body).fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            } buttons: {
+                Button(OnboardingCopy.moveQuitButton) { NSApp.terminate(nil) }
+                defaultButton(OnboardingCopy.moveButton, action: moveToApplications)
+            }
         case .welcome:
             page(caption: caption, heading: OnboardingCopy.welcomeHeading, text: OnboardingCopy.welcomeBody) {
                 Image(nsImage: NSApplication.shared.applicationIconImage).resizable().frame(width: 64, height: 64)

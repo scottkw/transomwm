@@ -32,11 +32,19 @@ import os
     /// Decided once at launch, so turning the last feature off keeps the step, its rows reading Off.
     private var featuresStep = false
     private var screenRecordingPoll: Task<Void, Never>?
+    /// Where this Transom runs from; a disk image, Downloads or a translocated path puts Move first (D-08).
+    private let needsMove: Bool
 
-    init(permission: PermissionController, defaults: UserDefaults = .standard) {
+    init(
+        permission: PermissionController, defaults: UserDefaults = .standard,
+        place: InstallLocation.Place = InstallLocation.classify(bundlePath: Bundle.main.bundlePath, home: NSHomeDirectory())
+    ) {
         self.permission = permission
         self.defaults = defaults
-        model = OnboardingModel(steps: OnboardingFlow.steps(completed: defaults.bool(forKey: Self.completedKey), conflictsActive: false))
+        needsMove = InstallLocation.needsMove(place)
+        model = OnboardingModel(
+            steps: OnboardingFlow.steps(completed: defaults.bool(forKey: Self.completedKey), conflictsActive: false, needsMove: needsMove))
+        model.place = place
         super.init()
         subscription = permission.$state.sink { [weak self] state in self?.stateChanged(state) }
     }
@@ -48,7 +56,7 @@ import os
     func decideAtLaunch() {
         featuresStep = !(conflicts?.active.isEmpty ?? true)
         if !completed {
-            model.steps = OnboardingFlow.steps(completed: false, conflictsActive: featuresStep)
+            model.steps = OnboardingFlow.steps(completed: false, conflictsActive: featuresStep, needsMove: needsMove)
             go(to: OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: model.steps))
         }
         awaitingLaunchDecision = true
@@ -57,13 +65,17 @@ import os
 
     /// Whether the window opens by itself once the launch probe has settled, and with which steps. The first run
     /// always opens (step 2 passes by itself when access is ready); later launches only when access isn't ready.
-    static func launchDecision(completed: Bool, phase: PermissionPhase, conflictsActive: Bool) -> (show: Bool, steps: [OnboardingStep]) {
-        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed, conflictsActive: conflictsActive))
+    static func launchDecision(
+        completed: Bool, phase: PermissionPhase, conflictsActive: Bool, needsMove: Bool = false
+    ) -> (show: Bool, steps: [OnboardingStep]) {
+        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed, conflictsActive: conflictsActive, needsMove: needsMove))
     }
 
     /// Opens the steps for the current completion state: after completion, the lone Accessibility step.
     func show() {
-        let steps = Self.launchDecision(completed: completed, phase: permission.state.phase, conflictsActive: featuresStep).steps
+        let steps = Self.launchDecision(
+            completed: completed, phase: permission.state.phase, conflictsActive: featuresStep, needsMove: needsMove
+        ).steps
         if model.steps != steps {
             model.steps = steps
             go(to: steps[0])
@@ -83,7 +95,11 @@ import os
         }
         guard awaitingLaunchDecision, state.phase != .probing else { return }
         awaitingLaunchDecision = false
-        if Self.launchDecision(completed: completed, phase: state.phase, conflictsActive: featuresStep).show && !userClosed { show() }
+        if Self.launchDecision(completed: completed, phase: state.phase, conflictsActive: featuresStep, needsMove: needsMove).show
+            && !userClosed
+        {
+            show()
+        }
     }
 
     /// Continue: the next step, passing the Accessibility step when access is already ready.
@@ -118,6 +134,42 @@ import os
         guard model.launchAtLogin, model.loginResult == nil else { return advance() }
         let result = LoginItemToggle.toggled(true, service: loginItem)
         if result.status == .enabled { advance() } else { model.loginResult = result }
+    }
+
+    /// Move to Applications (D-08): the Replace alert when a copy is already there, then copy, relaunch and quit. Cancel or
+    /// a failed copy keeps the step.
+    func moveToApplications() {
+        let destination = URL(fileURLWithPath: "/Applications/Transom.app")
+        if FileManager.default.fileExists(atPath: destination.path), !Self.confirmReplace() { return }
+        guard
+            model.copyForMove({ () throws -> Void in
+                try AppMover.copy(from: Bundle.main.bundleURL, to: destination, trash: AppMover.moveToTrash)
+            })
+        else { return }
+        logger.info("moved to Applications")
+        AppMover.relaunchAndQuit(path: destination.path)
+    }
+
+    /// The destructive confirmation (UI-SPEC Copywriting): Cancel holds Return and Esc; only a click on Replace replaces.
+    private static func confirmReplace() -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = OnboardingCopy.replaceMessage
+        alert.informativeText = OnboardingCopy.replaceInformative
+        let replace = alert.addButton(withTitle: OnboardingCopy.replaceButton)
+        replace.keyEquivalent = ""
+        replace.hasDestructiveAction = true
+        let cancel = alert.addButton(withTitle: "Cancel")
+        cancel.keyEquivalent = "\r"
+        // Cancel holds Return, so map Esc (key code 53) to it while the alert is up.
+        let escape = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            cancel.performClick(nil)
+            return nil
+        }
+        let response = alert.runModal()
+        if let escape { NSEvent.removeMonitor(escape) }
+        return response == .alertFirstButtonReturn
     }
 
     /// Back: the step before this one.
@@ -180,7 +232,8 @@ import os
             openSettings: { [weak self] in self?.openSettingsFromDone() },
             continueLaunchAtLogin: { [weak self] in self?.continueLaunchAtLogin() },
             openLoginItems: { [weak self] in self?.loginItem?.openSystemSettingsLoginItems() },
-            close: { [weak self] in self?.closeAccessibilityStep() })
+            close: { [weak self] in self?.closeAccessibilityStep() },
+            moveToApplications: { [weak self] in self?.moveToApplications() })
         let hosting = NSHostingController(rootView: view)
         // The hosting controller publishes SwiftUI's size as preferredContentSize, which the window applies,
         // so its height follows each state's content (G-02-1).
