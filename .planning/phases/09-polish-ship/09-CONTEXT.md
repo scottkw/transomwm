@@ -90,6 +90,11 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
 - **D-24 (user, 2026-11-07):** The Overview live-test helper exit on macOS 27.2 (test-only) is deferred until after the
   release; it stays recorded in deferred-items.md.
 
+- **D-25 (user, 2026-11-07, after 09-29):** The remaining macOS 27 close case blocks v0.9.0: when an app closes a whole
+  native tab group but keeps it alive, Transom may keep the group's tile (09-29 deferred-items "Not covered"). Measure it
+  in the macOS 27.2 VM, then fix it (plan 09-30, before 09-27) without misclassifying live hidden tabs; prove on 27.2 and
+  15.7.
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.
