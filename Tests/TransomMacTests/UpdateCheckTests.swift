@@ -110,6 +110,7 @@ private final class StubURLProtocol: URLProtocol {
         #expect(UpdateCopy.statusLine(.available(release), current: "0.9.0") == "Transom 1.0.0 is available. You have 0.9.0.")
         #expect(UpdateCopy.checkForUpdates == "Check for Updates")
         #expect(UpdateCopy.releaseNotes == "Release Notes")
+        #expect(UpdateCopy.errorLine(.checkFailed) == "Couldn't check for updates. Check your connection, then try again.")
     }
 
     @Test func theUpdaterIsOffOutsideAReleaseBundle() async {

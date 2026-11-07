@@ -10,7 +10,12 @@ struct UpdatesTab: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(UpdateCopy.versionLine(controller.currentVersion, controller.build))
-                    if let line = UpdateCopy.statusLine(controller.status, current: controller.currentVersion) {
+                    if let error = controller.error {
+                        HStack(spacing: 6) {
+                            Image(systemName: "xmark.octagon.fill").foregroundStyle(.red).accessibilityLabel("Error")
+                            Text(UpdateCopy.errorLine(error)).accessibilityAddTraits(.updatesFrequently)
+                        }
+                    } else if let line = UpdateCopy.statusLine(controller.status, current: controller.currentVersion) {
                         HStack(spacing: 6) {
                             switch controller.status {
                             case .checking: ProgressView().controlSize(.small)
@@ -27,7 +32,7 @@ struct UpdatesTab: View {
                             Link(UpdateCopy.releaseNotes, destination: release.notesURL)
                         }
                         Button(UpdateCopy.checkForUpdates) { Task { await controller.checkNow() } }
-                            .disabled(!controller.isEnabled || controller.status == .checking)
+                            .disabled(!controller.isEnabled || controller.machine.isBusy)
                     }
                 }
             }

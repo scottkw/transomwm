@@ -8,6 +8,13 @@ nonisolated public enum UpdateCopy {
     /// "Transom 0.9.0 (1)".
     public static func versionLine(_ version: String, _ build: String) -> String { "Transom \(version) (\(build))" }
 
+    /// Replaces the status line after a failed manual action.
+    public static func errorLine(_ error: UpdateError) -> String {
+        switch error {
+        case .checkFailed: "Couldn't check for updates. Check your connection, then try again."
+        }
+    }
+
     /// The status line under the version; idle has none. `current` is the running version.
     public static func statusLine(_ status: UpdateStatus, current: String) -> String? {
         switch status {

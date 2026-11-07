@@ -3,9 +3,11 @@ import TransomEngine
 import os
 
 /// Owns the update status (SHIP-04, D-09), ported from gifsmith `UpdateService.Check`. One check at a time; a failed
-/// check restores the previous status.
+/// check restores the previous status (`UpdateMachine`).
 @MainActor final class UpdateController: ObservableObject {
-    @Published private(set) var status: UpdateStatus = .idle
+    @Published private(set) var machine = UpdateMachine()
+    var status: UpdateStatus { machine.status }
+    var error: UpdateError? { machine.error }
     let currentVersion: String
     let build: String
     /// False outside a Release bundle: the tab shows the version line and a disabled Check for Updates.
@@ -28,26 +30,25 @@ import os
         return true
     }
 
-    func checkNow() async {
-        guard isEnabled, status != .checking else { return }
-        let previous = status
-        status = .checking
+    /// `manual` is a Check for Updates click: only its failure is shown. An automatic check's failure is only logged.
+    func checkNow(manual: Bool = true) async {
+        guard isEnabled, machine.begin(.check) else { return }
         let check: UpdateCheck
         do {
             check = try await client.latest()
         } catch let error as GitHubReleaseClient.HTTPStatusError {
             logger.error("check failed: \(error.code, privacy: .public)")
-            status = previous
+            machine.fail(.checkFailed, manual: manual)
             return
         } catch {
             logger.error("check failed: \(error.localizedDescription)")
-            status = previous
+            machine.fail(.checkFailed, manual: manual)
             return
         }
         switch check {
         case .release(let release) where UpdateVersion.compare(release.version, currentVersion) == 1:
             logger.info("check: \(release.version, privacy: .public) available")
-            status = .available(release)
+            machine.succeed(.available(release))
             return
         case .release:
             break
@@ -58,6 +59,6 @@ import os
             logger.info("check: no published release")
         }
         logger.info("check: up to date \(self.currentVersion, privacy: .public)")
-        status = .current(currentVersion)
+        machine.succeed(.current(currentVersion))
     }
 }

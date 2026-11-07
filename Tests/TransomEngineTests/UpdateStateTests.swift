@@ -12,7 +12,8 @@ struct UpdateStateTests {
     static func machine(_ status: UpdateStatus) -> UpdateMachine {
         var machine = UpdateMachine()
         if status != .idle {
-            #expect(machine.begin(.check))
+            let started = machine.begin(.check)
+            #expect(started)
             machine.succeed(status)
         }
         return machine
@@ -22,18 +23,21 @@ struct UpdateStateTests {
         for status in [UpdateStatus.idle, .current("0.9.0"), .available(Self.release)] {
             var machine = Self.machine(status)
             #expect(!machine.isBusy)
-            #expect(machine.begin(.check))
+            let started = machine.begin(.check)
+            #expect(started)
             #expect(machine.status == .checking)
             #expect(machine.isBusy)
             let before = machine
-            #expect(!machine.begin(.check))
+            let refused = machine.begin(.check)
+            #expect(!refused)
             #expect(machine == before)
         }
     }
 
     @Test func aFailedManualCheckRestoresAndShowsTheError() {
         var machine = Self.machine(.available(Self.release))
-        #expect(machine.begin(.check))
+        let started = machine.begin(.check)
+        #expect(started)
         machine.fail(.checkFailed, manual: true)
         #expect(machine.status == .available(Self.release))
         #expect(machine.error == .checkFailed)
@@ -42,22 +46,26 @@ struct UpdateStateTests {
 
     @Test func aFailedAutomaticCheckRestoresSilently() {
         var machine = Self.machine(.available(Self.release))
-        #expect(machine.begin(.check))
+        let started = machine.begin(.check)
+        #expect(started)
         machine.fail(.checkFailed, manual: false)
         #expect(machine.status == .available(Self.release))
         #expect(machine.error == nil)
         var fresh = UpdateMachine()
-        #expect(fresh.begin(.check))
+        let freshStarted = fresh.begin(.check)
+        #expect(freshStarted)
         fresh.fail(.checkFailed, manual: false)
         #expect(fresh.status == .idle)
     }
 
     @Test func successClearsAnOldError() {
         var machine = UpdateMachine()
-        #expect(machine.begin(.check))
+        let started = machine.begin(.check)
+        #expect(started)
         machine.fail(.checkFailed, manual: true)
         #expect(machine.error == .checkFailed)
-        #expect(machine.begin(.check))
+        let again = machine.begin(.check)
+        #expect(again)
         machine.succeed(.current("0.9.0"))
         #expect(machine.status == .current("0.9.0"))
         #expect(machine.error == nil)
