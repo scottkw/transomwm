@@ -83,13 +83,16 @@ public enum TransomURL {
     ]
 
     /// The command for `url`: exactly `scheme`, a lowercase command host, no user, password, port, query or fragment, and
-    /// a path that is empty or "/", or for `view` and `save-view` only, "/" and one digit 1-9. Nil for anything else.
+    /// a path that is empty or "/", or for `view` and `save-view` only, "/" and one digit 1-9. `settings` alone may carry a
+    /// query: exactly one `pane` item (D-04). Nil for anything else.
     public static func parse(_ url: URL, scheme: String) -> Command? {
         guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), parts.scheme == scheme,
             parts.percentEncodedUser == nil, parts.percentEncodedPassword == nil, parts.port == nil,
-            parts.percentEncodedQuery == nil, parts.percentEncodedFragment == nil, let host = parts.percentEncodedHost
+            parts.percentEncodedFragment == nil, let host = parts.percentEncodedHost
         else { return nil }
         let path = parts.percentEncodedPath
+        if host == "settings" { return path.isEmpty || path == "/" ? settings(query: parts.percentEncodedQueryItems) : nil }
+        guard parts.percentEncodedQuery == nil else { return nil }
         if path.isEmpty || path == "/" { return commands[host] }
         guard path.hasPrefix("/"), let slot = slot(digit: String(path.dropFirst())) else { return nil }
         return switch host {
@@ -97,6 +100,14 @@ public enum TransomURL {
         case "save-view": .camera(.saveView(slot))
         default: nil
         }
+    }
+
+    /// No query opens the last pane; one `pane` item opens the pane its raw value names, General for any other value
+    /// (uppercase, unknown, empty or percent-encoded, D-04). Any other item, or a second one, is refused.
+    static func settings(query items: [URLQueryItem]?) -> Command? {
+        guard let items else { return .settings(nil) }
+        guard items.count == 1, let item = items.first, item.name == "pane" else { return nil }
+        return .settings(SettingsPane(rawValue: item.value ?? "") ?? .general)
     }
 
     /// The slot for exactly one byte "1"..."9". Bytes, so that a percent-encoded digit or a non-ASCII one fails.

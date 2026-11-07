@@ -13,6 +13,9 @@ public enum Command: Hashable, Sendable {
     /// Don't Arrange the frontmost app (TILE-18, D-29). The shell handles it with its exclusion list; the window
     /// system's `windowChanged` events then tell the Arranger.
     case toggleExcludeFrontmost
+    /// Open Settings on that pane, or on the last one shown when nil (D-04, SHIP-08). The shell handles it, like
+    /// `toggleExcludeFrontmost`.
+    case settings(SettingsPane?)
     /// Move a docked window into the tile across that edge, or snap a floating one to that half of the visible frame
     /// (D-09, D-11, TILE-13, TILE-14).
     case moveOrSnap(Edge)

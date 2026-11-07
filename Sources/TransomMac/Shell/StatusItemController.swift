@@ -65,6 +65,10 @@ import os
             }
         arrange.onPauseChanged = { [weak self] in self?.updateGlyph() }
         arrange.onViewChanged = { [weak self] in self?.updateGlyph() }
+        arrange.openSettings = { [weak self] pane, source in
+            let word = switch source { case .hotkey: "hotkey"; case .menu: "menu"; case .url: "url"; case .cli: "cli" }
+            self?.showSettings(pane, from: word)
+        }
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu

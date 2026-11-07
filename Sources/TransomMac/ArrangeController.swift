@@ -617,6 +617,9 @@ import os
     /// The refusal sound; a seam for tests.
     var beep: () -> Void = { NSSound.beep() }
 
+    /// Opens Settings on a pane, or the last one when nil (D-04); the status item sets it to `showSettings(_:from:)`.
+    var openSettings: ((SettingsPane?, CommandSource) -> Void)?
+
     /// Every route (hotkey, menu item, URL) calls this. A command that cannot act beeps (UI-SPEC: no hotkey fails
     /// silently), except from a URL, whose user may not be at the keyboard (Pitfall 21).
     public func dispatch(_ command: Command, from source: CommandSource = .hotkey) async {
@@ -648,6 +651,11 @@ import os
     }
 
     private func refusableEffects(of command: Command, from source: CommandSource, afterSwitch: Bool) -> [ArrangerEffect] {
+        // Before the overview interrupt, so a settings URL never closes the overview first.
+        if case .settings(let pane) = command {
+            openSettings?(pane, source)
+            return []
+        }
         if command == .toggleExcludeFrontmost {
             // The store's onChange hands the list to the window system, whose windowChanged events float the windows.
             if let exclusions, Self.toggleExclusion(of: NSWorkspace.shared.frontmostApplication, in: exclusions) { return [] }

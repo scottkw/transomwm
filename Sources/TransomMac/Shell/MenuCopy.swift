@@ -53,6 +53,7 @@ nonisolated public enum MenuCopy {
         case .finderSplit: "Split with New Finder Window"
         case .togglePause: pauseToggle(paused: false)
         case .toggleExcludeFrontmost: dontArrangeFallback
+        case .settings: SettingsCopy.menuItem
         case .restoreAll: "Restore All Windows"
         case .camera(let command): cameraTitle(command)
         case .tabs(.next): TabCopy.nextTab
