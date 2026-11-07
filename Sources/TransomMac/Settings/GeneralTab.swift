@@ -16,6 +16,7 @@ struct GeneralTab: View {
     let allowScreenRecording: () -> Void
     @State private var login = LoginItemToggle(status: .notRegistered)
     @State private var recordingGranted = false
+    @State private var cliPath: String?
     @State private var custom = HighlightColor.override() != nil
     @State private var color = Color(nsColor: HighlightColor.current)
 
@@ -52,6 +53,11 @@ struct GeneralTab: View {
             state.showStaleFormB
                 ? (SettingsCopy.permissionNotWorking, SettingsCopy.fixButton) : (SettingsCopy.featureOff, SettingsCopy.setUpButton)
         }
+    }
+
+    /// Where the `transom` tool is on `PATH`, Homebrew's Apple Silicon prefix first.
+    nonisolated static func installedCLIPath(exists: (String) -> Bool) -> String? {
+        ["/opt/homebrew/bin/transom", "/usr/local/bin/transom"].first(where: exists)
     }
 
     nonisolated static func screenRecordingRow(granted: Bool) -> (status: String, button: String?) {
@@ -106,9 +112,38 @@ struct GeneralTab: View {
             } footer: {
                 Self.footer(SettingsCopy.highlightFooter)
             }
+            Section {
+                HStack {
+                    Text(SettingsCopy.cliRow)
+                    Spacer()
+                    if let cliPath {
+                        Text(SettingsCopy.cliInstalled)
+                        Text(cliPath).foregroundStyle(.secondary)
+                    } else {
+                        Text(SettingsCopy.cliNotInstalled)
+                        Button(SettingsCopy.copyInstallCommand) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(SettingsCopy.cliInstallCommand, forType: .string)
+                        }
+                    }
+                }
+            } header: {
+                Text(SettingsCopy.cliSection)
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Self.footer(SettingsCopy.cliFooter)
+                    if cliPath == nil {
+                        Text(SettingsCopy.cliInstallCommand).font(.body.monospaced()).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
-        .onAppear { login = LoginItemToggle(status: loginItem.status) }
+        .onAppear {
+            login = LoginItemToggle(status: loginItem.status)
+            cliPath = Self.installedCLIPath(exists: { FileManager.default.fileExists(atPath: $0) })
+        }
         .task {
             // Re-read once a second while the tab shows; SwiftUI cancels the task when it goes away.
             while !Task.isCancelled {

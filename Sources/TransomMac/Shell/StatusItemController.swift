@@ -423,6 +423,7 @@ import os
         submenu.addItem(Self.info(MenuCopy.capabilityItem(windowIDLookupAvailable: available)))
         submenu.addItem(Self.info(MenuCopy.spacesItem(available: system.capabilityReport[.spaces] == true)))
         submenu.addItem(Self.info(MenuCopy.tapItem(running: arrange.isTapRunning)))
+        submenu.addItem(Self.info(SettingsCopy.loginItemDebugLine(loginItem.status)))
         let zoom = arrange.zoomController
         submenu.addItem(Self.info(ZoomCopy.zoomStateLine(enabled: arrange.isZoomEnabled, capture: arrange.isZoomEnabled ? captureLine(zoom) : "")))
         submenu.addItem(Self.info(ZoomCopy.lastSettleLine(zoom?.lastSettle)))

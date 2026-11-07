@@ -21,6 +21,15 @@ nonisolated public enum SettingsCopy {
     public static let allowButton = "Allow\u{2026}"
     public static let screenRecordingFooter =
         "Optional. With it, zoomed-out views show live pictures of your windows; without it, app icons. On macOS 15 and later, macOS asks you to confirm it about once a month."
+    public static let cliSection = "Command-line tool"
+    public static let cliRow = "transom"
+    public static let cliInstalled = "Installed"
+    public static let cliNotInstalled = "Not installed"
+    public static let copyInstallCommand = "Copy Install Command"
+    public static let cliFooter = "Run Transom commands from Terminal, for example transom view 3. Homebrew installs it for you."
+    /// A fixed string naming only the bundled tool (T-09-15); Transom never runs it.
+    public static let cliInstallCommand =
+        "sudo mkdir -p /usr/local/bin && sudo ln -sf /Applications/Transom.app/Contents/Helpers/transom /usr/local/bin/transom"
     public static let appearanceSection = "Appearance"
     public static let highlightColor = "Highlight color"
     public static let matchSystemAccent = "Match system accent color"
@@ -28,6 +37,16 @@ nonisolated public enum SettingsCopy {
     /// The colour well's accessibility label; the radio row shows no text beside it.
     public static let customHighlightWell = "Custom highlight color"
     public static let highlightFooter = "Used for docking previews, rings and gap handles."
+
+    /// The Debug submenu's read-only login item line.
+    public static func loginItemDebugLine(_ status: LoginItemStatus) -> String {
+        switch status {
+        case .enabled: "Login item: enabled"
+        case .notRegistered: "Login item: not registered"
+        case .requiresApproval: "Login item: needs approval"
+        case .notFound: "Login item: not found"
+        }
+    }
 
     // Arranging (Tab 2)
     public static let layoutSection = "Layout"

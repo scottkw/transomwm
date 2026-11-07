@@ -68,4 +68,18 @@ private final class FakeLoginItem: LoginItemService {
         #expect(!toggle.isOn)
         #expect(toggle.footer == nil)
     }
+
+    @Test func theDebugLineNamesEveryStatus() {
+        #expect(SettingsCopy.loginItemDebugLine(.enabled) == "Login item: enabled")
+        #expect(SettingsCopy.loginItemDebugLine(.notRegistered) == "Login item: not registered")
+        #expect(SettingsCopy.loginItemDebugLine(.requiresApproval) == "Login item: needs approval")
+        #expect(SettingsCopy.loginItemDebugLine(.notFound) == "Login item: not found")
+    }
+
+    @Test func theCLIPathPrefersHomebrewsBin() {
+        let both: Set<String> = ["/opt/homebrew/bin/transom", "/usr/local/bin/transom"]
+        #expect(GeneralTab.installedCLIPath(exists: { both.contains($0) }) == "/opt/homebrew/bin/transom")
+        #expect(GeneralTab.installedCLIPath(exists: { $0 == "/usr/local/bin/transom" }) == "/usr/local/bin/transom")
+        #expect(GeneralTab.installedCLIPath(exists: { _ in false }) == nil)
+    }
 }
