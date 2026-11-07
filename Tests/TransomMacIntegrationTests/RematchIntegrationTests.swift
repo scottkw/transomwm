@@ -241,6 +241,9 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         #expect(reached, "the click at \(point) did not reach the window behind the panel: \(front)")
 
         _ = try await over.send("close 1")
+        // D-17: on macOS 27.2 the closed window is still on screen when the reply comes, and took the click (09-24).
+        let closed = await waitUntil(timeout: .seconds(3)) { !(CGWindowList.onScreenFrontToBack() ?? []).contains { $0.windowID == below } }
+        try #require(closed, "window \(below) stayed on screen after its close")
         try await click()
         let finder = await waitUntil(timeout: .seconds(2)) { NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" }
         #expect(finder, "the click at \(point) did not reach Finder: \(String(describing: NSWorkspace.shared.frontmostApplication?.bundleIdentifier))")
