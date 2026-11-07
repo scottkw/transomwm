@@ -173,3 +173,21 @@ Its `uninstall` removes the "Transom" login item; a Debug build registers its ow
   `~/Library/Logs/DiagnosticReports` as the `parallel-test-diagnostics` artifact; read the log
   there, not in the web viewer. Drop `--no-parallel` once a parallel run passes, or when the
   runner has Swift 6.4 and one passes.
+
+## macOS betas
+
+Before claiming support for a new macOS, run [macos-beta-checklist.md](macos-beta-checklist.md): it lists
+every private symbol Transom resolves and how to check each one on the beta.
+
+## Name check (D-18, D-20)
+
+Checked 2026-11-06, before the first public release:
+
+- No Homebrew cask or formula is named `transom` (`Casks/t/transom.rb` in homebrew-cask and
+  `Formula/t/transom.rb` in homebrew-core both 404).
+- No Mac App Store app named Transom turned up. The App Store has an iPad app, "Transom Note-Taker
+  for Writers" (Void Media), which can run on Apple silicon Macs.
+- Several unrelated GitHub repos are named transom, among them macOS apps: a clipboard manager, a
+  brightness controller, a browser-profile manager and a remote-windows tool. That is a naming
+  overlap, not a trademark finding.
+- The user kept the name Transom on 2026-11-06 (D-20). `transomwm.app` is registered.
