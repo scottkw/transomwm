@@ -1,4 +1,5 @@
 import Foundation
+import TransomEngine
 @testable import TransomMac
 import Testing
 
@@ -67,5 +68,24 @@ import Testing
         #expect(!arguments[1].contains("4242"))
         #expect(!arguments[1].contains("Odd"))
         #expect(arguments[1].contains("\"$1\"") && arguments[1].contains("\"$2\""))
+    }
+
+    @Test func theMoveBodyNamesThePlace() {
+        #expect(OnboardingCopy.moveBody(.diskImage).contains("a disk image"))
+        #expect(OnboardingCopy.moveBody(.downloads).contains("your Downloads folder"))
+        #expect(OnboardingCopy.moveBody(.translocated).contains("a temporary folder"))
+        #expect(
+            OnboardingCopy.moveBody(.diskImage)
+                == "Transom is running from a disk image. macOS can forget the permissions you give it there, so move it to the Applications folder first.")
+    }
+
+    @Test func aFailedCopyKeepsTheStepWithTheFailureText() {
+        struct DiskFull: Error {}
+        let model = OnboardingModel(steps: [.move, .welcome])
+        #expect(!model.copyForMove({ () throws -> Void in throw DiskFull() }))
+        #expect(model.current == .move)
+        #expect(model.moveFailure == "Couldn't move Transom. Drag it to the Applications folder yourself, then open it from there.")
+        #expect(model.copyForMove({ () throws -> Void in }))
+        #expect(model.moveFailure == nil)
     }
 }

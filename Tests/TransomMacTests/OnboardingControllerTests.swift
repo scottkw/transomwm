@@ -18,6 +18,19 @@ import Testing
         #expect(controller.model.current == .welcome)
     }
 
+    @Test func aDiskImageLaunchStartsAtMoveEvenAfterCompletion() {
+        let defaults = throwawayDefaults()
+        defaults.set("accessibility", forKey: SetupWindowController.stepKey)
+        let controller = SetupWindowController(permission: permission(.ready), defaults: defaults, place: .diskImage)
+        controller.decideAtLaunch()
+        #expect(controller.model.current == .move)
+        #expect(controller.model.place == .diskImage)
+        defaults.set(true, forKey: SetupWindowController.completedKey)
+        let later = SetupWindowController(permission: permission(.notTrusted), defaults: defaults, place: .downloads)
+        #expect(later.model.steps == [.move, .accessibility])
+        #expect(later.model.current == .move)
+    }
+
     @Test func afterCompletionOnlyAMissingGrantOpensTheSingleStep() {
         #expect(!SetupWindowController.launchDecision(completed: true, phase: .ready, conflictsActive: true).show)
         let missing = SetupWindowController.launchDecision(completed: true, phase: .notTrusted, conflictsActive: true)
