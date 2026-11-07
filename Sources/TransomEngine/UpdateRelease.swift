@@ -86,10 +86,10 @@ public enum UpdateFeed {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         let raw = try decoder.decode(Raw.self, from: body)
-        guard !raw.draft, !raw.prerelease, UpdateVersion.parse(raw.tagName) != nil else { return .none }
+        guard raw.draft != true, raw.prerelease != true, UpdateVersion.parse(raw.tagName) != nil else { return .none }
         let version = raw.tagName.hasPrefix("v") ? String(raw.tagName.dropFirst()) : raw.tagName
         let name = assetName(version)
-        guard let asset = raw.assets.first(where: { $0.name == name }), asset.state == "uploaded",
+        guard let asset = (raw.assets ?? []).first(where: { $0.name == name }), asset.state == "uploaded",
             (1...maxDMGBytes).contains(asset.size), let hex = asset.digest.flatMap(sha256Hex),
             let url = URL(string: asset.browserDownloadUrl), isAllowedDownload(url)
         else { return .notInstallable(version: version) }
@@ -103,9 +103,10 @@ public enum UpdateFeed {
 
     private struct Raw: Decodable {
         let tagName: String
-        let draft: Bool
-        let prerelease: Bool
-        let assets: [Asset]
+        // Absent reads as false / empty, like Go's zero values in gifsmith.
+        let draft: Bool?
+        let prerelease: Bool?
+        let assets: [Asset]?
 
         struct Asset: Decodable {
             let name: String

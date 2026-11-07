@@ -67,6 +67,17 @@ private final class StubURLProtocol: URLProtocol {
         #expect(release.notesURL.absoluteString == "https://github.com/scottkw/transomwm/releases/tag/v0.9.0")
     }
 
+    @Test func anUninstallableReleaseIsNeverOffered() async {
+        StubURLProtocol.body = Data(
+            String(decoding: Self.latestJSON, as: UTF8.self)
+                .replacingOccurrences(of: "0.9.0", with: "9.9.9")
+                .replacingOccurrences(of: "https://github.com/scottkw/transomwm/releases/download/", with: "https://evil.example/")
+                .utf8)
+        let updates = controller(current: "0.8.0")
+        await updates.checkNow()
+        #expect(updates.status == .current("0.8.0"))
+    }
+
     @Test func theSameVersionIsCurrent() async {
         let updates = controller(current: "0.9.0")
         await updates.checkNow()
