@@ -1,7 +1,8 @@
 ---
 phase: "9"
 slug: "polish-ship"
-status: draft
+status: approved
+reviewed_at: 2026-11-06
 shadcn_initialized: false
 preset: none
 created: "2026-11-06"
@@ -404,7 +405,7 @@ The card width is the wider line plus 16pt, capped at block width − 32. Lines 
 
 **Menu-bar glyph.** `TransomTemplate` (normal and paused, with `appearsDisabled` dimming paused) and `TransomZoomedTemplate` (zoomed in) replace `rectangle.split.2x1`, at 18 × 18pt with `isTemplate = true`. The images are wired as in `design-template/icons/README.md`. Not ready keeps the SF Symbol `exclamationmark.triangle`. The update dot (Surface 3) is composited onto whichever template applies. Accessibility descriptions are unchanged ("Transom", "Transom: arranging paused", "Transom: zoomed in", plus ", update available").
 
-**DMG window** (`scripts/release.sh`, create-dmg):
+**DMG window** (built by the GitHub Actions release job with `hdiutil`, D-11 revised; `scripts/release.sh` is for local dry runs). The plain `hdiutil` DMG holds `Transom.app` and an Applications link in the default Finder window. The layout below applies only when create-dmg is used (optional, never required):
 - Volume name "Transom {version}"
 - Window 540 × 380pt, icon size 128pt
 - `Transom.app` at (140, 180), Applications link at (400, 180), extension hidden
@@ -455,7 +456,7 @@ The voice is unchanged from Phases 2–8.1.1: plain, second person, title case f
 | Owner | Strings |
 |---|---|
 | `SettingsCopy` (new) | Tab labels (7); section headers "Startup", "Permissions", "Appearance", "Command-line tool", "Layout", "Tab groups", "macOS window features", "Zoom", "Trackpad", "Mouse", "Mission Control", "Controls", "Saved views"; row labels and footers from Surface 1; "On", "Off", "Not working", "Installed", "Not installed", "Needs your OK in System Settings"; buttons "Set Up…", "Fix…", "Allow…", "Open Login Items Settings", "Copy Install Command", "Turn Off", "Restore macOS Window Settings", "Add App", "Remove App", "Exclude", "Move Up", "Move Down" |
-| `OnboardingCopy` (new) | Step headings, bodies, "Step {n} of {total}", `{place}` variants, buttons "Continue", "Skip", "Back", "Quit", "Allow Screen Recording", "Move to Applications", "Open Desktop & Dock Settings", "Open Settings", "Done"; the replace alert |
+| `OnboardingCopy` (new) | Step headings, bodies, "Step {n} of {total}", `{place}` variants, buttons "Continue", "Skip", "Back", "Quit Transom", "Allow Screen Recording", "Move to Applications", "Open Desktop & Dock Settings", "Open Settings", "Done"; the replace alert |
 | `UpdateCopy` (new) | Status lines (Surface 3), errors (4), "Check for Updates", "Download and Open", "Release Notes", "Copy Command", "Quit Transom", "Check for updates automatically", the automatic footer, menu items "Update to Transom {v}…", "Transom {v} is available", "Copy “brew upgrade --cask transom”", ", update available" |
 | `MenuCopy` | "Settings…", "Report a Problem…", the Report tooltip, the issue body template |
 | `ViewCopy` | View control descriptions "Back", "Forward", "View {n}", "View {n}, current"; Menu Bar footers |
