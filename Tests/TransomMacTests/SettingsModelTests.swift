@@ -69,4 +69,41 @@ private final class Count: @unchecked Sendable { var value = 0 }
         for mode in NewWindowsMode.allCases { #expect(ArrangingTab.footer(mode) == MenuCopy.newWindowsTooltip(mode)) }
         for mode in DragToDockMode.allCases { #expect(ArrangingTab.footer(mode) == MenuCopy.dragToDockTooltip(mode)) }
     }
+
+    @Test func turningAFeatureOffIsSeenBySettings() async {
+        let (defaults, cleanUp) = ConflictControllerTests.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = ["GloballyEnabled": .bool(true), "EnableStandardClickToShowDesktop": .bool(false)]
+        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 14, readBackDelay: .zero)
+        let told = Count()
+        withObservationTracking({ _ = conflicts.active }, onChange: { told.value += 1 })
+        conflicts.poll()
+        #expect(told.value == 1)
+        #expect(conflicts.active == [.stageManager])
+
+        withObservationTracking({ _ = conflicts.active }, onChange: { told.value += 1 })
+        await conflicts.turnOff(.stageManager)
+        #expect(told.value == 2)
+        #expect(!conflicts.active.contains(.stageManager))
+    }
+
+    @Test func theFeatureRowsAreTheThreeConflictsInOrder() async {
+        let (defaults, cleanUp) = ConflictControllerTests.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = ["GloballyEnabled": .bool(true), "EnableStandardClickToShowDesktop": .bool(false)]
+        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 14, readBackDelay: .zero)
+        conflicts.poll()
+        let rows = ArrangingTab.featureRows(conflicts)
+        #expect(rows.map(\.conflict) == [.stageManager, .edgeTiling, .clickWallpaper])
+        #expect(rows.map(\.name) == ["Stage Manager", "macOS edge tiling", "Click wallpaper to reveal desktop"])
+        #expect(rows.map(\.detail) == Conflict.allCases.map(ConflictCopy.tooltip))
+        #expect(rows.map(\.isOn) == [true, false, false])
+        #expect(!conflicts.canRestore, "nothing turned off yet, nothing to restore")
+
+        await conflicts.turnOff(.stageManager)
+        #expect(ArrangingTab.featureRows(conflicts).map(\.isOn) == [false, false, false])
+        #expect(conflicts.canRestore)
+    }
 }
