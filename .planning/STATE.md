@@ -551,6 +551,7 @@ Recent decisions affecting current work:
 | 5 | Write a comprehensive README.md for Transom | 2026-10-27 | 739295b | — |
 | 6 | Add the MIT LICENSE file | 2026-10-27 | fb0e29b | — |
 | 261106-bru | Fix menu bar icon clipped on non-Retina external display | 2026-11-06 | 6d6be69 | [261106-bru-fix-menu-bar-icon-clipped-on-non-retina-](./quick/261106-bru-fix-menu-bar-icon-clipped-on-non-retina-/) |
+| fast | E5: a minimised window leaving no longer grows an empty area (ponytail review of 08.1.1) | 2026-11-06 | 407e458 | — |
 
 ### Pending Todos
 
