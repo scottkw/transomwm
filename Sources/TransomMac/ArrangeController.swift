@@ -122,6 +122,8 @@ import os
     /// The gesture session tap (05-03): runs only while zoom is on and the mouse tap runs (D-07).
     private let gestureTap = GestureTap()
     private(set) lazy var gestures = GestureController(tap: gestureTap, controller: self)
+    /// Settings ▸ Trackpad's two switches (09-06); this file owns the one instance.
+    let gesturePreference = GesturePreference()
     public var isGestureTapRunning: Bool { gestureTap.isRunning }
     /// Multitouch devices are open (05-07): only while the gesture tap runs, never with zoom off (D-07).
     public var isMultitouchRunning: Bool { gestures.multitouch.isRunning }
@@ -170,6 +172,10 @@ import os
         tabStripPanels.bounds = { [weak self] window in
             let id = self?.arranger.windows[window.identity]?.visibleMemberID ?? window.windowID
             return id < WindowIdentity.syntheticIDBase ? DragFramePoller.bounds(of: id) : nil
+        }
+        gesturePreference.onChange = { [weak self] in
+            self?.gestures.publish()
+            self?.updateGestureTap(reason: "settings")
         }
     }
 

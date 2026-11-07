@@ -30,11 +30,14 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
     /// top, so the no-⌥ test passes it with no CG window-list read in the tap callback. A stale frame can only make a
     /// wallpaper gesture pass, never take a gesture over a window.
     public var windowRects: [CGRect]
+    /// Settings ▸ Trackpad (09-06): ⌥-held gestures anywhere, and bare gestures on the wallpaper.
+    public var takesOptionGestures: Bool
+    public var takesWallpaperGestures: Bool
 
     public init(
         armed: Bool = false, disarmReason: DisarmReason? = nil, deskDisplays: [CGRect] = [], fullScreenDisplays: [CGRect] = [],
         finderPID: Int32 = 0, trackpadSenders: Set<UInt64> = [], filtersBySender: Bool = true, trustsTargetPID: Bool = false,
-        windowRects: [CGRect] = []
+        windowRects: [CGRect] = [], takesOptionGestures: Bool = true, takesWallpaperGestures: Bool = true
     ) {
         self.armed = armed
         self.disarmReason = disarmReason
@@ -45,6 +48,8 @@ public nonisolated struct GestureTapState: Equatable, Sendable {
         self.filtersBySender = filtersBySender
         self.trustsTargetPID = trustsTargetPID
         self.windowRects = windowRects
+        self.takesOptionGestures = takesOptionGestures
+        self.takesWallpaperGestures = takesWallpaperGestures
     }
 }
 
@@ -100,6 +105,8 @@ public nonisolated enum GestureTapRules {
         case windowUnderPointer, overlayUnderPointer
         /// A target pid that is not Finder: passed with no CG read.
         case shortCircuit
+        /// Bare wallpaper with Settings ▸ Trackpad's wallpaper switch off.
+        case turnedOff
     }
 
     public struct Sequence: Equatable, Sendable {
@@ -289,11 +296,12 @@ public nonisolated enum GestureTapRules {
             return passing(.notTrackpad)
         }
         if !input.flags.intersection([.maskControl, .maskCommand]).isEmpty { return passing(.chord) }
-        if option { return taking(.optionHeld) }
+        // With the ⌥ switch off an ⌥ gesture falls through: over bare wallpaper it is still a wallpaper gesture.
+        if option && state.takesOptionGestures { return taking(.optionHeld) }
         if state.trustsTargetPID, input.targetPID != 0, input.targetPID != state.finderPID { return passing(.shortCircuit) }
         if state.windowRects.contains(where: { $0.contains(location) }) { return passing(.windowUnderPointer) }
         switch surface(location) {
-        case .wallpaper: return taking(.wallpaper)
+        case .wallpaper: return state.takesWallpaperGestures ? taking(.wallpaper) : passing(.turnedOff)
         case .window: return passing(.windowUnderPointer)
         case .overlay: return passing(.overlayUnderPointer)
         }

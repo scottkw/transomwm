@@ -181,7 +181,8 @@ import os
             armed: controller.isZoomEnabled && disarm == nil, disarmReason: disarm,
             deskDisplays: arranger.displays.filter(hasDesk).map { ZoomInput.cgRect($0.frame) },
             fullScreenDisplays: arranger.displays.filter { !hasDesk($0) }.map { ZoomInput.cgRect($0.frame) }, finderPID: finderPID,
-            trackpadSenders: trackpadSenders, windowRects: windows.map { ZoomInput.cgRect($0.frame) })
+            trackpadSenders: trackpadSenders, windowRects: windows.map { ZoomInput.cgRect($0.frame) },
+            takesOptionGestures: controller.gesturePreference.takesOption, takesWallpaperGestures: controller.gesturePreference.takesWallpaper)
         guard state != published else { return }
         published = state
         tap.setState(state)
@@ -505,6 +506,7 @@ import os
         case .notDeskDisplay: "not a desk display"
         case .chord: "⌃ or ⌘ also held"
         case .notTrackpad: "not a trackpad"
+        case .turnedOff: "turned off in Settings"
         case .midSequence, .windowUnderPointer, .overlayUnderPointer, .shortCircuit, nil: "⌥ pressed mid-gesture"
         }
     }

@@ -348,6 +348,7 @@ func passText(_ reason: GestureTapRules.PassReason?) -> String {
     case .windowUnderPointer: requireAlt ? "no ⌥ (--require-alt)" : "window under pointer"
     case .overlayUnderPointer: "menu or popover under pointer"
     case .shortCircuit: "app under pointer"
+    case .turnedOff: "turned off in Settings"
     case nil: "–"
     }
 }
