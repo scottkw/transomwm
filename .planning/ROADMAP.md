@@ -512,7 +512,7 @@ Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
   5. `brew install --cask` installs a Developer ID-signed, notarised Transom that opens without Gatekeeper warnings
   6. The menu bar shows back, forward and saved-view controls (current view highlighted) that the user can choose and reorder in Settings; the menu has "Report a Problem", the icon shows a dot when an update is waiting, and a `transom://settings` URL opens a given Settings section directly (query key as in SHIP-08)
 
-**Plans:** 28 plans (one per wave: executors share one working tree, `.build` and the VM lock)
+**Plans:** 29 plans (one per wave: executors share one working tree, `.build` and the VM lock)
 
 Plans:
 - [ ] 09-01-PLAN.md — Settings window from the menu (⌘,) with the Shortcuts tab (SHIP-01, D-01)
@@ -540,6 +540,7 @@ Plans:
 - [ ] 09-23-PLAN.md — Collapsed-block label (D-16)
 - [ ] 09-24-PLAN.md — Carried failures: FreezeTest, Views and Rematch on macOS 27 (D-17)
 - [ ] 09-25-PLAN.md — Carried failures: Overview, OverviewSpaceSwitch, TabStripSpace, TabGroup on macOS 27 (D-17)
+- [ ] 09-29-PLAN.md — Gap closure, runs before 09-26: CloseRule closes a window its app keeps alive on macOS 27 (ordered out on a shown Space, AX -25202); TabGroup live in both VMs (D-23)
 - [ ] 09-26-PLAN.md — 0.9.0: version, notes, local dry run, README, beta checklist, name record (D-18, D-20)
 - [ ] 09-27-PLAN.md — Human: confirm contracts, merge, go public, release environment and secrets, tap, dry run (D-19)
 - [ ] 09-28-PLAN.md — Human: tag and publish v0.9.0; verify release, tap and a clean Homebrew install
