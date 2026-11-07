@@ -111,7 +111,8 @@ import os
         viewControls.refresh(
             ViewControlItems.layout(
                 items: menuBar.items, iconOnly: menuBar.iconOnly, zoomOn: arrange.isZoomEnabled,
-                paused: ready && !arranger.pauseReasons.isEmpty, slots: arranger.savedViewSlots, current: nil,
+                paused: ready && !arranger.pauseReasons.isEmpty, slots: arranger.savedViewSlots,
+                current: uuid.flatMap { arranger.currentViewSlot(displayUUID: $0)?.number },
                 backAvailable: arranger.availability(.camera(.back), context: context),
                 forwardAvailable: arranger.availability(.camera(.forward), context: context)))
     }

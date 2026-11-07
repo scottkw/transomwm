@@ -103,7 +103,13 @@ nonisolated struct ViewControlSpec: Equatable, Sendable {
             switch item.control {
             case .back: [ViewControlSpec(kind: .back, symbol: "chevron.backward", description: ViewCopy.back, appearsDisabled: false)]
             case .forward: [ViewControlSpec(kind: .forward, symbol: "chevron.forward", description: ViewCopy.forward, appearsDisabled: false)]
-            case .views: []
+            case .views:
+                slots.map { (n: Int) -> ViewControlSpec in
+                    let name = iconOnly ? "square" : "\(n).square"
+                    return ViewControlSpec(
+                        kind: .view(n), symbol: n == current ? name + ".fill" : name, description: ViewCopy.viewControl(n, current: n == current),
+                        appearsDisabled: false)
+                }
             }
         }
     }
