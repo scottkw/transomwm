@@ -36,7 +36,7 @@ import os
     private var nudgePlanner = NudgePlanner()
     /// Installed apps' display names by bundle ID, so a menu rebuild does not ask Launch Services per row (02-UI-REVIEW).
     private var displayNames: [String: String] = [:]
-    private lazy var shortcutsWindow = ShortcutsWindowController()
+    private lazy var settingsWindow = SettingsWindowController(tabs: settingsTabs())
     /// The Replace Mission Control explanation while it is up or waiting to show.
     private var takeoverAlert: TakeoverAlert?
 
@@ -103,9 +103,9 @@ import os
             menu.addItem(debugMenuItem())
         }
         menu.addItem(.separator())
-        let shortcuts = NSMenuItem(title: ZoomCopy.shortcutsItem, action: #selector(openShortcuts), keyEquivalent: "")
-        shortcuts.target = self
-        menu.addItem(shortcuts)
+        let settings = NSMenuItem(title: SettingsCopy.menuItem, action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         let quit = NSMenuItem(title: "Quit Transom", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
@@ -371,8 +371,18 @@ import os
         arrange.turnMultitouchBackOn()
     }
 
-    @objc private func openShortcuts() {
-        shortcutsWindow.show()
+    @objc private func openSettings() {
+        showSettings(nil, from: "menu")
+    }
+
+    /// The one way into Settings (D-01, D-04): `pane`'s tab, or the last tab shown when nil.
+    func showSettings(_ pane: SettingsPane?, from source: String) {
+        settingsWindow.show(pane, from: source)
+    }
+
+    /// One factory per Settings tab built so far; later plans add their panes here.
+    private func settingsTabs() -> [SettingsPane: () -> NSViewController] {
+        [.shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) }]
     }
 
     private func debugMenuItem() -> NSMenuItem {

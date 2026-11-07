@@ -1,0 +1,32 @@
+import TransomEngine
+
+/// Settings window copy (09 UI-SPEC Surface 1). The UI-SPEC lists "Settings…" under MenuCopy; it lives here so the
+/// Settings window owns one copy type.
+nonisolated public enum SettingsCopy {
+    public static let menuItem = "Settings\u{2026}"
+
+    public static func tabLabel(_ pane: SettingsPane) -> String {
+        switch pane {
+        case .general: "General"
+        case .arranging: "Arranging"
+        case .zoom: "Zoom & Gestures"
+        case .shortcuts: ZoomCopy.shortcutsWindowTitle
+        case .exclusions: "Exclusions"
+        case .menubar: "Menu Bar"
+        case .updates: "Updates"
+        }
+    }
+
+    /// The SF Symbol over each toolbar tab's label.
+    public static func tabSymbol(_ pane: SettingsPane) -> String {
+        switch pane {
+        case .general: "gearshape"
+        case .arranging: "rectangle.split.3x1"
+        case .zoom: "plus.magnifyingglass"
+        case .shortcuts: "keyboard"
+        case .exclusions: "hand.raised"
+        case .menubar: "menubar.rectangle"
+        case .updates: "arrow.down.circle"
+        }
+    }
+}
