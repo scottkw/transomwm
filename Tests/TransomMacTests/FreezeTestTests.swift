@@ -53,8 +53,9 @@ import Testing
         defer { cleanUp() }
         let freeze = make(resumeAfter: .milliseconds(50))
         freeze.freeze(pid: 4242)
-        let deadline = ContinuousClock.now + .seconds(1)
-        while freeze.frozenPID != nil, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        // Awaits the resume task itself: a 1 s wall-clock deadline flaked under full-suite load (D-17).
+        let resume = try #require(freeze.resumeTask)
+        await resume.value
         #expect(recorder.calls.map(\.signal) == [SIGSTOP, SIGCONT])
         #expect(recorder.calls.last?.pid == 4242)
         #expect(freeze.frozenPID == nil)

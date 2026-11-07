@@ -15,7 +15,7 @@ import os
     private let defaults: UserDefaults
     private let signal: (pid_t, Int32) -> Int32
     private let resumeAfter: Duration
-    private var resumeTask: Task<Void, Never>?
+    public private(set) var resumeTask: Task<Void, Never>?  // readable so a test can await the resume, not a clock
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "freeze")
 
     public init(
