@@ -114,8 +114,8 @@ import Testing
         let all = MenuBarControl.allCases.map { MenuBarItem(control: $0, enabled: true) }
         let specs = layout(all, paused: true, slots: [2], current: 2)
         #expect(specs.count == 3)
-        #expect(specs.allSatisfy(\.appearsDisabled))
-        #expect(!layout(all, slots: [2], current: 2).contains(where: \.appearsDisabled))
+        #expect(specs.map(\.appearsDisabled) == [true, true, true])
+        #expect(layout(all, slots: [2], current: 2).map(\.appearsDisabled) == [false, false, false])
     }
 
     @Test func emptyHistoryDimsBackButKeepsIt() {

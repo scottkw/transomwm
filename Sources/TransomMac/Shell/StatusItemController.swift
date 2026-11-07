@@ -541,7 +541,9 @@ import os
                 SettingsWindowController.hosting(
                     ExclusionsTab(exclusions: self.exclusions, displayName: { [weak self] in self?.displayName(of: $0) }), height: 560)
             },
-            .menubar: { SettingsWindowController.hosting(MenuBarTab(preference: self.menuBar)) },
+            .menubar: {
+                SettingsWindowController.hosting(MenuBarTab(preference: self.menuBar, hasSavedViews: { !self.arrange.arranger.savedViewSlots.isEmpty }))
+            },
             .updates: { SettingsWindowController.hosting(UpdatesTab(controller: self.updates)) },
         ]
     }

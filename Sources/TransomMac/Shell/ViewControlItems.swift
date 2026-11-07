@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import SwiftUI
 import TransomEngine
 import os
 
@@ -45,6 +46,27 @@ nonisolated struct MenuBarItem: Codable, Equatable, Sendable {
         guard let index = items.firstIndex(where: { $0.control == control }), items[index].enabled != enabled else { return }
         items[index].enabled = enabled
         save()
+    }
+
+    /// `.onMove`'s reorder.
+    func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        let before = items
+        items.move(fromOffsets: source, toOffset: destination)
+        if items != before { save() }
+    }
+
+    func canMoveUp(_ control: MenuBarControl) -> Bool { items.first?.control != control }
+    func canMoveDown(_ control: MenuBarControl) -> Bool { items.last?.control != control }
+
+    /// The right-click and VoiceOver Move Up / Move Down; nothing at the ends.
+    func moveUp(_ control: MenuBarControl) {
+        guard canMoveUp(control), let index = items.firstIndex(where: { $0.control == control }) else { return }
+        move(fromOffsets: [index], toOffset: index - 1)
+    }
+
+    func moveDown(_ control: MenuBarControl) {
+        guard canMoveDown(control), let index = items.firstIndex(where: { $0.control == control }) else { return }
+        move(fromOffsets: [index], toOffset: index + 2)
     }
 
     func setIconOnly(_ on: Bool) {
@@ -93,7 +115,8 @@ nonisolated struct ViewControlSpec: Equatable, Sendable {
         self.dispatch = dispatch
     }
 
-    /// The specs, left to right. Empty while zoom is off.
+    /// The specs, left to right. Empty while zoom is off. Paused dims every control, as it dims the Transom glyph; empty
+    /// history dims Back or Forward, which stay clickable and are refused like the hotkey.
     nonisolated static func layout(
         items: [MenuBarItem], iconOnly: Bool, zoomOn: Bool, paused: Bool, slots: [Int], current: Int?, backAvailable: Bool,
         forwardAvailable: Bool
@@ -101,14 +124,15 @@ nonisolated struct ViewControlSpec: Equatable, Sendable {
         guard zoomOn else { return [] }
         return items.filter(\.enabled).flatMap { (item: MenuBarItem) -> [ViewControlSpec] in
             switch item.control {
-            case .back: [ViewControlSpec(kind: .back, symbol: "chevron.backward", description: ViewCopy.back, appearsDisabled: false)]
-            case .forward: [ViewControlSpec(kind: .forward, symbol: "chevron.forward", description: ViewCopy.forward, appearsDisabled: false)]
+            case .back: [ViewControlSpec(kind: .back, symbol: "chevron.backward", description: ViewCopy.back, appearsDisabled: paused || !backAvailable)]
+            case .forward:
+                [ViewControlSpec(kind: .forward, symbol: "chevron.forward", description: ViewCopy.forward, appearsDisabled: paused || !forwardAvailable)]
             case .views:
                 slots.map { (n: Int) -> ViewControlSpec in
                     let name = iconOnly ? "square" : "\(n).square"
                     return ViewControlSpec(
                         kind: .view(n), symbol: n == current ? name + ".fill" : name, description: ViewCopy.viewControl(n, current: n == current),
-                        appearsDisabled: false)
+                        appearsDisabled: paused)
                 }
             }
         }

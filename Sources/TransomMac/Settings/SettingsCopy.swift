@@ -73,6 +73,15 @@ nonisolated public enum SettingsCopy {
     public static let useMissionControlKeys = "Use the Mission Control keys for the overview"
     public static let takeoverUnavailable = "Not available on this version of macOS."
 
+    // Menu Bar (Tab 6)
+    public static let controlsSection = "Controls"
+    public static let savedViewsSection = "Saved views"
+    public static let iconOnly = "Icon only"
+    public static let iconOnlyFooter = "Icon only shows squares without numbers. The view you're on is filled."
+    public static let noSavedViewsFooter = "Save a view (\u{21E7}\u{2325} and a number, by default) and it shows here."
+    public static let moveUp = "Move Up"
+    public static let moveDown = "Move Down"
+
     // Exclusions (Tab 5)
     public static let addApp = "Add App"
     public static let removeApp = "Remove App"
