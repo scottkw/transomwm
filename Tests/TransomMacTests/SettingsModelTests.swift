@@ -221,4 +221,25 @@ private final class Count: @unchecked Sendable { var value = 0 }
             #expect(changes == 1, "adding an app already excluded fires nothing")
         }
     }
+
+    @Test func theAccessibilityRowFollowsEveryPhase() {
+        func row(_ phase: PermissionPhase, formB: Bool = false) -> (status: String, button: String?) {
+            var state = PermissionState()
+            state.phase = phase
+            state.showStaleFormB = formB
+            return GeneralTab.accessibilityRow(state)
+        }
+        #expect(row(.ready) == ("On", nil))
+        #expect(row(.notTrusted) == ("Off", "Set Up\u{2026}"))
+        #expect(row(.waitingForGrant) == ("Off", "Set Up\u{2026}"))
+        #expect(row(.probing) == ("Off", "Set Up\u{2026}"))
+        #expect(row(.staleTrustedButFailing) == ("Not working", "Fix\u{2026}"))
+        #expect(row(.resetting) == ("Not working", "Fix\u{2026}"))
+        #expect(row(.waitingForGrant, formB: true) == ("Not working", "Fix\u{2026}"))
+    }
+
+    @Test func theScreenRecordingRowOffersAllow() {
+        #expect(GeneralTab.screenRecordingRow(granted: true) == ("On", nil))
+        #expect(GeneralTab.screenRecordingRow(granted: false) == ("Off", "Allow\u{2026}"))
+    }
 }

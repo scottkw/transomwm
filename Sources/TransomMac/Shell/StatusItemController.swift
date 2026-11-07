@@ -379,7 +379,13 @@ import os
     /// One factory per Settings tab built so far; later plans add their panes here.
     private func settingsTabs() -> [SettingsPane: () -> NSViewController] {
         [
-            .general: { SettingsWindowController.hosting(GeneralTab(loginItem: self.loginItem)) },
+            .general: {
+                SettingsWindowController.hosting(
+                    GeneralTab(
+                        loginItem: self.loginItem, permission: self.permission, showSetup: self.showSetup,
+                        screenRecordingGranted: { SnapshotCapture.isGranted() },
+                        allowScreenRecording: { [weak self] in self?.allowPreviews() }))
+            },
             .arranging: {
                 SettingsWindowController.hosting(
                     ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts),

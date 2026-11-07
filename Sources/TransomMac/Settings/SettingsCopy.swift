@@ -12,6 +12,15 @@ nonisolated public enum SettingsCopy {
     public static let openLoginItems = "Open Login Items Settings"
     public static let loginItemFailed =
         "macOS didn't allow this. Try again, or add Transom in System Settings \u{25B8} General \u{25B8} Login Items."
+    public static let permissionsSection = "Permissions"
+    public static let accessibility = "Accessibility"
+    public static let screenRecording = "Screen Recording"
+    public static let permissionNotWorking = "Not working"
+    public static let setUpButton = "Set Up\u{2026}"
+    public static let fixButton = "Fix\u{2026}"
+    public static let allowButton = "Allow\u{2026}"
+    public static let screenRecordingFooter =
+        "Optional. With it, zoomed-out views show live pictures of your windows; without it, app icons. On macOS 15 and later, macOS asks you to confirm it about once a month."
     public static let appearanceSection = "Appearance"
     public static let highlightColor = "Highlight color"
     public static let matchSystemAccent = "Match system accent color"
