@@ -72,6 +72,13 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
 - **D-18:** Before release, check the name "Transom" against existing macOS apps; add a macOS-beta compatibility
   checklist for the private APIs.
 
+- **D-19 (user, 2026-11-06, after research):** The repo `scottkw/transomwm` stays private until the v0.9.0 release;
+  a human checkpoint just before tagging makes it public and sets up the `release` environment, the five secrets,
+  `scottkw/homebrew-transom` and `HOMEBREW_TAP_TOKEN` (RESEARCH open question 1).
+- **D-20 (user, 2026-11-06):** Keep the name Transom (no Homebrew cask clash; several unrelated GitHub repos share it).
+- **D-21 (2026-11-06):** CI runs tests with `--no-parallel` (shortcut: the parallel run exits early on the runner's
+  Swift 6.3.3 only); find the cause or revisit when the runner has Swift 6.4 (part of D-17).
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.
