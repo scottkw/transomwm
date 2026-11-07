@@ -29,6 +29,11 @@ public enum CloseDecision: Equatable, Sendable {
 /// windows can linger in the CG list like that (G-03-9). An unknown set (lookup off) is never empty, and hidden tabs
 /// (also no Space) are guarded by the tab-member check first.
 ///
+/// D-23: "ordered out" (`cgOrderedOut`) is a CG entry that is present but offscreen, on a Space a display shows now.
+/// macOS 27 keeps a closed window its app retains in the CG list like that. AX must still answer -25202, so AX-valid
+/// minimised, hidden, hidden-tab and other-Space windows never reach the row, and unknown Spaces never count. There is
+/// no OS check: on macOS 14 and 15 the entry leaves the CG list first.
+///
 /// | Session | App        | AX                         | CG      | Decision                          |
 /// |---------|------------|----------------------------|---------|-----------------------------------|
 /// | paused  | any        | any                        | any     | noChange                          |
@@ -38,6 +43,7 @@ public enum CloseDecision: Equatable, Sendable {
 /// | active  | alive      | invalidElement             | absent  | closed                            |
 /// | active  | alive      | invalidElement             | present | .absent for a tab member          |
 /// | active  | alive      | invalidElement             | present, no Space | closed (G-03-9 ghost)   |
+/// | active  | alive      | invalidElement             | present, ordered out on a shown Space | closed (D-23) |
 /// | active  | alive      | invalidElement             | present | recheck                           |
 /// | active  | alive      | timedOut / otherFailure    | any     | noChange                          |
 /// | active  | alive      | valid, minimised or hidden | any     | state(.absent)                    |
@@ -47,14 +53,17 @@ public enum CloseDecision: Equatable, Sendable {
 /// | active  | alive      | valid, listed              | present | state(.present)                   |
 public enum CloseRule {
     public static func decide(
-        sessionActive: Bool, app: AppLiveness, ax: AXWindowFact, inCGList: Bool, cgSpacesKnownEmpty: Bool, isKnownTabMember: Bool
+        sessionActive: Bool, app: AppLiveness, ax: AXWindowFact, inCGList: Bool, cgSpacesKnownEmpty: Bool, cgOrderedOut: Bool,
+        isKnownTabMember: Bool
     ) -> CloseDecision {
         guard sessionActive else { return .noChange }
         switch (app, ax, inCGList) {
         case (.terminated, _, false): return .closed
         case (.terminated, _, true): return cgSpacesKnownEmpty ? .closed : .recheck
         case (.alive, .invalidElement, false): return .closed
-        case (.alive, .invalidElement, true): return isKnownTabMember ? .state(.absent) : cgSpacesKnownEmpty ? .closed : .recheck
+        case (.alive, .invalidElement, true):
+            if isKnownTabMember { return .state(.absent) }
+            return cgSpacesKnownEmpty || cgOrderedOut ? .closed : .recheck
         case (.alive, .timedOut, _), (.alive, .otherFailure, _): return .noChange
         case (.alive, .valid(_, let minimized, let appHidden, _), _) where minimized || appHidden: return .state(.absent)
         case (.alive, .valid(_, _, _, true), _): return .state(.fullscreen)

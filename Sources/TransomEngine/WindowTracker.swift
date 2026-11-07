@@ -362,14 +362,20 @@ public struct WindowTracker: Sendable {
         fact: (UInt32) -> AXWindowFact
     ) -> [WindowEvent] {
         let inCG = Set(context.cgWindows.map(\.windowID))
+        let cgByID = Dictionary(context.cgWindows.map { ($0.windowID, $0) }, uniquingKeysWith: { first, _ in first })
+        let shownSpaces = Set(context.displays.compactMap(\.currentSpaceID))
         var events: [WindowEvent] = []
         for identity in windows.keys.sorted() where identity.pid == pid && !skipping.contains(identity) {
             let shown = windows[identity]?.visibleMemberID ?? identity.windowID
+            // D-23: nil Spaces or no shown Space is unknown, never ordered out.
+            let orderedOut = cgByID[shown].map { !$0.onScreen } == true
+                && context.windowSpaces?[shown].map { !$0.isDisjoint(with: shownSpaces) } == true
             let decision = CloseRule.decide(
                 sessionActive: context.sessionActive, app: app, ax: fact(shown),
                 inCGList: inCG.contains(shown),
                 // nil (lookup off, or not asked) is unknown, never empty.
                 cgSpacesKnownEmpty: inCG.contains(shown) && context.windowSpaces?[shown] == [],
+                cgOrderedOut: orderedOut,
                 isKnownTabMember: tabGroups.isKnownMember(shown, pid: pid)
             )
             if decision == .recheck { rechecks[identity, default: 0] += 1 } else { rechecks[identity] = nil }
