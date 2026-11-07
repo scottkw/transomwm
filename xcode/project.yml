@@ -12,8 +12,8 @@ settings:
     # Merged into the generated Info.plist: only CFBundleURLTypes, with the per-configuration TRANSOM_URL_SCHEME.
     INFOPLIST_FILE: Transom-Info.plist
     INFOPLIST_KEY_LSUIElement: YES
-    MARKETING_VERSION: "0.3.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.9.0"
+    CURRENT_PROJECT_VERSION: "2"
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "Developer ID Application"
     DEVELOPMENT_TEAM: S2K7P43927
