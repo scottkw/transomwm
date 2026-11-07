@@ -1,22 +1,61 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      parallel:
+        description: 'Run swift test in parallel once and upload its full log and crash reports (D-21 diagnostic)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   test:
     runs-on: macos-26
     # Live AX suites are opt-in (TRANSOM_LIVE=1), so even an AX-trusted runner skips the fixture suite.
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: swift --version
       - run: scripts/check-no-appkit.sh
+      # PRs can't sign, so guard the designated requirement's inputs here (RESEARCH Pitfall 13): a changed bundle ID,
+      # team or certificate type makes macOS treat an update as another app and every user loses Accessibility.
+      - name: Signing identity unchanged
+        run: |
+          for want in 'PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.transom' 'DEVELOPMENT_TEAM: S2K7P43927' 'CODE_SIGN_IDENTITY: "Developer ID Application"'; do
+            grep -qF -- "$want" xcode/project.yml || { echo "::error::xcode/project.yml no longer has $want"; exit 1; }
+          done
       - run: swift build
       # shortcut: serial, because the parallel run exits early with no message on the runner (Swift 6.3.3) and not
-      # locally (6.4); revisit when the runner has Swift 6.4 or the cause is found (Phase 9 D-17).
-      - run: swift test --no-parallel
+      # locally (6.4); most likely a real failure hidden by GitHub's log viewer, which drops the rest of a very long
+      # Swift Testing line. Dispatch with parallel: true to read the full log; drop --no-parallel once it passes (D-21).
+      - if: ${{ !inputs.parallel }}
+        run: swift test --no-parallel
+      - name: Parallel test (D-21 diagnostic)
+        if: ${{ inputs.parallel }}
+        continue-on-error: true
+        run: |
+          mkdir -p ci-logs
+          swift test 2>&1 | tee ci-logs/parallel-test.log
+      - name: Upload the parallel log and crash reports
+        if: ${{ inputs.parallel }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: parallel-test-diagnostics
+          path: |
+            ci-logs/parallel-test.log
+            ~/Library/Logs/DiagnosticReports
+          if-no-files-found: warn
+          retention-days: 7
       # Release compiles out assertValid(), so the edits' invariant behaviour must be tested there too.
       - run: swift build -c release
       - run: swift test -c release -Xswiftc -enable-testing --no-parallel
