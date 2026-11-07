@@ -154,4 +154,32 @@ private final class Count: @unchecked Sendable { var value = 0 }
             #expect(defaults.object(forKey: GesturePreference.wallpaperKey) == nil)
         }
     }
+
+    @Test func exclusionRowsSortByNameAndShowUninstalledAppsByBundleID() throws {
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            for id in ["com.example.zed", "com.example.gone", "com.example.alpha"] { try store.add(id) }
+            let names = ["com.example.zed": "Zed", "com.example.alpha": String(repeating: "A", count: 40)]
+            let rows = ExclusionsTab.rows(store) { names[$0] }
+            // An uninstalled app sorts by its bundle ID, its title, as in the menu.
+            #expect(rows.map(\.bundleID) == ["com.example.alpha", "com.example.gone", "com.example.zed"])
+            #expect(rows[0].title == MenuCopy.truncatedAppName(String(repeating: "A", count: 40)))
+            #expect(rows[0].installed && rows[2].installed)
+            #expect(rows[1] == ExclusionsTab.Row(bundleID: "com.example.gone", title: "com.example.gone", installed: false))
+        }
+    }
+
+    @Test func removingInSettingsUnexcludesTheAppAndFiresOnChange() throws {
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            try store.add("com.apple.Safari")
+            var changes = 0
+            store.onChange = { changes += 1 }
+            store.remove("com.apple.Safari")
+            #expect(!store.contains("com.apple.Safari"))
+            #expect(ExclusionsTab.rows(store) { _ in nil }.isEmpty)
+            #expect(ExclusionStore(defaults: defaults).bundleIDs.isEmpty, "the menu's store reads the same defaults")
+            #expect(changes == 1)
+        }
+    }
 }

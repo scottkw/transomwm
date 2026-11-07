@@ -30,6 +30,11 @@ nonisolated public enum SettingsCopy {
     public static let useMissionControlKeys = "Use the Mission Control keys for the overview"
     public static let takeoverUnavailable = "Not available on this version of macOS."
 
+    // Exclusions (Tab 5)
+    public static let removeApp = "Remove App"
+    public static let exclusionsFooter =
+        "Transom never moves or docks these apps' windows. You can also choose Don't Arrange in the Transom menu while the app is in front."
+
     /// {keys} is `OverviewCopy.takeoverAlertKeys`, the user's real chord.
     public static func takeoverFooter(_ keys: String) -> String {
         "\(keys) show Transom's overview instead of Mission Control. Swiping up with four fingers still opens Mission Control."

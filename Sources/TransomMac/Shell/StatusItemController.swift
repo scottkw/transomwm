@@ -346,7 +346,7 @@ import os
     }
 
     /// The installed app's display name, or nil when no app has this bundle ID (not cached, so a later install shows).
-    private func displayName(of bundleID: String) -> String? {
+    func displayName(of bundleID: String) -> String? {
         if let name = displayNames[bundleID] { return name }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
         let name = FileManager.default.displayName(atPath: url.path)
@@ -394,6 +394,10 @@ import os
                         chooseTakeover: choose))
             },
             .shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) },
+            .exclusions: {
+                SettingsWindowController.hosting(
+                    ExclusionsTab(exclusions: self.exclusions, displayName: { [weak self] in self?.displayName(of: $0) }), height: 560)
+            },
         ]
     }
 
