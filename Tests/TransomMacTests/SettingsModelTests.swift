@@ -182,4 +182,43 @@ private final class Count: @unchecked Sendable { var value = 0 }
             #expect(changes == 1)
         }
     }
+
+    @Test func addingTransomItselfIsRefused() throws {
+        let own = "com.eightabyte.transom"
+        #expect(ExclusionsTab.decide(bundleID: own, own: own) == .refuseSelf)
+        #expect(ExclusionsTab.decide(bundleID: "COM.eightabyte.Transom", own: own) == .refuseSelf, "compared case-insensitively")
+        #expect(ExclusionsTab.decide(bundleID: "\(own).debug", own: "\(own).debug") == .refuseSelf)
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            let refusal = ExclusionsTab.exclude([(bundleID: own, name: "Transom")], own: own, in: store)
+            #expect(refusal == SettingsCopy.cantExcludeSelf)
+            #expect(store.bundleIDs.isEmpty)
+        }
+    }
+
+    @Test func anAppWithNoBundleIDIsRefused() throws {
+        #expect(ExclusionsTab.decide(bundleID: nil, own: "com.eightabyte.transom") == .refuseNoBundleID)
+        #expect(ExclusionsTab.decide(bundleID: "unbundled:Foo", own: "com.eightabyte.transom") == .refuseNoBundleID)
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            let refusal = ExclusionsTab.exclude(
+                [(bundleID: nil, name: "Tool"), (bundleID: "com.apple.Safari", name: "Safari")], own: "com.eightabyte.transom", in: store)
+            #expect(refusal == "Tool has no bundle ID, so it can't be excluded.")
+            #expect(store.bundleIDs == ["com.apple.Safari"], "the other chosen app is still added")
+        }
+    }
+
+    @Test func anAppIsAddedOnce() throws {
+        #expect(ExclusionsTab.decide(bundleID: "com.apple.Safari", own: "com.eightabyte.transom") == .add("com.apple.Safari"))
+        try withDefaults { defaults in
+            let store = ExclusionStore(defaults: defaults)
+            var changes = 0
+            store.onChange = { changes += 1 }
+            let safari: [(bundleID: String?, name: String)] = [(bundleID: "com.apple.Safari", name: "Safari")]
+            #expect(ExclusionsTab.exclude(safari, own: "com.eightabyte.transom", in: store) == nil)
+            #expect(ExclusionsTab.exclude(safari, own: "com.eightabyte.transom", in: store) == nil)
+            #expect(store.bundleIDs == ["com.apple.Safari"])
+            #expect(changes == 1, "adding an app already excluded fires nothing")
+        }
+    }
 }
