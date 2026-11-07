@@ -13,7 +13,7 @@ import Testing
 @Suite @MainActor struct SetupWindowTests {
     @Test func theSetupWindowHasItsContentSizeBeforeItIsShown() throws {
         let permission = PermissionController(system: AXWindowSystem())
-        let window = SetupWindowController(permission: permission).makeWindow()
+        let window = SetupWindowController(permission: permission, defaults: completedDefaults()).makeWindow()
         let content = window.contentLayoutRect.size
         let fitting = try #require(window.contentViewController).view.fittingSize
         #expect(!window.isVisible)
@@ -28,7 +28,7 @@ import Testing
 
     @Test func theSetupWindowHeightFollowsAPermissionStateChange() async throws {
         let permission = PermissionController(system: AXWindowSystem())
-        let window = SetupWindowController(permission: permission).makeWindow()
+        let window = SetupWindowController(permission: permission, defaults: completedDefaults()).makeWindow()
         let hostingView = try #require(window.contentViewController).view
         let before = window.contentLayoutRect.height
         let beforeFitting = hostingView.fittingSize.height
@@ -46,6 +46,15 @@ import Testing
         #expect(abs(before - beforeFitting) <= 1)
         #expect(fitsNewContent)
         #expect(abs(window.contentLayoutRect.height - after) <= 1)
+    }
+
+    /// A throwaway suite with onboarding done, so the window is Phase 2's single Accessibility step.
+    private func completedDefaults() -> UserDefaults {
+        let name = "SetupWindowTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        defaults.set(true, forKey: SetupWindowController.completedKey)
+        return defaults
     }
 
     private func waitFor(_ condition: () -> Bool) async -> Bool {
