@@ -183,6 +183,39 @@ private final class Opened { var urls: [URL] = [] }
         try downloader().clean()
     }
 
+    @Test func homebrewIsDetectedFromEitherCaskroom() {
+        #expect(InstallLocation.caskroomPaths == ["/opt/homebrew/Caskroom/transom", "/usr/local/Caskroom/transom"])
+        for path in InstallLocation.caskroomPaths {
+            #expect(InstallLocation.isHomebrew(exists: { $0 == path }), "\(path)")
+        }
+        #expect(!InstallLocation.isHomebrew(exists: { _ in false }))
+        #expect(!InstallLocation.isHomebrew(exists: { $0 == "/opt/homebrew/Caskroom/transom-beta" }))
+        let brew = UpdateController(
+            client: GitHubReleaseClient(configuration: GitHubReleaseClient.configuration(), userAgent: "Transom"),
+            currentVersion: "0.8.0", build: "1", isEnabled: false,
+            defaults: UserDefaults(suiteName: "com.eightabyte.transom.tests.updates")!, downloader: downloader(),
+            fileExists: { $0 == "/usr/local/Caskroom/transom" })
+        #expect(brew.installedWithHomebrew)
+    }
+
+    @Test func theDownloadStatusLinesAreTheUISpecCopy() {
+        let release = Self.release
+        #expect(UpdateCopy.statusLine(.downloading(release, fraction: 0.42), current: "0.8.0") == "Downloading Transom 0.9.0\u{2026} 42%")
+        #expect(UpdateCopy.statusLine(.downloading(release, fraction: nil), current: "0.8.0") == "Downloading Transom 0.9.0\u{2026}")
+        #expect(UpdateCopy.statusLine(.verifying(release), current: "0.8.0") == "Checking the download's signature\u{2026}")
+        #expect(
+            UpdateCopy.statusLine(.opened(release), current: "0.8.0")
+                == "The Transom 0.9.0 disk image is open. Quit Transom, then drag the new Transom to Applications and choose Replace.")
+        #expect(UpdateCopy.errorLine(.downloadFailed(version: "0.9.0")) == "Couldn't download Transom 0.9.0. Check your connection, then try again.")
+        #expect(UpdateCopy.errorLine(.verifyFailed) == "The download didn't pass the signature check, so Transom deleted it. Nothing was opened.")
+        #expect(UpdateCopy.errorLine(.openFailed) == "Transom couldn't open the downloaded disk image. Try again.")
+        #expect(UpdateCopy.downloadAndOpen == "Download and Open")
+        #expect(UpdateCopy.copyCommand == "Copy Command")
+        #expect(UpdateCopy.quitTransom == "Quit Transom")
+        #expect(UpdateCopy.homebrewIntro == "Transom was installed with Homebrew. To update, run this in Terminal:")
+        #expect(UpdateCopy.homebrewCommand == "brew upgrade --cask transom")
+    }
+
     private func xattr(_ file: URL, _ name: String) -> String? {
         let size = getxattr(file.path, name, nil, 0, 0, 0)
         guard size > 0 else { return nil }

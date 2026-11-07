@@ -5,6 +5,10 @@ nonisolated public enum UpdateCopy {
     public static let checkForUpdates = "Check for Updates"
     public static let releaseNotes = "Release Notes"
     public static let downloadAndOpen = "Download and Open"
+    public static let copyCommand = ""
+    public static let quitTransom = ""
+    public static let homebrewIntro = ""
+    public static let homebrewCommand = ""
     public static let automaticToggle = "Check for updates automatically"
     public static let automaticFooter =
         "Transom asks GitHub for the latest release when it opens and once a day. Nothing about you or your Mac is sent."

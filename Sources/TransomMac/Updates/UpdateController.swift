@@ -21,6 +21,8 @@ import os
     private let verify: @Sendable (URL) -> OSStatus
     /// `NSWorkspace.open`; tests record instead of opening.
     private let open: (URL) -> Bool
+    /// Read once per launch: an available update shows the brew command instead of Download and Open (D-10).
+    let installedWithHomebrew: Bool
     /// On by default. The daily schedule that reads it lands in 09-17.
     static let automaticKey = "updates.automatic"
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "update")
@@ -30,13 +32,15 @@ import os
         downloader: DMGDownloader = DMGDownloader(
             configuration: GitHubReleaseClient.configuration(), directory: DMGDownloader.productionDirectory),
         verify: @escaping @Sendable (URL) -> OSStatus = { DMGVerifier.check($0) },
-        open: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
+        open: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) {
         self.client = client
         self.defaults = defaults
         self.downloader = downloader
         self.verify = verify
         self.open = open
+        installedWithHomebrew = InstallLocation.isHomebrew(exists: fileExists)
         self.currentVersion = currentVersion
         self.build = build
         self.isEnabled = isEnabled
