@@ -133,8 +133,10 @@ public struct TransomURLRateLimiter: Sendable {
     public init() {}
 
     public mutating func admit(_ command: Command, at now: ContinuousClock.Instant) -> Bool {
-        if let last = lastAdmitted[command], now - last < Self.interval { return false }
-        lastAdmitted[command] = now
+        // Opening Settings activates Transom, so every pane shares one second (09 UI-SPEC Surface 6).
+        let key: Command = if case .settings = command { .settings(nil) } else { command }
+        if let last = lastAdmitted[key], now - last < Self.interval { return false }
+        lastAdmitted[key] = now
         return true
     }
 
