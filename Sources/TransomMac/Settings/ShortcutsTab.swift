@@ -3,7 +3,7 @@ import KeyboardShortcuts
 import SwiftUI
 import TransomEngine
 
-/// The Shortcuts window's rows (UI-SPEC Surface 8): every hotkey name exactly once, in the Surface 8 sections.
+/// The Shortcuts tab's rows (UI-SPEC Surface 8): every hotkey name exactly once, in the Surface 8 sections.
 enum ShortcutsModel {
     typealias Row = (title: String, name: KeyboardShortcuts.Name)
     /// Double-click a docked window's title bar frames it (Surface 9, read by 04-06's input); default on.
@@ -89,38 +89,11 @@ struct ShortcutsView: View {
             }
             .formStyle(.grouped)
             HStack {
-                Button(ZoomCopy.restoreDefaults) { ShortcutsWindowController.confirmRestoreDefaults() }
+                Button(ZoomCopy.restoreDefaults) { Self.confirmRestoreDefaults() }
                 Spacer()
             }
             .padding(20)
         }
-    }
-}
-
-/// Owns the "Shortcuts" window (Surface 8): one window, reopened with its remembered frame.
-@MainActor final class ShortcutsWindowController {
-    private var window: NSWindow?
-
-    func show() {
-        let window = window ?? makeWindow()
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private func makeWindow() -> NSWindow {
-        let hosting = NSHostingController(rootView: ShortcutsView())
-        hosting.sizingOptions = []  // the window decides the frame; the Form scrolls inside it
-        let window = KeyClosableWindow(contentViewController: hosting)
-        window.styleMask = [.titled, .closable, .resizable]
-        window.title = ZoomCopy.shortcutsWindowTitle
-        window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 480, height: 640))
-        window.contentMinSize = NSSize(width: 480, height: 400)
-        window.contentMaxSize = NSSize(width: 480, height: CGFloat.greatestFiniteMagnitude)  // width fixed
-        if !window.setFrameUsingName("Shortcuts") { window.center() }
-        window.setFrameAutosaveName("Shortcuts")
-        self.window = window
-        return window
     }
 
     /// The destructive confirmation (Copywriting Contract): Cancel is the default (Return and Esc); only a click on
