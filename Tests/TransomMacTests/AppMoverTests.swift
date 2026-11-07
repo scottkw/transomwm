@@ -57,6 +57,35 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: destination.appendingPathComponent("Contents/MacOS/Transom").path))
     }
 
+    /// WR-01: the copy finishes before the installed one is touched, so a failed copy leaves it in place.
+    @Test func aFailedCopyLeavesTheInstalledCopyAlone() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let destination = dir.appendingPathComponent("Transom.app")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let missing = dir.appendingPathComponent("Gone/Transom.app")
+        #expect(throws: (any Error).self) {
+            try AppMover.copy(from: missing, to: destination, trash: { (_: URL) throws -> Void in Issue.record("trashed before the copy") })
+        }
+        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["Transom.app"], "no staging copy left behind")
+    }
+
+    /// WR-01: a trash that fails keeps the installed copy and removes the staged one.
+    @Test func aFailedTrashRemovesTheStagedCopy() throws {
+        struct Refused: Error {}
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let source = try quarantinedBundle(in: dir)
+        let destination = dir.appendingPathComponent("Transom.app")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        #expect(throws: Refused.self) {
+            try AppMover.copy(from: source, to: destination, trash: { (_: URL) throws -> Void in throw Refused() })
+        }
+        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted() == ["Source", "Transom.app"])
+    }
+
     @Test func theRelaunchPassesPidAndPathAsArguments() {
         let path = "/Applications/My \"Odd\" $(rm) Transom.app"
         let arguments = AppMover.relaunchArguments(pid: 4242, path: path)
