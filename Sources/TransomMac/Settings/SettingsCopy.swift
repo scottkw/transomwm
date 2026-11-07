@@ -8,6 +8,11 @@ nonisolated public enum SettingsCopy {
     // Arranging (Tab 2)
     public static let layoutSection = "Layout"
     public static let gaps = "Gaps"
+    public static let newWindows = "New windows"
+    public static let dragToDock = "Drag to dock"
+    public static let tabGroupsSection = "Tab groups"
+    public static let confirmCloseGroup = "Ask before Close Group closes every window"
+    public static let confirmCloseGroupFooter = "Turn this back on if you chose not to be asked."
 
     public static func tabLabel(_ pane: SettingsPane) -> String {
         switch pane {

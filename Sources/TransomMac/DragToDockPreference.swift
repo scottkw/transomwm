@@ -1,16 +1,17 @@
 import Foundation
+import Observation
 import TransomEngine
 import os
 
 /// Drag to Dock (D-07, D-19), kept in UserDefaults. The plist is user-writable: anything but the two modes is logged and
 /// replaced by the default.
-@MainActor final class DragToDockPreference {
+@Observable @MainActor final class DragToDockPreference {
     static let key = "dragToDock"
     static let defaultValue = DragToDockMode.automatic
     private(set) var value: DragToDockMode
     /// Fires after every change; choosing the current value is not one.
-    var onChange: ((DragToDockMode) -> Void)?
-    private let defaults: UserDefaults
+    @ObservationIgnored var onChange: ((DragToDockMode) -> Void)?
+    @ObservationIgnored private let defaults: UserDefaults
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "preferences")
 
     init(defaults: UserDefaults = .standard) {
