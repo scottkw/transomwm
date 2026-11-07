@@ -31,7 +31,13 @@ nonisolated public enum SettingsCopy {
     public static let takeoverUnavailable = "Not available on this version of macOS."
 
     // Exclusions (Tab 5)
+    public static let addApp = "Add App"
     public static let removeApp = "Remove App"
+    public static let addAppMessage = "Choose an app whose windows Transom should never arrange"
+    public static let addAppPrompt = "Exclude"
+    public static let cantExcludeSelf = "Transom can't exclude itself."
+    /// {app} is the chosen file's display name, truncated like the rows.
+    public static func noBundleID(_ app: String) -> String { "\(app) has no bundle ID, so it can't be excluded." }
     public static let exclusionsFooter =
         "Transom never moves or docks these apps' windows. You can also choose Don't Arrange in the Transom menu while the app is in front."
 
