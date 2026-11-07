@@ -79,6 +79,10 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
 - **D-21 (2026-11-06):** CI runs tests with `--no-parallel` (shortcut: the parallel run exits early on the runner's
   Swift 6.3.3 only); find the cause or revisit when the runner has Swift 6.4 (part of D-17).
 
+- **D-22 (user, 2026-11-07):** GitHub Actions is paused by the account spending limit on this private repo. Wait: no
+  CI until the repo goes public at v0.9.0 (09-27), when macOS minutes are free. Until then the full host `swift test`
+  after each plan is the gate; 09-27 runs CI (and the D-21 parallel diagnostic) once the repo is public.
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.
