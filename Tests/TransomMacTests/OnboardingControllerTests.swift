@@ -10,7 +10,7 @@ import Testing
 /// Like SetupWindowTests: throwaway defaults, `makeWindow()` only (never `show()`), and no `permission.send(_:)`.
 @Suite @MainActor struct OnboardingControllerTests {
     @Test func aFirstRunShowsWelcomeEvenWhenTrusted() {
-        let decision = SetupWindowController.launchDecision(completed: false, phase: .ready)
+        let decision = SetupWindowController.launchDecision(completed: false, phase: .ready, conflictsActive: false)
         #expect(decision.show)
         #expect(decision.steps.first == .welcome)
         let controller = SetupWindowController(permission: permission(.ready), defaults: throwawayDefaults())
@@ -19,8 +19,8 @@ import Testing
     }
 
     @Test func afterCompletionOnlyAMissingGrantOpensTheSingleStep() {
-        #expect(!SetupWindowController.launchDecision(completed: true, phase: .ready).show)
-        let missing = SetupWindowController.launchDecision(completed: true, phase: .notTrusted)
+        #expect(!SetupWindowController.launchDecision(completed: true, phase: .ready, conflictsActive: true).show)
+        let missing = SetupWindowController.launchDecision(completed: true, phase: .notTrusted, conflictsActive: true)
         #expect(missing.show)
         #expect(missing.steps == [.accessibility])
         #expect(OnboardingFlow.caption(for: .accessibility, in: missing.steps) == nil)
@@ -153,6 +153,43 @@ import Testing
         #expect(controller.model.loginResult?.footer == SettingsCopy.loginItemFailed)
         controller.continueLaunchAtLogin()
         #expect(controller.model.current == .done)
+    }
+
+    @Test func theFeaturesStepTurnsAFeatureOffLikeTheMenu() async {
+        let (defaults, cleanUp) = ConflictControllerTests.defaults()
+        defer { cleanUp() }
+        let prefs = MemoryPreferences()
+        prefs.values = ["GloballyEnabled": .bool(true)]
+        let conflicts = ConflictController(store: prefs, defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        conflicts.poll()
+        // Probing keeps decideAtLaunch from showing the window.
+        let controller = SetupWindowController(permission: permission(.probing), defaults: throwawayDefaults())
+        _ = FakeScreenRecording(controller)
+        controller.conflicts = conflicts
+        controller.decideAtLaunch()
+        #expect(controller.model.steps == [.welcome, .accessibility, .screenRecording, .features, .launchAtLogin, .done])
+        for _ in 0..<3 { controller.advance() }
+        #expect(controller.model.current == .features)
+        let rows = ArrangingTab.featureRows(conflicts)
+        #expect(rows.map(\.conflict) == Conflict.allCases)
+        #expect(rows.map(\.isOn) == [true, false, false])
+
+        await conflicts.turnOff(.stageManager)
+        #expect(prefs.values["GloballyEnabled"] == .bool(false))
+        #expect(ArrangingTab.featureRows(conflicts).map(\.isOn) == [false, false, false])
+        #expect(conflicts.canRestore, "Restore macOS Window Settings undoes it")
+        #expect(controller.model.steps.contains(.features), "the step stays once shown, its rows reading Off")
+    }
+
+    @Test func noActiveConflictSkipsTheFeaturesStep() {
+        let (defaults, cleanUp) = ConflictControllerTests.defaults()
+        defer { cleanUp() }
+        let conflicts = ConflictController(store: MemoryPreferences(), defaults: defaults, osMajor: 15, readBackDelay: .zero)
+        conflicts.poll()
+        let controller = SetupWindowController(permission: permission(.probing), defaults: throwawayDefaults())
+        controller.conflicts = conflicts
+        controller.decideAtLaunch()
+        #expect(!controller.model.steps.contains(.features))
     }
 
     /// A first-run controller on the Launch at login step, with its login item faked.

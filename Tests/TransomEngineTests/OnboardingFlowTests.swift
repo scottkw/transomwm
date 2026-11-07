@@ -9,6 +9,15 @@ import Testing
         #expect(firstRun == [.welcome, .accessibility, .screenRecording, .launchAtLogin, .done])
     }
 
+    @Test func theFeaturesStepShowsOnlyWithAnActiveConflict() {
+        let withFeatures = OnboardingFlow.steps(completed: false, conflictsActive: true)
+        #expect(withFeatures == [.welcome, .accessibility, .screenRecording, .features, .launchAtLogin, .done])
+        #expect(OnboardingFlow.caption(for: .features, in: withFeatures).map { [$0.number, $0.total] } == [4, 5])
+        #expect(OnboardingFlow.caption(for: .launchAtLogin, in: withFeatures).map { [$0.number, $0.total] } == [5, 5])
+        #expect(OnboardingFlow.resume(stored: "screenRecording", in: withFeatures) == .features)
+        #expect(!firstRun.contains(.features))
+    }
+
     @Test func afterCompletionOnlyAccessibilityShows() {
         #expect(OnboardingFlow.steps(completed: true, conflictsActive: true) == [.accessibility])
         #expect(OnboardingFlow.caption(for: .accessibility, in: [.accessibility]) == nil)
