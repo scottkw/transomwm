@@ -5,6 +5,10 @@ import TransomEngine
 nonisolated public enum SettingsCopy {
     public static let menuItem = "Settings\u{2026}"
 
+    // Arranging (Tab 2)
+    public static let layoutSection = "Layout"
+    public static let gaps = "Gaps"
+
     public static func tabLabel(_ pane: SettingsPane) -> String {
         switch pane {
         case .general: "General"

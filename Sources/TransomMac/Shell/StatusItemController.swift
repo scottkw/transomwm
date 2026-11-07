@@ -386,7 +386,13 @@ import os
 
     /// One factory per Settings tab built so far; later plans add their panes here.
     private func settingsTabs() -> [SettingsPane: () -> NSViewController] {
-        [.shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) }]
+        [
+            .arranging: {
+                SettingsWindowController.hosting(
+                    ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts))
+            },
+            .shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) },
+        ]
     }
 
     private func debugMenuItem() -> NSMenuItem {
