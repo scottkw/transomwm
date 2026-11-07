@@ -344,3 +344,150 @@ private func spacesFake() async -> FakeWindowSystem {
         #expect(!tracker.needsQuickRecheck(pid: pid))
     }
 }
+
+/// One app with the native tab group 1, 2, 3 (tab 1 shown) on Space 1, one display showing Space 1, after the initial
+/// sweep (D-25).
+private func tabGroupFake(spaces: Bool = true, hiddenTabsReportSpace: Bool = false) async -> FakeWindowSystem {
+    let fake = FakeWindowSystem()
+    await fake.setSpacesAvailable(spaces)
+    await fake.setHiddenTabsReportSpace(hiddenTabsReportSpace)
+    await fake.setDisplays([DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900),
+                                        visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: 1)])
+    await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+    await fake.tabGroup(ids: [1, 2, 3], frame: Rect(x: 10, y: 25, width: 400, height: 300), pid: pid, visible: 1, space: 1)
+    await fake.refreshAll()
+    return fake
+}
+
+/// The CG shape of a whole tab group closed and kept alive: each entry's Spaces while it lingers, or nil once it left
+/// the CG list.
+private struct KeptAliveShape: Sendable, CustomTestStringConvertible {
+    let name: String
+    let shown: Set<UInt64>?
+    let hidden: Set<UInt64>?
+    var testDescription: String { name }
+
+    static let all: [KeptAliveShape] = [
+        KeptAliveShape(name: "27.2: shown ordered out, hidden no Space", shown: [1], hidden: []),
+        KeptAliveShape(name: "shown ordered out, hidden on the Space", shown: [1], hidden: [1]),
+        KeptAliveShape(name: "15.7: all on no Space", shown: [], hidden: []),
+        KeptAliveShape(name: "shown no Space, hidden on the Space", shown: [], hidden: [1]),
+        KeptAliveShape(name: "shown ordered out, hidden left the CG list", shown: [1], hidden: nil),
+        KeptAliveShape(name: "shown left the CG list, hidden no Space", shown: nil, hidden: []),
+    ]
+}
+
+/// Closed and kept alive (`spaces`), or closed and gone from AX and the CG list (nil).
+private func closeKeptAlive(_ fake: FakeWindowSystem, _ id: UInt32, spaces: Set<UInt64>?) async {
+    if let spaces {
+        await fake.lingerInCG(id, spaces: spaces)
+    } else {
+        await fake.close(id)
+        await fake.update(id) {
+            $0.listedInAX = false  // a released window is no longer in AXWindows
+            $0.onScreen = false
+        }
+    }
+}
+
+/// D-25: macOS 27 (and 15.7) keep a whole native tab group its app closed and retains in the CG list, its shown tab
+/// AX -25202, no tab listed or on screen. Once that holds twice, `settleDelay` apart, the group closes once; a live
+/// group's hidden tabs, a Cmd-W's next tab, a minimised group, a hidden app and the lookup off never close one.
+@Suite struct KeptAliveTabGroupTests {
+    @Test(arguments: KeptAliveShape.all)
+    fileprivate func aKeptAliveTabGroupClosesOnceAfterTheSettleDelay(shape: KeptAliveShape) async {
+        let fake = await tabGroupFake()
+        await closeKeptAlive(fake, 1, spaces: shape.shown)
+        await closeKeptAlive(fake, 2, spaces: shape.hidden)
+        await closeKeptAlive(fake, 3, spaces: shape.hidden)
+        await fake.refreshAll()
+        #expect(await fake.windowInfo(ref(1)) != nil, "closed before settleDelay")
+        await fake.advance(by: .milliseconds(300))
+        await fake.refreshAll()
+        #expect(await fake.windowInfo(ref(1)) == nil)
+        await refreshFiveTimes(fake)
+        let events = await drain(fake.events)
+        #expect(destroyed(events) == [ref(1)])
+        #expect(created(events).map(\.window) == [ref(1)])
+    }
+
+    @Test func aKeptAliveTabGroupClosedOnAnotherSpaceWaitsForItsSpace() async {
+        let fake = await tabGroupFake()
+        await fake.showSpace(2)
+        await fake.refreshAll()
+        await fake.lingerInCG(1, spaces: [1])
+        await fake.lingerInCG(2, spaces: [])
+        await fake.lingerInCG(3, spaces: [])
+        await refreshFiveTimes(fake)
+        #expect(await fake.windowInfo(ref(1)) != nil, "closed while its Space was not shown")
+        await fake.showSpace(1)
+        await fake.refreshAll()
+        await fake.advance(by: .milliseconds(300))
+        await fake.refreshAll()
+        #expect(await fake.windowInfo(ref(1)) == nil)
+        #expect(destroyed(await drain(fake.events)) == [ref(1)])
+    }
+
+    /// The transient AppKit may show after a Cmd-W: the shown tab is gone before the next tab is listed.
+    @Test func cmdWInAKeptAliveTabGroupFollowsTheNextTab() async throws {
+        let fake = await tabGroupFake()
+        await fake.lingerInCG(1, spaces: [1])
+        await fake.refreshAll()
+        await fake.selectTab(2)
+        await fake.advance(by: .milliseconds(300))
+        await fake.refreshAll()
+        await fake.refreshAll()
+        let info = try #require(await fake.windowInfo(ref(1)))
+        #expect(info.visibleMemberID == 2)
+        #expect(info.tabCount == 2)
+        #expect(info.state == .present)
+        let events = await drain(fake.events)
+        #expect(destroyed(events).isEmpty)
+        #expect(created(events).map(\.window) == [ref(1)])
+    }
+
+    @Test(arguments: [false, true])
+    func aLiveTabGroupOnTheShownSpaceKeepsItsHiddenTabs(hiddenTabsReportSpace: Bool) async throws {
+        let fake = await tabGroupFake(hiddenTabsReportSpace: hiddenTabsReportSpace)
+        for round in 0..<5 {
+            if round == 2 { await fake.selectTab(2) }
+            await fake.advance(by: .seconds(1))
+            await fake.refreshAll()
+        }
+        let info = try #require(await fake.windowInfo(ref(1)))
+        #expect(info.tabCount == 3)
+        #expect(info.visibleMemberID == 2)
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+    }
+
+    @Test func aMinimisedTabGroupIsNeverClosed() async throws {
+        let fake = await tabGroupFake()
+        await fake.update(1) {
+            $0.snapshot.minimized = true
+            $0.onScreen = false
+        }
+        await refreshFiveTimes(fake)
+        #expect(try #require(await fake.windowInfo(ref(1))).state == .absent)
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+    }
+
+    /// Pins the not-hidden condition: a hidden app's tabs are neither listed nor on screen.
+    @Test func aHiddenAppsTabGroupIsKeptWithItsShownTabGone() async {
+        let fake = await tabGroupFake()
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID, hidden: true))
+        await fake.lingerInCG(1, spaces: [1])
+        await refreshFiveTimes(fake)
+        #expect(await fake.windowInfo(ref(1)) != nil)
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+    }
+
+    @Test func withTheLookupOffAKeptAliveTabGroupStays() async {
+        let fake = await tabGroupFake(spaces: false)
+        await fake.lingerInCG(1, spaces: [1])
+        await fake.lingerInCG(2, spaces: [])
+        await fake.lingerInCG(3, spaces: [])
+        await refreshFiveTimes(fake)
+        #expect(await fake.windowInfo(ref(1)) != nil)
+        #expect(destroyed(await drain(fake.events)).isEmpty)
+    }
+}
