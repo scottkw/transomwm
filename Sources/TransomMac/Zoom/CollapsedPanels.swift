@@ -75,7 +75,7 @@ final class CollapsedBlockView: NSView {
         layer.borderColor = NSColor.separatorColor.cgColor
         ring.frame = bounds
         ring.cornerRadius = radius
-        ring.borderColor = NSColor.controlAccentColor.withAlphaComponent(contrast ? 1 : 0.85).cgColor
+        ring.borderColor = HighlightColor.current.withAlphaComponent(contrast ? 1 : 0.85).cgColor
         icon.isHidden = side < TileLayer.minIcon || app?.icon == nil
         icon.frame = CGRect(x: (bounds.width - side) / 2, y: (bounds.height - side) / 2, width: max(side, 0), height: max(side, 0))
         icon.contents = app?.icon?.layerContents(forContentsScale: window?.backingScaleFactor ?? 2)
@@ -140,6 +140,7 @@ final class CollapsedBlockView: NSView {
         }
         observers = [
             (center, center.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main, using: redraw)),
+            (center, center.addObserver(forName: HighlightColor.didChange, object: nil, queue: .main, using: redraw)),
             (workspace, workspace.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main, using: redraw)),
         ]
     }
