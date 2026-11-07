@@ -87,4 +87,33 @@ private final class StubURLProtocol: URLProtocol {
         #expect(configuration.urlCache == nil)
         #expect(configuration.requestCachePolicy == .reloadIgnoringLocalCacheData)
     }
+
+    @Test func theVersionLineAndStatusLinesAreTheUISpecCopy() {
+        let release = UpdateRelease(
+            version: "1.0.0", url: URL(string: "https://github.com/scottkw/transomwm/releases/download/v1.0.0/x")!, size: 1,
+            sha256: Self.digest)
+        #expect(UpdateCopy.versionLine("0.9.0", "1") == "Transom 0.9.0 (1)")
+        #expect(UpdateCopy.statusLine(.idle, current: "0.9.0") == nil)
+        #expect(UpdateCopy.statusLine(.checking, current: "0.9.0") == "Checking for updates\u{2026}")
+        #expect(UpdateCopy.statusLine(.current("0.9.0"), current: "0.9.0") == "Transom 0.9.0 is up to date.")
+        #expect(UpdateCopy.statusLine(.available(release), current: "0.9.0") == "Transom 1.0.0 is available. You have 0.9.0.")
+        #expect(UpdateCopy.checkForUpdates == "Check for Updates")
+        #expect(UpdateCopy.releaseNotes == "Release Notes")
+    }
+
+    @Test func theUpdaterIsOffOutsideAReleaseBundle() async {
+        #expect(UpdateController.isEnabled(bundleID: "com.eightabyte.transom", version: "0.9.0"))
+        #expect(!UpdateController.isEnabled(bundleID: "com.eightabyte.transom.debug", version: "0.9.0"))
+        #expect(!UpdateController.isEnabled(bundleID: "com.eightabyte.transom", version: nil))
+        #expect(!UpdateController.isEnabled(bundleID: nil, version: "0.9.0"))
+        // A disabled controller never asks GitHub.
+        let configuration = GitHubReleaseClient.configuration()
+        configuration.protocolClasses = [StubURLProtocol.self]
+        let off = UpdateController(
+            client: GitHubReleaseClient(configuration: configuration, userAgent: "Transom"), currentVersion: "dev", build: "?",
+            isEnabled: false)
+        await off.checkNow()
+        #expect(off.status == .idle)
+        #expect(StubURLProtocol.requests.isEmpty)
+    }
 }
