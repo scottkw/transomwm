@@ -175,6 +175,14 @@ private let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
         try tree.validate()
     }
 
+    /// E5 with E7: a minimised window took no space, so when it leaves the windows on screen keep their size.
+    @Test func aMinimisedWindowLeavingGrowsNoEmptyArea() throws {
+        var tree = try build(h((w("A"), 1.0 / 3), (w("X"), 1.0 / 3), (gap, 1.0 / 3)), absent: ["X"])
+        try tree.remove(window("X"))
+        #expect(describe(tree) == "H[A 0.5, _ 0.5]")
+        try tree.validate()
+    }
+
     // MARK: Vacate, rule E4
 
     @Test func vacatingALeafLeavesAnEmptyAreaInItsPlace() throws {

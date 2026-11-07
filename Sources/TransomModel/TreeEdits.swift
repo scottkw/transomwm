@@ -102,8 +102,8 @@ extension LayoutTree {
     }
 
     /// Takes the whole leaf `id` (a panel or a tab group) out of the tree, as `remove` does a panel's. Rule E5 (8.1.1
-    /// D-16): an empty area right beside it takes its share, the one before it first; with none, its siblings share it
-    /// by weight. Returns the leaf and its members' states, for `insertLeaf` or a floating group.
+    /// D-16): an empty area right beside it takes its share, the one before it first; with none, or when the leaf took no
+    /// space (minimised), its siblings share it by weight. Returns the leaf and its members' states, for `insertLeaf` or a floating group.
     public mutating func removeLeaf(_ id: NodeID) throws(LayoutError) -> (node: Node, states: [WindowIdentity: WindowState]) {
         guard let node = nodes[id] else { throw .nodeNotFound(id) }
         guard let members = Self.members(of: node) else { throw .notALeaf(id) }
@@ -115,7 +115,8 @@ extension LayoutTree {
             let index = children.firstIndex(of: id)!
             children.remove(at: index)
             let weight = weights.remove(at: index)
-            if let beside = [index - 1, index].first(where: { children.indices.contains($0) && nodes[children[$0]] == .spacer }) {
+            // A minimised leaf took no space, so its weight is shared by weight: an empty area gaining it would shrink a window.
+            if takesPart(id), let beside = [index - 1, index].first(where: { children.indices.contains($0) && nodes[children[$0]] == .spacer }) {
                 weights[beside] += weight
             }
             next.nodes[parent] = .split(axis: axis, children: children, weights: weights)
