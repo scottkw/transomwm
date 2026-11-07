@@ -24,6 +24,14 @@ import Testing
         #expect(InstallLocation.classify(bundlePath: "/Users/someone/Downloads2/Transom.app", home: home) == .other)
     }
 
+    /// WR-02: only the release bundle offers Move, so a Debug build never replaces the release Transom.app.
+    @Test func onlyTheReleaseBundleIsClassified() {
+        let path = "/Volumes/Transom 0.9.0/Transom.app"
+        #expect(InstallLocation.classify(bundleID: "com.eightabyte.transom", bundlePath: path, home: home) == .diskImage)
+        #expect(InstallLocation.classify(bundleID: "com.eightabyte.transom.debug", bundlePath: path, home: home) == .other)
+        #expect(InstallLocation.classify(bundleID: nil, bundlePath: path, home: home) == .other)
+    }
+
     @Test func applicationsAndBuildFoldersNeedNoMove() {
         #expect(InstallLocation.classify(bundlePath: "/Applications/Transom.app", home: home) == .applications)
         #expect(InstallLocation.classify(bundlePath: "/Users/someone/dev/transomwm/build/Transom.app", home: home) == .other)

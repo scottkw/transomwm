@@ -17,6 +17,12 @@ public enum InstallLocation {
         return .other
     }
 
+    /// The running bundle's place for Move. Anything but the release bundle is `.other`: Move always targets
+    /// /Applications/Transom.app, so a Debug build would trash the release copy and take its name (WR-02).
+    public static func classify(bundleID: String?, bundlePath: String, home: String) -> Place {
+        bundleID == "com.eightabyte.transom" ? classify(bundlePath: bundlePath, home: home) : .other
+    }
+
     /// Places where macOS may forget permissions, so setup offers Move to Applications first (D-08). A build folder doesn't.
     public static func needsMove(_ place: Place) -> Bool { [.translocated, .diskImage, .downloads].contains(place) }
 }

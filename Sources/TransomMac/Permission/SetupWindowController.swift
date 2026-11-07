@@ -37,7 +37,8 @@ import os
 
     init(
         permission: PermissionController, defaults: UserDefaults = .standard,
-        place: InstallLocation.Place = InstallLocation.classify(bundlePath: Bundle.main.bundlePath, home: NSHomeDirectory())
+        place: InstallLocation.Place = InstallLocation.classify(
+            bundleID: Bundle.main.bundleIdentifier, bundlePath: Bundle.main.bundlePath, home: NSHomeDirectory())
     ) {
         self.permission = permission
         self.defaults = defaults
