@@ -47,9 +47,13 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
 - **D-10:** Update action downloads the DMG, verifies its sha256 digest and the Developer ID Team ID (S2K7P43927),
   then opens it; the user drags the app in. If Transom was installed by Homebrew, the menu says to run
   `brew upgrade --cask transom` instead of downloading.
-- **D-11:** Releases are built locally by `scripts/release.sh` (version from the tag, universal, sign, notarise with the
-  `pane-notary` profile, create-dmg, staple, `gh release` upload). Signing keys never leave the Mac. CI keeps
-  `swift test`, and checks the designated requirement so TCC grants survive updates.
+- **D-11 (user, revised 2026-11-06):** Releases are built by GitHub Actions on a version tag (`v*`), following
+  gifsmith's and storcat's `release.yml`: import the Developer ID `.p12` into a temporary keychain, build the universal
+  app, sign, notarise with an App Store Connect API key, build the DMG with `hdiutil` (create-dmg optional, not
+  required), staple, verify, and upload to the GitHub release with its sha256. Repo secrets use gifsmith's names:
+  `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`, `NOTARY_KEY_P8_BASE64`.
+  `scripts/release.sh` stays for local dry runs (`--build-only` / `--skip-notarize`). CI keeps `swift test` on PRs and
+  checks the designated requirement so TCC grants survive updates.
 - **D-12:** Own tap `scottkw/homebrew-transom` (pattern of homebrew-storcat), cask modelled on Rectangle's
   (`depends_on macos: :sonoma`, uninstall quit/login_item, zap, livecheck github_latest, no `auto_updates`). First
   public version 0.9.0. homebrew/cask submission later.
