@@ -44,9 +44,31 @@
 
 ### TabGroup: `closeAndMinimizeCommandsActOnFixtureWindows` on 27.2, NOT fixed (product gap on macOS 27, deviation)
 
+Resolved in 09-29 (D-23).
+
 - **Failure:** on macOS 27.2 the close of window 0 is never confirmed: `closed` false and latency 3.03 s at L200-201 (`.build/09-25-tabgroup-vm27-base.log`). On 15.7 it confirms in 0.109 s (`.build/09-25-tabgroup-vm15.log`).
 - **Measured:** two temporary probe copies of the test (not committed; `.build/09-25-tabgroup-vm27-diag.log`, `.build/09-25-tabgroup-vm27-diag2.log`) sampled both sources every 150 to 500 ms for up to 6 s after the 3 s wait. Before the press, AX listed both windows (43 not minimised, 56 minimised) and CG had 43 on screen. After the press, 43 left AX's window list (only the minimised 56 remained) and left the screen. But it **stayed in the full CG window list** for the whole 8.5 s: layer 0, alpha 1, unchanged bounds, and SkyLight still put it on Space 1. The tracker kept 43 `present`.
 - **Cause:** the fixture keeps closed windows alive (`isReleasedWhenClosed = false`, a strong reference in `entries`). On 27.2 a closed but retained NSWindow keeps its window-server window, ordered out, in the CG list; 15.7 drops it. The product's two-source rule (`CloseRule`: AX gone AND CG absent, or CG present with a known-empty Space set) therefore never closes it: the decision is `recheck` (or `noChange` if the cached element still answers valid but unlisted; not measured), and both keep the old state. This also explains the Rematch finding in 09-24 (the window leaves the on-screen list, not the full list).
 - **Why not a test-setup fix:** real AppKit and SwiftUI apps commonly keep closed windows (window controllers, `isReleasedWhenClosed = false`). On macOS 27 Transom would keep such a closed window tracked and tiled, and Close Group would stop on its 1 s confirmation. Making the fixture release its windows would hide that. Changing `CloseRule` (for example treating "AX gone, CG present but off screen" as closed) is a product decision outside this test-only plan; it needs care because minimised, hidden and other-Space windows are also off screen (those answer AX as valid).
 - **Runs:** 27.2 used its three (base, diag, diag2). 15.7 once, unchanged.
 - **Also seen on 15.7, out of scope:** `aTabDraggedOutWithNoWindowUnderPointerLeavesTheGroup` failed at L46 (`ids.count == 2`): the fixture's launch reported fewer than two windows in `SavedGroup.start`, before any product logic ran. It passed on 27.2 in the baseline. One sample; not investigated.
+
+## 09-29: macOS 27 close of a window its app keeps alive (D-23), fixed (product)
+
+- **Cause:** on macOS 27.2 a closed window its app retains stays in the full CG list, offscreen, on its Space, so `CloseRule` rechecked it forever (see the 09-25 TabGroup entry above).
+- **Change:** a new `cgOrderedOut` input to `CloseRule.decide`: the CG entry is present and not `onScreen`, and the window's Spaces are known and include a Space some display shows now (`currentSpaceID`). `WindowTracker.decide` computes it per window from the CG entry, `context.windowSpaces` and `context.displays`. It counts only when AX answers -25202 (`invalidElement`), after the tab-member check; nil Spaces or no shown Space never count. No OS check.
+- **Live facts** (the logged `closed window 0 facts:` line, read after the confirmation wait):
+  - 27.2 (`.build/09-29-tabgroup-vm27.log`): `AXRole error -25202, in CG list true, onScreen Optional(false), spaces Optional(Set([1])), shown Spaces [1]`; close confirmed in 0.382 s (under `Arranger.closeConfirmation`, 1 s). Matches 09-25's measurement.
+  - 15.7 (`.build/09-29-tabgroup-vm15.log`): `AXRole error -25202, in CG list true, onScreen Optional(false), spaces Optional(Set([])), shown Spaces [1]`; confirmed in 0.109 s, as in 09-25. Correction to 09-25's "15.7 drops it": on 15.7 the entry also stays in the CG list, but with an empty Space set, so the existing G-03-9 no-Space row closes it. The new row does not decide anything there (the empty set misses the shown Space).
+- **Logs (all first runs, no reruns):**
+  - `.build/09-29-red.log`: the two D-23 scenarios failed before the change; the three guards passed.
+  - `.build/09-29-engine.log`: TransomEngineTests 1336 tests passed.
+  - `.build/09-29-tabgroup-vm27.log`: TabGroupIntegrationTests 7/7 passed on 27.2.
+  - `.build/09-29-tabgroup-vm15.log`: TabGroupIntegrationTests 7/7 passed on 15.7 (the 09-25 L46 launch flake did not recur).
+  - `.build/09-29-close-vm27.log`, `.build/09-29-close-vm15.log`: CloseIntegrationTests passed on both.
+  - `.build/09-29-tabs-vm27.log`, `.build/09-29-tabs-vm15.log`: TabsIntegrationTests passed on both.
+  - `.build/09-29-full.log`: host gate, four passed "Test run with" lines; `scripts/check-no-appkit.sh` OK.
+- **Not covered (not measured):**
+  - (a) A whole native tab group its app closes and keeps alive on macOS 27. Its hidden members could linger in the CG list too, and `decide`'s remaining-members check cannot tell them from live hidden tabs by CG alone, so the group may stay tracked.
+  - (b) With the Spaces lookup off, a kept-alive closed window keeps rechecking, as before.
+  - (c) A kept-alive closed window whose Space no display shows any more by the time Transom refreshes (Spaces switched first) keeps rechecking until that Space shows.
