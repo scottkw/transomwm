@@ -37,6 +37,9 @@ public enum TransomMacApp {
         // Tracking starts only through the reducer's startTracking effect, once access is confirmed.
         let permissionController = PermissionController(system: system)
         let setupController = SetupWindowController(permission: permissionController)
+        // The only Screen Recording reads onboarding makes; tests inject fakes instead (RESEARCH Pitfall 5).
+        setupController.screenRecordingGranted = { SnapshotCapture.isGranted() }
+        setupController.requestScreenRecording = { SnapshotCapture.request() }
         let exclusions = ExclusionStore()
         // The window system enforces the list (D-12); the store only validates and keeps it.
         system.setExcludedBundleIDs(Set(exclusions.bundleIDs))

@@ -18,6 +18,10 @@ import os
     private var userClosed = false
     private var awaitingLaunchDecision = false
     private var subscription: AnyCancellable?
+    /// Screen Recording through `SnapshotCapture`, injected so tests never touch it (RESEARCH Pitfall 5).
+    var screenRecordingGranted: (() -> Bool)?
+    var requestScreenRecording: (() -> Bool)?
+    private var screenRecordingPoll: Task<Void, Never>?
 
     init(permission: PermissionController, defaults: UserDefaults = .standard) {
         self.permission = permission
@@ -85,10 +89,47 @@ import os
         window?.performClose(nil)
     }
 
+    /// Back: the step before this one.
+    func back() {
+        guard let index = model.steps.firstIndex(of: model.current), index > 0 else { return }
+        go(to: model.steps[index - 1])
+    }
+
+    /// Allow Screen Recording: one system request per click; after that the step only polls (D-06).
+    func allowScreenRecording() {
+        guard let request = requestScreenRecording else { preconditionFailure("requestScreenRecording not wired") }
+        model.screenRecordingAsked = true
+        model.screenRecordingOn = request()
+        logger.info("screen recording requested")
+    }
+
+    /// One poll tick: preflight only, never a prompt. The 1 s loop calls it while the step shows.
+    func pollScreenRecording() {
+        guard let granted = screenRecordingGranted else { preconditionFailure("screenRecordingGranted not wired") }
+        model.screenRecordingOn = granted()
+    }
+
     private func go(to step: OnboardingStep) {
         guard model.current != step else { return }
         model.current = step
+        screenRecordingPoll?.cancel()
+        screenRecordingPoll = nil
         logger.info("step \(step.rawValue, privacy: .public)")
+        if step == .screenRecording { enterScreenRecording() }
+    }
+
+    /// Reaching the step answers the Phase 4 previews alert, so it never asks again (UI-SPEC Surface 2).
+    private func enterScreenRecording() {
+        guard requestScreenRecording != nil else { preconditionFailure("requestScreenRecording not wired") }
+        defaults.set(true, forKey: ZoomController.explainerShownKey)
+        pollScreenRecording()
+        screenRecordingPoll = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                self.pollScreenRecording()
+            }
+        }
     }
 
     func makeWindow() -> NSWindow {
@@ -97,8 +138,10 @@ import os
         let view = OnboardingView(
             model: model, permission: permission, appName: appName,
             advance: { [weak self] in self?.advance() },
+            back: { [weak self] in self?.back() },
+            allowScreenRecording: { [weak self] in self?.allowScreenRecording() },
             finish: { [weak self] in self?.finish() },
-            close: { [weak self] in self?.window?.performClose(nil) })
+            close: { [weak self] in self?.closeAccessibilityStep() })
         let hosting = NSHostingController(rootView: view)
         // The hosting controller publishes SwiftUI's size as preferredContentSize, which the window applies,
         // so its height follows each state's content (G-02-1).
@@ -122,6 +165,11 @@ import os
         return window
     }
 
+    /// The Accessibility step's Done (shown on ready): mid-flow, after Back from Screen Recording, it moves on.
+    private func closeAccessibilityStep() {
+        if OnboardingFlow.next(after: model.current, in: model.steps) != nil { advance() } else { window?.performClose(nil) }
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         permission.state.phase != .resetting
     }
@@ -129,6 +177,8 @@ import os
     /// Writes nothing: closing before Done leaves the first run pending, and quits nothing.
     func windowWillClose(_ notification: Notification) {
         userClosed = true
+        screenRecordingPoll?.cancel()
+        screenRecordingPoll = nil
     }
 }
 

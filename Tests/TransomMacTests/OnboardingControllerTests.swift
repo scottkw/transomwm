@@ -41,13 +41,66 @@ import Testing
     @Test func readyDuringOnboardingMovesOnByItself() {
         let permission = permission(.waitingForGrant)
         let controller = SetupWindowController(permission: permission, defaults: throwawayDefaults())
+        let fake = FakeScreenRecording(controller)
         _ = controller.makeWindow()
         controller.advance()
         #expect(controller.model.current == .accessibility)
         var ready = PermissionState()
         ready.phase = .ready
         permission.overrideStateForTesting(ready)
+        #expect(controller.model.current == .screenRecording)
+        #expect(fake.requests == 0)
+    }
+
+    @Test func allowRequestsExactlyOncePerClick() {
+        let (controller, fake) = atScreenRecording()
+        #expect(fake.requests == 0)
+        controller.allowScreenRecording()
+        #expect(fake.requests == 1)
+        #expect(controller.model.screenRecordingAsked)
+    }
+
+    @Test func theStepOnlyPollsAfterwards() {
+        let (controller, fake) = atScreenRecording()
+        controller.allowScreenRecording()
+        let checksBefore = fake.checks
+        for _ in 0..<5 { controller.pollScreenRecording() }
+        #expect(fake.requests == 1)
+        #expect(fake.checks >= checksBefore + 5)
+        fake.granted = true
+        controller.pollScreenRecording()
+        #expect(controller.model.screenRecordingOn)
+        #expect(fake.requests == 1)
+    }
+
+    @Test func continueIsNeverBlockedWhileWaiting() {
+        let (controller, fake) = atScreenRecording()
+        controller.allowScreenRecording()
+        #expect(!controller.model.screenRecordingOn)
+        controller.advance()
         #expect(controller.model.current == .done)
+        controller.back()
+        controller.back()
+        #expect(controller.model.current == .accessibility)
+        #expect(fake.requests == 1)
+    }
+
+    @Test func reachingTheStepMarksThePreviewsAlertAnswered() {
+        let defaults = throwawayDefaults()
+        let controller = SetupWindowController(permission: permission(.ready), defaults: defaults)
+        _ = FakeScreenRecording(controller)
+        #expect(!defaults.bool(forKey: ZoomController.explainerShownKey))
+        controller.advance()
+        #expect(controller.model.current == .screenRecording)
+        #expect(defaults.bool(forKey: ZoomController.explainerShownKey))
+    }
+
+    /// A first-run controller on the Screen Recording step (ready access skips step 2), with fakes wired.
+    private func atScreenRecording(_ defaults: UserDefaults? = nil) -> (SetupWindowController, FakeScreenRecording) {
+        let controller = SetupWindowController(permission: permission(.ready), defaults: defaults ?? throwawayDefaults())
+        let fake = FakeScreenRecording(controller)
+        controller.advance()
+        return (controller, fake)
     }
 
     private func permission(_ phase: PermissionPhase) -> PermissionController {
@@ -56,6 +109,24 @@ import Testing
         state.phase = phase
         permission.overrideStateForTesting(state)
         return permission
+    }
+
+    /// Counts what onboarding asks Screen Recording, standing in for SnapshotCapture (ZoomOffTests counts its touches).
+    @MainActor final class FakeScreenRecording {
+        var granted = false
+        var checks = 0
+        var requests = 0
+
+        init(_ controller: SetupWindowController) {
+            controller.screenRecordingGranted = { [self] in
+                checks += 1
+                return granted
+            }
+            controller.requestScreenRecording = { [self] in
+                requests += 1
+                return granted
+            }
+        }
     }
 
     private func throwawayDefaults() -> UserDefaults {

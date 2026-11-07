@@ -8,7 +8,7 @@ public enum OnboardingStep: String, CaseIterable, Sendable {
 public enum OnboardingFlow {
     /// The first run walks every applicable step; after completion only the Accessibility step ever shows.
     public static func steps(completed: Bool) -> [OnboardingStep] {
-        completed ? [.accessibility] : [.welcome, .accessibility, .done]
+        completed ? [.accessibility] : [.welcome, .accessibility, .screenRecording, .done]
     }
 
     /// Welcome…Launch at login are numbered, counting only the ones in `steps`. Move and Done have no caption, and
