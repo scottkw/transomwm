@@ -37,6 +37,10 @@ nonisolated public enum TabCopy {
         "\(stripLabel(count: count)), collapsed: \(tabLabel(app: app, title: title))"
     }
 
+    /// A collapsed block's label card, line 2 (UI-SPEC Surface 7): one window, or a tab group of `n`.
+    public static let collapsed = "Collapsed"
+    public static func collapsedWindows(_ n: Int) -> String { "\(n) windows, collapsed" }
+
     /// Added to an overview group tile's selection announcement (UI-SPEC Surface 6).
     public static func overviewTabSuffix(index: Int, count: Int) -> String { ", tab \(index) of \(count)" }
 
