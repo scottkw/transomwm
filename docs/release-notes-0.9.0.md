@@ -49,6 +49,5 @@ It should print `Transom-0.9.0-universal.dmg: OK`.
 ## Known issues
 
 - Testing so far has used a single display. The multi-display re-checks (unplug and re-plug, per-arrangement layouts, "Displays have separate Spaces" off, Tab between displays in the overview) are outstanding, so treat behaviour on a second display as unverified.
-- On macOS 27, a native tab group whose app closes the whole group but keeps its windows alive may stay tracked.
 - Transom has been tested on macOS 15 and macOS 27, not on macOS 14.
 - An external Magic Trackpad is untested; the built-in trackpad is tested.
