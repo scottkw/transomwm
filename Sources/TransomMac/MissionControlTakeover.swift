@@ -68,7 +68,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
 
     enum LiftReason { case toggleOff, zoomOff, restoreSettings, quit }
 
-    /// Replace Mission Control (off by default, D-06). Only the menu toggle (06-11) and tests write it; no URL.
+    /// Replace Mission Control (off by default, D-06). Only the Settings toggle (09-07) and tests write it; no URL.
     static let enabledKey = "takeover.enabled"
     /// The explanation alert was confirmed once (Surface 5); saved only on confirm.
     static let explainedKey = "takeover.explained"
@@ -101,7 +101,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
 
     var preferenceOn: Bool { defaults.bool(forKey: Self.enabledKey) }
     var isOn: Bool { if case .on = state { true } else { false } }
-    /// The private symbols resolve (O2 reads "(unavailable)" otherwise).
+    /// The private symbols resolve (the Settings toggle is disabled otherwise).
     var isAvailable: Bool { backend.isAvailable }
 
     /// OVER-03, before the Arranger starts: stored originals mean the last run did not lift, so they are restored
@@ -128,7 +128,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
         }
     }
 
-    /// The menu toggle: on clears a tripped canary and applies (or waits for zoom); off lifts.
+    /// The preference: on clears a tripped canary and applies (or waits for zoom); off lifts.
     func setPreference(_ on: Bool) {
         defaults.set(on, forKey: Self.enabledKey)
         guard on else { return lift(reason: .toggleOff) }
@@ -137,7 +137,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
         if zoomOn { apply() } else { state = .liftedForZoom }
     }
 
-    /// O2 (Surface 5): on turns off at once; off turns on after the one-time explanation, unless it was confirmed
+    /// The Settings toggle (Surface 5, D-04): on turns off at once; off turns on after the one-time explanation, unless it was confirmed
     /// before or a crash turned the takeover off. `explain` shows the alert and answers whether the user confirmed.
     func choose(explain: (_ answered: @escaping (Bool) -> Void) -> Void) {
         if isOn {
@@ -263,7 +263,7 @@ struct LiveHotKeyBackend: HotKeyBackend {
             let state = readBack(ids)
             restore(originals)
             self.state = .offApplyFailed
-            defaults.set(false, forKey: Self.enabledKey)  // WR-03: O2 can turn it on again; N11 does not repeat every launch
+            defaults.set(false, forKey: Self.enabledKey)  // WR-03: Settings can turn it on again; N11 does not repeat every launch
             log.error("takeover apply failed: read-back \(String(describing: state), privacy: .public); originals restored")
             post(.takeoverApplyFailed)
             return false

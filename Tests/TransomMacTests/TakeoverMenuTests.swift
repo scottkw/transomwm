@@ -170,18 +170,15 @@ private final class Count: @unchecked Sendable { var value = 0 }
         #expect(ZoomGesturesTab.takeoverFooter(nil, zoomOn: true) == "Not available on this version of macOS.")
     }
 
-    @Test func o2SitsAfterFrameFocusedWindowBeforeAllowWindowPreviews() {
+    /// Surface 5 (09): Replace Mission Control left the menu for Settings ▸ Zoom & Gestures.
+    @Test func theZoomSectionHasNoMissionControlItem() {
         let menu = CommandMenu { _ in }
-        let item = { (title: String) in NSMenuItem(title: title, action: nil, keyEquivalent: "") }
+        let item = { (title: String) -> NSMenuItem in NSMenuItem(title: title, action: nil, keyEquivalent: "") }
         let titles = menu.zoomSection(
-            enabled: true, framingWindow: false, takeover: item("Replace Mission Control"),
-            previews: item("Allow Window Previews\u{2026}"), toggle: item("Turn Off Zoom")
+            enabled: true, framingWindow: false, previews: item("Allow Window Previews\u{2026}"), toggle: item("Turn Off Zoom")
         ).map(\.title)
-        #expect(Array(titles.suffix(4)) == ["Frame Focused Window", "Replace Mission Control", "Allow Window Previews\u{2026}", "Turn Off Zoom"])
-        let off = menu.zoomSection(
-            enabled: false, framingWindow: false, takeover: item("Replace Mission Control"), previews: nil,
-            toggle: item("Turn On Zoom"))
-        #expect(!off.map(\.title).contains("Replace Mission Control"), "rendered only with zoom on")
+        #expect(Array(titles.suffix(3)) == ["Frame Focused Window", "Allow Window Previews\u{2026}", "Turn Off Zoom"])
+        #expect(!titles.contains { $0.contains("Mission Control") })
     }
 
     @Test func aRefusedApplyRestoresTheOriginalsAndPostsN11() {

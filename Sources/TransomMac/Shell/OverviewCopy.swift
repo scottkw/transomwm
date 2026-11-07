@@ -119,7 +119,6 @@ nonisolated public enum OverviewCopy {
     // MARK: Replace Mission Control (Surface 5). Swipe verdict "kept" (06-SPIKE): only the [swipe kept] variant ships.
 
     public static let replaceMissionControl = "Replace Mission Control"
-    public static let replaceMissionControlUnavailable = "Replace Mission Control (unavailable)"
     public static let takeoverAlertMessage = "Use the Mission Control keys for Transom's overview?"
     public static let takeoverNotNow = "Not Now"
 

@@ -171,22 +171,12 @@ import os
         let uuid = context.displayUUID
         let section = commands.zoomSection(
             enabled: on, framingWindow: uuid.map { arranger.isFramingFocused(displayUUID: $0, focused: context.focused) } ?? false,
-            takeover: takeoverMenuItem(), previews: previews, toggle: toggle)
+            previews: previews, toggle: toggle)
         for item in section { menu.addItem(item) }
     }
 
-    /// O2: checked while the takeover is on; "(unavailable)" and disabled without the private symbols.
-    private func takeoverMenuItem() -> NSMenuItem? {
-        guard let takeover = arrange.takeover else { return nil }
-        guard takeover.isAvailable else { return Self.info(OverviewCopy.replaceMissionControlUnavailable) }
-        let item = NSMenuItem(title: OverviewCopy.replaceMissionControl, action: #selector(chooseTakeover), keyEquivalent: "")
-        item.target = self
-        item.state = takeover.isOn ? .on : .off
-        return item
-    }
-
-    /// Replace Mission Control's one flow (Surface 5): the explanation alert, then `choose` decides.
-    @objc private func chooseTakeover() {
+    /// Settings ▸ Zoom & Gestures' Mission Control toggle (D-04, Surface 5): the explanation alert, then `choose` decides.
+    private func chooseTakeover() {
         guard let takeover = arrange.takeover, takeoverAlert == nil else { return }
         takeover.choose { [weak self] answered in
             guard let self else { return }
