@@ -82,4 +82,45 @@ import Testing
     @Test func noSavedViewsGivesNoBadges() {
         #expect(layout(views, slots: []).isEmpty)
     }
+
+    @Test func rowsReorderAndPersist() throws {
+        try withDefaults { defaults in
+            let preference = MenuBarPreference(defaults: defaults)
+            var changes = 0
+            preference.onChange = { changes += 1 }
+            preference.move(fromOffsets: [2], toOffset: 0)
+            #expect(preference.items.map(\.control) == [.views, .back, .forward])
+            #expect(changes == 1)
+            #expect(MenuBarPreference(defaults: defaults).items.map(\.control) == [.views, .back, .forward])
+        }
+    }
+
+    @Test func moveUpAndDownStopAtTheEnds() throws {
+        try withDefaults { defaults in
+            let preference = MenuBarPreference(defaults: defaults)
+            var changes = 0
+            preference.onChange = { changes += 1 }
+            #expect(!preference.canMoveUp(.back) && !preference.canMoveDown(.views))
+            preference.moveUp(.back)
+            preference.moveDown(.views)
+            #expect(preference.items.map(\.control) == [.back, .forward, .views] && changes == 0)
+            preference.moveDown(.back)
+            preference.moveUp(.views)
+            #expect(preference.items.map(\.control) == [.forward, .views, .back] && changes == 2)
+        }
+    }
+
+    @Test func pausedDimsEveryControl() {
+        let all = MenuBarControl.allCases.map { MenuBarItem(control: $0, enabled: true) }
+        let specs = layout(all, paused: true, slots: [2], current: 2)
+        #expect(specs.count == 3)
+        #expect(specs.allSatisfy(\.appearsDisabled))
+        #expect(!layout(all, slots: [2], current: 2).contains(where: \.appearsDisabled))
+    }
+
+    @Test func emptyHistoryDimsBackButKeepsIt() {
+        let specs = layout([MenuBarItem(control: .back, enabled: true), MenuBarItem(control: .forward, enabled: true)], back: false)
+        #expect(specs.map(\.kind) == [.back, .forward])
+        #expect(specs.map(\.appearsDisabled) == [true, false])
+    }
 }
