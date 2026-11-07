@@ -509,7 +509,7 @@ Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
   2. On first run, onboarding walks the user through Accessibility, optional Screen Recording and the conflicting macOS features, without looping on permission prompts
   3. User can turn on launch at login, and Transom starts at the next login
   4. Settings (opened from the menu-bar icon) has an Updates section: an automatic-check toggle and a "Check for Updates" button; when GitHub has a newer release Transom notifies the user, and the downloaded DMG is opened only after its sha256 digest and Team ID verify
-  5. `brew install --cask` installs a Developer ID-signed, notarised Transom that opens without Gatekeeper warnings
+  5. The signed, notarised DMG from the GitHub release installs Transom, which opens without Gatekeeper warnings (Homebrew deferred, D-26)
   6. The menu bar shows back, forward and saved-view controls (current view highlighted) that the user can choose and reorder in Settings; the menu has "Report a Problem", the icon shows a dot when an update is waiting, and a `transom://settings` URL opens a given Settings section directly (query key as in SHIP-08)
 
 **Plans:** 30 plans (one per wave: executors share one working tree, `.build` and the VM lock)

@@ -95,6 +95,13 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
   in the macOS 27.2 VM, then fix it (plan 09-30, before 09-27) without misclassifying live hidden tabs; prove on 27.2 and
   15.7.
 
+- **D-26 (user, 2026-11-07, at 09-27's contract checkpoint):** "ship-as-planned" for the DMG asset name, pane names,
+  bundle ID and designated requirement, but **forego Homebrew for now**: no `scottkw/homebrew-transom`, no
+  `HOMEBREW_TAP_TOKEN`, no `tap` environment, and no `brew install` in the README or release notes for 0.9.0. `tap.yml`
+  stays in the repo but only runs by hand (`workflow_dispatch`); the cask template and the updater's Homebrew detection
+  stay (harmless without a Caskroom install). Supersedes D-12's tap for 0.9.0 and the Homebrew part of SHIP-05 / ROADMAP
+  Phase 9 criterion 5; 09-27 drops the tap steps and 09-28 checks a DMG install instead of a cask install.
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.

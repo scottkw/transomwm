@@ -123,7 +123,7 @@
 - [ ] **SHIP-02**: First-run onboarding walks through permissions and conflicting macOS features
 - [ ] **SHIP-03**: User can launch Transom at login
 - [ ] **SHIP-04**: Transom checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
-- [ ] **SHIP-05**: Releases are Developer ID signed, notarised, and installable with `brew install --cask`
+- [ ] **SHIP-05**: Releases are Developer ID signed and notarised, and the DMG installs and opens without Gatekeeper warnings (Homebrew cask deferred, Phase 9 D-26)
 - [ ] **SHIP-06**: Menu bar shows back, forward and saved-view buttons with the current view highlighted, and Settings lets the user choose and reorder which controls appear, down to icon only
 - [ ] **SHIP-07**: The menu includes "Report a Problem", and the menu bar icon shows a dot when an update is available
 - [ ] **SHIP-08**: `transom://settings?pane=` opens a specific Settings pane

@@ -1,10 +1,8 @@
 name: Tap
 
-# Publishing a release (by the maintainer's own gh token, so the event fires) bumps
-# Casks/transom.rb in scottkw/homebrew-transom (D-12). workflow_dispatch re-runs it for a tag.
+# Bumps Casks/transom.rb in scottkw/homebrew-transom (D-12). Homebrew is deferred for 0.9.0 (Phase 9 D-26), so this
+# runs only by hand; to turn the tap on, create the tap repo and token, then add back `release: types: [published]`.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:

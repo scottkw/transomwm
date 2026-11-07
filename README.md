@@ -33,7 +33,7 @@ Known gap: testing so far has used a single display. The multi-display re-checks
 
 ## Install
 
-Install with Homebrew: `brew install --cask scottkw/transom/transom`. Or download the disk image from the latest GitHub release, open it, and drag Transom to Applications. Transom needs macOS 14 or later.
+Download the disk image from the latest GitHub release, open it, and drag Transom to Applications. Transom needs macOS 14 or later.
 
 On first launch, Set Up Transom walks you through the Accessibility permission, optional Screen Recording and opening at login. If you open Transom from the disk image or your Downloads folder, it offers to move itself to Applications first.
 
@@ -76,7 +76,7 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Zoom off | Turn Off Zoom (menu) brings every window home and disables zoom entirely: no overlay, no Screen Recording use, and tiling behaves exactly as without zoom. |
 | Slow apps | Each app's Accessibility calls run off the main thread with a timeout, so a frozen app cannot stall Transom or the arranging of other apps' windows. |
 | Settings | Click the Transom icon and choose Settings… (⌘,). Tabs: General, Arranging, Zoom & Gestures, Shortcuts, Exclusions, Menu Bar and Updates. Gaps, New Windows and Drag to Dock are also in the menu, and both always show the same value. |
-| Updates | Transom checks GitHub for a new release when it opens and once a day (turn this off in Settings ▸ Updates). A dot on the menu-bar icon means one is ready. If you installed with Homebrew, run `brew upgrade --cask transom`. |
+| Updates | Transom checks GitHub for a new release when it opens and once a day (turn this off in Settings ▸ Updates). A dot on the menu-bar icon means one is ready. |
 | Menu bar controls | Optional Back, Forward and saved-view buttons next to the Transom icon. Turn them on and order them in Settings ▸ Menu Bar. |
 
 ### Menu
@@ -115,7 +115,7 @@ Debug builds register `transom-debug://` instead.
 
 ### Command-line tool
 
-Transom ships a `transom` command that runs the same commands as the `transom://` URLs and reports errors with an exit code. Homebrew installs it for you, and Settings ▸ General shows whether it's installed. Otherwise, install it with:
+Transom ships a `transom` command that runs the same commands as the `transom://` URLs and reports errors with an exit code. Settings ▸ General shows whether it's installed. To install it, run:
 
 ```sh
 sudo mkdir -p /usr/local/bin && sudo ln -sf /Applications/Transom.app/Contents/Helpers/transom /usr/local/bin/transom

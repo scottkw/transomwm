@@ -10,8 +10,7 @@ The first public release of Transom, a free, open-source (MIT) window manager fo
 
 ## Install
 
-- Homebrew: `brew install --cask scottkw/transom/transom`
-- Or download `Transom-0.9.0-universal.dmg` below, open it, and drag Transom to Applications. Transom is Developer ID-signed and notarized by Apple.
+- Download `Transom-0.9.0-universal.dmg` below, open it, and drag Transom to Applications. Transom is Developer ID-signed and notarized by Apple.
 
 To check the download, put the DMG and `Transom-0.9.0-universal.dmg.sha256` in the same folder and run:
 
@@ -37,7 +36,6 @@ It should print `Transom-0.9.0-universal.dmg: OK`.
 - **First-run setup** walks you through moving Transom to Applications, Accessibility, optional Screen Recording, opening at login and turning off macOS features that move windows.
 - **Launch at login**, from setup or Settings ▸ General.
 - **Update check.** Transom asks GitHub for the latest release when it opens and once a day (turn this off in Settings ▸ Updates). Download and Open checks the disk image's SHA-256, Developer ID team and notarization before opening it.
-- **Homebrew cask** in the `scottkw/transom` tap. A Homebrew install is told to run `brew upgrade --cask transom`.
 - **Menu bar controls.** Optional Back, Forward and saved-view buttons next to the Transom icon, set up in Settings ▸ Menu Bar.
 - **Report a Problem…** opens a GitHub issue with your Transom and macOS versions (never window titles or app names).
 - A highlight color that follows your macOS accent color or a color you choose, an app icon and menu-bar glyph, and labels on collapsed blocks.

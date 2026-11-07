@@ -3,14 +3,13 @@
 GitHub Actions builds every release. A `vX.Y.Z` tag runs `.github/workflows/release.yml`, which
 builds the universal app, signs it with Developer ID, notarises and staples the app and the DMG,
 checks that the in-app updater accepts the DMG and creates a **draft** release with
-`Transom-X.Y.Z-universal.dmg` and its `.sha256`. You publish it by hand. Publishing runs
-`.github/workflows/tap.yml`, which updates the Homebrew cask. Pushes and pull requests run the
-test suite (`.github/workflows/ci.yml`).
+`Transom-X.Y.Z-universal.dmg` and its `.sha256`. You publish it by hand. Pushes and pull requests run the test suite (`.github/workflows/ci.yml`).
+Homebrew is deferred for 0.9.0 (Phase 9 D-26): `.github/workflows/tap.yml` runs only by hand; see Homebrew tap.
 
 ## Before the first release (one time)
 
 1. **Make `scottkw/transomwm` public** (D-19). While it is private, `releases/latest` returns 404
-   to everyone else, so the in-app updater silently finds nothing, the cask URL fails and the
+   to everyone else, so the in-app updater silently finds nothing and the
    Report a Problem link opens a page nobody can see.
 2. **Create the `release` environment** (Settings, Environments, New environment, `release`):
    - Required reviewer: `scottkw`. Leave "Prevent self-review" off, or you cannot approve your own runs.
@@ -20,9 +19,7 @@ test suite (`.github/workflows/ci.yml`).
    maintainer only", active, targeting `refs/tags/v*`, with "Restrict creations", "Restrict
    updates" and "Restrict deletions". Bypass list: the Repository admin role, always. Keep the
    admin role to the maintainer.
-5. **Create the tap** `scottkw/homebrew-transom` (public, empty, `Casks/` is created on the first
-   publish), create the `tap` environment and add `HOMEBREW_TAP_TOKEN` to it (see Homebrew tap).
-6. Run a dry run (below) and check it goes green.
+5. Run a dry run (below) and check it goes green.
 
 ## Cutting a release
 
@@ -59,10 +56,6 @@ test suite (`.github/workflows/ci.yml`).
    ```
 
    Installed copies see the update once `releases/latest` returns the new tag.
-9. Publishing fires `tap.yml` (it fires because your own `gh` token published the release; an
-   action using the default `GITHUB_TOKEN` would not). Check that `scottkw/homebrew-transom` has a
-   commit "transom X.Y.Z", then `brew update && brew upgrade --cask transom`. To re-run it for a
-   published tag: `gh workflow run tap.yml --repo scottkw/transomwm -f tag=vX.Y.Z`.
 
 The `gate` job refuses, before any credential is touched, when the tag is not exactly `v` plus
 `MARKETING_VERSION`, the release notes are missing, the commit is not on `main`, or a published
@@ -131,7 +124,11 @@ Delete the exported .p12 afterwards.
   changed), then revoke the old key.
 - Run a dry run after any rotation.
 
-## Homebrew tap
+## Homebrew tap (deferred, D-26)
+
+Not used for 0.9.0. To turn it on later: create `scottkw/homebrew-transom`, the `tap` environment and
+`HOMEBREW_TAP_TOKEN` as below, add `release: types: [published]` back to `tap.yml`'s triggers, and put
+the `brew install --cask` line back in the README and release notes.
 
 `tap.yml` downloads the published `Transom-X.Y.Z-universal.dmg` and its `.sha256`, hashes the DMG,
 requires that hash to match the `.sha256` asset (and the release API's asset digest), renders
