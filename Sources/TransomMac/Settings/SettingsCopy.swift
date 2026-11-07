@@ -5,6 +5,15 @@ import TransomEngine
 nonisolated public enum SettingsCopy {
     public static let menuItem = "Settings\u{2026}"
 
+    // General (Tab 1)
+    public static let appearanceSection = "Appearance"
+    public static let highlightColor = "Highlight color"
+    public static let matchSystemAccent = "Match system accent color"
+    public static let customHighlight = "Custom"
+    /// The colour well's accessibility label; the radio row shows no text beside it.
+    public static let customHighlightWell = "Custom highlight color"
+    public static let highlightFooter = "Used for docking previews, rings and gap handles."
+
     // Arranging (Tab 2)
     public static let layoutSection = "Layout"
     public static let gaps = "Gaps"

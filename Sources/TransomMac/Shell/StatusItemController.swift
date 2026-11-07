@@ -378,6 +378,7 @@ import os
     /// One factory per Settings tab built so far; later plans add their panes here.
     private func settingsTabs() -> [SettingsPane: () -> NSViewController] {
         [
+            .general: { SettingsWindowController.hosting(GeneralTab()) },
             .arranging: {
                 SettingsWindowController.hosting(
                     ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts),

@@ -489,7 +489,7 @@ private final class PreviewLabelView: NSView {
 
     private static func color(_ role: PreviewStyle.ColorRole) -> NSColor {
         switch role {
-        case .accent: .controlAccentColor
+        case .accent: HighlightColor.current
         case .red: .systemRed
         case .label: .labelColor
         }
