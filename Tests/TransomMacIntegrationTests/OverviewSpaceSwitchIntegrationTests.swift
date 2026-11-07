@@ -71,6 +71,8 @@ import Testing
     func pickingAMiniTileOnAnotherSpaceSwitchesThereAndFocusesItsWindow() async throws {
         try await returnToFirst()
         let (display, _, second) = try desktops()
+        let relay = SpaceChangeRelay(display: display)  // D-17: the Arranger hears Space changes over SSH on 27.2
+        defer { relay.stop() }
         // The window to pick opens on the second desktop, tracked from there; the test then comes back.
         _ = await SpaceSwitcher(spaces: { SpacesProvider.snapshot() }).switchTo(space: second, on: display)
         try #require(await waitUntil(timeout: .seconds(3)) { SkyLightSpaces.currentSpace(displayUUID: display) == second })
@@ -126,6 +128,8 @@ import Testing
         try #require(SnapshotCapture.isGranted(), "needs Screen Recording (the VM's SSH session has it)")
         try await returnToFirst()
         let (display, _, second) = try desktops()
+        let relay = SpaceChangeRelay(display: display)  // D-17: the Arranger hears Space changes over SSH on 27.2
+        defer { relay.stop() }
         _ = await SpaceSwitcher(spaces: { SpacesProvider.snapshot() }).switchTo(space: second, on: display)
         try #require(await waitUntil(timeout: .seconds(3)) { SkyLightSpaces.currentSpace(displayUUID: display) == second })
         let fixture = try await FixtureProcess.launch(["standard", "standard"])
@@ -171,6 +175,8 @@ import Testing
     func aPanelStrandedOnAnotherSpaceDoesNotHideTheNextOpen() async throws {
         try await returnToFirst()
         let (display, _, second) = try desktops()
+        let relay = SpaceChangeRelay(display: display)  // D-17: the Arranger hears Space changes over SSH on 27.2
+        defer { relay.stop() }
         let fixture = try await FixtureProcess.launch(["standard"])
         defer { fixture.terminate() }
         let fixturePID = fixture.pid

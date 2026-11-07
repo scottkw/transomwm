@@ -17,3 +17,12 @@
 - **Cause, measured:** a temporary copy of the test with diagnostics (`.build/09-24-probe5-vm27.log`) showed that when `close 1` replies on 27.2, the closed fixture window is still on screen under the click point. The second click landed on it, so the fixture stayed frontmost. Once the window had left the on-screen list, the click went through the placeholder panel to the desktop and Finder became frontmost. The panel was click-through both times.
 - **Change:** after `close 1`, the test waits (up to 3 s, required) until that window is gone from the on-screen window list, then clicks. The comment names D-17.
 - **Result:** passed on macOS 27.2 on its third run, the first with the fix (`.build/09-24-rematch-vm27.log`), and on macOS 15.7 (`.build/09-24-rematch-vm15.log`).
+
+## 09-25: the other carried macOS 27.2 live failures (D-17, from 08.1.1-18)
+
+### OverviewSpaceSwitch: three tests, fixed (test setup, the 09-24 Views cause)
+
+- **Failure:** baseline on macOS 27.2 (`.build/09-25-oss-vm27-base.log`): `pickingAMiniTileOnAnotherSpaceSwitchesThereAndFocusesItsWindow` L114 and `theFirstVisitToASpaceNotYetReadCapturesItsWindows` L155 (`cached` false), `aPanelStrandedOnAnotherSpaceDoesNotHideTheNextOpen` L195 (the Arranger's `currentSpaceID` never became the second Space). The same three as 08.1.1-18.
+- **Cause, measured:** all three hang off `AXWindowSystem`'s `activeSpaceDidChangeNotification` observer (the `.spaceChanged` event feeds the Arranger's `currentSpaceID` and the visit capture 1 s later). With `SpaceChangeRelay` counting, the system announced 0 of 8 Space changes to the SSH-run test process on 27.2 (`.build/09-25-oss-vm27.log`: "3 Space changes, 0 announced by the system, 3 posted" and so on) and every one on 15.7 (`.build/09-25-oss-vm15.log`: "4 announced, 0 posted"). Same harness gap as Views in 09-24.
+- **Change:** `SpaceChangeRelay` moved from `ViewsIntegrationTests.swift` into `IntegrationSupport.swift` (now two suites use it) and prints its counts at `stop()`. The three tests start one after reading the desktops, with a D-17 comment.
+- **Result:** 6/6 passed on macOS 27.2 on the first run with the fix (`.build/09-25-oss-vm27.log`) and on macOS 15.7 (`.build/09-25-oss-vm15.log`), where the relay posted nothing.
