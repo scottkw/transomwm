@@ -18,6 +18,11 @@ nonisolated public enum SettingsCopy {
     public static let featureOff = "Off"
     public static let restoreFooter = "Puts back the settings Transom turned off."
 
+    // Zoom & Gestures (Tab 3)
+    public static let zoomSection = "Zoom"
+    public static let useZoom = "Use zoom"
+    public static let useZoomFooter = "Zoom lets you see every window at once and step in to any of them. Tiling works with zoom off."
+
     /// Sentence case, as the UI-SPEC writes the rows (the menu and toasts keep `ConflictCopy.featureName`).
     public static func featureName(_ conflict: Conflict) -> String {
         switch conflict {

@@ -106,4 +106,15 @@ private final class Count: @unchecked Sendable { var value = 0 }
         #expect(ArrangingTab.featureRows(conflicts).map(\.isOn) == [false, false, false])
         #expect(conflicts.canRestore)
     }
+
+    @Test func theZoomToggleCallsTheMenuPathAndWritesNoKeyItself() throws {
+        try withDefaults { defaults in
+            var calls: [Bool] = []
+            let binding = ZoomGesturesTab.zoomBinding(isOn: true) { (on: Bool) -> Void in calls.append(on) }
+            #expect(binding.wrappedValue)
+            binding.wrappedValue = false
+            #expect(calls == [false])
+            #expect(defaults.object(forKey: ZoomController.enabledKey) == nil)
+        }
+    }
 }

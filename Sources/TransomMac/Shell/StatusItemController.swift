@@ -392,6 +392,11 @@ import os
                     ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts),
                     height: 640)
             },
+            .zoom: {
+                // The menu's toggleZoom path: announcement and the Turn Off flow included.
+                let setZoomEnabled: (Bool) -> Void = { on in Task { await self.arrange.setZoomEnabled(on) } }
+                return SettingsWindowController.hosting(ZoomGesturesTab(setZoomEnabled: setZoomEnabled))
+            },
             .shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) },
         ]
     }
