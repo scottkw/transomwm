@@ -256,19 +256,34 @@ import os
         dragToDock.set(DragToDockMode.allCases[sender.tag])
     }
 
+    /// The asset-catalog glyph for a state (UI-SPEC Surface 8): nil (the warning symbol) until access is ready;
+    /// paused keeps the normal glyph (dimmed by appearsDisabled); the zoomed variant only while zoomed in.
+    nonisolated static func glyphName(ready: Bool, paused: Bool, zoomed: Bool) -> String? {
+        !ready ? nil : zoomed && !paused ? "TransomZoomedTemplate" : "TransomTemplate"
+    }
+
     /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.
     /// While the pointer display's view is not home it reads "Transom: zoomed in" (paused and not ready win).
-    /// No explicit symbol size: the default (18 x 14 pt) fits the 22 pt square item on every menu bar; a forced 16 pt image measured 23 x 18 pt and lost its bottom edge on a 1x display.
+    /// The Transom templates are drawn on the 18 x 18 pt menu-bar canvas. No explicit size on SF Symbols: the default (18 x 14 pt) fits the 22 pt square item on every menu bar; a forced 16 pt image measured 23 x 18 pt and lost its bottom edge on a 1x display.
     private func updateGlyph() {
         guard let button = statusItem.button else { return }
         let paused = ready && !arrange.arranger.pauseReasons.isEmpty
         let zoomed = arrange.isZoomEnabled && arrange.pointerDisplay().uuid.map { arrange.arranger.view(on: $0) != .home } == true
-        let (symbol, description) =
-            !ready ? ("exclamationmark.triangle", "Transom: Accessibility access needed")
-            : paused ? ("rectangle.split.2x1", MenuCopy.pausedGlyphDescription)
-            : zoomed ? ("rectangle.split.2x1", ZoomCopy.zoomedInDescription) : ("rectangle.split.2x1", "Transom")
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        let description =
+            !ready ? "Transom: Accessibility access needed"
+            : paused ? MenuCopy.pausedGlyphDescription
+            : zoomed ? ZoomCopy.zoomedInDescription : "Transom"
+        let image: NSImage?
+        // A copy: NSImage(named:) hands out one shared instance. No catalog under `swift run`, so the symbol stays.
+        if let name = Self.glyphName(ready: ready, paused: paused, zoomed: zoomed),
+           let named = NSImage(named: name)?.copy() as? NSImage {
+            named.size = NSSize(width: 18, height: 18)
+            image = named
+        } else {
+            image = NSImage(systemSymbolName: ready ? "rectangle.split.2x1" : "exclamationmark.triangle", accessibilityDescription: description)
+        }
         image?.isTemplate = true
+        image?.accessibilityDescription = description
         button.image = image
         button.appearsDisabled = paused
         button.toolTip = ready && !paused && !zoomed ? Self.bundleName(logger: logger) : description
