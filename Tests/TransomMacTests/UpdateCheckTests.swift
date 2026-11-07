@@ -4,10 +4,12 @@ import TransomEngine
 import Testing
 
 /// Serves one canned response for every request and records the requests. Tests never reach the network: the client's
-/// session has only this protocol class. Shared statics are safe because the suite is `.serialized`.
+/// session has only this protocol class. Shared statics are safe because the suite is `.serialized`. Like gifsmith's
+/// `serve`, a request whose If-None-Match equals `etag` gets an empty 304.
 private final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var status = 200
     nonisolated(unsafe) static var body = Data()
+    nonisolated(unsafe) static var etag: String?
     nonisolated(unsafe) static var requests: [URLRequest] = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -15,9 +17,12 @@ private final class StubURLProtocol: URLProtocol {
 
     override func startLoading() {
         Self.requests.append(request)
-        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: nil)!
+        let notModified = Self.etag != nil && request.value(forHTTPHeaderField: "If-None-Match") == Self.etag
+        let headers = Self.etag.map { ["ETag": $0] }
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: notModified ? 304 : Self.status, httpVersion: "HTTP/1.1", headerFields: headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Self.body)
+        if !notModified { client?.urlProtocol(self, didLoad: Self.body) }
         client?.urlProtocolDidFinishLoading(self)
     }
 
@@ -45,14 +50,89 @@ private final class StubURLProtocol: URLProtocol {
     init() {
         StubURLProtocol.status = 200
         StubURLProtocol.body = Self.latestJSON
+        StubURLProtocol.etag = nil
         StubURLProtocol.requests = []
     }
 
-    private func controller(current: String) -> UpdateController {
+    private func client(_ userAgent: String = "Transom") -> GitHubReleaseClient {
         let configuration = GitHubReleaseClient.configuration()
         configuration.protocolClasses = [StubURLProtocol.self]
-        let client = GitHubReleaseClient(configuration: configuration, userAgent: "Transom/\(current)")
-        return UpdateController(client: client, currentVersion: current, build: "1", isEnabled: true)
+        return GitHubReleaseClient(configuration: configuration, userAgent: userAgent)
+    }
+
+    /// A throwaway defaults domain, never the user's.
+    private func withDefaults(_ body: (UserDefaults) async throws -> Void) async throws {
+        let suite = "com.eightabyte.transom.tests.updates.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try await body(defaults)
+    }
+
+    private func controller(current: String, defaults: UserDefaults = UserDefaults(suiteName: "com.eightabyte.transom.tests.updates")!)
+        -> UpdateController
+    {
+        UpdateController(client: client("Transom/\(current)"), currentVersion: current, build: "1", isEnabled: true, defaults: defaults)
+    }
+
+    @Test func aSecondCheckSendsTheETagAndReusesTheBodyOn304() async throws {
+        StubURLProtocol.etag = "\"e1\""
+        let releases = client()
+        let first = try await releases.latest()
+        guard case .release = first else { Issue.record("first check: \(first)"); return }
+        let second = try await releases.latest()
+        #expect(second == first)
+        #expect(StubURLProtocol.requests.count == 2)
+        #expect(StubURLProtocol.requests[0].value(forHTTPHeaderField: "If-None-Match") == nil)
+        #expect(StubURLProtocol.requests[1].value(forHTTPHeaderField: "If-None-Match") == "\"e1\"")
+    }
+
+    @Test func a304WithNoStoredBodyIsAFailedCheck() async {
+        StubURLProtocol.status = 304
+        StubURLProtocol.body = Data()
+        await #expect(throws: (any Error).self) { try await client().latest() }
+        let updates = controller(current: "0.8.0")
+        await updates.checkNow()
+        #expect(updates.status == .idle)
+        #expect(updates.error == .checkFailed)
+    }
+
+    @Test func rateLimitAnswersAreFailedChecks() async throws {
+        for code in [403, 429, 500, 503] {
+            StubURLProtocol.status = code
+            await #expect(throws: (any Error).self, "\(code)") { try await client().latest() }
+            let manual = controller(current: "0.8.0")
+            await manual.checkNow()
+            #expect(manual.status == .idle)
+            #expect(manual.error == .checkFailed)
+            let automatic = controller(current: "0.8.0")
+            await automatic.checkNow(manual: false)
+            #expect(automatic.status == .idle)
+            #expect(automatic.error == nil)
+        }
+        StubURLProtocol.status = 404
+        #expect(try await client().latest() == UpdateCheck.none)
+    }
+
+    @Test func anOversizedBodyIsAFailedCheck() async {
+        StubURLProtocol.body = Self.latestJSON + Data(repeating: UInt8(ascii: " "), count: UpdateFeed.maxJSONBytes)
+        await #expect(throws: (any Error).self) { try await client().latest() }
+    }
+
+    @Test func theAutomaticSwitchDefaultsOnAndPersists() async throws {
+        try await withDefaults { defaults in
+            let updates = controller(current: "0.8.0", defaults: defaults)
+            #expect(UpdateController.automaticKey == "updates.automatic")
+            #expect(updates.automatic)
+            #expect(defaults.object(forKey: UpdateController.automaticKey) == nil)
+            updates.automatic = false
+            #expect(defaults.bool(forKey: UpdateController.automaticKey) == false)
+            #expect(defaults.object(forKey: UpdateController.automaticKey) != nil)
+            #expect(!controller(current: "0.8.0", defaults: defaults).automatic)
+        }
+        #expect(UpdateCopy.automaticToggle == "Check for updates automatically")
+        #expect(
+            UpdateCopy.automaticFooter
+                == "Transom asks GitHub for the latest release when it opens and once a day. Nothing about you or your Mac is sent.")
     }
 
     @Test func aNewerPublishedReleaseIsAvailable() async {
@@ -123,7 +203,7 @@ private final class StubURLProtocol: URLProtocol {
         configuration.protocolClasses = [StubURLProtocol.self]
         let off = UpdateController(
             client: GitHubReleaseClient(configuration: configuration, userAgent: "Transom"), currentVersion: "dev", build: "?",
-            isEnabled: false)
+            isEnabled: false, defaults: UserDefaults(suiteName: "com.eightabyte.transom.tests.updates")!)
         await off.checkNow()
         #expect(off.status == .idle)
         #expect(StubURLProtocol.requests.isEmpty)
