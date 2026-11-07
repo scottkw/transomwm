@@ -32,7 +32,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         let source = try quarantinedBundle(in: dir)
         let destination = dir.appendingPathComponent("Transom.app")
-        try AppMover.copy(from: source, to: destination, trash: { (_: URL) throws -> Void in Issue.record("nothing to trash") })
+        try AppMover.copy(from: source, to: destination, trash: { (_: URL) throws -> URL? in Issue.record("nothing to trash"); return nil })
         let binary = destination.appendingPathComponent("Contents/MacOS/Transom").path
         #expect(FileManager.default.fileExists(atPath: binary))
         #expect(!quarantined(destination.path))
@@ -48,9 +48,10 @@ import Testing
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let fakeTrash = dir.appendingPathComponent("Trash")
         var trashed: [URL] = []
-        try AppMover.copy(from: source, to: destination, trash: { (url: URL) throws -> Void in
+        try AppMover.copy(from: source, to: destination, trash: { (url: URL) throws -> URL? in
             trashed.append(url)
             try FileManager.default.moveItem(at: url, to: fakeTrash)
+            return fakeTrash
         })
         #expect(trashed == [destination])
         #expect(FileManager.default.fileExists(atPath: fakeTrash.path))
@@ -65,7 +66,7 @@ import Testing
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let missing = dir.appendingPathComponent("Gone/Transom.app")
         #expect(throws: (any Error).self) {
-            try AppMover.copy(from: missing, to: destination, trash: { (_: URL) throws -> Void in Issue.record("trashed before the copy") })
+            try AppMover.copy(from: missing, to: destination, trash: { (_: URL) throws -> URL? in Issue.record("trashed before the copy"); return nil })
         }
         #expect(FileManager.default.fileExists(atPath: destination.path))
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["Transom.app"], "no staging copy left behind")
@@ -80,9 +81,33 @@ import Testing
         let destination = dir.appendingPathComponent("Transom.app")
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         #expect(throws: Refused.self) {
-            try AppMover.copy(from: source, to: destination, trash: { (_: URL) throws -> Void in throw Refused() })
+            try AppMover.copy(from: source, to: destination, trash: { (_: URL) throws -> URL? in throw Refused() })
         }
         #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted() == ["Source", "Transom.app"])
+    }
+
+    /// WR-01 (round 2): a rename that fails after the trash puts the installed copy back and removes the staged one.
+    @Test func aFailedRenameAfterTheTrashRestoresTheInstalledCopy() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let source = try quarantinedBundle(in: dir)
+        let destination = dir.appendingPathComponent("Transom.app")
+        let marker = destination.appendingPathComponent("installed")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: marker)
+        let fakeTrash = dir.appendingPathComponent("Trash")
+        #expect(throws: (any Error).self) {
+            try AppMover.copy(from: source, to: destination, trash: { (url: URL) throws -> URL? in
+                try FileManager.default.moveItem(at: url, to: fakeTrash)
+                // An I/O failure stand-in: the staged copy vanishes, so the rename that follows throws.
+                for name in try FileManager.default.contentsOfDirectory(atPath: dir.path) where name.hasPrefix(".Transom.app.moving-") {
+                    try FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+                }
+                return fakeTrash
+            })
+        }
+        #expect(try String(contentsOf: marker, encoding: .utf8) == "old", "the installed copy is back")
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted() == ["Source", "Transom.app"])
     }
 
