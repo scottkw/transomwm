@@ -389,7 +389,8 @@ import os
         [
             .arranging: {
                 SettingsWindowController.hosting(
-                    ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts))
+                    ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts),
+                    height: 640)
             },
             .shortcuts: { SettingsWindowController.hosting(ShortcutsView(), height: 560) },
         ]

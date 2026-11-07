@@ -28,6 +28,11 @@ struct ArrangingTab: View {
     static func footer(_ mode: NewWindowsMode) -> String { MenuCopy.newWindowsTooltip(mode) }
     static func footer(_ mode: DragToDockMode) -> String { MenuCopy.dragToDockTooltip(mode) }
 
+    /// One row per conflicting macOS feature, in `Conflict.allCases` order.
+    static func featureRows(_ conflicts: ConflictController) -> [(conflict: Conflict, name: String, detail: String, isOn: Bool)] {
+        Conflict.allCases.map { ($0, SettingsCopy.featureName($0), ConflictCopy.tooltip($0), conflicts.active.contains($0)) }
+    }
+
     var body: some View {
         Form {
             Section {
@@ -58,6 +63,30 @@ struct ArrangingTab: View {
                 Text(SettingsCopy.tabGroupsSection)
             } footer: {
                 Self.rowFooter(SettingsCopy.confirmCloseGroupFooter)
+            }
+            Section {
+                ForEach(Self.featureRows(conflicts), id: \.conflict) { row in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(row.name)
+                            Self.rowFooter(row.detail)
+                        }
+                        Spacer()
+                        if row.isOn {
+                            Text(SettingsCopy.featureOn)
+                            // The menu line's immediate action (Phase 3 D-19).
+                            Button(ConflictCopy.turnOffButton) { Task { await conflicts.turnOff(row.conflict) } }
+                        } else {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityHidden(true)
+                            Text(SettingsCopy.featureOff)
+                        }
+                    }
+                }
+                Button(ConflictCopy.restoreItem) { conflicts.restore() }.disabled(!conflicts.canRestore)
+            } header: {
+                Text(SettingsCopy.featuresSection)
+            } footer: {
+                Self.rowFooter(SettingsCopy.restoreFooter)
             }
         }
         .formStyle(.grouped)

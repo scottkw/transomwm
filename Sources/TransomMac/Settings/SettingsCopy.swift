@@ -13,6 +13,19 @@ nonisolated public enum SettingsCopy {
     public static let tabGroupsSection = "Tab groups"
     public static let confirmCloseGroup = "Ask before Close Group closes every window"
     public static let confirmCloseGroupFooter = "Turn this back on if you chose not to be asked."
+    public static let featuresSection = "macOS window features"
+    public static let featureOn = "On"
+    public static let featureOff = "Off"
+    public static let restoreFooter = "Puts back the settings Transom turned off."
+
+    /// Sentence case, as the UI-SPEC writes the rows (the menu and toasts keep `ConflictCopy.featureName`).
+    public static func featureName(_ conflict: Conflict) -> String {
+        switch conflict {
+        case .stageManager: "Stage Manager"
+        case .edgeTiling: "macOS edge tiling"
+        case .clickWallpaper: "Click wallpaper to reveal desktop"
+        }
+    }
 
     public static func tabLabel(_ pane: SettingsPane) -> String {
         switch pane {
