@@ -71,3 +71,34 @@ struct UpdateStateTests {
         #expect(machine.error == nil)
     }
 }
+
+/// gifsmith `services/updates.go` `Download`: only from available or opened, busy until it ends, failures go back to
+/// available.
+extension UpdateStateTests {
+    @Test func aDownloadStartsOnlyFromAvailableOrOpened() {
+        let release = UpdateStateTests.release
+        for status in [UpdateStatus.idle, .current("0.9.0")] {
+            var machine = UpdateStateTests.machine(status)
+            let started = machine.begin(.download)
+            #expect(!started)
+            #expect(machine.status == status)
+        }
+        var machine = UpdateStateTests.machine(.available(release))
+        let started = machine.begin(.download)
+        #expect(started)
+        #expect(machine.status == .downloading(release, fraction: nil))
+        for op in [UpdateMachine.Operation.check, .download] {
+            let refused = machine.begin(op)
+            #expect(!refused)
+        }
+        machine.succeed(.verifying(release))
+        #expect(machine.isBusy)
+        machine.succeed(.opened(release))
+        #expect(!machine.isBusy)
+        let again = machine.begin(.download)
+        #expect(again)
+        machine.fail(.verifyFailed, manual: true)
+        #expect(machine.status == .available(release))
+        #expect(machine.error == .verifyFailed)
+    }
+}

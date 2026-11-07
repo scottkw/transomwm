@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import TransomEngine
@@ -15,13 +16,27 @@ import os
     let isEnabled: Bool
     private let client: GitHubReleaseClient
     private let defaults: UserDefaults
+    private let downloader: DMGDownloader
+    /// `DMGVerifier.check`; runs off the main actor (the notarisation check may ask Apple).
+    private let verify: @Sendable (URL) -> OSStatus
+    /// `NSWorkspace.open`; tests record instead of opening.
+    private let open: (URL) -> Bool
     /// On by default. The daily schedule that reads it lands in 09-17.
     static let automaticKey = "updates.automatic"
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "update")
 
-    init(client: GitHubReleaseClient, currentVersion: String, build: String, isEnabled: Bool, defaults: UserDefaults) {
+    init(
+        client: GitHubReleaseClient, currentVersion: String, build: String, isEnabled: Bool, defaults: UserDefaults,
+        downloader: DMGDownloader = DMGDownloader(
+            configuration: GitHubReleaseClient.configuration(), directory: DMGDownloader.productionDirectory),
+        verify: @escaping @Sendable (URL) -> OSStatus = { DMGVerifier.check($0) },
+        open: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    ) {
         self.client = client
         self.defaults = defaults
+        self.downloader = downloader
+        self.verify = verify
+        self.open = open
         self.currentVersion = currentVersion
         self.build = build
         self.isEnabled = isEnabled
@@ -74,5 +89,49 @@ import os
         }
         logger.info("check: up to date \(self.currentVersion, privacy: .public)")
         machine.succeed(.current(currentVersion))
+    }
+
+    /// Download and Open (D-10), gifsmith `UpdateService.Download`: download with size and digest, then signature, Team
+    /// ID and notarisation, then quarantine, then open. Only a fully verified file reaches `open`.
+    func downloadAndOpen() async {
+        guard machine.begin(.download), case .downloading(let release, _) = machine.status else { return }
+        let file: URL
+        do {
+            file = try await downloader.download(release) { [weak self] fraction in
+                // A late progress tick must not undo verifying.
+                guard let self, case .downloading = self.machine.status else { return }
+                self.machine.succeed(.downloading(release, fraction: fraction))
+            }
+        } catch DMGDownloader.Failure.digest {
+            logger.error("verify failed: digest")
+            machine.fail(.verifyFailed, manual: true)
+            return
+        } catch {
+            logger.error("download failed: \(error.localizedDescription)")
+            machine.fail(.downloadFailed(version: release.version), manual: true)
+            return
+        }
+        logger.info("download \(release.version, privacy: .public) done")
+        machine.succeed(.verifying(release))
+        let check = verify
+        let status = await Task.detached { check(file) }.value
+        guard status == errSecSuccess else {
+            logger.error("verify failed: team id (\(status, privacy: .public))")
+            machine.fail(.verifyFailed, manual: true)
+            return
+        }
+        guard DMGVerifier.quarantine(file) else {
+            logger.error("verify failed: quarantine")
+            machine.fail(.verifyFailed, manual: true)
+            return
+        }
+        guard open(file) else {
+            // gifsmith: the verified file stays for a retry.
+            logger.error("open failed")
+            machine.fail(.openFailed, manual: true)
+            return
+        }
+        logger.info("opened \(release.assetName, privacy: .public)")
+        machine.succeed(.opened(release))
     }
 }
