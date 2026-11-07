@@ -1,288 +1,193 @@
 ---
 phase: 09-polish-ship
-reviewed: 2026-11-07T21:22:11Z
+reviewed: 2026-11-07T21:33:45Z
 depth: standard
-files_reviewed: 124
+iteration: 2
+files_reviewed: 11
 files_reviewed_list:
   - .github/workflows/ci.yml
-  - .github/workflows/release.yml
   - .github/workflows/tap.yml
-  - Sources/TransomEngine/Arranger+Views.swift
-  - Sources/TransomEngine/Arranger.swift
-  - Sources/TransomEngine/CLICommandLine.swift
-  - Sources/TransomEngine/CLICopy.swift
-  - Sources/TransomEngine/CloseRule.swift
-  - Sources/TransomEngine/Command.swift
   - Sources/TransomEngine/InstallLocation.swift
-  - Sources/TransomEngine/OnboardingFlow.swift
-  - Sources/TransomEngine/SettingsPane.swift
-  - Sources/TransomEngine/TransomURL.swift
-  - Sources/TransomEngine/UpdateRelease.swift
-  - Sources/TransomEngine/UpdateState.swift
-  - Sources/TransomEngine/WindowTracker.swift
-  - Sources/TransomFixtureApp/main.swift
-  - Sources/TransomMac/ArrangeController.swift
-  - Sources/TransomMac/ConflictController.swift
-  - Sources/TransomMac/DragToDockPreference.swift
-  - Sources/TransomMac/GapPreference.swift
-  - Sources/TransomMac/GesturePreference.swift
-  - Sources/TransomMac/HighlightColor.swift
-  - Sources/TransomMac/Input/GestureTapRules.swift
-  - Sources/TransomMac/LoginItem.swift
-  - Sources/TransomMac/MinimumHintsStore.swift
-  - Sources/TransomMac/MissionControlTakeover.swift
-  - Sources/TransomMac/NewWindowsPreference.swift
   - Sources/TransomMac/Onboarding/AppMover.swift
   - Sources/TransomMac/Onboarding/OnboardingCopy.swift
   - Sources/TransomMac/Onboarding/OnboardingSteps.swift
-  - Sources/TransomMac/Overlay/GapHandlePanels.swift
-  - Sources/TransomMac/Overlay/PreviewPanel.swift
-  - Sources/TransomMac/Overview/OverviewController.swift
-  - Sources/TransomMac/Permission/SetupView.swift
   - Sources/TransomMac/Permission/SetupWindowController.swift
-  - Sources/TransomMac/Settings/ArrangingTab.swift
-  - Sources/TransomMac/Settings/ExclusionsTab.swift
-  - Sources/TransomMac/Settings/GeneralTab.swift
-  - Sources/TransomMac/Settings/MenuBarTab.swift
-  - Sources/TransomMac/Settings/SettingsCopy.swift
-  - Sources/TransomMac/Settings/SettingsWindowController.swift
-  - Sources/TransomMac/Settings/ShortcutsTab.swift
-  - Sources/TransomMac/Settings/UpdatesTab.swift
-  - Sources/TransomMac/Settings/ZoomGesturesTab.swift
-  - Sources/TransomMac/Shell/CommandMenu.swift
-  - Sources/TransomMac/Shell/FreezeTest.swift
-  - Sources/TransomMac/Shell/MenuCopy.swift
-  - Sources/TransomMac/Shell/OverviewCopy.swift
-  - Sources/TransomMac/Shell/ReportProblem.swift
-  - Sources/TransomMac/Shell/StatusItemController.swift
-  - Sources/TransomMac/Shell/TabCopy.swift
-  - Sources/TransomMac/Shell/ViewControlItems.swift
-  - Sources/TransomMac/Shell/ViewCopy.swift
-  - Sources/TransomMac/Shell/ZoomCopy.swift
-  - Sources/TransomMac/TransomMacApp.swift
-  - Sources/TransomMac/Updates/DMGDownloader.swift
-  - Sources/TransomMac/Updates/DMGVerifier.swift
-  - Sources/TransomMac/Updates/GitHubReleaseClient.swift
-  - Sources/TransomMac/Updates/UpdateController.swift
-  - Sources/TransomMac/Updates/UpdateCopy.swift
-  - Sources/TransomMac/Zoom/CollapsedPanels.swift
-  - Sources/TransomMac/Zoom/GestureController.swift
-  - Sources/TransomMac/Zoom/StagePanel.swift
-  - Sources/TransomTestSupport/FakeWindowSystem.swift
-  - Sources/transom-gesture-spike/main.swift
-  - Sources/transom-spaces-spike/main.swift
-  - Tests/TransomEngineTests/ArrangerViewsTests.swift
-  - Tests/TransomEngineTests/CLICommandLineTests.swift
-  - Tests/TransomEngineTests/CLICopyTests.swift
-  - Tests/TransomEngineTests/CloseRuleTests.swift
-  - Tests/TransomEngineTests/CloseScenarioTests.swift
   - Tests/TransomEngineTests/InstallLocationTests.swift
-  - Tests/TransomEngineTests/OnboardingFlowTests.swift
-  - Tests/TransomEngineTests/TransomURLTests.swift
-  - Tests/TransomEngineTests/UpdateFeedTests.swift
-  - Tests/TransomEngineTests/UpdateStateTests.swift
-  - Tests/TransomMacIntegrationTests/GestureTapIntegrationTests.swift
-  - Tests/TransomMacIntegrationTests/IntegrationSupport.swift
-  - Tests/TransomMacIntegrationTests/OverviewSpaceSwitchIntegrationTests.swift
-  - Tests/TransomMacIntegrationTests/RematchIntegrationTests.swift
-  - Tests/TransomMacIntegrationTests/TabGroupIntegrationTests.swift
-  - Tests/TransomMacIntegrationTests/TabStripSpaceIntegrationTests.swift
-  - Tests/TransomMacIntegrationTests/TabsIntegrationTests.swift
-  - Tests/TransomMacIntegrationTests/ViewsIntegrationTests.swift
   - Tests/TransomMacTests/AppMoverTests.swift
-  - Tests/TransomMacTests/CollapsedLabelTests.swift
-  - Tests/TransomMacTests/DisplaySettlerTests.swift
-  - Tests/TransomMacTests/FreezeTestTests.swift
-  - Tests/TransomMacTests/GestureTapRulesTests.swift
-  - Tests/TransomMacTests/HighlightColorTests.swift
-  - Tests/TransomMacTests/LoginItemTests.swift
-  - Tests/TransomMacTests/MinimumHintsStoreTests.swift
   - Tests/TransomMacTests/OnboardingControllerTests.swift
-  - Tests/TransomMacTests/OverviewCopyTests.swift
-  - Tests/TransomMacTests/ReportProblemTests.swift
-  - Tests/TransomMacTests/SettingsModelTests.swift
-  - Tests/TransomMacTests/SettingsRouteTests.swift
-  - Tests/TransomMacTests/SettingsWindowTests.swift
-  - Tests/TransomMacTests/SetupWindowTests.swift
-  - Tests/TransomMacTests/StatusGlyphTests.swift
-  - Tests/TransomMacTests/TabCopyTests.swift
-  - Tests/TransomMacTests/TakeoverMenuTests.swift
-  - Tests/TransomMacTests/UpdateCheckTests.swift
-  - Tests/TransomMacTests/UpdateDownloadTests.swift
-  - Tests/TransomMacTests/UpdateMenuTests.swift
-  - Tests/TransomMacTests/UpdateRealDMGTests.swift
-  - Tests/TransomMacTests/UpdateScheduleTests.swift
-  - Tests/TransomMacTests/ViewControlItemsTests.swift
-  - Tests/TransomMacTests/ZoomCopyTests.swift
-  - docs/macos-beta-checklist.md
-  - docs/release-notes-0.9.0.md
   - docs/releasing.md
-  - packaging/homebrew/transom.rb.template
-  - scripts/release-version.sh
-  - scripts/release.sh
-  - xcode/Assets.xcassets/AppIcon.appiconset/Contents.json
-  - xcode/Assets.xcassets/Contents.json
-  - xcode/Assets.xcassets/TransomTemplate.imageset/Contents.json
-  - xcode/Assets.xcassets/TransomTemplate.imageset/TransomTemplate.svg
-  - xcode/Assets.xcassets/TransomZoomedTemplate.imageset/Contents.json
-  - xcode/Assets.xcassets/TransomZoomedTemplate.imageset/TransomZoomedTemplate.svg
-  - xcode/designated-requirement.txt
-  - xcode/project.yml
 findings:
   critical: 0
-  warning: 7
-  info: 3
-  total: 10
+  warning: 4
+  info: 7
+  total: 11
   necessity: 0
 status: issues_found
 ---
 
-# Phase 9: Code Review Report
+# Phase 9: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-11-07T21:22:11Z
+**Reviewed:** 2026-11-07T21:33:45Z
 **Depth:** standard
-**Files Reviewed:** 124
+**Files Reviewed:** 11
 **Status:** issues_found
 
 ## Summary
 
-Scope was the diff from `24c279f` to HEAD. I read every changed source file and the workflow and release scripts in full. I read test files only to check their reliability: shared stub state, skip gates and serialisation.
+This is the second review. It covers the fixes for WR-01 to WR-07 (commits `b6f7825`..`e3b1025`, diff base `bc1e553`). I read each changed file in full, along with `OnboardingFlow.swift` and `xcode/project.yml`, which the fixed code depends on. I ran the CI signing guard under `bash -eo pipefail` against the real `project.yml` and against padded copies. I did not run the test suite or any live tests, and I did not set `TRANSOM_LIVE`.
 
-**Updater (sound).** `GitHubReleaseClient`, `UpdateFeed`, `DMGDownloader`, `DMGVerifier` and `UpdateController` hold up against the threat model. Hosts are compared exactly, `..` and userinfo are refused, and every redirect is checked against the allow-list, with at most 5. The byte count is capped while downloading. The size and SHA-256 are checked before the move from `.part`. The requirement string pins `anchor apple generic`, the Team ID OU and `notarized`. Quarantine is set before `open`, and a failed check deletes the file. The progress callback cannot undo `.verifying`. I found no defect there.
+### Round-1 findings and how they were resolved
 
-**TransomURL and CLI settings (sound).** `settings?pane=` parsing is strict. Only a known `SettingsPane` raw value ever reaches the URL. The rate limiter shares one key across all panes.
+| ID | Round-1 finding | Result |
+|---|---|---|
+| WR-01 | Move trashed the installed copy before the new one existed | **Mostly fixed.** The copy is staged first. One window is still open: the rename fails after the trash has succeeded. See WR-01 below. |
+| WR-02 | A Debug build could replace the release `Transom.app` | **Fixed.** `classify(bundleID:...)` returns `.other` for any bundle except `com.eightabyte.transom`, so Move is never offered. |
+| WR-03 | The Move step had no way past it | **Fixed.** Not Now calls `advance()`. The new path exposes two smaller defects (WR-02, WR-03 below). |
+| WR-04 | The CI signing guard matched substrings | **Fixed** for the substring case. The new pipeline can fail falsely under `pipefail` once the file grows (WR-04 below). |
+| WR-05 | The CI job had no timeout | **Fixed.** `timeout-minutes: 60`. |
+| WR-06 | The tap took prereleases and allowed downgrades | **Fixed.** The `if:` gate plus the `releases/latest` equality check. A prerelease that is later promoted is not picked up automatically (IN-05). |
+| WR-07 | `HOMEBREW_TAP_TOKEN` was a repository secret | **Fixed in the workflow and docs.** The `tap` environment is limited to `main` and `v*`. Creating `v*` tags is admin-only through the existing tag ruleset (releasing.md step 4). There is a residual note about `main` with no reviewer (IN-04). The manual setup on GitHub is still pending. |
+| IN-01..IN-03 | Info | Carried unchanged below. |
 
-**ReportProblem (sound).** It carries counts and fixed capability strings only. No titles, app names, bundle IDs or paths leak, and the query encoding removes `+&=#`.
-
-**CloseRule / WindowTracker, D-23 and D-25.** I traced the new rows against the live-window cases:
-- Minimised, hidden and other-Space windows answer AX as valid, so they never reach the "ordered out" row.
-- A Cmd-T or Cmd-W in a group rebinds `visibleMemberID` through `tabGroups.update` in the same refresh, before `confirmClosedTabGroups` runs.
-
-I could not build a provable case that closes a live window. The one inconsistency I found is Info only (IN-01).
-
-**Where the defects are.** Most are in the Move-to-Applications onboarding path (WR-01 to WR-03) and in CI/release hardening (WR-04 to WR-07).
-
-**Swift 6.3 hazard (not proven).** The flagged `ViewsIntegrationTests.swift:57` is `FixtureProcess.launch(...)` inside a `@MainActor` test, with no Sendable closure. `IntegrationEnv`'s statics are nonisolated: the test target has no default isolation (`Package.swift:50-52`), and `SpaceChangeRelay.marker` is declared `nonisolated static`. `swift build --build-tests` on the local 6.4.2 toolchain printed no concurrency diagnostics. That build may have been incremental, and I could not check 6.3.3. So I am not reporting it as a finding. Confirm it with the CI log of the next `swift test` run on `macos-26`.
-
-**Not done.** No tests were run, and no live tests were run.
+**Verified sound:**
+- The AppMover staging copy, the quarantine strip on the staged tree (`XATTR_NOFOLLOW`, so framework symlinks are not followed), and the rename within one folder.
+- The translocated-from-`/Applications` case: the source is read in full before the trash moves it.
+- The relaunch argv quoting.
+- The tap `if:` expression, which short-circuits for dispatch.
+- `TAG` reaches the script only through `env`, never as a `${{ }}` splice.
+- For a `release` event the run's ref is `refs/tags/<tag>`, which the `v*` deployment rule allows.
 
 ## Warnings
 
-### WR-01: Move to Applications trashes the installed copy before the new copy exists, and the source can be the bundle it just trashed
+### WR-01: A rename that fails after a successful trash deletes the only good copy
 
-**File:** `Sources/TransomMac/Onboarding/AppMover.swift:9-18`, `Sources/TransomMac/Permission/SetupWindowController.swift:141-151`
-**Issue:**
-- **Not atomic.** `copy(from:to:trash:)` first trashes `/Applications/Transom.app`, then runs `copyItem`. If the copy fails part-way (disk full, a permission error on one file, or a read error from an ejecting DMG), the user is left with no Transom in Applications. The failure callout then tells them to drag it there themselves.
-- **The source can be the trashed bundle.** `InstallLocation.classify` checks `/AppTranslocation/` before `/Applications/`. Something other than Finder can put a quarantined Transom into `/Applications`: `unzip`, `ditto`, or a cask install that keeps quarantine. That copy runs translocated, so `needsMove` is true. The Replace alert then asks to replace "the Transom in Applications", which is the very bundle that is running. `Bundle.main.bundleURL` is a read-only view of `/Applications/Transom.app`, and that is the bundle `trash` moves away just before `copyItem` reads from it. At best the user gets a misleading "Replace" prompt about their own copy. At worst the copy reads from a moved original and fails, which leaves the WR-01 state above.
+**File:** `Sources/TransomMac/Onboarding/AppMover.swift:14-27`
+**Issue:** One `do`/`catch` covers every step. If `trash(destination)` succeeds and the `moveItem(at: staging, to: destination)` on line 23 then throws, the `catch` on line 25 deletes `staging`. That leaves no Transom in `/Applications`: the old copy is in the Trash and the new one has been deleted. This is the round-1 WR-01 end state again, only through a narrower window.
 
-**Fix:** finish the copy before touching the destination:
+The rename can fail if something recreates `/Applications/Transom.app` between the trash and the rename. Examples are a second Transom instance, a `brew install --cask` running at the same moment, or MDM. It can also fail with an I/O error. The user then sees "Couldn't move Transom. Drag it to the Applications folder yourself". The installed copy can be recovered from the Trash, so this is not permanent data loss, but the cleanup code is what creates the bad state. No test covers a rename failure after the trash.
+**Fix:** Delete the staged copy only while the destination is still untouched. Once the trash has succeeded, put the old copy back:
 ```swift
-static func copy(from source: URL, to destination: URL, trash: (URL) throws -> Void) throws {
-    let staging = destination.deletingLastPathComponent()
-        .appending(path: ".\(destination.lastPathComponent).moving-\(UUID().uuidString)")
-    try FileManager.default.copyItem(at: source, to: staging)          // read the source first, whatever it is
-    // strip quarantine on `staging` as today
+static func copy(from source: URL, to destination: URL, trash: (URL) throws -> URL?) throws {
+    let staging = ...
     do {
-        if FileManager.default.fileExists(atPath: destination.path) { try trash(destination) }
-        try FileManager.default.moveItem(at: staging, to: destination)  // same volume: a rename
+        try FileManager.default.copyItem(at: source, to: staging)
+        // strip quarantine as today
+    } catch { try? FileManager.default.removeItem(at: staging); throw error }
+    var trashed: URL?
+    if FileManager.default.fileExists(atPath: destination.path) {
+        do { trashed = try trash(destination) } catch { try? FileManager.default.removeItem(at: staging); throw error }
+    }
+    do {
+        try FileManager.default.moveItem(at: staging, to: destination)
     } catch {
+        if let trashed { try? FileManager.default.moveItem(at: trashed, to: destination) }  // restore the installed copy
         try? FileManager.default.removeItem(at: staging)
         throw error
     }
 }
+// moveToTrash: var out: NSURL?; try FileManager.default.trashItem(at: url, resultingItemURL: &out); return out as URL?
 ```
-Also cover the translocated-from-`/Applications` case. Either skip the Replace alert when the running bundle's version and bundle ID match the destination's, or word the alert so it does not imply that a second copy exists.
+Add a test in which the trash closure succeeds, then places a file at `destination` so that the rename fails. The test should expect the original to be restored.
 
-### WR-02: Move always targets `/Applications/Transom.app`, so a Debug build replaces the release app
+### WR-02: Not Now drops onboarding progress, so a relaunch mid-setup starts again at Welcome
 
-**File:** `Sources/TransomMac/Permission/SetupWindowController.swift:142`
-**Issue:** The destination is hard-coded. A Debug build (`Transom Debug.app`, bundle ID `com.eightabyte.transom.debug`) that runs from `~/Downloads`, `/Volumes/...` or a translocated path gets the Move step too. On confirm it trashes the user's release `Transom.app` and installs the Debug build under the release name, with a different bundle ID. That has two effects:
-- The release app's Accessibility grant no longer matches anything.
-- `UpdateController.isEnabled` turns the updater off for that bundle.
+**File:** `Sources/TransomMac/Onboarding/OnboardingSteps.swift:84`, `Sources/TransomMac/Permission/SetupWindowController.swift:61,107-115`, `Sources/TransomEngine/OnboardingFlow.swift:28-29`
+**Issue:**
+- **What happens.** `resume` always returns `.move` when Move is in the steps. That is intended. But Not Now calls plain `advance()`, which goes to `next(after: .move)`, and that is always `.welcome`. The stored `onboarding.step` is ignored, even though it is still intact: `go(to: .move)` at launch is a no-op because `current` is already `.move`, so nothing overwrites it.
+- **Common case.** A user on a disk image or Downloads copy picks Not Now, reaches Screen Recording and grants it. macOS then asks to "Quit & Reopen". On relaunch they land on Move, click Not Now, and start again at Welcome. `resume` exists specifically to skip past Screen Recording after this relaunch.
+- **Why it is new.** This path was unreachable before the WR-03 fix. A copy that needed Move could never get past Move.
 
-`/usr/local/bin/transom`, created by the documented `ln -sf`, then points at the Debug helper.
-
-**Fix:** derive the name from the running bundle, and only offer Move for the release bundle ID:
+**Fix:** Give Not Now its own action, which resumes the stored step among the steps after Move:
 ```swift
-let destination = URL(fileURLWithPath: "/Applications").appending(path: Bundle.main.bundleURL.lastPathComponent)
+func skipMove() {
+    let rest = Array(model.steps.drop { $0 == .move })
+    go(to: OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: rest))
+}
 ```
-Alternatively, set `needsMove = false` when `Bundle.main.bundleIdentifier != "com.eightabyte.transom"`.
+Wire it with `Button(OnboardingCopy.moveNotNowButton, action: skipMove)`. Keep the "skip Accessibility when ready" rule from `advance()` if `rest[0] == .accessibility`. Add a test: stored `screenRecording`, first run, `place: .diskImage`, skip Move, then expect `.features` or `.launchAtLogin`.
 
-### WR-03: The Move step has no way past it, so the Accessibility step cannot be reached from an external volume or `~/Downloads`
+### WR-03: After completion, the lone Accessibility step shows "Step 1 of 1" when Move comes before it
 
-**File:** `Sources/TransomMac/Onboarding/OnboardingSteps.swift:62-85`, `Sources/TransomEngine/OnboardingFlow.swift:12-16`, `Sources/TransomEngine/InstallLocation.swift:14`, `Sources/TransomMac/Permission/SetupWindowController.swift:75-82`
+**File:** `Sources/TransomEngine/OnboardingFlow.swift:20-24`
 **Issue:**
-- **No exit.** The Move step offers only Quit and Move to Applications. `steps(...)` always puts `.move` first, even after completion, giving `[.move, .accessibility]`. `show()` keeps the current step, which is `.move`. Settings ▸ General's Set Up / Fix button and the menu's Grant / Fix item also open on Move. A user whose copy cannot or should not move is stuck: there is no Continue or Not Now. That includes copies on any external drive (`/Volumes/` is classified as a disk image, so the copy shows "a disk image" for a real drive) and a copy where Move fails (for example, a standard account that cannot write `/Applications`). They can never reach the Accessibility step or its Reset flow from Transom's UI. Without Accessibility, Transom does nothing.
-- **Missed cases.** The classifier also cannot tell a mounted DMG from an external drive.
+- **The contract.** The doc comment says the lone Accessibility step shown after completion has no caption. The guard checks `steps.count > 1`, not the numbered count.
+- **The bug.** With `needsMove`, the completed steps are `[.move, .accessibility]`. `steps.count` is 2, `numbered` is `[.accessibility]`, and `caption` returns `(1, 1)`. `SetupView` then renders "Step 1 of 1" (`OnboardingSteps.swift:170`).
+- **Why it shows now.** It became visible with WR-03's Not Now: Settings ▸ General ▸ Set Up / Fix, or the menu's Grant / Fix, then Not Now. Before that fix, the Accessibility step could not be reached in that list. `OnboardingFlowTests` checks `caption(for: .accessibility, in: [.accessibility]) == nil` but not the `[.move, .accessibility]` case.
 
-**Fix:**
-1. Add a secondary "Not Now" button that calls `advance()`, so Move stays first and stays the default.
-2. Leave `.move` out of `steps(completed: true, ...)`. That way the post-completion Fix / Grant path always lands on Accessibility.
-3. If the spec must keep `/Volumes/`, check `URLResourceKey.volumeIsReadOnlyKey` or `volumeIsInternalKey`, so only read-only or disk-image volumes count as `.diskImage`.
+**Fix:** `guard numbered.count > 1, let index = numbered.firstIndex(of: step) else { return nil }`. Add `#expect(OnboardingFlow.caption(for: .accessibility, in: [.move, .accessibility]) == nil)`.
 
-### WR-04: The CI "Signing identity unchanged" guard is a substring match, and the debug and cli lines satisfy it
+### WR-04: The new CI guard fails with a false error under `pipefail` once `project.yml` passes about 16 KB
 
-**File:** `.github/workflows/ci.yml:33-37`
-**Issue:** `grep -qF -- 'PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.transom' xcode/project.yml` also matches `PRODUCT_BUNDLE_IDENTIFIER: com.eightabyte.transom.debug` (line 52) and `...transom.cli` (line 78). If the Release line (line 57) changed to a different ID, the guard would still pass. The comment says that change would cost every user their Accessibility grant, and this guard is meant to catch it.
-**Fix:** anchor the match to the whole line:
-```bash
-grep -qE '^[[:space:]]*PRODUCT_BUNDLE_IDENTIFIER:[[:space:]]*com\.eightabyte\.transom[[:space:]]*$' xcode/project.yml \
-  || { echo "::error::Release PRODUCT_BUNDLE_IDENTIFIER changed"; exit 1; }
-```
-Anchoring the other two checks the same way also stops a commented-out line from satisfying them. Better still, read `targets.Transom.settings.configs.Release.PRODUCT_BUNDLE_IDENTIFIER` with `yq`.
-
-### WR-05: The CI test job has no `timeout-minutes`
-
-**File:** `.github/workflows/ci.yml:21-22`
-**Issue:** The `test` job has `runs-on: macos-26` and no job-level `timeout-minutes`. The comment at lines 39-41 records a parallel run that "exits early with no message" on the runner. A hung `swift test` (a deadlocked suite, or a helper waiting on a run loop, as in the 09-25 Overview note) would hold a macOS runner for the 6-hour default. `release.yml` and `tap.yml` both set timeouts.
-**Fix:** add `timeout-minutes: 60` (or a measured value) under `jobs.test`.
-
-### WR-06: `tap.yml` publishes prereleases to the cask and lets a dispatch move the cask back to an older version
-
-**File:** `.github/workflows/tap.yml:5-12, 39-58`
+**File:** `.github/workflows/ci.yml:37-40`
 **Issue:**
-- **Prereleases.** `release: types: [published]` also fires for a release that is marked prerelease. The job does not check `github.event.release.prerelease`, so publishing a vX.Y.Z prerelease makes it the cask version for every `brew upgrade`. The app's own updater ignores prereleases (`UpdateFeed.parse`), so the two channels disagree.
-- **Downgrades.** `workflow_dispatch` accepts any published tag. Re-running it for an older tag rewrites `Casks/transom.rb` to the older version and pushes it, with no check against the current cask or `releases/latest`.
+- **Why it fails.** `defaults.run.shell: bash` makes GitHub run steps with `bash --noprofile --norc -eo pipefail`. In `sed ... | grep -qxF`, `grep -q` exits at the first match. If `sed` still has output to write, it then gets SIGPIPE, exits 141, and `pipefail` turns the pipeline into a failure. The `||` branch then prints "xcode/project.yml no longer has the line …", even though the line is there.
+- **Measured locally** (BSD sed, 100 runs each, `bash -eo pipefail`):
 
-**Fix:** gate the job, and check that the tag is the latest release:
-```yaml
-jobs:
-  cask:
-    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
-```
+  | `project.yml` size | Result |
+  |---|---|
+  | 3.5 KB (today) | 0 failures |
+  | 16.4 KB | 0 failures |
+  | 29 KB | 100 of 100 failed |
+  | 161 KB | 300 of 300 failed |
+
+- **Impact.** The file is 3,534 bytes today, so the defect is latent. It fails closed, but the message points the maintainer at the wrong cause.
+
+**Fix:** Let `grep` read all of its input. Drop `-q` and discard the output; I checked this passes 100 of 100 times on the 161 KB file and still exits 1 for a missing line:
 ```bash
-latest=$(gh api "repos/$REPO/releases/latest" --jq .tag_name)
-[ "$latest" = "$TAG" ] || { echo "::error::$TAG is not releases/latest ($latest)"; exit 1; }
+sed 's/^[[:space:]]*//; s/[[:space:]]*$//' xcode/project.yml | grep -xF -- "$want" >/dev/null \
+  || { echo "::error::xcode/project.yml no longer has the line $want"; exit 1; }
 ```
-
-### WR-07: `HOMEBREW_TAP_TOKEN` is a repository secret, not an environment secret
-
-**File:** `.github/workflows/tap.yml:60-65`, `docs/releasing.md:142-147`
-**Issue:** The signing secrets sit behind the `release` environment and its required reviewer. The tap token, which can push to `scottkw/homebrew-transom` and so change what every `brew install` downloads, is a plain repository secret. Any workflow file on any branch can reference it, and a `workflow_dispatch` of `tap.yml` from any branch runs that branch's `tap.yml`. One pushed branch with an edited workflow (`ci.yml` runs on every push) can read it. This is weaker than the protection the docs describe for the signing keys.
-**Fix:** move the token into an environment, for example `tap`, that allows only `v*` tags (deployment branch/tag rule) and optionally has a required reviewer. Add `environment: tap` to the `cask` job, and update `docs/releasing.md` to match.
+Alternatively, use `grep -qxF -- "$want" <(sed ...)`. `pipefail` does not cover a process substitution.
 
 ## Info
 
-### IN-01: A pending D-25 tab group skips CloseRule's paused-session guard
+### IN-01: A pending D-25 tab group skips CloseRule's paused-session guard (carried from round 1)
 
 **File:** `Sources/TransomEngine/WindowTracker.swift:436-441`
-**Issue:** `pendingGroups.contains(identity) ? CloseDecision.recheck : CloseRule.decide(...)` returns `.recheck` even when `context.sessionActive` is false. CloseRule's first row ("paused → noChange") is the documented contract. The effect is limited to extra quick rechecks, capped at 8 through `rechecks`, but the bypass is not stated in the CloseRule table.
-**Fix:** `let decision = !context.sessionActive ? .noChange : pendingGroups.contains(identity) ? .recheck : CloseRule.decide(...)`. Or skip the group-close look entirely while the session is inactive.
+**Issue:** `pendingGroups.contains(identity) ? CloseDecision.recheck : CloseRule.decide(...)` returns `.recheck` even when `context.sessionActive` is false. That bypasses CloseRule's first row, "paused → noChange". The effect is limited to extra rechecks, at most 8.
+**Fix:** `let decision = !context.sessionActive ? .noChange : pendingGroups.contains(identity) ? .recheck : CloseRule.decide(...)`.
 
-### IN-02: `cgByID` and `shownSpaces` are rebuilt for the same refresh
+### IN-02: `cgByID` and `shownSpaces` are rebuilt for the same refresh (carried from round 1)
 
 **File:** `Sources/TransomEngine/WindowTracker.swift:381, 429-431`
-**Issue:** `refresh` already builds `cgByID` (line 74) and passes it to `confirmClosedTabGroups`. `decide` then rebuilds both `cgByID` and `shownSpaces` from `context`. They are the same values, but there are now two sources of truth for the D-23 and D-25 inputs.
-**Fix:** pass `cgByID` and `shownSpaces` into `decide`, or compute them once on `ObservationContext`.
+**Issue:** This creates two sources of truth for the D-23 and D-25 inputs.
+**Fix:** Pass them into `decide`, or compute them once on `ObservationContext`.
 
-### IN-03: Report a Problem says "installed from the disk image" for every non-Homebrew install
+### IN-03: Report a Problem says "installed from the disk image" for every install outside Homebrew (carried from round 1)
 
 **File:** `Sources/TransomMac/Shell/ReportProblem.swift:50`
-**Issue:** `homebrew == false` prints "from the disk image". That includes `swift run`, Debug builds, `~/Applications` copies, and an app moved by WR-01 from a translocated cask install. Bug reports may then point triage at the DMG path when it was never used.
-**Fix:** print the `InstallLocation.Place` instead, for example `installed: applications | other | homebrew`.
+**Issue:** `homebrew == false` prints "from the disk image". That includes `swift run`, Debug builds, copies in `~/Applications`, and copies moved by Move.
+**Fix:** Print the `InstallLocation.Place` instead.
+
+### IN-04: The `tap` environment allows `main` with no reviewer, and GitHub auto-creates a missing environment without rules
+
+**File:** `.github/workflows/tap.yml:31-33`, `docs/releasing.md:147-149`
+**Issue:**
+- **No reviewer on `main`.** `v*` tags are admin-only through the ruleset, but `main` has no branch rule in these docs. Any push to `main` can add `environment: tap` to a job in `ci.yml`, which runs on every push, and read the token. Today only the maintainer can push, so this is a note, not a finding.
+- **Auto-created environment.** If `tap.yml` runs before the maintainer creates `tap`, GitHub creates the environment itself with no deployment rules. A later `gh secret set --env tap` would then store the token in an unprotected environment.
+
+**Fix:** In `releasing.md` step 5, say "check the deployment rules even if `tap` already exists". Either make the reviewer required, or add a `main` branch ruleset (restrict pushes, require PRs).
+
+### IN-05: A prerelease promoted to a full release never updates the cask by itself
+
+**File:** `.github/workflows/tap.yml:6-7, 28`
+**Issue:** The job now skips prereleases. Promoting a prerelease fires `release: released` (and `edited`), not `published`, so the cask stays where it was until someone dispatches the workflow by hand. The documented flow never creates prereleases, so nothing breaks today.
+**Fix:** Add `released` to `types:`. The `releases/latest` check and the unchanged-diff no-op already make a double run harmless. Alternatively, note the manual dispatch in `releasing.md`.
+
+### IN-06: An interrupted Move leaves a hidden staging bundle in `/Applications` that is never cleaned up
+
+**File:** `Sources/TransomMac/Onboarding/AppMover.swift:12-13`
+**Issue:** `.Transom.app.moving-<UUID>` is hidden in Finder, and each attempt uses a new UUID. A force quit, crash or power loss during `copyItem` leaves a full-size hidden bundle that nothing removes.
+**Fix:** Before copying, remove any `.\(name).moving-*` siblings. Alternatively, stage in `FileManager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: destination, create: true)`, which is on the same volume and in a folder the system cleans up.
+
+### IN-07: The CI guard checks only that a line exists, so a per-config override passes
+
+**File:** `.github/workflows/ci.yml:37-40`
+**Issue:** `CODE_SIGN_IDENTITY` and `DEVELOPMENT_TEAM` are base settings (`project.yml:18-19`). If someone added `CODE_SIGN_IDENTITY: "Apple Development"` under `targets.Transom.settings.configs.Release`, the Release build would change and the base lines would still satisfy the guard. `release.sh`'s designated-requirement check is the real gate, so this is defence in depth only.
+**Fix:** Read the resolved Release values, for example `yq '.targets.Transom.settings.configs.Release.PRODUCT_BUNDLE_IDENTIFIER'`, and also check that no target or config overrides the base values.
 
 ---
 
-_Reviewed: 2026-11-07T21:22:11Z_
+_Reviewed: 2026-11-07T21:33:45Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
