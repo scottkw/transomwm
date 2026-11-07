@@ -69,6 +69,39 @@ Resolved in 09-29 (D-23).
   - `.build/09-29-tabs-vm27.log`, `.build/09-29-tabs-vm15.log`: TabsIntegrationTests passed on both.
   - `.build/09-29-full.log`: host gate, four passed "Test run with" lines; `scripts/check-no-appkit.sh` OK.
 - **Not covered (not measured):**
-  - (a) A whole native tab group its app closes and keeps alive on macOS 27. Its hidden members could linger in the CG list too, and `decide`'s remaining-members check cannot tell them from live hidden tabs by CG alone, so the group may stay tracked.
+  - (a) A whole native tab group its app closes and keeps alive on macOS 27. Its hidden members could linger in the CG list too, and `decide`'s remaining-members check cannot tell them from live hidden tabs by CG alone, so the group may stay tracked. Resolved in 09-30 (D-25).
   - (b) With the Spaces lookup off, a kept-alive closed window keeps rechecking, as before.
   - (c) A kept-alive closed window whose Space no display shows any more by the time Transom refreshes (Spaces switched first) keeps rechecking until that Space shows.
+
+## 09-30: macOS 27 close of a whole native tab group its app keeps alive (D-25), fixed (product)
+
+- **Cause:** a group whose app closes every tab and keeps them alive stays in the CG list. `CloseRule`'s tab-member row (`invalidElement` + in CG + known tab member) answered `.state(.absent)`, and `decide`'s remaining-members check kept the group while any member was in the CG list, so its tile stayed.
+- **Measured facts** (fixture `close-group`, `TabsIntegrationTests.aNativeTabGroupItsAppClosesWholeAndKeepsAliveLeaves`; logs `.build/09-30-tabs-vm27-measure.log`, `.build/09-30-tabs-vm15-measure.log`):
+  - 27.2 live, selected tab: `tab group facts: live id=67 ax=0 listed=true inCG=true onScreen=Optional(true) spaces=Optional(Set([1])) shown=[1]`
+  - 27.2 closed+3s: `id=65 ax=-25202 listed=false inCG=true onScreen=Optional(false) spaces=Optional(Set([])) shown=[1]`, `id=66` the same, `id=67 ax=-25202 listed=false inCG=true onScreen=Optional(false) spaces=Optional(Set([1])) shown=[1]`; `tab group tracked: closed+3s windows=1 state=…absent tabCount=Optional(3)`. Matches the `KeptAliveShape` row "27.2: shown ordered out, hidden no Space".
+  - 27.2 `cmd-w facts: next tab listed after 0 ms`.
+  - 15.7 live, selected tab: `tab group facts: live id=73 ax=0 listed=true inCG=true onScreen=Optional(true) spaces=Optional(Set([1])) shown=[1]`
+  - 15.7 closed+3s: `id=71`, `id=72` and `id=73` all `ax=-25202 listed=false inCG=true onScreen=Optional(false) spaces=Optional(Set([])) shown=[1]`; `windows=1`. Matches "15.7: all on no Space".
+  - 15.7 `cmd-w facts: next tab listed after 0 ms`.
+  - S5: 15.7 also kept the group before the fix; the D-25 test failed on both macOS lines.
+  - 27.2 timing (first proof run): `closed+0 id=67 … onScreen=Optional(true)`. CG orders the shown tab out after AX reports it gone, so the first refresh after the close did not see the group closed, decided it absent and asked for no follow-up refresh (5 s sweep).
+- **Change:** `WindowTracker.closingGroups` (`confirmClosedTabGroups`). A group looks closed when its shown tab answers -25202, no tab of it is listed in AXWindows, a member is still in the CG list, its Spaces at its last listing include a Space a display shows, the app is not hidden and AXWindows did not fail. With no tab on screen as well, the look starts a clock and is confirmed once it still holds `settleDelay` (250 ms) later. With a tab still on screen (27.2), the group is pending with no clock started. A pending group's decision is `.recheck` (no CloseRule, so `needsQuickRecheck` brings the next refresh). Once confirmed, the shown tab goes to `CloseRule` with `isKnownTabMember` false and closes on its own CG evidence (absent, no Space, or ordered out), and `remaining` is empty, so the group is destroyed once. `CloseRule` is unchanged apart from its doc (D-25 paragraph and table row).
+- **Logs:**
+  - `.build/09-30-tabs-vm27-measure.log`, `.build/09-30-tabs-vm15-measure.log`: the measurement (RED on both; the Cmd-W guard and the tab-switch test passed).
+  - `.build/09-30-red.log`: all six shape rows and the other-Space scenario failed before the change; the five guards passed.
+  - `.build/09-30-tabs-vm27.log`: first proof on 27.2 failed (latency 3.07 s, `windows=1`, `state=absent`), with the timing above. `.build/09-30-tabs-vm15.log`: 15.7 passed with that first change (0.370 s).
+  - `.build/09-30-red2.log`: the new scenario `aKeptAliveTabGroupStillOnScreenAtTheFirstRefreshIsRechecked` failed before the on-screen recheck (no quick recheck requested, state absent).
+  - `.build/09-30-engine.log`: TransomEngineTests 1344 tests passed.
+  - `.build/09-30-tabs-vm27-2.log`: rerun that never reached the tests (`ssh: connect … Operation timed out` at boot).
+  - `.build/09-30-tabs-vm27-3.log`: TabsIntegrationTests 3/3 passed on 27.2; group gone in 0.673 s; `cmd-w facts: next tab listed after 19 ms`.
+  - `.build/09-30-tabs-vm15-2.log`: TabsIntegrationTests 3/3 passed on 15.7 with the final code; 0.388 s; `cmd-w facts: next tab listed after 1 ms`.
+  - `.build/09-30-tabgroup-vm27.log`, `.build/09-30-tabgroup-vm15.log`: TabGroupIntegrationTests 7/7 passed on both (the 15.7 L46 launch flake did not recur).
+  - `.build/09-30-close-vm27.log`, `.build/09-30-close-vm15.log`: CloseIntegrationTests passed on both.
+  - `.build/09-30-full.log`: host gate, four passed "Test run with" lines; `scripts/check-no-appkit.sh` OK.
+- **Not covered (not measured):**
+  - (a) A group closed while its Space is not shown waits until that Space shows.
+  - (b) With the Spaces lookup off, a closed group stays tracked.
+  - (c) A group closed while its app is hidden waits until the app is shown.
+  - (d) The 250 ms confirmation assumes AppKit lists the next tab sooner after a Cmd-W (measured: 0 ms and 19 ms on 27.2, 0 ms and 1 ms on 15.7).
+  - (e) A native fullscreen tab group closed whole was not measured.
+  - (f) A shown tab that stays on screen in CG for more than about 2 s after the close (8 quick rechecks) waits for the 5 s sweep.

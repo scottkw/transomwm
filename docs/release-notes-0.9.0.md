@@ -45,6 +45,7 @@ It should print `Transom-0.9.0-universal.dmg: OK`.
 ## Fixes
 
 - On macOS 27, closing a window whose app keeps it alive (common with document and preference windows) now frees its tile. Before, Transom kept the window tracked.
+- Closing a whole native tab group whose app keeps the windows alive now frees the group's tile. Before, Transom kept the group tracked on macOS 27 and macOS 15.
 
 ## Known issues
 
