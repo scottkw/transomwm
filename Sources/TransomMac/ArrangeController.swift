@@ -92,7 +92,7 @@ import os
     public var isZoomEnabled: Bool { zoomEnabled }
     private let zoomInputLog = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
     private let cameraLog = Logger(subsystem: "com.eightabyte.transom", category: "camera")
-    /// Fires after each reveal and when zoom turns off (the status item's "zoomed in" description).
+    /// Fires after each reveal, when zoom turns on or off and when a view is saved (the status glyph, the view controls).
     public var onViewChanged: (() -> Void)?
     /// Turn Off Zoom in progress: the displays whose move home has not revealed yet.
     private var turningOff = false
@@ -862,6 +862,7 @@ import os
                 logger.info("\(message, privacy: .public)")
             case .notice(let notice):
                 post(notice)
+                if case .viewSaved = notice { onViewChanged?() }  // a new saved-view badge in the menu bar
             case .save(.debounced):
                 saveTimer.set(.now + .milliseconds(500)) { [weak self] in self?.write() }
             case .save(.now):
@@ -1109,6 +1110,7 @@ import os
         takeover?.zoomChanged(on: true)
         postAnnouncement(ZoomCopy.zoomOnAnnouncement)
         cameraLog.info("zoom on")
+        onViewChanged?()  // the menu-bar view controls appear with zoom
     }
 
     private func finishZoomOff() async {

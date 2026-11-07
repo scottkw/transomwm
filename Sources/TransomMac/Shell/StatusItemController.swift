@@ -22,6 +22,8 @@ import os
     private let showSetup: () -> Void
     private let showTrackedWindows: () -> Void
     private let loginItem: any LoginItemService = SystemLoginItem()
+    private let menuBar = MenuBarPreference()
+    private let viewControls: ViewControlItems
     private var permissionSubscription: AnyCancellable?
     private var updateSubscription: AnyCancellable?
     /// The last access state the subscription saw (it fires before `permission.state` updates).
@@ -53,6 +55,7 @@ import os
         self.system = system
         self.arrange = arrange
         commands = CommandMenu(dispatch: dispatch)
+        viewControls = ViewControlItems(dispatch: dispatch)
         self.permission = permission
         self.gaps = gaps
         self.dragToDock = dragToDock
@@ -76,8 +79,15 @@ import os
                 self?.updateGlyph()
             }
         updates.startAutomatic()
-        arrange.onPauseChanged = { [weak self] in self?.updateGlyph() }
-        arrange.onViewChanged = { [weak self] in self?.updateGlyph() }
+        arrange.onPauseChanged = { [weak self] in
+            self?.updateGlyph()
+            self?.refreshViewControls()
+        }
+        arrange.onViewChanged = { [weak self] in
+            self?.updateGlyph()
+            self?.refreshViewControls()
+        }
+        menuBar.onChange = { [weak self] in self?.refreshViewControls() }
         arrange.openSettings = { [weak self] pane, source in
             let word = switch source { case .hotkey: "hotkey"; case .menu: "menu"; case .url: "url"; case .cli: "cli" }
             self?.showSettings(pane, from: word)
@@ -90,6 +100,20 @@ import os
     /// The latest inventory, re-read by `ArrangeController` after each event (it is the only events reader).
     func update(_ inventory: WindowInventory) {
         latest = inventory
+        refreshViewControls()  // a no-op unless the controls changed; covers the layout restored at launch
+    }
+
+    /// The view-control status items from the Menu Bar choices and the pointer display's camera (UI-SPEC Surface 4).
+    private func refreshViewControls() {
+        let arranger = arrange.arranger
+        let uuid = arrange.pointerDisplay().uuid
+        let context = CommandContext(focused: nil, ready: ready, displayUUID: uuid)
+        viewControls.refresh(
+            ViewControlItems.layout(
+                items: menuBar.items, iconOnly: menuBar.iconOnly, zoomOn: arrange.isZoomEnabled,
+                paused: ready && !arranger.pauseReasons.isEmpty, slots: arranger.savedViewSlots, current: nil,
+                backAvailable: arranger.availability(.camera(.back), context: context),
+                forwardAvailable: arranger.availability(.camera(.forward), context: context)))
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -516,6 +540,7 @@ import os
                 SettingsWindowController.hosting(
                     ExclusionsTab(exclusions: self.exclusions, displayName: { [weak self] in self?.displayName(of: $0) }), height: 560)
             },
+            .menubar: { SettingsWindowController.hosting(MenuBarTab(preference: self.menuBar)) },
             .updates: { SettingsWindowController.hosting(UpdatesTab(controller: self.updates)) },
         ]
     }
