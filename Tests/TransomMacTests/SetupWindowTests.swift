@@ -3,6 +3,9 @@ import TransomEngine
 @testable import TransomMac
 import Testing
 
+// The seam `overrideStateForTesting` exists in debug builds only.
+#if DEBUG
+
 /// G-02-1 (WIN-01, D-02): with no Accessibility grant the Set Up Transom window opened at 1x28, a title bar with
 /// no content. These tests build the window with `makeWindow()` and never show it, so they run headless. They
 /// never call `permission.send(_:)` either: its effects are live (system prompt, System Settings, AX probe,
@@ -50,3 +53,4 @@ import Testing
         return condition()
     }
 }
+#endif

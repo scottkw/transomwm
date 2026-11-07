@@ -14,7 +14,9 @@ jobs:
       - run: swift --version
       - run: scripts/check-no-appkit.sh
       - run: swift build
+      # shortcut: serial, because the parallel run exits early with no message on the runner (Swift 6.3.3) and not
+      # locally (6.4); revisit when the runner has Swift 6.4 or the cause is found (Phase 9 D-17).
       - run: swift test --no-parallel
       # Release compiles out assertValid(), so the edits' invariant behaviour must be tested there too.
       - run: swift build -c release
-      - run: swift test -c release -Xswiftc -enable-testing
+      - run: swift test -c release -Xswiftc -enable-testing --no-parallel
