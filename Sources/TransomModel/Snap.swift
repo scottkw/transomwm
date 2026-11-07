@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where a floating window can be snapped inside the Desktop tile (TILE-14).
+/// Where a floating window can be snapped on the visible frame (TILE-14).
 public enum SnapTarget: String, CaseIterable, Sendable {
     case leftHalf, rightHalf, topHalf, bottomHalf
     case leftThird, centerThird, rightThird
@@ -9,18 +9,18 @@ public enum SnapTarget: String, CaseIterable, Sendable {
 }
 
 public enum Snap {
-    /// The frame for `target` inside `desktop` inset by `gap` on every side, with gap-wide spacing between
-    /// parts (A9). Whole points like `resolve`: each part but the last is rounded down and the last takes
+    /// The frame for `target` inside `area` (the visible frame) inset by `gap` on every side, with gap-wide spacing
+    /// between parts (A9). Whole points like `resolve`: each part but the last is rounded down and the last takes
     /// the remainder. `center` keeps the window's size, shrunk to fit, and centres it.
-    public static func frame(_ target: SnapTarget, window: Rect, desktop: Rect, gap: Double) -> Rect {
+    public static func frame(_ target: SnapTarget, window: Rect, area: Rect, gap: Double) -> Rect {
         let gap = max(0, gap.rounded())
-        let minX = desktop.minX.rounded(.up) + gap
-        let minY = desktop.minY.rounded(.up) + gap
-        // shortcut: a Desktop narrower than two gaps gives an empty rect at its inset origin; fine at real sizes.
+        let minX = area.minX.rounded(.up) + gap
+        let minY = area.minY.rounded(.up) + gap
+        // shortcut: an area narrower than two gaps gives an empty rect at its inset origin; fine at real sizes.
         let inset = Rect(
             x: minX, y: minY,
-            width: max(0, desktop.maxX.rounded(.down) - gap - minX),
-            height: max(0, desktop.maxY.rounded(.down) - gap - minY))
+            width: max(0, area.maxX.rounded(.down) - gap - minX),
+            height: max(0, area.maxY.rounded(.down) - gap - minY))
 
         /// Part `i` of `n` along a length starting at `start`: (offset, size).
         func part(_ i: Int, of n: Int, from start: Double, _ length: Double) -> (Double, Double) {

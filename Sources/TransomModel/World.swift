@@ -4,12 +4,13 @@ public struct Desk: Codable, Equatable, Sendable {
     public var tree: LayoutTree
     public var desktop: DesktopLayer
 
-    public init(tree: LayoutTree = .withDesktop(), desktop: DesktopLayer = DesktopLayer()) {
+    /// A new desk has an empty tree (8.1.1 D-01): its first docked window fills the visible frame.
+    public init(tree: LayoutTree = LayoutTree(), desktop: DesktopLayer = DesktopLayer()) {
         self.tree = tree
         self.desktop = desktop
     }
 
-    /// True when `window` is docked in the tree or floats on the Desktop layer.
+    /// True when `window` is docked in the tree or floats on the floating layer.
     public func contains(_ window: WindowRef) -> Bool {
         tree.state(of: window) != nil || desktop.contains(window)
     }
@@ -42,11 +43,9 @@ public struct Desk: Codable, Equatable, Sendable {
         }
     }
 
-    /// Tree and Desktop layer are each valid, the tree holds the Desktop tile (D-24), and no window is
-    /// both docked and floating.
+    /// Tree and floating layer are each valid, and no window is both docked and floating.
     public func validate() throws(LayoutError) {
         try tree.validate()
-        guard tree.isDesktopHidden != nil else { throw .invariantViolated("desk has no Desktop tile \(NodeID.desktop)") }
         try desktop.validate()
         if let both = desktop.windows.first(where: { tree.state(of: $0.window) != nil }) {
             throw .duplicateWindow(both.window)
@@ -75,7 +74,7 @@ extension LayoutTree {
         switch nodes[leaf] {
         case .panel?: nodes[leaf] = .panel(to)
         case let .tabs(windows, selected)?: nodes[leaf] = .tabs(windows: windows.map { $0 == from ? to : $0 }, selected: selected)
-        case .split?, .desktop?, nil: throw .notALeaf(leaf) // leaf(containing:) only returns panels and tab groups
+        case .split?, .spacer?, nil: throw .notALeaf(leaf) // leaf(containing:) only returns panels and tab groups
         }
         states[from.identity] = nil
         states[to.identity] = state
@@ -84,7 +83,9 @@ extension LayoutTree {
 
 /// All desks, keyed by display (and optionally Space), plus the ID source their node IDs come from.
 public struct World: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    /// Not bumped for empty areas (8.1.1 D-16): this decoder reads the same `Node`, and layout.json's schema 5 is what
+    /// keeps an older build away (`.newerVersion`).
+    public static let currentSchemaVersion = 2
 
     public private(set) var ids: IDSource
     public private(set) var desks: [DeskKey: Desk]
@@ -97,9 +98,9 @@ public struct World: Codable, Equatable, Sendable {
     /// The load path (`init(from:)` uses it). Besides `validate()`, requires `ids` to have half its range
     /// left, which no real session approaches, so a hostile file cannot load with an ID source about to
     /// run out. Edits are not held to this bound: they stop only where `IDSource.make()` throws. Also
-    /// requires `ids.next >= 1`, so the source can never mint the reserved `NodeID.desktop`.
+    /// requires `ids.next >= 1`: IDs start at 1, and a legacy file's Desktop node was NodeID 0.
     public init(ids: IDSource, desks: [DeskKey: Desk]) throws(LayoutError) {
-        guard ids.next >= 1 else { throw .invariantViolated("ID source 0 would mint the Desktop tile's \(NodeID.desktop)") }
+        guard ids.next >= 1 else { throw .invariantViolated("ID source 0 is reserved") }
         guard ids.next <= UInt64.max / 2 else {
             throw .invariantViolated("ID source \(ids.next) is too close to exhaustion")
         }
@@ -147,7 +148,7 @@ public struct World: Codable, Equatable, Sendable {
                 switch node {
                 case .panel(let window): desk.tree.nodes[id] = .panel(titled(window))
                 case .tabs(let windows, let selected): desk.tree.nodes[id] = .tabs(windows: windows.map(titled), selected: selected)
-                case .split, .desktop: break
+                case .split, .spacer: break
                 }
             }
             desk.desktop.mapWindows(titled)
@@ -156,6 +157,7 @@ public struct World: Codable, Equatable, Sendable {
         return copy
     }
 
+    /// Adds an empty desk (8.1.1 D-01).
     public mutating func addDesk(_ key: DeskKey) throws(LayoutError) {
         guard desks[key] == nil else { throw .deskExists(key) }
         desks[key] = Desk()
@@ -212,7 +214,7 @@ public struct World: Codable, Equatable, Sendable {
     }
 
     /// An OS fact (02-16): macOS corrected `from`'s ID to `to`, and it is the same window. Re-points it on
-    /// whichever desk holds it (panel, tab or Desktop layer, keeping its state and frame) and in every undo
+    /// whichever desk holds it (panel, tab or floating layer, keeping its state and frame) and in every undo
     /// snapshot, so a later undo brings it back under its new ID (Pitfall 3). Pushes no undo step. A window no
     /// desk holds is re-pointed in the snapshots only. If a desk already holds `to`, the tracker merged two
     /// entries: `from` is closed instead, exactly as `apply(.closed, …)`, so no window is held twice. Any throw
@@ -232,7 +234,7 @@ public struct World: Codable, Equatable, Sendable {
         history.rekey(from: from, to: to)
     }
 
-    /// An OS fact (D-11): `window` is the window `placeholder` was waiting for. It leaves any Desktop layer and takes the
+    /// An OS fact (D-11): `window` is the window `placeholder` was waiting for. It leaves any floating layer and takes the
     /// placeholder's place (a panel or a tab position, with the selection; a floating one keeps its frame and group), with
     /// its own state, or present when no desk holds it yet. Every undo snapshot follows: `window`'s entries go, and
     /// `placeholder` is re-pointed to it. Pushes no undo step. Throws `windowNotFound` when no desk holds the placeholder and
@@ -301,15 +303,32 @@ public struct World: Codable, Equatable, Sendable {
         let desk: Desk
     }
 
+    /// Schema 1 (layout.json schema 3 and older): each desk's tree drops its legacy Desktop node (8.1.1 D-02).
+    private struct LegacyDeskRecord: Decodable {
+        let key: DeskKey
+        let desk: LegacyDesk
+    }
+
+    private struct LegacyDesk: Decodable {
+        let tree: LegacyLayoutTree
+        let desktop: DesktopLayer
+    }
+
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let version = try container.decode(Int.self, forKey: .schemaVersion)
-        guard version == Self.currentSchemaVersion else {
+        let ids = try container.decode(IDSource.self, forKey: .ids)
+        let records: [DeskRecord]
+        switch version {
+        case Self.currentSchemaVersion: records = try container.decode([DeskRecord].self, forKey: .desks)
+        case 1:
+            records = try container.decode([LegacyDeskRecord].self, forKey: .desks).map {
+                DeskRecord(key: $0.key, desk: Desk(tree: $0.desk.tree.tree, desktop: $0.desk.desktop))
+            }
+        default:
             throw DecodingError.dataCorruptedError(
                 forKey: .schemaVersion, in: container, debugDescription: "unsupported schema version \(version)")
         }
-        let ids = try container.decode(IDSource.self, forKey: .ids)
-        let records = try container.decode([DeskRecord].self, forKey: .desks)
         let world: World
         do throws(LayoutError) {
             var desks: [DeskKey: Desk] = [:]

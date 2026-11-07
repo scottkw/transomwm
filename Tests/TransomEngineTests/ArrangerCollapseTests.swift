@@ -53,7 +53,7 @@ private func dropF(_ arranger: inout Arranger) -> (tick: [ArrangerEffect], up: [
     return (tick, up)
 }
 
-/// f's frame on the main desk with every minimum ignored: [f | Desktop].
+/// f's frame on the main desk with every minimum ignored.
 private func loose(_ arranger: Arranger) throws -> Rect {
     let desk = try #require(arranger.world[mainKey])
     return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[f])
@@ -137,10 +137,14 @@ private func moves(_ effects: [ArrangerEffect]) -> [CameraMove] {
     }
 
     @Test func aCollapsedWindowIsATileKindCollapsedInAMove() throws {
-        var arranger = bare([info(2, frame: floatingFrame, minimum: huge)], zoom: true)
+        // a docked first gives the camera somewhere to zoom to; f drops on a's left edge: [f | a].
+        var arranger = bare([info(1, frame: Rect(x: 100, y: 100, width: 300, height: 200)), info(2, frame: floatingFrame, minimum: huge)], zoom: true)
+        _ = arranger.handle(.command(.dock, focused: a), now: .now)
         _ = dropF(&arranger)
+        try #require(arranger.camera.collapsible == [f.identity])
         let block = try loose(arranger)
-        let away = try #require(moves(arranger.handle(.zoomTo(.node(.desktop), displayUUID: "main"), now: .now)).first)
+        let leafA = try #require(arranger.world[mainKey]?.tree.leaf(containing: a))
+        let away = try #require(moves(arranger.handle(.zoomTo(.node(leafA), displayUUID: "main"), now: .now)).first)
         _ = arranger.handle(.cameraSettle(displayUUID: "main", moveID: away.id), now: .now)
 
         let back = try #require(moves(arranger.handle(.zoomTo(.home, displayUUID: "main"), now: .now)).first)
@@ -155,16 +159,17 @@ private let b = window(3), c = window(4), g = window(5)
 
 /// A saved main desk built by `build`, so its shape does not depend on where Dock would put each window.
 private func world(_ build: (inout LayoutTree, inout IDSource) throws -> Void) throws -> World {
-    var tree = LayoutTree.withDesktop()
+    var tree = LayoutTree()
     var ids = IDSource()
     try build(&tree, &ids)
     return try World(ids: ids, desks: [mainKey: Desk(tree: tree)])
 }
 
-/// [a | Desktop] with a 1410 pt wide: any other window docked beside it leaves a without room.
+/// a alone, 1420 pt wide at least: it fits the 1424 pt row, but any other window docked beside it (an 8 pt gap and at
+/// least 1 pt) leaves a without room.
 private func wideA(zoom: Bool, floating: Rect = floatingFrame) throws -> Arranger {
-    let saved = try world { tree, ids in try tree.insert(a, at: .left, of: .desktop, ids: &ids) }
-    return bare([info(1, frame: floatingFrame, minimum: Size(width: 1410, height: 100)), info(2, frame: floating)], world: saved, zoom: zoom)
+    let saved = try world { tree, ids in try tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids) }
+    return bare([info(1, frame: floatingFrame, minimum: Size(width: 1420, height: 100)), info(2, frame: floating)], world: saved, zoom: zoom)
 }
 
 private func announcements(_ effects: [ArrangerEffect]) -> [String] {
@@ -213,9 +218,9 @@ extension ArrangerCollapseTests {
         #expect(announcements(other) == ["Docked. 1 window collapsed."], "got \(other)")
         #expect(beside.camera.collapsible == [a.identity])
 
-        // [a | V[b, c] | Desktop]; c moved left: a + c + b side by side need 400 + 600 + 450, more than the row.
+        // [a | V[b, c]]; c moved left: a + c + b side by side need 400 + 600 + 450, more than the row.
         let saved = try world { tree, ids in
-            try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            try tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
             try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
             try tree.insert(c, at: .bottom, of: try #require(tree.leaf(containing: b)), ids: &ids)
         }
@@ -237,9 +242,9 @@ extension ArrangerCollapseTests {
     }
 
     @Test func growShrinkRotateFlipBalanceStillRefuseWithZoomOn() throws {
-        // [a | b | Desktop], each 500 pt tall at least: stacked they need more than the 859 pt column.
+        // [a | b], each 500 pt tall at least: stacked they need more than the 859 pt column.
         let saved = try world { tree, ids in
-            try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            try tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
             try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
         }
         let tall = Size(width: 100, height: 500)
@@ -263,10 +268,10 @@ extension ArrangerCollapseTests {
         #expect(arranger.camera.collapsible.isEmpty)
     }
 
-    @Test func theShiftBypassIntoATooSmallDesktopIsStillBlocked() throws {
-        // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
+    /// UI-SPEC Surface 2 row 4 (row gone): with zoom on too, a ⇧ pull-out never lacks room; it floats and nothing collapses.
+    @Test func theShiftBypassOfABigWindowFloatsItWithNothingCollapsed() throws {
         let saved = try world { tree, ids in
-            try tree.insert(a, at: .top, of: .desktop, ids: &ids)
+            try tree.applyDrop(.layoutEdge(.bottom), window: a, ids: &ids)
             try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
         }
         let frameA = Rect(x: 40, y: 80, width: 320, height: 232)
@@ -276,10 +281,11 @@ extension ArrangerCollapseTests {
         let start = ContinuousClock.now
         let infoA = try #require(arranger.windows[a.identity])
         let tick = hold(&arranger, a, from: infoA.frame, at: Point(x: 700, y: 800), [.shift], start: start)
-        #expect(previews(tick).contains { if case .blocked = $0 { true } else { false } }, "tick gave \(tick)")
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
         let up = arranger.handle(pointer(.up, 700, 800, [.shift]), now: start + .milliseconds(200))
-        #expect(up.contains(.announce(Arranger.noRoom)))
-        #expect(arranger.world[mainKey]?.tree.state(of: a) == .present && arranger.camera.collapsible.isEmpty)
+        #expect(!up.contains(.announce(Arranger.noRoom)))
+        #expect(arranger.world[mainKey]?.tree.state(of: a) == nil && arranger.world[mainKey]?.desktop.contains(a) == true)
+        #expect(arranger.camera.collapsible.isEmpty)
     }
 
     @Test func turningZoomOffFloatsCollapsedWindowsWithTheLostRoomNotice() throws {
@@ -318,7 +324,7 @@ extension ArrangerCollapseTests {
         try #require(arranger.camera.collapsible == [a.identity])
 
         _ = arranger.handle(.event(.windowDestroyed(f)), now: .now)
-        #expect(arranger.camera.collapsible.isEmpty, "a fits beside the Desktop again but stayed collapsible")
+        #expect(arranger.camera.collapsible.isEmpty, "a fits alone again but stayed collapsible")
 
         let grown = [info(1, frame: floatingFrame, minimum: huge)]
         let effects = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: grown, initialRefreshComplete: true)), now: .now)

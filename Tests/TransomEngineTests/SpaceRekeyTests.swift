@@ -18,7 +18,7 @@ private func world(_ spaces: [UInt64]) throws -> World {
     for space in spaces {
         try world.addDesk(key(space))
         try world.edit(key(space), history: &history) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(UInt32(space)), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(UInt32(space)), ids: &ids)
         }
     }
     return world

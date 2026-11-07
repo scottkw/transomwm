@@ -34,8 +34,9 @@ private func deskJSON(
     return #"{"desk":{"desktop":{"windows":[\#(floating.joined(separator: ","))]},"tree":{"nodes":{\#(nodeList)}\#(rootPart),"states":[\#(states)]}},"key":{"displayUUID":"\#(key)"}}"#
 }
 
-private func worldJSON(_ desks: [String], next: UInt64 = 100_000) -> Data {
-    Data(#"{"desks":[\#(desks.joined(separator: ","))],"ids":{"next":\#(next)},"schemaVersion":1}"#.utf8)
+/// `schema` 1 is the legacy World (layout.json schema 3 and older), the only one whose trees may hold a Desktop tile.
+private func worldJSON(_ desks: [String], next: UInt64 = 100_000, schema: Int = 1) -> Data {
+    Data(#"{"desks":[\#(desks.joined(separator: ","))],"ids":{"next":\#(next)},"schemaVersion":\#(schema)}"#.utf8)
 }
 
 private func floatingJSON(_ id: Int, x: String = "0", width: String = "100") -> String {
@@ -116,13 +117,21 @@ private let corruptCorpus: [CorruptCase] = [
     ], windows: [1])]), invalidLayout: false),
     CorruptCase(name: "100-deep split chain", data: worldJSON([chainDesk(splits: 100)]), invalidLayout: true),
     CorruptCase(name: "5000 nodes", data: worldJSON([manyNodesDesk(5000)], next: 10_000), invalidLayout: true),
-    CorruptCase(name: "desk without the Desktop tile", data: worldJSON([deskJSON(root: 3, nodes: [
-        1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [0.5, 0.5]),
-    ], windows: [1, 2], desktopTile: false)]), invalidLayout: true),
     CorruptCase(name: "Desktop tile under NodeID 7", data: worldJSON([deskJSON(root: 3, nodes: [
         1: panelJSON(1), 7: desktopTileJSON, 3: splitJSON([1, 7], [0.5, 0.5]),
     ], windows: [1], desktopTile: false)]), invalidLayout: true),
+    CorruptCase(name: "Desktop tiles at NodeIDs 0 and 7", data: worldJSON([deskJSON(root: 3, nodes: [
+        1: panelJSON(1), 7: desktopTileJSON, 3: splitJSON([1, 7, 0], [0.5, 0.25, 0.25]),
+    ], windows: [1])]), invalidLayout: true),
+    // The legacy migration's stand-in for the Desktop tile is windowID 0, pid -1, bundle "".
+    CorruptCase(name: "a window with the Desktop stand-in's identity", data: worldJSON([deskJSON(root: 3, nodes: [
+        1: #"{"panel":{"_0":{"creationOrder":0,"identity":{"bundleID":"","pid":-1,"windowID":0},"titleHint":""}}}"#,
+        3: splitJSON([1, 0], [0.5, 0.5]),
+    ], windows: [])]).replacing(Data(#""states":[]"#.utf8), with: Data(#""states":[{"state":"present","window":{"bundleID":"","pid":-1,"windowID":0}}]"#.utf8)),
+        invalidLayout: true),
     CorruptCase(name: "ids.next = 0 could mint the Desktop ID", data: worldJSON([], next: 0), invalidLayout: true),
+    // 8.1.1 D-02, T-08.1.1-14: the current World has no Desktop node kind, so the legacy-valid baseline relabelled schema 2 does not parse.
+    CorruptCase(name: "schema 2 World with a Desktop node", data: worldJSON([validPair], schema: 2), invalidLayout: false),
 ]
 
 // MARK: Rich world for the exact round-trip
@@ -136,17 +145,16 @@ private func hinted(_ id: UInt32, title: String, ax: String?, order: UInt64) -> 
 }
 
 private func richWorld() throws -> World {
-    // D1: nested splits from inserts only. H[D, A, V[B, C], Desktop].
+    // D1: nested splits from inserts only. H[D, A, V[B, C]].
     var ids = IDSource()
-    var nested = LayoutTree.withDesktop()
+    var nested = LayoutTree()
     let a = makeWindow(1), b = makeWindow(2), c = makeWindow(3), d = makeWindow(4)
-    try nested.insert(a, at: .left, of: .desktop, ids: &ids)
+    try nested.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
     try nested.insert(b, at: .right, of: #require(nested.leaf(containing: a)), ids: &ids)
     try nested.insert(c, at: .bottom, of: #require(nested.leaf(containing: b)), ids: &ids)
     try nested.insert(d, at: .left, of: #require(nested.leaf(containing: a)), ids: &ids)
 
-    // D1 Space 7: tabs plus kept-slot states, through the validating init. H[E, tabs(F, G), Desktop] at
-    // 1/3, 1/2, 1/6.
+    // D1 Space 7: tabs plus kept-slot states, through the validating init. H[E, tabs(F, G)] at 2/5, 3/5.
     let e = hinted(10, title: "Notes.txt", ax: "AXWindow-1", order: 3)
     let f = hinted(11, title: "", ax: nil, order: 4)
     let g = hinted(12, title: "Ünïcode ✓ \"quoted\"", ax: "", order: 5)
@@ -156,13 +164,11 @@ private func richWorld() throws -> World {
             NodeID(raw: 100): .panel(e),
             NodeID(raw: 101): .tabs(windows: [f, g], selected: 1),
             NodeID(raw: 102): .split(
-                axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101), .desktop], weights: [1.0 / 3.0, 0.5, 1.0 / 6.0]),
-            .desktop: .desktop(hidden: false),
+                axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101)], weights: [2.0 / 5.0, 3.0 / 5.0]),
         ],
         states: [e.identity: .absent, f.identity: .fullscreen, g.identity: .present])
 
-    // D2: a 0.1 / 0.8 / 0.1 vertical split with a hidden Desktop tile, plus two floating windows, one at a
-    // negative origin.
+    // D2: a 1/9 / 8/9 vertical split, plus two floating windows, one at a negative origin.
     let h = hinted(20, title: "a", ax: "AXWin-20", order: 9_007_199_254_740_993)
     let i = makeWindow(21)
     let thin = try LayoutTree(
@@ -170,8 +176,7 @@ private func richWorld() throws -> World {
         nodes: [
             NodeID(raw: 200): .panel(h),
             NodeID(raw: 201): .panel(i),
-            NodeID(raw: 202): .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201), .desktop], weights: [0.1, 0.8, 0.1]),
-            .desktop: .desktop(hidden: true),
+            NodeID(raw: 202): .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201)], weights: [1.0 / 9.0, 8.0 / 9.0]),
         ],
         states: [h.identity: .present, i.identity: .present])
     var desktop = DesktopLayer()
@@ -215,10 +220,9 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         #expect(floating.window.titleHint == "Float")
         #expect(floating.frame == Rect(x: -1440, y: -0.5, width: 800.25, height: 600))
         let tabs = try #require(decoded[k1s7]?.tree.node(NodeID(raw: 102)))
-        #expect(tabs == .split(axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101), .desktop], weights: [1.0 / 3.0, 0.5, 1.0 / 6.0]))
+        #expect(tabs == .split(axis: .horizontal, children: [NodeID(raw: 100), NodeID(raw: 101)], weights: [2.0 / 5.0, 3.0 / 5.0]))
         let thin = try #require(decoded[k2]?.tree.node(NodeID(raw: 202)))
-        #expect(thin == .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201), .desktop], weights: [0.1, 0.8, 0.1]))
-        #expect(decoded[k2]?.tree.isDesktopHidden == true)
+        #expect(thin == .split(axis: .vertical, children: [NodeID(raw: 200), NodeID(raw: 201)], weights: [1.0 / 9.0, 8.0 / 9.0]))
         #expect(decoded[k1s7]?.tree.state(of: makeWindow(10)) == nil)  // different pid/bundle: not the same window
         let e = hinted(10, title: "", ax: nil, order: 0)
         #expect(decoded[k1s7]?.tree.state(of: e) == .absent)
@@ -235,7 +239,7 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         try world.addDesk(perDisplay)
         try world.addDesk(perSpace)
         var history = UndoHistory()
-        try world.edit(perSpace, history: &history) { desk, ids throws(LayoutError) in try desk.tree.insert(makeWindow(1), at: .left, of: .desktop, ids: &ids) }
+        try world.edit(perSpace, history: &history) { desk, ids throws(LayoutError) in try desk.tree.applyDrop(.layoutEdge(.right), window: makeWindow(1), ids: &ids) }
         #expect(world.desks.count == 2)
 
         let decoded = try World.decode(from: world.encoded())
@@ -251,28 +255,38 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
         _ = try World.decode(from: worldJSON([chainDesk(splits: LayoutTree.maxDepth)]))
     }
 
-    @Test func versionOneLoads() throws {
+    @Test func versionTwoLoads() throws {
         let data = try richWorld().encoded()
-        #expect(String(decoding: data, as: UTF8.self).contains(#""schemaVersion":1"#))
+        #expect(String(decoding: data, as: UTF8.self).contains(#""schemaVersion":2"#))
         _ = try World.decode(from: data)
     }
 
+    /// 8.1.1 D-02: a desk with no Desktop tile is harmless in a legacy file; it loads with its windows.
+    @Test func aLegacyDeskWithoutADesktopTileLoadsUnchanged() throws {
+        let world = try World.decode(from: worldJSON([deskJSON(root: 3, nodes: [
+            1: panelJSON(1), 2: panelJSON(2), 3: splitJSON([1, 2], [0.5, 0.5]),
+        ], windows: [1, 2], desktopTile: false)]))
+        let tree = try #require(world[k1]?.tree)
+        #expect(tree.windows == [makeWindow(1), makeWindow(2)])
+        #expect(tree.node(NodeID(raw: 3)) == .split(axis: .horizontal, children: [NodeID(raw: 1), NodeID(raw: 2)], weights: [0.5, 0.5]))
+    }
+
     @Test func newerVersionIsRefused() throws {
-        let data = try replacing(richWorld().encoded(), #""schemaVersion":1"#, with: #""schemaVersion":2"#)
-        expectPersistenceError(.newerVersion(found: 2, supported: 1)) { () throws(PersistenceError) in try World.decode(from: data) }
+        let data = try replacing(richWorld().encoded(), #""schemaVersion":2"#, with: #""schemaVersion":3"#)
+        expectPersistenceError(.newerVersion(found: 3, supported: 2)) { () throws(PersistenceError) in try World.decode(from: data) }
     }
 
     @Test func olderVersionWithoutMigrationIsRefused() throws {
-        let data = try replacing(richWorld().encoded(), #""schemaVersion":1"#, with: #""schemaVersion":0"#)
+        let data = try replacing(richWorld().encoded(), #""schemaVersion":2"#, with: #""schemaVersion":0"#)
         expectPersistenceError(.missingMigration(from: 0)) { () throws(PersistenceError) in try World.decode(from: data) }
     }
 
-    @Test(arguments: [#","schemaVersion":1"#, #""schemaVersion":"1""#])
+    @Test(arguments: [#","schemaVersion":2"#, #""schemaVersion":"2""#])
     func missingOrNonIntegerVersionIsCorrupt(replacement: String) throws {
         let original = try richWorld().encoded()
         let data = replacement.hasPrefix(",")
             ? try replacing(original, replacement, with: "")
-            : try replacing(original, #""schemaVersion":1"#, with: replacement)
+            : try replacing(original, #""schemaVersion":2"#, with: replacement)
         do {
             _ = try World.decode(from: data)
             Issue.record("expected corrupt")
@@ -325,14 +339,17 @@ private func expectPersistenceError(_ expected: PersistenceError, _ body: () thr
     }
 
     @Test func olderFileDecodesThroughTheChain() throws {
-        // A hypothetical schema 0 that called desks "spaces".
-        let v1 = try richWorld().encoded()
-        var v0 = try replacing(v1, #""schemaVersion":1"#, with: #""schemaVersion":0"#)
+        // A hypothetical schema 0 that called desks "spaces". The chain takes it to schema 1, which then loads as
+        // legacy (8.1.1 D-02; DesktopMigrationTests covers dropping a legacy Desktop tile).
+        let v2 = try richWorld().encoded()
+        let v1 = try replacing(v2, #""schemaVersion":2"#, with: #""schemaVersion":1"#)
+        var v0 = try replacing(v2, #""schemaVersion":2"#, with: #""schemaVersion":0"#)
         v0 = try replacing(v0, #""desks":"#, with: #""spaces":"#)
         let chain = MigrationChain(steps: [0: { object in object["desks"] = object.removeValue(forKey: "spaces") }])
         let migrated = try World.decode(from: v0, migrations: chain)
         // IDSource is above 2^53, which JSONSerialization may not keep exact, so compare the desks.
-        #expect(migrated.desks == (try richWorld()).desks)
+        let legacy = try World.decode(from: v1).desks
+        #expect(migrated.desks == legacy)
     }
 
     @Test(arguments: corruptCorpus)

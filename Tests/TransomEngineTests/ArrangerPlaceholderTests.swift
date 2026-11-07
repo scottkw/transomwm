@@ -23,7 +23,7 @@ private func returning(_ id: UInt32, title: String, spaces: Set<UInt64>? = nil) 
     tracked(ref(id, title: title, pid: newPID), spaces: spaces)
 }
 
-/// [Notes (1) | Plan (2) | Other (3) | Desktop]: two docked windows of one app, titled, beside another app's.
+/// [Notes (1) | Plan (2) | Other (3)]: two docked windows of one app, titled, beside another app's.
 private func threeDocked() async -> Harness {
     var harness = Harness()
     await harness.fake.setDisplays([DisplayInfo(
@@ -64,10 +64,10 @@ private func saved(on desk: DeskKey = key, _ build: (inout Desk, inout IDSource)
     return world
 }
 
-/// [Notes (1) | Plan (2) | Desktop] saved, under the last session's pid.
+/// [Notes (1) | Plan (2)] saved, under the last session's pid.
 private func savedTwo(on desk: DeskKey = key) throws -> World {
     try saved(on: desk) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Notes"), ids: &ids)
         guard let leaf = desk.tree.leaf(containing: ref(1)) else { throw .windowNotFound(ref(1)) }
         try desk.tree.insert(ref(2, title: "Plan"), at: .right, of: leaf, ids: &ids)
     }
@@ -121,12 +121,12 @@ private func launchedOnSpaceOne(_ layout: World, bootChanged: Bool = true) async
     return harness
 }
 
-/// [Notes (1) | Plan (2) | Desktop] on Desktop 2, and on Desktop 1 a tile whose app never opens.
+/// [Notes (1) | Plan (2)] on Desktop 2, and on Desktop 1 a tile whose app never opens.
 private func storedOnBothSpaces() throws -> World {
     var world = try savedTwo(on: spaceTwo)
     try world.addDesk(spaceOne)
     try world.reflow(spaceOne) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(ref(7, title: "Gone", bundle: "com.example.neveropens"), at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: ref(7, title: "Gone", bundle: "com.example.neveropens"), ids: &ids)
     }
     return world
 }
@@ -149,7 +149,7 @@ private func appliedStoredSet(
     return harness
 }
 
-/// [Notes (1) | Plan (2) | Other (3) | Desktop] docked on Desktop 1.
+/// [Notes (1) | Plan (2) | Other (3)] docked on Desktop 1.
 private func threeDockedOnSpaceOne() async -> Harness {
     var harness = await onSpaceOne([
         .standard(id: 1, pid: pid, frame: Rect(x: 40, y: 80, width: 320, height: 232), title: "Notes", space: 1),
@@ -422,7 +422,7 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
 
     @Test func oneClearedTileIsSingular() async throws {
         var harness = await launched(try saved { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Notes"), ids: &ids)
         })
         #expect(announcements(await harness.send(.clearWaitingTiles)) == ["Cleared 1 waiting tile"])
     }
@@ -736,7 +736,7 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
     /// different rank would settle it, as `HintMatcher` does for an app reopening its windows in order.)
     @Test func aTieAtRelaunchFillsNothingAndTheWindowsFloat() async throws {
         let layout = try saved { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Notes"), ids: &ids)
             guard let leaf = desk.tree.leaf(containing: ref(1)) else { throw .windowNotFound(ref(1)) }
             try desk.tree.insert(ref(2, title: "Notes"), at: .right, of: leaf, ids: &ids)
         }
@@ -753,7 +753,7 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
     /// WR-03: an app's first window, a Welcome window or one with no title yet, doesn't take a lone tile on the sole-pair
     /// bonus alone; the real window can when it comes, or when the title settles.
     @Test func aLoneTileIsNotTakenAgainstTheTitleEvidence() async throws {
-        let layout = try saved { desk, ids throws(LayoutError) in try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids) }
+        let layout = try saved { desk, ids throws(LayoutError) in try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Notes"), ids: &ids) }
         var harness = await launched(layout)
         await harness.send(.event(.windowCreated(returning(11, title: "Welcome"))))
         await harness.send(.event(.windowCreated(returning(12, title: ""))))
@@ -765,7 +765,7 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
 
     /// WR-03, RESEARCH Pitfall 4: at a launch too, a window with another title floats and can match once its title settles.
     @Test func aWindowAtLaunchWithAnotherTitleCanMatchLater() async throws {
-        let layout = try saved { desk, ids throws(LayoutError) in try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids) }
+        let layout = try saved { desk, ids throws(LayoutError) in try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Notes"), ids: &ids) }
         var harness = await launched(layout, open: [.standard(id: 11, pid: newPID, frame: openFrame, title: "Loading")])
         #expect(harness.arranger.isPlaceholder(ref(1)))
         await harness.send(.event(.windowChanged(returning(11, title: "Notes"))))
@@ -867,10 +867,10 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
 
     // MARK: Tab groups
 
-    /// [tab group: Notes (waiting), Live (selected at the restore moves off Notes) | Desktop].
+    /// [tab group: Notes (waiting), Live (selected at the restore moves off Notes)].
     private func savedGroup(selectWaiting: Bool, live: WindowRef) throws -> World {
         try saved { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(1, title: "Notes"), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Notes"), ids: &ids)
             guard let leaf = desk.tree.leaf(containing: ref(1)) else { throw .windowNotFound(ref(1)) }
             try desk.tree.group(live, into: leaf)
             if selectWaiting { try desk.tree.selectTab(ref(1)) }
@@ -1018,7 +1018,7 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         }
         func waitingOnly(_ id: NodeID) throws -> Bool {
             let sub = try tree.subtree(at: id)
-            return sub.nodes[.desktop] == nil && sub.windows.allSatisfy(harness.arranger.isPlaceholder)
+            return sub.windows.allSatisfy(harness.arranger.isPlaceholder)
         }
         // The pointer over a waiting tile: its window is not there to zoom to.
         let pointer = Point(x: home.frame.midX, y: home.frame.midY)
@@ -1038,11 +1038,16 @@ private func ticked(_ harness: inout Harness, at instant: ContinuousClock.Instan
         await harness.fake.setDisplays([DisplayInfo(
             uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: Rect(x: 0, y: 25, width: 1440, height: 875), currentSpaceID: nil)])
         await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        await harness.fake.addApp(FakeApp(pid: 950, bundleID: otherBundle))
         await harness.fake.open(.standard(id: 1, pid: pid, frame: Rect(x: 40, y: 10, width: 1360, height: 885), title: "Notes"))
         await harness.fake.open(.standard(id: 2, pid: pid, frame: Rect(x: 900, y: 400, width: 300, height: 200), title: "Plan"))
+        await harness.fake.open(.standard(id: 3, pid: 950, frame: Rect(x: 600, y: 600, width: 200, height: 150), title: "Anchor"))
         await harness.fake.refreshAll()
         _ = await harness.inbox.take()
         await harness.send(.inventory(await harness.fake.inventory()))
+        // Another app's window docked first, so Notes docks over it in a half-height tile, as it once did over the
+        // Desktop tile: alone it would get the whole column, within the learner's 32 pt overflow tolerance.
+        await harness.send(.command(.dock, focused: ref(3, pid: 950, bundle: otherBundle)))
         await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 100, height: 870) }
         await harness.send(.command(.dock, focused: ref(1)))
         await harness.fake.advance(by: .seconds(1.1))

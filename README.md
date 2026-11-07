@@ -26,7 +26,7 @@ Phases 1-8.1 of the roadmap are complete, so tiling, zoom, trackpad gestures, th
 | 7 | Tab Groups | Complete |
 | 8 | Saved Views, URLs & Persistence | Complete |
 | 8.1 | Window Behaviour Options | Complete |
-| 8.1.1 | Remove the Desktop Tile | Planned |
+| 8.1.1 | Remove the Desktop Tile | Complete |
 | 9 | Polish & Ship | Planned |
 
 Known gap: testing so far has used a single display. The multi-display re-checks from Phases 2, 3 and 6 (unplug and re-plug, per-arrangement layouts, "Displays have separate Spaces" off, Tab between displays) are still outstanding, so treat behaviour on a second display as unverified.
@@ -38,15 +38,16 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Feature | What it does |
 |---|---|
 | Drag to dock | Drag a window by its title bar to a screen edge or to another window's edge. A drop preview shows the exact frame the window will get, and it docks there on release. Tiles nest as deep as you like. A drop that cannot fit the windows' minimum sizes is shown as blocked and refused. |
-| Drag modifiers | Hold ⇧ while dragging to move the window freely: it floats on the Desktop tile instead of docking. Hold ⌘ over another docked tile to swap the two windows. Hold ⌃ for fourths (see Fourths). |
-| New windows | Choose menu ▸ Arrange ▸ New Windows ▸ Float or Tile. Float is the default. With Tile, a new window docks beside the focused tile, splitting it along its longer side. Dialogs, panels, excluded apps and windows too small to tile still float. So does a window that opens while you are dragging. |
+| Drag modifiers | Hold ⇧ while dragging to move the window freely: it floats instead of docking. Hold ⌘ over another docked tile to swap the two windows. Hold ⌃ for fourths (see Fourths). |
+| New windows | Choose menu ▸ Arrange ▸ New Windows ▸ Float or Tile. Float is the default. With Tile, a new window docks beside the focused tile, splitting it along its longer side. With nothing docked it fills the screen. Dialogs, panels, excluded apps and windows too small to tile still float. So does a window that opens while you are dragging. |
 | Drag to Dock | Choose menu ▸ Arrange ▸ Drag to Dock ▸ Automatically or Hold ⌥. Automatically is the default. With Hold ⌥, a plain drag pulls a docked window out to floating and just moves a floating one, with no docking regions. Hold ⌥ during the drag to show the regions and dock, or to make a tab group. ⇧ still floats and ⌘ still swaps. Press ⌥ after the drag starts. |
-| Fourths | Dock a window to the 1st, 2nd, 3rd or 4th fourth of the desk, or to its middle half, as a column or a row. Windows already docked shrink to fit, and with no window on one side the new window grows to fill it. Use the hotkeys, menu ▸ Arrange ▸ Dock to Fourth, or a drag: press ⌃ after the drag starts for columns, or ⌃⌘ for rows, because ⌃-click is a right click. The screen shows the regions, and the preview shows where the window will go, with a label saying what it gets: over side-by-side windows the 2nd row reads Top half. The middle-half region is the central quarter of the screen. With zoom off, a fourth that doesn't fit is refused; with zoom on, windows collapse. |
-| Desktop tile | Each layout has a Desktop tile that holds floating windows. New windows open floating there, unless you choose menu ▸ Arrange ▸ New Windows ▸ Tile. You can hide and show the Desktop tile. |
+| Fourths | Dock a window to the 1st, 2nd, 3rd or 4th fourth of the desk, or to its middle half, as a column or a row. The window gets exactly that part of the screen. Windows already docked move into empty space first and shrink only if they must; a side with no window stays empty until you dock something there. Use the hotkeys, menu ▸ Arrange ▸ Dock Window, or a drag: press ⌃ after the drag starts for columns, or ⌃⌘ for rows, because ⌃-click is a right click. The screen shows the regions, and the preview shows where the window will go, with a label naming the position, such as 2nd row. The middle-half region is the central quarter of the screen. With zoom off, a fourth that doesn't fit is refused; with zoom on, windows collapse. |
+| Halves, corners and thirds | Dock a window to the left, right, top or bottom half of the screen, to a corner quarter (top left, top right, bottom left or bottom right), or to a third, as a column or a row. Each gives the window exactly that part of the screen, like fourths: windows already docked move into empty space first and shrink only if they must, and the rest of the screen can stay empty, with floating windows showing there, until you dock another window into it. Use the hotkeys or menu ▸ Arrange ▸ Dock Window, which lists every docking position with its hotkey. There are no drag regions for halves, corners and thirds; a ⌃-drag gives fourths. |
+| Floating windows | Docked windows share the whole screen. A floating window sits on top of them like any Mac window: the window you click comes to the front, and Transom never hides or moves it. New windows open floating where their app puts them, unless you choose menu ▸ Arrange ▸ New Windows ▸ Tile. To drag a floating window over docked ones without docking it, hold ⇧, or choose Drag to Dock ▸ Hold ⌥. With nothing docked you see your normal desktop; drag a window to a screen edge, or press ⌃⌥⌘D, to dock it full screen. To dock a window into an empty part of the screen, drag it to the screen edge there, or press ⌃⌥⌘D with the window over it; New Windows ▸ Tile and Arrange All fill empty space first. Earlier versions kept floating windows in a Desktop tile. It is gone: saved layouts are updated on first launch, and windows a hidden Desktop tile had moved off screen come back. |
 | Reflow | Closing or minimising a docked window reflows its neighbours to fill the space. A minimised window returns to its tile, and a window that leaves native fullscreen returns to its reserved tile. |
 | Gaps | Choose the gap between tiles from the Gaps menu: None, 4, 8, 12, 16 or 24 pt (default 8). Drag the gap between two windows to resize both. |
 | Green button | Clicking a window's green button toggles it between docked and floating. On a floating window, ⌥-click keeps the normal macOS zoom. To fill the screen with a docked window, double-click its title bar or press `⌃⌥⌘M`; this needs zoom on. |
-| Keyboard layout commands | Dock, float, focus or move to a neighbour, swap, grow or shrink a tile, balance, rotate and flip splits, snap floating windows to halves, thirds, quarters, maximised or centred, Arrange All and Float All. Layout edits can be undone. |
+| Keyboard layout commands | Dock, dock to a half, corner, third or fourth, float, focus or move to a neighbour, swap, grow or shrink a tile, balance, rotate and flip splits, snap floating windows to halves, thirds, quarters, maximised or centred, Arrange All and Float All. Layout edits can be undone. |
 | Split with New Finder Window | Splits the current tile with a new Finder window. |
 | Exclusions | "Don't Arrange" the frontmost app from the menu or a hotkey. Excluded apps are never moved. The list starts empty. |
 | Pause and Resume | Pause Arranging stops Transom moving windows until you resume. |
@@ -56,13 +57,13 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 | Display arrangements | Layouts are remembered per set of connected displays and switched automatically when you dock or undock. When a display is unplugged, its windows float on a remaining display and go back to their tiles when it returns. Transom waits about 1.5 s for the displays to settle, and never acts while the Mac is asleep or locked. Works with "Displays have separate Spaces" on or off. |
 | Overview | ⌃⌥⌘A (or menu ▸ Show Overview, or `transom://overview`) shows every window on every display and Space, with a strip of that display's Spaces along the top. Windows on other Spaces show the last snapshot taken this session, or their app-colour tile. Click a window to go to it (switching Space if needed), or click a Space to switch to it. The arrow keys move the selection, Tab moves to the next display, Return opens the selected window and Esc closes the overview. VoiceOver uses ⌃⌥ for its own commands, so with VoiceOver on, open the overview from the menu or rebind it. |
 | Replace Mission Control | Off by default. Turn it on from the menu and F3, ⌃↑ and ⇧F3 open Transom's overview instead of Mission Control; when the overview can't open, Mission Control opens as usual. The four-finger swipe stays with macOS. Transom stores the original shortcut settings first and restores them when you turn it off, on quit and on the next launch after a crash; a crash while it is on turns it off until you turn it back on. Switching Spaces from the overview uses macOS's Move left/right a space shortcuts, so it needs them on. |
-| Tab groups | Drag a window onto the middle of another window (docked, or floating on the Desktop) and hold until the outline reads "Group as tabs" (about half a second), then release: both share the tile under one tab strip, from any apps. Click a tab to switch; hidden tabs are moved off screen, never minimised, and come back on quit. A window activated another way (⌘Tab, the Dock) becomes the selected tab. Drag a tab out of the strip to dock or float it again; right-click a tab for Close Tab and Move Out of Group. The strip's buttons close, minimise and float/dock the whole group; Close Group asks first (with "Do not show this again") and waits for any save prompt, continuing after Save or Delete and stopping on Cancel. A Safari window with several tabs joins as one tab. ⌃⌥⌘T / ⇧⌃⌥⌘T switch to the next / previous tab, ⌃⌥⌘L moves the focused tab out, also under menu ▸ Arrange ▸ Tabs. Groups are saved and come back on relaunch. VoiceOver reads the strip as a tab group. |
+| Tab groups | Drag a window onto the middle of another window (docked or floating) and hold until the outline reads "Group as tabs" (about half a second), then release: both share the tile under one tab strip, from any apps. Click a tab to switch; hidden tabs are moved off screen, never minimised, and come back on quit. A window activated another way (⌘Tab, the Dock) becomes the selected tab. Drag a tab out of the strip to dock or float it again; right-click a tab for Close Tab and Move Out of Group. The strip's buttons close, minimise and float/dock the whole group; Close Group asks first (with "Do not show this again") and waits for any save prompt, continuing after Save or Delete and stopping on Cancel. A Safari window with several tabs joins as one tab. ⌃⌥⌘T / ⇧⌃⌥⌘T switch to the next / previous tab, ⌃⌥⌘L moves the focused tab out, also under menu ▸ Arrange ▸ Tabs. Groups are saved and come back on relaunch. VoiceOver reads the strip as a tab group. |
 | Saved views | ⇧⌥1–9 saves the current view to a slot and ⌥1–9 goes back to it, also from another Space: Transom switches there first, then zooms to the windows you saved, even after splits and moves. Saving over a slot replaces it, and saved views survive restarts. `transom://view/3` and `transom://save-view/3` do the same. With zoom off, these keys reach your apps. |
 | Command-line tool | `transom view 3` runs any `transom://` command in the running app and reports errors with an exit code. See Command-line tool below. |
 | Windows find their tiles again | After Transom or an app relaunches, or the Mac restarts, windows go back to their tiles, matched by app, title, position and order. A tile whose window hasn't come back shows a dim "Waiting for {App}…" that clicks pass through. It closes 30 s after you quit that app, 10 s after the app opens without a match, or 5 min after Transom starts if the app never opens. A tile on a Desktop you aren't on waits until you go there. Closing a window with ⌘W while its app keeps running still closes its tile at once. |
 | macOS conflicts | Transom detects Stage Manager (and pauses arranging while it is on), macOS edge tiling, and click-wallpaper-to-reveal-desktop. It explains each conflict and offers to turn the feature off. Restore macOS Window Settings in the menu puts back the values Transom changed. |
 | Accessibility setup | A Set Up Transom window guides you through the Accessibility grant. If the grant goes stale (for example after a rebuild with a different signature), Transom detects it and explains the fix instead of looping on prompts. |
-| Zoom camera | Zoom out to see every window on a display, step in or out one level of the layout, go back and forward through up to 50 previous views per display, and pan to a neighbouring area. ⌘⇧-drag a rectangle to zoom to the windows it frames (Esc cancels). After zooming out, click a window to zoom in to it and focus it. Double-click a title bar to frame that window, or the bare wallpaper to frame the Desktop; do it again to toggle back. Only an overlay animates (about 250 ms, or a crossfade with Reduce Motion); real windows get one move each when the camera settles. Windows outside the view are moved off screen at their own size, never shrunk, and come back on quit, after a crash and with Restore All Windows. |
+| Zoom camera | Zoom out to see every window on a display, step in or out one level of the layout, go back and forward through up to 50 previous views per display, and pan to a neighbouring area. ⌘⇧-drag a rectangle to zoom to the windows it frames (Esc cancels). After zooming out, click a window to zoom in to it and focus it. Double-click a title bar to frame that window; do it again to toggle back. Only an overlay animates (about 250 ms, or a crossfade with Reduce Motion); real windows get one move each when the camera settles. Windows outside the view are moved off screen at their own size, never shrunk, and come back on quit, after a crash and with Restore All Windows. |
 | Window snapshots | With Screen Recording granted, the zoom overlay shows one-shot snapshots of each window. Without it, each window is drawn in its app's colour with its icon and title. Transom asks for Screen Recording the first time you zoom, never at setup. |
 | Collapsed blocks | With zoom on, a drop that doesn't fit the windows' minimum sizes is accepted: windows that lose room show as blocks in their app's colour until you zoom in. Double-click a block to zoom in to it. With zoom off, such a drop is refused as before. |
 | Trackpad gestures | Hold ⌥ and pinch on the trackpad over any app to zoom the desk one level in or out, or ⌥-two-finger pan to slide to a neighbouring area. Over the bare wallpaper, pinch and pan work without ⌥. The desk follows your fingers live, then snaps to the next level or neighbour, or springs back if the gesture was short. The app under your fingers never sees a gesture Transom takes. Other modifiers (⌃, ⌘) and mouse wheels pass through to macOS. Gestures keep working after sleep, and with Reduce Motion the finish is a fade. They work with Trackpad ▸ "Zoom in or out" on or off; with it off, Transom reads the pinch from the trackpad directly. Built-in trackpad tested; an external Magic Trackpad is untested. Pans follow your natural-scrolling setting, like scrolled content. |
@@ -71,7 +72,7 @@ Transom runs as a menu-bar app (no Dock icon). Everything below is in the code n
 
 ### Menu
 
-The status menu has four sections. Arrange holds the layout commands, Clear Waiting Tiles, which closes the waiting tiles on the Spaces showing, and the Gaps, New Windows and Drag to Dock submenus. Zoom holds the zoom commands, Turn Off or Turn On Zoom, Allow Window Previews… (Screen Recording) and Shortcuts…, a window where you can rebind every hotkey. Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, the state of the window-ID lookup, the Spaces lookup and the event tap, the zoom and snapshot state, and the gesture state (gestures taken, the gesture tap, and multitouch), the Spaces and Displays state (current Spaces, display arrangement, settling), the Mission Control takeover state, the last overview's open time, saved views, windows waiting to come back, and whether the command-line tool is listening. If multitouch was switched off after a crash, Turn Multitouch Back On re-enables it.
+The status menu has four sections. Arrange starts with Dock Window, which lists every docking position with its hotkey: where the window is, halves, corners, thirds and fourths. Arrange also holds the other layout commands, Clear Waiting Tiles, which closes the waiting tiles on the Spaces showing, and the Gaps, New Windows and Drag to Dock submenus. Zoom holds the zoom commands, Turn Off or Turn On Zoom, Allow Window Previews… (Screen Recording) and Shortcuts…, a window where you can rebind every hotkey. Safety holds Pause or Resume Arranging, Restore All Windows and Restore macOS Window Settings. Exclusions holds the Don't Arrange toggle and the list of excluded apps. Hold ⌥ while opening the menu to see a Debug submenu: Show Tracked Windows, Nudge Focused Window, the state of the window-ID lookup, the Spaces lookup and the event tap, the zoom and snapshot state, and the gesture state (gestures taken, the gesture tap, and multitouch), the Spaces and Displays state (current Spaces, display arrangement, settling), the Mission Control takeover state, the last overview's open time, saved views, windows waiting to come back, and whether the command-line tool is listening. If multitouch was switched off after a crash, Turn Multitouch Back On re-enables it.
 
 ### URL commands
 
@@ -79,7 +80,6 @@ Transom registers the `transom://` URL scheme. Each one runs at most once per se
 
 ```sh
 open transom://restore          # Restore All Windows
-open transom://toggle-desktop   # hide or show the Desktop tile
 open transom://split-finder     # Split with New Finder Window
 open transom://zoom-out         # zoom out to all windows
 open transom://step-out         # zoom out one level
@@ -88,13 +88,15 @@ open transom://back             # previous view
 open transom://forward          # next view
 open transom://pan-left         # also pan-right, pan-up, pan-down
 open transom://frame-window     # frame the focused window, or toggle back
-open transom://frame-desktop    # frame the Desktop, or toggle back
 open transom://overview         # open or close the overview
 open transom://next-tab         # also previous-tab, move-out-of-group (focused tab group)
 open transom://view/3          # go to saved view 3 (1-9)
 open transom://save-view/3     # save the current view to slot 3
 open transom://dock-column-1   # also dock-column-2, -3, -4, dock-column-middle
 open transom://dock-row-1      # also dock-row-2, -3, -4, dock-row-middle
+open transom://dock-left-half  # also dock-right-half, dock-top-half, dock-bottom-half
+open transom://dock-top-left   # also dock-top-right, dock-bottom-left, dock-bottom-right
+open transom://dock-left-third # also dock-center-third, -right-third, -top-third, -middle-third, -bottom-third
 ```
 
 Zoom URLs act on the display under the pointer. Dock URLs act on the focused window.
@@ -117,10 +119,9 @@ These are the default global hotkeys. Rebind any of them in the Shortcuts window
 
 | Hotkey | Command |
 |---|---|
-| `⌃⌥⌘D` | Dock Window: dock the focused floating window |
+| `⌃⌥⌘D` | Dock Window ▸ Where It Is: dock the focused floating window where it is |
 | `⌃⌥⌘F` | Float Window: float the focused docked window |
 | `⌃⌥⌘Z` | Undo Layout Change |
-| `⌃⌥⌘H` | Hide or show the Desktop tile |
 | `⌃⌥⌘←` | Focus the neighbouring tile to the left |
 | `⌃⌥⌘→` | Focus the neighbouring tile to the right |
 | `⌃⌥⌘↑` | Focus the neighbouring tile above |
@@ -146,6 +147,11 @@ These are the default global hotkeys. Rebind any of them in the Shortcuts window
 | `⌃⌥⌘C` | Snap floating window: Center |
 | `⌃⌥⌘⇧D` | Arrange All Windows: dock every eligible floating window (one undo step) |
 | `⌃⌥⌘⇧F` | Float All Windows: float every docked window (one undo step) |
+| `⇧⌃⌥⌘Y` / `U` | Dock the focused window to the left / right half |
+| `⇧⌃⌥⌘H` / `J` | Dock the focused window to the top / bottom half |
+| `⇧⌃⌥⌘-` / `=` / `[` / `]` | Dock the focused window to the top left / top right / bottom left / bottom right quarter |
+| `⇧⌃⌥⌘I` / `O` / `P` | Dock the focused window to the left / center / right third |
+| `⇧⌃⌥⌘K` / `L` / `;` | Dock the focused window to the top / middle / bottom third |
 | `⇧⌃⌥⌘1–4` | Dock the focused window to the 1st–4th column, left to right |
 | `⇧⌃⌥⌘5` | Dock the focused window to the middle half column |
 | `⇧⌃⌥⌘6–9` | Dock the focused window to the 1st–4th row, top to bottom |
@@ -164,7 +170,6 @@ These are the default global hotkeys. Rebind any of them in the Shortcuts window
 | `⌃⌥⌘]` | Forward to the next view |
 | `⌃⌥⌘Home` / `End` / `PgUp` / `PgDn` | Pan left / right / up / down (fn⌃⌥⌘ arrows on a laptop) |
 | `⌃⌥⌘M` | Frame the focused window, or toggle back |
-| `⌃⌥⌘G` | Frame the Desktop, or toggle back |
 | `⌥1–9` | Go to view 1–9 |
 | `⇧⌥1–9` | Save view 1–9 |
 
@@ -172,11 +177,10 @@ On macOS 15.0 and 15.1 the defaults are ⌃⌥1–9 and ⇧⌃⌥1–9. If ⌥ w
 
 ## Planned features
 
-Phases 8.1.1 and 9 are not in the code yet. Each line summarises the goal in `.planning/ROADMAP.md`.
+Phase 9 is not in the code yet. Each line summarises the goal in `.planning/ROADMAP.md`.
 
 | Phase | Feature | Status |
 |---|---|---|
-| 8.1.1 | Remove the Desktop Tile: docked windows fill the whole screen and floating windows sit on top of them like normal macOS windows. Hide/Show Desktop Tile goes away, and saved layouts are migrated. | Planned |
 | 9 | Polish & Ship: a Settings window (gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement, New Windows, Drag to Dock), first-run onboarding, launch at login, an update check against GitHub Releases, a Homebrew cask, and a `transom://settings` URL that opens a given Settings section. | Planned |
 
 ## Requirements
@@ -220,7 +224,7 @@ Signing notes:
 
 | Target | Kind | Role |
 |---|---|---|
-| `TransomModel` | library | The pure layout model: nested split tree with weights, the Desktop layer, tab groups, desks keyed by display and Space, resolving tiles to non-overlapping rects with minimum sizes, undo and versioned JSON. Foundation only. |
+| `TransomModel` | library | The pure layout model: nested split tree with weights, the floating-window layer, tab groups, desks keyed by display and Space, resolving tiles to non-overlapping rects with minimum sizes, undo and versioned JSON. Foundation only. |
 | `TransomEngine` | library | Behaviour with no UI: the Arranger, the one `Command` enum every route dispatches, drag sessions, window tracking and classification, crash recovery, layout restore, the `transom://` parser and the `WindowSystem` protocol. |
 | `TransomMac` | library | The AppKit layer: Accessibility window system, event tap, hotkeys, status menu, overlays (drop preview, gap handles, toasts), the zoom stage and snapshot capture, the Shortcuts window, permission flow, stores and conflict handling. |
 | `TransomPrivate` | library | Every private API, each behind a fallback (see Private APIs). |
@@ -273,7 +277,7 @@ Files in `~/Library/Application Support/Transom`:
 
 | File | Contents |
 |---|---|
-| `layout.json` | Schema 3: one set of layouts per display arrangement (up to 16), keyed by display UUID and macOS Space UUID. A schema 1 or 2 file is migrated on first load. If Spaces are renumbered after a restart, the file is backed up first as `layout.json.pre-rekey-<time>`. The layouts (desks, tile trees including tab groups, Desktop tiles, floating tab groups under `groups`, and saved views under `views`), each moved window's pre-park and wanted frames, and a session record used to detect a crash on the next launch. Window titles are written so windows can be matched to their tiles after a restart; the file is readable only by you. The first relaunch after upgrading from an older version has no saved titles yet, so windows are matched by position and order that once. |
+| `layout.json` | Schema 5: one set of layouts per display arrangement (up to 16), keyed by display UUID and macOS Space UUID. A schema 1, 2, 3 or 4 file is migrated on first load, and a schema 3 file loses its Desktop tiles. The original is kept as `layout.json.schema-<N>-<time>`; after a downgrade, copy it back over `layout.json`. If Spaces are renumbered after a restart, the file is backed up first as `layout.json.pre-rekey-<time>`. The layouts (desks, tile trees including tab groups and empty areas, floating windows, floating tab groups under `groups`, and saved views under `views`), each moved window's pre-park and wanted frames, and a session record used to detect a crash on the next launch. Window titles are written so windows can be matched to their tiles after a restart; the file is readable only by you. The first relaunch after upgrading from an older version has no saved titles yet, so windows are matched by position and order that once. |
 | `min-size-hints.json` | Minimum window sizes Transom has learned, per app bundle ID. Only bundle IDs and sizes, nothing per window. |
 
 Both files are validated on load. A file that fails validation is moved aside with a `.corrupt` suffix and Transom starts empty. A `layout.json` from a newer schema is left untouched and nothing is saved that session.

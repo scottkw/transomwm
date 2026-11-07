@@ -14,7 +14,7 @@ private func ref(_ id: UInt32) -> WindowRef {
 
 private let a = ref(1), b = ref(2), c = ref(3), d = ref(4)
 
-/// [a | b | Desktop] on the 1440 pt display.
+/// [a | b] on the 1440 pt display.
 private func twoDocked(frames: [UInt32: Rect]? = nil) async -> Harness {
     var harness = if let frames { await Harness.started(frames: frames) } else { await Harness.started() }
     await harness.send(.command(.dock, focused: a))
@@ -33,7 +33,7 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 /// SAFE-06, D-16, D-17: the layout saved by the last session comes back by window identity, and only by identity.
 @Suite struct ArrangerRestoreTests {
     @Test func reattachKeepsOnlyWindowsTrackedUnderTheSameRealID() async throws {
-        // Saved: [a | b | Desktop], c floating.
+        // Saved: [a | b], c floating.
         let harness = await twoDocked(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Rect(x: 1000, y: 600, width: 150, height: 120)])
         let saved = harness.arranger.world
         try #require(saved[key].map { Set($0.tree.windows) } == [a, b] && saved[key]?.desktop.contains(c) == true)
@@ -119,7 +119,7 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
         var saved = World()
         try saved.addDesk(key)
         try saved.reflow(key) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(one, at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: one, ids: &ids)
             guard let leaf = desk.tree.leaf(containing: one) else { throw .windowNotFound(one) }
             try desk.tree.insert(two, at: .right, of: leaf, ids: &ids)
         }
@@ -273,7 +273,7 @@ private func tracked(_ window: WindowRef, frame: Rect, idSource: WindowIDSource 
 
     /// G-03-8: an untracked saved window stays (dormant) while a layer-0 CG window has its exact ID and pid.
     @Test func reattachKeepsAnUntrackedWindowTheCGListStillHasUnderItsIDAndPid() async throws {
-        // Saved: [a | b | Desktop], c floating. Only a is tracked.
+        // Saved: [a | b], c floating. Only a is tracked.
         let harness = await twoDocked(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Rect(x: 1000, y: 600, width: 150, height: 120)])
         let saved = harness.arranger.world
         let frame = Rect(x: 10, y: 40, width: 200, height: 200)
@@ -418,7 +418,7 @@ private let visibleFrame = Rect(x: 0, y: 25, width: 1440, height: 875)
 
 /// SAFE-02, D-17: the launch after a crash brings stranded windows on screen first, then re-applies the layout.
 extension ArrangerRestoreTests {
-    /// [a | b | Desktop] saved, then a pushed to x = 10000; a fresh Arranger on a recovery launch.
+    /// [a | b] saved, then a pushed to x = 10000; a fresh Arranger on a recovery launch.
     private func recovering(_ mode: LaunchMode = .recovery) async throws -> (Arranger, [ArrangerEffect], tileA: Rect, saved: World) {
         let source = await twoDocked()
         let saved = source.arranger.snapshot.world
@@ -486,34 +486,6 @@ extension ArrangerRestoreTests {
         #expect(restored.world[key]?.desktop.contains(c) == true)
     }
 
-    /// The human check's case: a hidden Desktop with a parked floating window. The parked window comes back at its home
-    /// frame and the Desktop tile shows again, so the next plan does not park it again.
-    @Test func aRecoveryLaunchUnparksAWindowParkedByAHiddenDesktop() async throws {
-        var source = await twoDocked(frames: [
-            1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120),
-            3: Rect(x: 1000, y: 600, width: 150, height: 120),
-        ])
-        let home = Rect(x: 1000, y: 600, width: 150, height: 120)
-        await source.send(.command(.toggleDesktop, focused: a))
-        try #require(source.arranger.world[key]?.tree.isDesktopHidden == true)
-        let parked = try #require(await source.frame(c))
-        try #require(Recovery.isStranded(parked, displays: [DisplayInfo(uuid: "main", frame: visibleFrame, visibleFrame: visibleFrame, currentSpaceID: nil)]))
-        let snapshot = source.arranger.snapshot
-        try #require(snapshot.homeFrames[c.identity] == home)
-
-        var restored = Arranger()
-        _ = restored.handle(.launch(.recovery), now: .now)
-        _ = restored.handle(.restore(snapshot.world, homeFrames: snapshot.homeFrames), now: .now)
-        let effects = restored.handle(.inventory(await source.fake.inventory()), now: .now)
-        let sent = performs(effects)
-        try #require(!sent.isEmpty)
-        #expect(sent[0] == [.setFrame(c, home)])
-        #expect(!sent.joined().contains(.park(c, displayUUID: "main")), "the parked window was parked again")
-        #expect(restored.world[key]?.tree.isDesktopHidden != true)
-        #expect(restored.world[key]?.desktop.frame(of: c) == home)
-        #expect(notices(effects) == [.crashRecovered(unplaced: 0)])
-    }
-
     /// WR-05: a layout.json that was rejected or is from a newer Transom says nothing about the last session, so stranded
     /// windows are rescued as after a crash; with no layout restored, no recovery notice is shown.
     @Test func anUnreadableLayoutLaunchRescuesStrandedWindowsWithNoNotice() async throws {
@@ -561,59 +533,12 @@ extension ArrangerRestoreTests {
 extension ArrangerRestoreTests {
     private static let home = Rect(x: 1000, y: 600, width: 150, height: 120)
 
-    /// [a | b | Desktop] with c floating at `home`, the Desktop hidden so c is parked.
-    private func parkedC() async throws -> Harness {
-        var harness = await twoDocked(frames: [
-            1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 730, y: 400, width: 150, height: 120), 3: Self.home,
-        ])
-        await harness.send(.command(.toggleDesktop, focused: a))
-        try #require(harness.arranger.world[key]?.tree.isDesktopHidden == true)
-        let parked = try #require(await harness.frame(c))
-        try #require(!inside(parked, visibleFrame), "c was not parked: \(parked)")
-        return harness
-    }
-
     /// Pushes b far off screen while paused, so nothing puts it back.
     private func strandB(_ harness: inout Harness) async throws {
         let tileB = try #require(await harness.frame(b))
         await harness.fake.userMove(2, to: Rect(x: 10000, y: 100, width: tileB.width, height: tileB.height))
         _ = await harness.refresh()
         try #require(harness.arranger.windows[b.identity]?.frame.x == 10000)
-    }
-
-    @Test func restoreAllShowsTheHiddenDesktopAndMovesAnOffScreenWindowEvenWhilePaused() async throws {
-        var harness = try await parkedC()
-        await harness.send(.command(.togglePause, focused: nil))
-        try await strandB(&harness)
-        let depth = harness.arranger.history.depth(for: key)
-
-        let effects = await harness.send(.command(.restoreAll, focused: nil))
-        let frames = setFrames(effects)
-        #expect(frames[c] == Self.home, "the parked window did not go back to its home frame")
-        #expect(frames[b].map { inside($0, visibleFrame) } == true, "b is not back on screen: \(String(describing: frames[b]))")
-        #expect(notices(effects) == [.restored(count: 2)])
-        #expect(harness.arranger.world[key]?.tree.isDesktopHidden != true)
-        #expect(harness.arranger.world[key]?.desktop.frame(of: c) == Self.home)
-        #expect(harness.arranger.history.depth(for: key) == depth + 1, "showing the Desktop is the undoable part")
-        #expect(harness.arranger.pauseReasons == [.user], "Restore All does not resume arranging")
-        #expect(await harness.frame(c) == Self.home)
-    }
-
-    /// WR-06: Restore All while paused shows the Desktop, so its home frames are spent there and then; a quit after the
-    /// user moves the window leaves it where it is instead of sending it back to the stale home.
-    @Test func restoreAllWhilePausedSpendsTheHomeFramesSoAQuitLeavesMovedWindowsAlone() async throws {
-        var harness = try await parkedC()
-        await harness.send(.command(.togglePause, focused: nil))
-        await harness.send(.command(.restoreAll, focused: nil))
-        let moved = Rect(x: 400, y: 500, width: 150, height: 120)
-        await harness.fake.userMove(3, to: moved)
-        _ = await harness.refresh()
-
-        #expect(harness.arranger.homeFrames.isEmpty, "home frames survived the shown Desktop: \(harness.arranger.homeFrames)")
-        let plan = Recovery.terminationPlan(
-            windows: Array(harness.arranger.windows.values), homeFrames: harness.arranger.homeFrames,
-            displays: harness.arranger.displays, docked: [a.identity, b.identity])
-        #expect(plan[c] == nil, "the quit sends c back to its stale home: \(String(describing: plan[c]))")
     }
 
     @Test func restoreAllWithNoHiddenDesktopAddsNoUndoStep() async throws {
@@ -625,16 +550,6 @@ extension ArrangerRestoreTests {
         #expect(setFrames(effects).keys.sorted { $0.identity < $1.identity } == [b])
         #expect(notices(effects) == [.restored(count: 1)])
         #expect(harness.arranger.history.depth(for: key) == depth)
-    }
-
-    @Test func restoreAllWhileArrangingPutsTheShownDesktopsWindowsHome() async throws {
-        var harness = try await parkedC()
-        let depth = harness.arranger.history.depth(for: key)
-        let effects = await harness.send(.command(.restoreAll, focused: nil))
-        #expect(performs(effects).first?.first == .setFrame(c, Self.home), "the rescue goes before the layout")
-        #expect(notices(effects) == [.restored(count: 1)])
-        #expect(harness.arranger.history.depth(for: key) == depth + 1)
-        #expect(await harness.frame(c) == Self.home)
     }
 
     @Test func restoreAllWithNothingStrandedOnlySaysSo() async throws {
@@ -688,14 +603,14 @@ extension ArrangerRestoreTests {
     }
 
     @Test func aFloaterMovedWhileTransomWasNotRunningKeepsWhereTheUserPutIt() async throws {
-        // Saved: [a | Desktop], b floating at its saved frame S (frame2), with a different wanted frame W.
+        // Saved: [a], b floating at its saved frame S (frame2), with a different wanted frame W.
         var source = await Harness.started()
         await source.send(.command(.dock, focused: a))
         let snapshot = source.arranger.snapshot
         let saved = try #require(snapshot.world[key]?.desktop.frame(of: b))
         let wanted = Rect(x: 760, y: 300, width: 150, height: 120)
         try #require(wanted != saved)
-        // While Transom is not running, the user moves b on screen, clear of a's tile.
+        // While Transom is not running, the user moves b on screen, over a's tile.
         let moved = Rect(x: 1000, y: 500, width: 150, height: 120)
         await source.fake.userMove(2, to: moved)
         await source.fake.refreshAll()
@@ -722,5 +637,102 @@ extension ArrangerRestoreTests {
         let frame = try #require(float[a])
         #expect(inside(frame, visibleFrame), "\(frame) is not on screen")
         #expect(frame != Self.preDock)
+    }
+}
+
+/// 8.1.1 D-02, RESEARCH Pitfall 2: a floating window a hidden Desktop tile parked comes back at its home frame at the
+/// first restore after the update, once, as an OS fact.
+extension ArrangerRestoreTests {
+    private static let park = Rect(x: 1439, y: 899, width: 150, height: 120)
+    private static let mainDisplay = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: visibleFrame, currentSpaceID: nil)
+
+    /// The fake with the main display and `frames` open, nothing arranged yet.
+    private func fakeWith(_ frames: [UInt32: Rect]) async -> FakeWindowSystem {
+        let fake = FakeWindowSystem()
+        await fake.setDisplays([Self.mainDisplay])
+        await fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
+        for (id, frame) in frames.sorted(by: { $0.key < $1.key }) { await fake.open(.standard(id: id, pid: pid, frame: frame)) }
+        await fake.refreshAll()
+        return fake
+    }
+
+    /// A migrated desk: no tree, `c` floating at `frame`.
+    private func floating(at frame: Rect) throws -> World {
+        var layer = DesktopLayer()
+        try layer.add(c, frame: frame)
+        return try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree(), desktop: layer)])
+    }
+
+    private func setFrameCount(_ effects: [ArrangerEffect], _ window: WindowRef) -> Int {
+        performs(effects).joined().filter { if case .setFrame(window, _) = $0 { true } else { false } }.count
+    }
+
+    @Test func aParkedFloaterComesBackToItsHomeFrameOnANormalLaunch() async throws {
+        let fake = await fakeWith([3: Self.park])
+        try #require(Recovery.isStranded(Self.park, displays: [Self.mainDisplay]))
+        var restored = Arranger()
+        _ = restored.handle(.restore(try floating(at: Self.park), homeFrames: [c.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        let back = Recovery.destination(for: Self.park, home: Self.home, display: Self.mainDisplay)
+        #expect(performs(effects).joined().contains(.setFrame(c, back)), "\(effects)")
+        #expect(restored.world[key]?.desktop.frame(of: c) == back)
+        #expect(restored.homeFrames[c.identity] == nil)
+        #expect(restored.history.depth(for: key) == 0)
+
+        await fake.perform(performs(effects).joined().map { $0 })
+        await fake.refreshAll()
+        let again = restored.handle(.inventory(await fake.inventory()), now: .now)
+        #expect(setFrameCount(again, c) == 0, "\(again)")
+    }
+
+    @Test func aFloaterOnScreenWithAHomeFrameStaysWhereItIs() async throws {
+        let onScreen = Rect(x: 900, y: 300, width: 150, height: 120)
+        let fake = await fakeWith([3: onScreen])
+        var restored = Arranger()
+        _ = restored.handle(.restore(try floating(at: onScreen), homeFrames: [c.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        #expect(setFrameCount(effects, c) == 0, "\(effects)")
+        #expect(restored.world[key]?.desktop.frame(of: c) == onScreen)
+    }
+
+    @Test func aStrandedDockedWindowIsLeftToThePlan() async throws {
+        let fake = await fakeWith([1: Self.park])
+        let tree = try LayoutTree(root: NodeID(raw: 1), nodes: [NodeID(raw: 1): .panel(a)], states: [a.identity: .present])
+        let saved = try World(ids: IDSource(next: 2), desks: [key: Desk(tree: tree)])
+        var restored = Arranger()
+        _ = restored.handle(.restore(saved, homeFrames: [a.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        let back = Recovery.destination(for: Self.park, home: Self.home, display: Self.mainDisplay)
+        #expect(!performs(effects).joined().contains(.setFrame(a, back)), "\(effects)")
+        let tile = try #require(setFrames(effects)[a])
+        #expect(inside(tile, visibleFrame))
+    }
+
+    /// T-08.1.1-04, T-08.1.1-19: the bring-back stays one-shot because `handle` clears every floater's home frame, on
+    /// every desk, at the end of the input that applies the restore.
+    @Test func aFloatersHomeFrameIsClearedOnEveryDesk() async throws {
+        let other = DeskKey(displayUUID: "main", spaceID: 7)
+        let fake = await fakeWith([3: Rect(x: 900, y: 300, width: 150, height: 120), 4: Rect(x: 200, y: 300, width: 150, height: 120)])
+        var mine = DesktopLayer(), theirs = DesktopLayer()
+        try mine.add(c, frame: Rect(x: 900, y: 300, width: 150, height: 120))
+        try theirs.add(d, frame: Rect(x: 200, y: 300, width: 150, height: 120))
+        let saved = try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree(), desktop: mine), other: Desk(tree: LayoutTree(), desktop: theirs)])
+        var restored = Arranger()
+        _ = restored.handle(.restore(saved, homeFrames: [c.identity: Self.home, d.identity: Self.home]), now: .now)
+        _ = restored.handle(.inventory(await fake.inventory()), now: .now)
+        try #require(restored.isFloating(c) && restored.isFloating(d), "\(restored.world)")
+        #expect(restored.deskKey(of: c) != restored.deskKey(of: d), "both desks hold a floater")
+        #expect(restored.homeFrames[c.identity] == nil && restored.homeFrames[d.identity] == nil)
+    }
+
+    @Test func aRescuedWindowIsNotBroughtBackTwice() async throws {
+        let fake = await fakeWith([3: Self.park])
+        var restored = Arranger()
+        _ = restored.handle(.launch(.recovery), now: .now)
+        _ = restored.handle(.restore(try floating(at: Self.park), homeFrames: [c.identity: Self.home]), now: .now)
+        let effects = restored.handle(.inventory(await fake.inventory()), now: .now)
+        let back = Recovery.destination(for: Self.park, home: Self.home, display: Self.mainDisplay)
+        #expect(performs(effects).first == [.setFrame(c, back)], "the rescue comes first: \(effects)")
+        #expect(setFrameCount(effects, c) == 1, "\(effects)")
     }
 }

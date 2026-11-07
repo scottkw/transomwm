@@ -29,15 +29,15 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
         for _ in 0..<100 {
             // Dictionary order varies per process; sort so a seed always picks the same node.
             let nodeIDs = tree.nodes.keys.sorted()
-            switch Int.random(in: 0..<11, using: &rng) {
+            switch Int.random(in: 0..<13, using: &rng) {
             case 0..<4:
                 let window = makeWindow(nextWindow)
                 nextWindow += 1
                 if let target = nodeIDs.randomElement(using: &rng) {
-                    // A third of the drops onto a leaf make (or grow) a tab group instead of docking beside it.
+                    // A third of the drops onto a window leaf make (or grow) a tab group instead of docking beside it.
                     if case .split? = tree.nodes[target] {
                         try tree.insert(window, at: Edge.allCases.randomElement(using: &rng)!, of: target, ids: &ids)
-                    } else if Int.random(in: 0..<3, using: &rng) == 0 {
+                    } else if tree.nodes[target] != .spacer, Int.random(in: 0..<3, using: &rng) == 0 {
                         try tree.group(window, into: target)
                     } else {
                         try tree.insert(window, at: Edge.allCases.randomElement(using: &rng)!, of: target, ids: &ids)
@@ -67,7 +67,24 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
                 let slot = FourthSlot.allCases.randomElement(using: &rng)!
                 let axis: Axis = Bool.random(using: &rng) ? .horizontal : .vertical
                 // Too deep or too full: nothing changed, so there's nothing to record.
-                guard (try? tree.insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)) != nil else { continue }
+                let unchanged = tree
+                guard (try? tree.insertFourth(.panel(window), states: [window.identity: .present], slot: slot, axis: axis, ids: &ids)) != nil else {
+                    #expect(tree == unchanged, "a failed fourth changed the tree")
+                    continue
+                }
+                expected.insert(window.identity)
+            case 10:
+                // Rule E4: a window leaf (a whole tab group) leaves an empty area behind.
+                guard let window = tree.windows.randomElement(using: &rng), let leaf = tree.leaf(containing: window) else { continue }
+                let taken = try tree.vacate(leaf)
+                expected.subtract(taken.states.keys)
+            case 11:
+                // Rule E6: a new window fills an empty area.
+                let spacers = nodeIDs.filter { tree.nodes[$0] == .spacer }
+                guard let spacer = spacers.randomElement(using: &rng) else { continue }
+                let window = makeWindow(nextWindow)
+                nextWindow += 1
+                try tree.fill(spacer, with: .panel(window), states: [window.identity: .present])
                 expected.insert(window.identity)
             default:
                 // Edits that must throw and leave the tree and the ID source untouched.
@@ -99,5 +116,19 @@ fileprivate struct SplitMix64: RandomNumberGenerator {
             }
         }
         #expect(Set(tree.windows.map(\.identity)) == expected)
+        // 8.1.1 D-16: empty areas stay in normal form.
+        if let root = tree.root { #expect(tree.nodes[root] != .spacer, "the root is an empty area") }
+        func holdsWindow(_ id: NodeID) -> Bool {
+            switch tree.nodes[id] {
+            case .panel?, .tabs?: true
+            case let .split(_, children, _)?: children.contains(where: holdsWindow)
+            case .spacer?, nil: false
+            }
+        }
+        for (id, node) in tree.nodes {
+            guard case let .split(_, children, _) = node else { continue }
+            #expect(holdsWindow(id), "split \(id) holds no window")
+            #expect(!zip(children, children.dropFirst()).contains { tree.nodes[$0] == .spacer && tree.nodes[$1] == .spacer })
+        }
     }
 }

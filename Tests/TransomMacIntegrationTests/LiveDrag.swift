@@ -13,18 +13,23 @@ import Testing
     /// A system and an ArrangeController that track only `fixture`, started, with every fixture window on a desk. The tap
     /// is not running yet.
     static func start(_ fixture: FixtureProcess, newWindows: NewWindowsMode = .float) async throws -> (ArrangeController, [TransomModel.WindowRef]) {
+        try await start([fixture], newWindows: newWindows)
+    }
+
+    /// The same for several fixture apps under one filter; the refs come in fixture order.
+    static func start(_ fixtures: [FixtureProcess], newWindows: NewWindowsMode = .float) async throws -> (ArrangeController, [TransomModel.WindowRef]) {
         // The last test's gap handles are still on screen, in this process, and would take this test's press.
         await last?.setPaused(.user, true)
-        let fixturePID = fixture.pid
-        let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+        let pids = Set(fixtures.map(\.pid))
+        let system = AXWindowSystem(appFilter: { pid, _ in pids.contains(pid) })
         await system.start()
         let arrange = ArrangeController(system: system, newWindows: newWindows)
         await arrange.start()
         last = arrange
         var refs: [TransomModel.WindowRef] = []
-        for window in fixture.windows {
+        for (pid, window) in fixtures.flatMap({ fixture in fixture.windows.map { (fixture.pid, $0) } }) {
             func find() -> TransomModel.WindowRef? {
-                arrange.arranger.windows.values.first { $0.window.pid == fixturePID && $0.window.windowID == window.id }?.window
+                arrange.arranger.windows.values.first { $0.window.pid == pid && $0.window.windowID == window.id }?.window
             }
             _ = await waitUntil(timeout: .seconds(3)) { find().map { arrange.arranger.deskKey(of: $0) != nil } ?? false }
             let ref = try #require(find(), "window \(window.id) never reached the Arranger")
@@ -39,13 +44,13 @@ import Testing
         try #require(Displays.current().first).visibleFrame
     }
 
-    /// Two fixture windows docked side by side: [0 | 1 | Desktop]. Returns the controller, the refs and both tile frames.
+    /// Two fixture windows docked side by side: [0 | 1]. Returns the controller, the refs and both tile frames.
     static func dockedPair(_ fixture: FixtureProcess) async throws -> (ArrangeController, [TransomModel.WindowRef], Rect, Rect) {
         let (arrange, refs) = try await start(fixture)
         try #require(refs.count == 2)
         let visible = try visibleFrame()
         // Dock acts where a drop at the window's centre lands (D-12): see ArrangeIntegrationTests' dockedPair.
-        let placed = [(visible.minX + visible.width * 0.15, visible.midY), (visible.midX + visible.width * 0.1, visible.midY)]
+        let placed = [(visible.minX + visible.width * 0.15, visible.midY), (visible.minX + visible.width * 0.85, visible.midY)]
         for (index, centre) in placed.enumerated() {
             let size = try #require(fixture.windows.first { $0.index == index }).frame.size
             let x = (centre.0 - size.width / 2).rounded(), y = (centre.1 - size.height / 2).rounded()

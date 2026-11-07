@@ -5,11 +5,12 @@ import os
 
 // These raw names are a persistent contract (Pitfall 13): KeyboardShortcuts stores each binding under
 // `KeyboardShortcuts_<name>`, so the Phase 4 recorder reuses them. Never rename one.
+// Retired raw values, never to be reused for another command (a user's old binding is stored under them):
+// toggleDesktop (8.1.1 D-09), frameDesktop (8.1.1 D-13).
 extension KeyboardShortcuts.Name {
     static let dock = Self("dock", initial: .init(.d, modifiers: [.control, .option, .command]))
     static let float = Self("float", initial: .init(.f, modifiers: [.control, .option, .command]))
     static let undo = Self("undo", initial: .init(.z, modifiers: [.control, .option, .command]))
-    static let toggleDesktop = Self("toggleDesktop", initial: .init(.h, modifiers: [.control, .option, .command]))
     static let focusLeft = Self("focusLeft", initial: .init(.leftArrow, modifiers: [.control, .option, .command]))
     static let focusRight = Self("focusRight", initial: .init(.rightArrow, modifiers: [.control, .option, .command]))
     static let focusUp = Self("focusUp", initial: .init(.upArrow, modifiers: [.control, .option, .command]))
@@ -50,7 +51,6 @@ extension KeyboardShortcuts.Name {
     static let panUp = Self("panUp", initial: .init(.pageUp, modifiers: [.control, .option, .command]))
     static let panDown = Self("panDown", initial: .init(.pageDown, modifiers: [.control, .option, .command]))
     static let frameWindow = Self("frameWindow", initial: .init(.m, modifiers: [.control, .option, .command]))
-    static let frameDesktop = Self("frameDesktop", initial: .init(.g, modifiers: [.control, .option, .command]))
     // Overview (06 UI-SPEC Surface 4).
     static let showOverview = Self("showOverview", initial: .init(.a, modifiers: [.control, .option, .command]))
     // Tabs (07 UI-SPEC Surface 7): not zoom names, so they stay enabled with zoom off.
@@ -78,6 +78,22 @@ extension KeyboardShortcuts.Name {
     static let saveView7 = Self("saveView7", initial: ViewChords.shortcut(7, save: true))
     static let saveView8 = Self("saveView8", initial: ViewChords.shortcut(8, save: true))
     static let saveView9 = Self("saveView9", initial: ViewChords.shortcut(9, save: true))
+    // Halves and thirds (08.1.1 UI-SPEC Surface 4): not zoom names, so they stay enabled with zoom off. Bound by key position.
+    static let dockLeftHalf = Self("dockLeftHalf", initial: .init(.y, modifiers: [.control, .option, .command, .shift]))
+    static let dockRightHalf = Self("dockRightHalf", initial: .init(.u, modifiers: [.control, .option, .command, .shift]))
+    static let dockTopHalf = Self("dockTopHalf", initial: .init(.h, modifiers: [.control, .option, .command, .shift]))
+    static let dockBottomHalf = Self("dockBottomHalf", initial: .init(.j, modifiers: [.control, .option, .command, .shift]))
+    // Corner quarters (8.1.1 D-17): not zoom names, so they stay enabled with zoom off. Bound by key position.
+    static let dockTopLeft = Self("dockTopLeft", initial: .init(.minus, modifiers: [.control, .option, .command, .shift]))
+    static let dockTopRight = Self("dockTopRight", initial: .init(.equal, modifiers: [.control, .option, .command, .shift]))
+    static let dockBottomLeft = Self("dockBottomLeft", initial: .init(.leftBracket, modifiers: [.control, .option, .command, .shift]))
+    static let dockBottomRight = Self("dockBottomRight", initial: .init(.rightBracket, modifiers: [.control, .option, .command, .shift]))
+    static let dockLeftThird = Self("dockLeftThird", initial: .init(.i, modifiers: [.control, .option, .command, .shift]))
+    static let dockCenterThird = Self("dockCenterThird", initial: .init(.o, modifiers: [.control, .option, .command, .shift]))
+    static let dockRightThird = Self("dockRightThird", initial: .init(.p, modifiers: [.control, .option, .command, .shift]))
+    static let dockTopThird = Self("dockTopThird", initial: .init(.k, modifiers: [.control, .option, .command, .shift]))
+    static let dockMiddleThird = Self("dockMiddleThird", initial: .init(.l, modifiers: [.control, .option, .command, .shift]))
+    static let dockBottomThird = Self("dockBottomThird", initial: .init(.semicolon, modifiers: [.control, .option, .command, .shift]))
     // Fourths (08.1 UI-SPEC Surface 4): not zoom names, so they stay enabled with zoom off. Bound by key position.
     static let dockColumn1 = Self("dockColumn1", initial: .init(.one, modifiers: [.control, .option, .command, .shift]))
     static let dockColumn2 = Self("dockColumn2", initial: .init(.two, modifiers: [.control, .option, .command, .shift]))
@@ -114,7 +130,6 @@ enum Hotkeys {
         (.dock, .dock),
         (.float, .float),
         (.undo, .undo),
-        (.toggleDesktop, .toggleDesktop),
         (.focusLeft, .focus(.left)),
         (.focusRight, .focus(.right)),
         (.focusUp, .focus(.top)),
@@ -154,7 +169,6 @@ enum Hotkeys {
         (.panUp, .camera(.pan(.top))),
         (.panDown, .camera(.pan(.bottom))),
         (.frameWindow, .camera(.frameWindow)),
-        (.frameDesktop, .camera(.frameDesktop)),
         (.showOverview, .camera(.overview)),
         (.nextTab, .tabs(.next)),
         (.previousTab, .tabs(.previous)),
@@ -177,6 +191,20 @@ enum Hotkeys {
         (.saveView7, .camera(.saveView(ViewSlot(7)!))),
         (.saveView8, .camera(.saveView(ViewSlot(8)!))),
         (.saveView9, .camera(.saveView(ViewSlot(9)!))),
+        (.dockLeftHalf, .dockFourth(.firstHalf, .horizontal)),
+        (.dockRightHalf, .dockFourth(.secondHalf, .horizontal)),
+        (.dockTopHalf, .dockFourth(.firstHalf, .vertical)),
+        (.dockBottomHalf, .dockFourth(.secondHalf, .vertical)),
+        (.dockTopLeft, .dockCorner(.topLeft)),
+        (.dockTopRight, .dockCorner(.topRight)),
+        (.dockBottomLeft, .dockCorner(.bottomLeft)),
+        (.dockBottomRight, .dockCorner(.bottomRight)),
+        (.dockLeftThird, .dockFourth(.firstThird, .horizontal)),
+        (.dockCenterThird, .dockFourth(.middleThird, .horizontal)),
+        (.dockRightThird, .dockFourth(.lastThird, .horizontal)),
+        (.dockTopThird, .dockFourth(.firstThird, .vertical)),
+        (.dockMiddleThird, .dockFourth(.middleThird, .vertical)),
+        (.dockBottomThird, .dockFourth(.lastThird, .vertical)),
         (.dockColumn1, .dockFourth(.first, .horizontal)),
         (.dockColumn2, .dockFourth(.second, .horizontal)),
         (.dockColumn3, .dockFourth(.third, .horizontal)),
@@ -192,8 +220,13 @@ enum Hotkeys {
     /// The camera hotkeys: disabled while zoom is off, so their chords reach apps as in Phase 3 (D-D).
     static let zoomNames: [KeyboardShortcuts.Name] = entries.compactMap { if case .camera = $0.command { $0.name } else { nil } }
 
-    /// The fourth hotkeys. They aren't `.camera` commands, so they stay enabled with zoom off (TILE-10).
-    static let fourthNames: [KeyboardShortcuts.Name] = entries.compactMap { if case .dockFourth = $0.command { $0.name } else { nil } }
+    /// The docking-position hotkeys (halves, corners, thirds, fourths). They aren't `.camera` commands, so they stay enabled with zoom off (TILE-10).
+    static let fourthNames: [KeyboardShortcuts.Name] = entries.compactMap {
+        switch $0.command {
+        case .dockFourth, .dockCorner: $0.name
+        default: nil
+        }
+    }
 
     private static let logger = Logger(subsystem: "com.eightabyte.transom", category: "zoomInput")
 
@@ -208,11 +241,17 @@ enum Hotkeys {
         if enabled { KeyboardShortcuts.enable(zoomNames) } else { KeyboardShortcuts.disable(zoomNames) }
     }
 
-    /// The zoom and fourth defaults macOS also uses (⌃⌥⌘, and ⌃⌥⌘. when the contrast shortcuts are on); macOS takes them.
+    /// The zoom and docking-position defaults macOS also uses (⌃⌥⌘, and ⌃⌥⌘. when the contrast shortcuts are on); macOS takes them.
     static func logSystemConflicts() {
-        for name in zoomNames + fourthNames {
-            guard let chord = name.initialShortcut, chord.isTakenBySystem else { continue }
+        let taken = Set(systemConflictNames())
+        for name in zoomNames + fourthNames where taken.contains(name.rawValue) {
+            guard let chord = name.initialShortcut else { continue }
             logger.info("hotkey \(name.rawValue, privacy: .public) \(chord.description, privacy: .public) is also a macOS shortcut; macOS takes it")
         }
+    }
+
+    /// The raw names among the zoom and docking-position hotkeys whose default chord macOS also uses (the VM check reads this).
+    static func systemConflictNames() -> [String] {
+        (zoomNames + fourthNames).filter { $0.initialShortcut?.isTakenBySystem == true }.map(\.rawValue)
     }
 }

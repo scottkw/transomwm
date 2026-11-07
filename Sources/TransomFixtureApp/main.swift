@@ -216,6 +216,8 @@ final class Fixture: NSObject, NSApplicationDelegate {
                 target.setFrame(appKitRect(x: target.frame.minX, y: topLeftY, width: s[0], height: s[1]), display: true)
             case "order-back":
                 try window(parts.dropFirst().first).orderBack(nil)
+            case "order-front":  // in front without activating the app, so no focus reaches Transom (8.1.1 D-18)
+                try window(parts.dropFirst().first).orderFrontRegardless()
             case "minimize":
                 try window(parts.dropFirst().first).miniaturize(nil)
             case "deminimize":

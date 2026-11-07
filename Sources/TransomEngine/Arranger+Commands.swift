@@ -7,7 +7,7 @@ extension Arranger {
     static let resizeStep = 0.1
 
     /// Moves a docked window into the tile across `edge`, docking it on that tile's near edge (D-11, TILE-13), or
-    /// snaps a floating one to that half of the Desktop tile (TILE-14). No neighbour: beep.
+    /// snaps a floating one to that half of the visible frame (TILE-14). No neighbour: beep.
     mutating func moveOrSnap(_ window: WindowRef, toward edge: Edge) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
         if desk.desktop.contains(window) { return try snap(window, to: edge.half) }
@@ -25,15 +25,16 @@ extension Arranger {
         }
     }
 
-    /// Docks `window`, or moves it if docked, to a share of the whole desk (D-14, D-15): one undo step. A group member
+    /// Docks `window`, or moves it if docked, to a share of the whole desk (D-14, D-15) or a corner quarter (8.1.1 D-17),
+    /// `target` being a `.fourth` or a `.corner`: one undo step. A group member
     /// moves its whole group. Without room it collapses with zoom on, and with zoom off it is refused and changes
     /// nothing (D-16). A docked window already there only beeps; `commit` can't tell, because it compares rects by node
     /// and the new leaf has a new ID.
-    mutating func dockFourth(_ window: WindowRef, slot: FourthSlot, axis: Axis) throws(LayoutError) -> [ArrangerEffect] {
+    mutating func dockFourth(_ window: WindowRef, at target: DropTarget) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let area = display(for: key)?.visibleFrame else { return [.beep] }
         let group = tabGroup(holding: window)
         let shown = group.map { $0.members[$0.selected] } ?? window
-        let candidate = try dropping(window, on: key, at: .fourth(slot, axis), moving: group)
+        let candidate = try dropping(window, on: key, at: target, moving: group)
         guard let edited = candidate.world[key], let label = candidate.fourthLabel else { return [.beep] }
         let plan = try Planner.plan(desk: edited, area: area, gap: gap, mins: minimums)
         let collapsed = plan.unfit.isEmpty ? nil : try collapse(edited, area: area)
@@ -57,8 +58,8 @@ extension Arranger {
         return try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).frames == plan.frames
     }
 
-    /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen and every
-    /// hidden Desktop tile holding windows shown, one undo step per desk shown. Runs while paused; N6 counts the windows
+    /// Restore All Windows (SAFE-03): every camera home first (D-D), then every stranded window back on screen, each
+    /// rescued floater recorded at its rescue frame (a frame fact, no undo step). Runs while paused; N6 counts the windows
     /// moved, camera-parked ones included. Collapsed windows come back too and float with N1, as with zoom off (CR-01).
     /// Tab groups dissolve first (D-07), their hidden members floating beside the group and counted in N6.
     mutating func restoreAll() throws(LayoutError) -> [ArrangerEffect] {
@@ -69,20 +70,19 @@ extension Arranger {
             ? [] : [.info("restore all: dissolved \(dissolved.groups) groups, \(dissolved.windows.count) windows brought back")]
         // The dissolved members float at their cascade frames; the rescue would move them elsewhere.
         let moves = rescueStranded(desks: world, sparing: Set(dissolved.windows.map(\.identity)))
-        try showParkedDesktops(keeping: moves, undoable: true)
+        for case .setFrame(let window, let frame) in moves where isFloating(window) { try world.recordFloatingFrame(frame, for: window) }
         let count = moves.count + dissolved.windows.count
         return dissolved.faults + (moves.isEmpty ? [] : [.perform(moves)]) + replan() + showBlocks([:]) + log + [.notice(.restored(count: count))]
     }
 
-    /// Snaps a floating window to `target` inside the Desktop tile (TILE-14): a frame fact, no undo step. A floating
-    /// group's member snaps the group frame, band included (UI-SPEC Surface 5).
+    /// Snaps a floating window to `target` on the visible frame, over any docked windows (TILE-14, 8.1.1 D-10): a frame
+    /// fact, no undo step. A floating group's member snaps the group frame, band included (UI-SPEC Surface 5).
     mutating func snap(_ window: WindowRef, to target: SnapTarget) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = deskKey(of: window), let desk = world[key], let frame = desk.desktop.frame(of: window),
-            let area = display(for: key)?.visibleFrame,
-            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: minimums).desktopRect
+            let area = display(for: key)?.visibleFrame
         else { return [.beep] }
         let group = desk.desktop.group(containing: window)
-        let snapped = Snap.frame(target, window: group?.frame ?? frame, desktop: desktop, gap: gap)
+        let snapped = Snap.frame(target, window: group?.frame ?? frame, area: area, gap: gap)
         let shown = group.map { $0.members[$0.selected] } ?? window, content = group == nil ? snapped : TabBand.content(of: snapped)
         try world.recordFloatingFrame(content, for: shown)
         wantedFrames[shown.identity] = content
@@ -119,7 +119,9 @@ extension Arranger {
     }
 
     /// Docks every eligible floating window of the target desk in screen order (top to bottom, then left to right),
-    /// each on the longer side of the largest tile, as one undo step (TILE-16, D-13). A window whose dry run leaves
+    /// each into the largest empty area (8.1.1 D-16, E6), else on the longer side of the largest tile (on an empty desk
+    /// the first becomes the root), as one undo step
+    /// (TILE-16, D-13). A window whose dry run leaves
     /// any window without room stays floating, and N5 counts them; when none docks: beep, and the first one's
     /// blocked frame flashes.
     mutating func arrangeAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
@@ -148,15 +150,18 @@ extension Arranger {
                     (node, states) = (.panel(window), [window.identity: .present])
                 }
                 let resolution = try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).resolution
-                guard let (target, rect) = Self.largestTile(resolution, in: trial.tree) else {
-                    skipped += 1
-                    continue
-                }
-                do {
-                    try trial.tree.insertLeaf(node, states: states, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
-                } catch {
-                    skipped += 1  // a full split
-                    continue
+                if let (spacer, _) = Self.largestEmptyArea(resolution, in: trial.tree) {
+                    try trial.tree.applyDrop(.fill(spacer), leaf: node, states: states, ids: &trialIDs)  // E6: empty space first
+                } else if let (target, rect) = Self.largestTile(resolution, in: trial.tree) {
+                    do {
+                        try trial.tree.insertLeaf(node, states: states, at: rect.width >= rect.height ? .right : .bottom, of: target, ids: &trialIDs)
+                    } catch {
+                        skipped += 1  // a full split
+                        continue
+                    }
+                } else {
+                    // Nothing placed: no tree, or every docked window minimized, hidden or full screen. It fills the frame.
+                    try trial.tree.applyDrop(.layoutEdge(.right), leaf: node, states: states, ids: &trialIDs)
                 }
                 if try Planner.plan(desk: trial, area: area, gap: gap, mins: mins).unfit.isEmpty {
                     desk = trial
@@ -176,8 +181,8 @@ extension Arranger {
         return replan() + (skipped == 0 ? [] : [.notice(.arrangeLeftovers(count: skipped))])
     }
 
-    /// Floats every docked window of the target desk at its tile rect, clamped into the Desktop that leaves, as one
-    /// undo step that also shows a hidden Desktop (TILE-16). N4 says how many. Nothing docked: beep.
+    /// Floats every docked window of the target desk at its tile rect, clamped on screen, as one undo step (TILE-16).
+    /// N4 says how many. Nothing docked: beep.
     mutating func floatAll(_ focused: WindowRef?) throws(LayoutError) -> [ArrangerEffect] {
         guard let key = targetKey(focused), let desk = world[key], let area = display(for: key)?.visibleFrame, !desk.tree.windows.isEmpty
         else { return [.beep] }
@@ -197,25 +202,22 @@ extension Arranger {
             let actual = shown.flatMap { windows[$0.identity]?.frame }.map { grouped ? TabBand.frame(ofContent: $0) : $0 }
             return (leaf, plan.resolution.nodeRects[leaf] ?? actual ?? area)
         }
-        let gap = gap, mins = minimums, show = showingDesktop()
         var shown: [WindowRef] = []
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            if desk.tree.isDesktopHidden == true { try show(&desk, &ids) }
             var taken: [NodeID: (node: Node, states: [WindowIdentity: WindowState])] = [:]
             for (leaf, _) in docked { taken[leaf] = try desk.tree.removeLeaf(leaf) }  // leaf IDs survive: only splits collapse
-            let desktop = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins).desktopRect ?? area
             for (leaf, tile) in docked {
                 guard let (node, states) = taken[leaf] else { continue }
                 switch node {
                 case .panel(let window):
-                    try desk.desktop.add(window, frame: Planner.clamp(tile, into: desktop))
+                    try desk.desktop.add(window, frame: Planner.clamp(tile, into: area))
                     if let state = states[window.identity], state != .present { try desk.desktop.setState(state, for: window) }
                     shown.append(window)
                 case .tabs(let members, let selected):
-                    let group = FloatingTabGroup(id: try ids.make(), members: members, selected: selected, frame: Planner.clamp(tile, into: desktop))
+                    let group = FloatingTabGroup(id: try ids.make(), members: members, selected: selected, frame: Planner.clamp(tile, into: area))
                     try desk.desktop.addGroup(group, states: states)
                     shown.append(members[selected])
-                case .split, .desktop: throw .notALeaf(leaf)
+                case .split, .spacer: throw .notALeaf(leaf)
                 }
             }
         }
@@ -226,10 +228,19 @@ extension Arranger {
         return replan() + [.notice(.floatedAll(count: shown.count))]
     }
 
-    /// The largest placed leaf (the Desktop tile included); ties go to the smaller NodeID.
+    /// The largest placed leaf holding a window; ties go to the smaller NodeID. An empty area is no tile (8.1.1 D-16, E7).
     static func largestTile(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
-        let leaves = resolution.nodeRects.filter { if case .split? = tree.node($0.key) { false } else { true } }
-        return leaves.max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
+        largest(resolution) { switch tree.node($0) { case .split?, .spacer?: false; default: true } }
+    }
+
+    /// The largest empty area; ties go to the smaller NodeID (8.1.1 D-16, E6).
+    static func largestEmptyArea(_ resolution: Resolution, in tree: LayoutTree) -> (NodeID, Rect)? {
+        largest(resolution) { tree.node($0) == .spacer }
+    }
+
+    private static func largest(_ resolution: Resolution, where keep: (NodeID) -> Bool) -> (NodeID, Rect)? {
+        resolution.nodeRects.filter { keep($0.key) }
+            .max { ($0.value.width * $0.value.height, $1.key) < ($1.value.width * $1.value.height, $0.key) }
             .map { ($0.key, $0.value) }
     }
 
@@ -294,7 +305,7 @@ extension Edge {
         }
     }
 
-    /// The half of the Desktop tile ⌃⌥⌘⇧ and this arrow snap a floating window to.
+    /// The half of the visible frame ⌃⌥⌘⇧ and this arrow snap a floating window to.
     fileprivate var half: SnapTarget {
         switch self {
         case .left: .leftHalf

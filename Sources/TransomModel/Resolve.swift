@@ -21,9 +21,6 @@ public struct Resolution: Equatable, Sendable {
         self.unfit = unfit
         self.hiddenTabs = hiddenTabs
     }
-
-    /// The Desktop tile's rect; nil when the tree has none or it is hidden.
-    public var desktopRect: Rect? { nodeRects[.desktop] }
 }
 
 /// Lays the tree out in `area` with one `gap` between tiles and around the outer edge (D-12).
@@ -31,7 +28,7 @@ public struct Resolution: Equatable, Sendable {
 /// - Only `.present` windows take part (D-17). Absent and fullscreen windows keep their node but get
 ///   no rect and are not unfit; a panel takes part while its window does, a tab group while its selected
 ///   member does, a split while one child does, and the taking-part children of a split share its length
-///   by their stored weights.
+///   by their stored weights. Empty areas always take part, with a zero minimum, and get a node rect only (8.1.1 D-16).
 /// - A tab group's selected member gets the content rect (`TabBand.content`), its other present members
 ///   go to `hiddenTabs` with the same rect, and its minimum is the largest present member's plus the band.
 ///   Only the selected member can become unfit; the group goes with it.
@@ -41,12 +38,7 @@ public struct Resolution: Equatable, Sendable {
 ///   WindowIdentity. Victims are then re-admitted in removal order wherever they fit (D-11).
 /// - The area is snapped inward to whole points and the gap rounded, so every rect is whole points;
 ///   along a split each child but the last gets floor(share) and the last the remainder (D-13).
-/// - A visible Desktop tile takes part with `desktopMinimum` (rounded up like a window's) and is never
-///   unfit: when room runs out a docked window is. A hidden one takes no part, so its siblings share
-///   its space. If the Desktop alone cannot fit, it gets what there is.
-public func resolve(
-    _ tree: LayoutTree, in area: Rect, mins: [WindowRef: Size], gap: Double, desktopMinimum: Size = Size(width: 1, height: 1)
-) throws(LayoutError) -> Resolution {
+public func resolve(_ tree: LayoutTree, in area: Rect, mins: [WindowRef: Size], gap: Double) throws(LayoutError) -> Resolution {
     guard area.isValidGeometry else { throw .invalidGeometry("area") }
     guard gap.isFinite, gap >= 0, gap <= Geometry.maxCoordinate else { throw .invalidGap }
     let isValid = { (s: Size) in [s.width, s.height].allSatisfy { $0.isFinite && $0 >= 0 && $0 <= Geometry.maxCoordinate } }
@@ -54,7 +46,6 @@ public func resolve(
     if let bad = mins.filter({ !isValid($0.value) }).keys.min(by: { $0.identity < $1.identity }) {
         throw .invalidMinimum(bad)
     }
-    guard isValid(desktopMinimum) else { throw .invalidGeometry("desktop minimum") }
 
     var result = Resolution()
     guard let root = tree.root else { return result }
@@ -66,16 +57,14 @@ public func resolve(
         width: max(0, area.maxX.rounded(.down) - gap - minX),
         height: max(0, area.maxY.rounded(.down) - gap - minY))
 
-    var solver = Solver(
-        tree: tree, gap: gap,
-        desktopMinimum: Size(width: max(1, desktopMinimum.width.rounded(.up)), height: max(1, desktopMinimum.height.rounded(.up))))
+    var solver = Solver(tree: tree, gap: gap)
     var candidates: [(leaf: NodeID, window: WindowRef, min: Size)] = []
     for (id, node) in tree.nodes {
         let windows: [WindowRef], selected: WindowRef
         switch node {
         case let .panel(window): (windows, selected) = ([window], window)
         case let .tabs(tabs, index): (windows, selected) = (tabs, tabs[index])
-        case .split, .desktop: continue
+        case .split, .spacer: continue
         }
         for window in windows where tree.state(of: window) == .present {
             let min = mins[window] ?? Size(width: 1, height: 1)
@@ -96,7 +85,7 @@ public func resolve(
     while let need = try solver.aggregate(root), need.width > inner.width || need.height > inner.height {
         let wide = need.width > inner.width, tall = need.height > inner.height
         func key(_ s: Size) -> Double { wide && tall ? s.width * s.height : wide ? s.width : s.height }
-        // No window left to take out: only the Desktop's own minimum is too big, and it gets what there is.
+        // Empty only when empty areas' gaps alone overflow a tiny area: every window is out by then.
         guard let victim = candidates.filter({ solver.active.contains($0.window) }).max(by: { l, r in
             (key(l.min), l.leaf, l.window.identity) < (key(r.min), r.leaf, r.window.identity)
         }) else { break }
@@ -112,14 +101,14 @@ public func resolve(
         }
     }
 
-    if try solver.aggregate(root) != nil { try solver.place(root, in: inner, into: &result) }
+    // fits() also covers empty areas whose gaps alone overflow a tiny area: then nothing is placed.
+    if try solver.aggregate(root) != nil, try fits() { try solver.place(root, in: inner, into: &result) }
     return result
 }
 
 private struct Solver {
     let tree: LayoutTree
     let gap: Double
-    let desktopMinimum: Size
     var minimum: [WindowRef: Size] = [:]
     var active: Set<WindowRef> = []
 
@@ -139,8 +128,8 @@ private struct Solver {
             guard active.contains(windows[selected]) else { return nil }
             let sizes = windows.compactMap { minimum[$0] }
             return Size(width: sizes.map(\.width).max()!, height: sizes.map(\.height).max()! + TabBand.height)
-        case let .desktop(hidden):
-            return hidden ? nil : desktopMinimum
+        case .spacer:
+            return Size(width: 0, height: 0)
         case let .split(axis, children, _):
             var sizes: [Size] = []
             for child in children { if let size = try aggregate(child) { sizes.append(size) } }
@@ -158,14 +147,14 @@ private struct Solver {
         switch try node(id) {
         case let .panel(window):
             result.windowRects[window] = rect
+        case .spacer:
+            break
         case let .tabs(windows, selected):
             let content = TabBand.content(of: rect)
             result.windowRects[windows[selected]] = content
             for window in windows where window != windows[selected] && tree.state(of: window) == .present {
                 result.hiddenTabs[window] = content
             }
-        case .desktop:
-            break  // its rect is the nodeRects entry recorded above
         case let .split(axis, children, weights):
             var parts: [(id: NodeID, weight: Double, min: Double)] = []
             let horizontal = axis == .horizontal

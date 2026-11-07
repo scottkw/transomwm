@@ -19,14 +19,15 @@ private let somewhere = Rect(x: 200, y: 200, width: 400, height: 300)
 
 /// An Arranger whose main desk holds the layout `build` makes, re-attached from a saved World (so the shape does
 /// not depend on where Dock would put each window). Every window in `frames` is tracked; those `build` does not
-/// dock float on the Desktop at their frame. Then focused, in order: `focus`.
+/// dock float at their frame. Then focused, in order: `focus`. `empty` starts from a desk with no tree,
+/// so a test holds before and after new desks lose their Desktop tile (08.1.1-09).
 private func arranger(
-    frames: [WindowRef: Rect], minimums: [WindowRef: Size] = [:], focus: [WindowRef] = [], extra: [WindowInfo] = [],
+    frames: [WindowRef: Rect], minimums: [WindowRef: Size] = [:], focus: [WindowRef] = [], extra: [WindowInfo] = [], empty: Bool = false,
     _ build: (inout Desk, inout IDSource) throws(LayoutError) -> Void = { _, _ in }
 ) throws -> Arranger {
-    var world = World()
+    var world = empty ? try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]) : World()
     var history = UndoHistory()
-    try world.addDesk(key)
+    if !empty { try world.addDesk(key) }
     try world.edit(key, history: &history, build)
     var arranger = Arranger(gap: gap)
     _ = arranger.handle(.restore(world, homeFrames: [:]), now: .now)
@@ -38,7 +39,7 @@ private func arranger(
     return arranger
 }
 
-/// "H[a,V[b,c],D]": the tree's shape with window names, the Desktop as D.
+/// "H[a,V[b,c]]": the tree's shape with window names; "empty" for no tree.
 private func shape(_ tree: LayoutTree) -> String {
     func describe(_ id: NodeID) -> String {
         switch tree.node(id) {
@@ -46,7 +47,7 @@ private func shape(_ tree: LayoutTree) -> String {
             (axis == .horizontal ? "H[" : "V[") + children.map(describe).joined(separator: ",") + "]"
         case .panel(let window)?: names[window] ?? "?"
         case .tabs(let windows, _)?: "T[" + windows.map { names[$0] ?? "?" }.joined(separator: ",") + "]"
-        case .desktop?: "D"
+        case .spacer?: "_"
         case nil: "nil"
         }
     }
@@ -58,13 +59,13 @@ private func leaf(_ desk: Desk, _ window: WindowRef) throws(LayoutError) -> Node
     return id
 }
 
-/// [a | b | Desktop]
+/// [a | b]
 private func row(_ desk: inout Desk, _ ids: inout IDSource) throws(LayoutError) {
-    try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
     try desk.tree.insert(b, at: .right, of: try leaf(desk, a), ids: &ids)
 }
 
-/// [a | V[b, c] | Desktop]
+/// [a | V[b, c]]
 private func columns(_ desk: inout Desk, _ ids: inout IDSource) throws(LayoutError) {
     try row(&desk, &ids)
     try desk.tree.insert(c, at: .bottom, of: try leaf(desk, b), ids: &ids)
@@ -77,7 +78,7 @@ private func plan(_ arranger: Arranger, mins: [WindowRef: Size] = [:]) throws ->
 private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: key) }
 
 /// TILE-13, TILE-14, D-09, D-11: ⌃⌥⌘⇧ arrows move a docked window into the neighbouring tile, or snap a floating one
-/// to that half of the Desktop tile.
+/// to that half of the visible frame.
 @Suite struct ArrangerCommandTests {
     /// Next to a sibling on the move axis the near edge is the window's own slot, so it goes past the neighbour:
     /// the window takes the neighbour's place in the row (03-12 deviation; the near-edge insert changes nothing).
@@ -90,7 +91,7 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
         let effects = arranger.handle(.command(.moveOrSnap(.left), focused: b), now: .now)
 
         let desk = try #require(arranger.world[key])
-        #expect(shape(desk.tree) == "H[b,a,D]")
+        #expect(shape(desk.tree) == "H[b,a]")
         #expect(depth(arranger) == history + 1)
         let frames = setFrames(effects)
         let moved = try #require(frames[b], "b was not moved: \(effects)")
@@ -102,19 +103,20 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
     @Test func movingOutOfAColumnDocksOnTheNeighboursNearEdge() throws {
         var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], columns)
         let effects = arranger.handle(.command(.moveOrSnap(.left), focused: c), now: .now)
-        #expect(shape(try #require(arranger.world[key]).tree) == "H[a,c,b,D]")
+        #expect(shape(try #require(arranger.world[key]).tree) == "H[a,c,b]")
         #expect(setFrames(effects)[c] != nil)
     }
 
-    @Test func aDesktopNeighbourTakesTheWindowOnItsNearEdge() throws {
-        // V[H[a, b], Desktop]: the Desktop is below b.
-        var arranger = try arranger(frames: [a: somewhere, b: somewhere]) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(a, at: .top, of: .desktop, ids: &ids)
+    @Test func aNeighbourBelowTakesTheWindowOnItsNearEdge() throws {
+        // V[H[a, b], c]: c is below b.
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere]) { desk, ids throws(LayoutError) in
+            try desk.tree.applyDrop(.layoutEdge(.bottom), window: a, ids: &ids)
             try desk.tree.insert(b, at: .right, of: try leaf(desk, a), ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.bottom), window: c, ids: &ids)
         }
-        #expect(shape(try #require(arranger.world[key]).tree) == "V[H[a,b],D]")
+        #expect(shape(try #require(arranger.world[key]).tree) == "V[H[a,b],c]")
         _ = arranger.handle(.command(.moveOrSnap(.bottom), focused: b), now: .now)
-        #expect(shape(try #require(arranger.world[key]).tree) == "V[a,b,D]")
+        #expect(shape(try #require(arranger.world[key]).tree) == "V[a,b,c]")
     }
 
     @Test func withNoNeighbourAcrossTheEdgeItBeepsAndChangesNothing() throws {
@@ -125,7 +127,7 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
     }
 
     @Test func aMoveThatLeavesAWindowWithoutRoomIsRefusedAndFlashesTheBlockedPreview() throws {
-        // Side by side, a + c + b need 400 + 600 + 450 + 3 gaps + the Desktop: more than the 1424 pt row.
+        // Side by side, a + c + b need 400 + 600 + 450 + 2 gaps: more than the 1424 pt row.
         let mins = [a: Size(width: 400, height: 100), b: Size(width: 450, height: 100), c: Size(width: 600, height: 100)]
         var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], minimums: mins, columns)
         let world = arranger.world, history = arranger.history
@@ -136,14 +138,14 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
         #expect(arranger.world == world && arranger.history == history)
     }
 
-    @Test func aFloatingWindowSnapsToThatHalfOfTheDesktopAsAFact() throws {
+    /// 8.1.1 D-10: the half is of the visible frame, over the docked windows.
+    @Test func aFloatingWindowSnapsToThatHalfOfTheScreenAsAFact() throws {
         var arranger = try arranger(frames: [a: somewhere, f: Rect(x: 900, y: 300, width: 300, height: 200)]) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         }
-        let desktop = try #require(try plan(arranger).desktopRect)
         let history = depth(arranger)
         let effects = arranger.handle(.command(.moveOrSnap(.left), focused: f), now: .now)
-        let expected = Snap.frame(.leftHalf, window: Rect(x: 900, y: 300, width: 300, height: 200), desktop: desktop, gap: gap)
+        let expected = Snap.frame(.leftHalf, window: Rect(x: 900, y: 300, width: 300, height: 200), area: visible, gap: gap)
         #expect(setFrames(effects) == [f: expected])
         #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
         #expect(depth(arranger) == history, "a snap is a floating-frame fact, not an undo step")
@@ -151,7 +153,7 @@ private func depth(_ arranger: Arranger) -> Int { arranger.history.depth(for: ke
 
     @Test func moveOrSnapIsAvailableForDockedAndFloatingWindowsAlike() throws {
         let arranger = try arranger(frames: [a: somewhere, f: somewhere]) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         }
         #expect(arranger.isAvailable(.moveOrSnap(.left), focused: a))
         #expect(arranger.isAvailable(.moveOrSnap(.left), focused: f))
@@ -176,7 +178,7 @@ extension ArrangerCommandTests {
         var arranger = try arranger(frames: [a: somewhere, b: somewhere, f: somewhere], focus: [a, f, b], row)
         let history = depth(arranger)
         let effects = arranger.handle(.command(.swapPrevious, focused: b), now: .now)
-        #expect(shape(try #require(arranger.world[key]).tree) == "H[b,a,D]")
+        #expect(shape(try #require(arranger.world[key]).tree) == "H[b,a]")
         #expect(depth(arranger) == history + 1)
         #expect(setFrames(effects)[a] != nil && setFrames(effects)[b] != nil)
     }
@@ -190,11 +192,16 @@ extension ArrangerCommandTests {
     }
 
     @Test func growAndShrinkMoveATenthOfTheSplitFromAndToTheSiblings() throws {
-        var arranger = try arranger(frames: [a: somewhere, b: somewhere], row)
+        // [a | b | c]: b has a sibling on each side.
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere]) { desk, ids throws(LayoutError) in
+            try row(&desk, &ids)
+            try desk.tree.insert(c, at: .right, of: try leaf(desk, b), ids: &ids)
+        }
         let start = try parentWeights(arranger, b)
-        #expect(start.count == 3)
+        try #require(start.count == 3)
         _ = arranger.handle(.command(.growTile, focused: b), now: .now)
         let grown = try parentWeights(arranger, b)
+        try #require(grown.count == 3)
         #expect(abs(grown[1] - (start[1] + 0.1)) < 1e-9)
         #expect(abs(grown[0] - grown[2]) < 1e-9, "the siblings did not give in proportion: \(grown)")
         _ = arranger.handle(.command(.shrinkTile, focused: b), now: .now)
@@ -203,10 +210,11 @@ extension ArrangerCommandTests {
         #expect(depth(arranger) == 2)
     }
 
-    /// a and the Desktop (sized by f's minimum) at their minimums leave b nothing to grow into.
+    /// c at its 800 pt minimum height leaves b, above it in the column, nothing to grow into. (A floater no longer
+    /// sizes the Desktop tile, D-05, so the limit comes from a docked sibling.)
     @Test func growAtASizeLimitBeepsAndPushesNoUndoStep() throws {
-        let mins = [a: Size(width: 600, height: 100), f: Size(width: 600, height: 100)]
-        var arranger = try arranger(frames: [a: somewhere, b: somewhere, f: Rect(x: 900, y: 300, width: 600, height: 200)], minimums: mins, row)
+        let mins = [c: Size(width: 100, height: 800)]
+        var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], minimums: mins, columns)
         let world = arranger.world, history = arranger.history
         #expect(arranger.handle(.command(.growTile, focused: b), now: .now) == [.beep])
         #expect(arranger.world == world && arranger.history == history)
@@ -216,9 +224,9 @@ extension ArrangerCommandTests {
         var arranger = try arranger(frames: [a: somewhere, b: somewhere], row)
         _ = arranger.handle(.command(.growTile, focused: b), now: .now)
         _ = arranger.handle(.command(.balanceSplit, focused: b), now: .now)
-        #expect(try parentWeights(arranger, b).allSatisfy { abs($0 - 1.0 / 3) < 1e-9 })
+        #expect(try parentWeights(arranger, b).allSatisfy { abs($0 - 1.0 / 2) < 1e-9 })
         _ = arranger.handle(.command(.flipSplit, focused: b), now: .now)
-        #expect(shape(try #require(arranger.world[key]).tree) == "H[D,b,a]")
+        #expect(shape(try #require(arranger.world[key]).tree) == "H[b,a]")
         #expect(depth(arranger) == 3)
     }
 
@@ -227,7 +235,7 @@ extension ArrangerCommandTests {
         var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], columns)
         let original = try #require(arranger.world[key]).tree
         _ = arranger.handle(.command(.rotateSplit, focused: focused), now: .now)
-        #expect(shape(try #require(arranger.world[key]).tree) == "V[a,H[b,c],D]")
+        #expect(shape(try #require(arranger.world[key]).tree) == "V[a,H[b,c]]")
         _ = arranger.handle(.command(.rotateSplit, focused: focused), now: .now)
         #expect(arranger.world[key]?.tree == original)
         #expect(depth(arranger) == 2)
@@ -239,18 +247,26 @@ extension ArrangerCommandTests {
         #expect(arranger.handle(.command(command, focused: f), now: .now) == [.beep])
     }
 
+    /// 8.1.1 D-10: every target is on the visible frame, over the docked windows.
     @Test(arguments: [SnapTarget.leftThird, .centerThird, .rightThird, .topLeft, .topRight, .bottomLeft, .bottomRight, .maximize, .center])
     func snapPutsAFloatingWindowAtItsTargetAndADockedOneBeeps(target: SnapTarget) throws {
         let start = Rect(x: 900, y: 300, width: 300, height: 200)
         var arranger = try arranger(frames: [a: somewhere, f: start]) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         }
-        let desktop = try #require(try plan(arranger).desktopRect)
-        let expected = Snap.frame(target, window: start, desktop: desktop, gap: gap)
+        let expected = Snap.frame(target, window: start, area: visible, gap: gap)
         #expect(setFrames(arranger.handle(.command(.snap(target), focused: f), now: .now)) == [f: expected])
         #expect(arranger.world[key]?.desktop.frame(of: f) == expected)
         #expect(depth(arranger) == 0)
         #expect(arranger.handle(.command(.snap(target), focused: a), now: .now) == [.beep])
+    }
+
+    @Test func maximizeFillsTheVisibleFrameOnAnEmptyDesk() throws {
+        var arranger = try arranger(frames: [f: Rect(x: 900, y: 300, width: 300, height: 200)], empty: true)
+        let effects = arranger.handle(.command(.snap(.maximize), focused: f), now: .now)
+        let filled = Rect(x: visible.minX + gap, y: visible.minY + gap, width: visible.width - 2 * gap, height: visible.height - 2 * gap)
+        #expect(setFrames(effects) == [f: filled])
+        #expect(depth(arranger) == 0)
     }
 }
 
@@ -260,8 +276,8 @@ private func notices(_ effects: [ArrangerEffect]) -> [Notice] {
 
 /// TILE-16, D-13: Arrange All Windows and Float All Windows, each one undo step.
 extension ArrangerCommandTests {
-    /// Screen order is top to bottom, then left to right: b (100, 100), a (500, 100), c (100, 600). Each docks on the
-    /// longer side of the largest tile (ties to the smaller NodeID, so the Desktop first).
+    /// Screen order is top to bottom, then left to right: b (100, 100), a (500, 100), c (100, 600). On the empty desk b
+    /// becomes the root; each other docks on the longer side of the largest tile (ties to the smaller NodeID).
     @Test func arrangeAllDocksEveryFloatingWindowInScreenOrderAsOneUndoStep() throws {
         let size = (width: 300.0, height: 200.0)
         var arranger = try arranger(frames: [
@@ -271,28 +287,73 @@ extension ArrangerCommandTests {
         #expect(arranger.isAvailable(.arrangeAll, focused: nil))
         let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
         let desk = try #require(arranger.world[key])
-        // Desktop | b; then the Desktop (now taller than wide) over a; then b (tallest) over c.
-        #expect(shape(desk.tree) == "H[V[D,a],V[b,c]]")
+        // b fills the frame; a goes right of it; then b (the smaller NodeID of two equal tall tiles) over c.
+        #expect(shape(desk.tree) == "H[V[b,c],a]")
         #expect(desk.desktop.windows.isEmpty)
         #expect(notices(effects).isEmpty)
         #expect(depth(arranger) == 1)
         _ = arranger.handle(.command(.undo, focused: nil), now: .now)
         let undone = try #require(arranger.world[key])
-        #expect(shape(undone.tree) == "D" && Set(undone.desktop.windows.map(\.window)) == [a, b, c])
+        #expect(shape(undone.tree) == "empty" && Set(undone.desktop.windows.map(\.window)) == [a, b, c])
     }
 
-    /// V[a, Desktop], a at least 500 wide and 600 tall. b (at least 1000 wide) fits on the Desktop but not beside a,
-    /// the largest tile; c, with no minimum, docks there.
+    /// 8.1.1 D-16, E6: on [a .5 | empty .5], b (higher) fills the empty half, then c splits the largest tile on its
+    /// longer side: a and b are equal tall tiles, so a (the smaller NodeID, made before the empty area) goes over c.
+    @Test func arrangeAllFillsTheEmptyAreaFirst() throws {
+        let size = (width: 300.0, height: 200.0)
+        var arranger = try arranger(frames: [
+            a: somewhere, b: Rect(x: 500, y: 100, width: size.width, height: size.height),
+            c: Rect(x: 100, y: 600, width: size.width, height: size.height),
+        ]) { desk, ids throws(LayoutError) in
+            try desk.tree.insertFourth(.panel(a), states: [a.identity: .present], slot: .firstHalf, axis: .horizontal, ids: &ids)
+        }
+        try #require(shape(try #require(arranger.world[key]).tree) == "H[a,_]")
+        let steps = depth(arranger)
+
+        let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        #expect(shape(desk.tree) == "H[V[a,c],b]", "\(effects)")
+        #expect(desk.desktop.windows.isEmpty)
+        #expect(depth(arranger) == steps + 1, "Arrange All was not one undo step")
+    }
+
+    /// On an empty desk the first window in screen order becomes the root; the rest dock beside the largest tile.
+    @Test func arrangeAllOnAnEmptyDeskStartsTheLayoutWithTheFirstWindow() throws {
+        let size = (width: 300.0, height: 200.0)
+        let frames = [
+            a: Rect(x: 100, y: 100, width: size.width, height: size.height), b: Rect(x: 500, y: 100, width: size.width, height: size.height),
+            c: Rect(x: 100, y: 600, width: size.width, height: size.height),
+        ]
+        var arranger = try arranger(frames: frames, empty: true)
+        try #require(arranger.world[key]?.tree.root == nil, "precondition: the desk is not empty")
+
+        let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
+
+        let desk = try #require(arranger.world[key])
+        // a fills the frame; b goes right of it; then a (the smaller NodeID of two equal tall tiles) over c.
+        #expect(shape(desk.tree) == "H[V[a,c],b]", "\(effects)")
+        #expect(desk.desktop.windows.isEmpty)
+        #expect(!effects.contains(.beep) && notices(effects).isEmpty)
+        #expect(depth(arranger) == 1)
+        _ = arranger.handle(.command(.undo, focused: nil), now: .now)
+        let undone = try #require(arranger.world[key])
+        #expect(undone.tree.root == nil)
+        for window in [a, b, c] { #expect(undone.desktop.frame(of: window) == frames[window]) }
+    }
+
+    /// a alone, at least 500 wide and 600 tall. b (at least 1000 wide) does not fit beside a, the largest tile, on its
+    /// longer side; c, with no minimum, docks there.
     @Test func aWindowThatDoesNotFitStaysFloatingAndIsCounted() throws {
         var arranger = try arranger(
             frames: [a: somewhere, b: Rect(x: 100, y: 650, width: 1000, height: 150), c: Rect(x: 1200, y: 700, width: 200, height: 150)],
             minimums: [a: Size(width: 500, height: 600), b: Size(width: 1000, height: 100)]
         ) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(a, at: .top, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.bottom), window: a, ids: &ids)
         }
         let effects = arranger.handle(.command(.arrangeAll, focused: nil), now: .now)
         let desk = try #require(arranger.world[key])
-        #expect(shape(desk.tree) == "V[H[a,c],D]" && desk.desktop.contains(b), "\(shape(desk.tree)) \(effects)")
+        #expect(shape(desk.tree) == "H[a,c]" && desk.desktop.contains(b), "\(shape(desk.tree)) \(effects)")
         #expect(notices(effects) == [.arrangeLeftovers(count: 1)])
         #expect(depth(arranger) == 1)
     }
@@ -321,29 +382,18 @@ extension ArrangerCommandTests {
         #expect(desk.desktop.contains(f) && arranger.deskKey(of: c) == nil && arranger.deskKey(of: x) == nil)
     }
 
-    @Test func floatAllReturnsEveryDockedWindowToTheDesktopAtItsTileAsOneUndoStep() throws {
+    @Test func floatAllFloatsEveryDockedWindowAtItsTileAsOneUndoStep() throws {
         var arranger = try arranger(frames: [a: somewhere, b: somewhere, c: somewhere], columns)
         let tiles = try plan(arranger).frames
         #expect(arranger.isAvailable(.floatAll, focused: nil))
         let effects = arranger.handle(.command(.floatAll, focused: nil), now: .now)
         let desk = try #require(arranger.world[key])
-        #expect(shape(desk.tree) == "D")
+        #expect(shape(desk.tree) == "empty")
         for window in [a, b, c] { #expect(desk.desktop.frame(of: window) == tiles[window]) }
         #expect(notices(effects) == [.floatedAll(count: 3)])
         #expect(depth(arranger) == 1)
         _ = arranger.handle(.command(.undo, focused: nil), now: .now)
-        #expect(shape(try #require(arranger.world[key]).tree) == "H[a,V[b,c],D]")
-    }
-
-    @Test func floatAllShowsAHiddenDesktopInTheSameStep() throws {
-        var arranger = try arranger(frames: [a: somewhere, b: somewhere], row)
-        _ = arranger.handle(.command(.toggleDesktop, focused: nil), now: .now)
-        #expect(arranger.world[key]?.tree.isDesktopHidden == true)
-        let history = depth(arranger)
-        _ = arranger.handle(.command(.floatAll, focused: nil), now: .now)
-        #expect(arranger.world[key]?.tree.isDesktopHidden == false)
-        #expect(arranger.world[key]?.desktop.windows.count == 2)
-        #expect(depth(arranger) == history + 1)
+        #expect(shape(try #require(arranger.world[key]).tree) == "H[a,V[b,c]]")
     }
 
     @Test func floatAllWithNothingDockedBeeps() throws {

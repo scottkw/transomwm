@@ -25,7 +25,7 @@ private func notices(_ effects: [ArrangerEffect]) -> [Notice] {
     effects.compactMap { if case .notice(let notice) = $0 { notice } else { nil } }
 }
 
-/// [a | b | Desktop] on the 1440 pt display (inner width 1424 with the 8 pt gap).
+/// [a | b] on the 1440 pt display (inner width 1424 with the 8 pt gap).
 private func twoDocked() async -> Harness {
     var harness = await Harness.started()
     await harness.send(.command(.dock, focused: a))
@@ -33,32 +33,30 @@ private func twoDocked() async -> Harness {
     return harness
 }
 
-/// D-26, TILE-03: a docked window that loses its room after docking floats to the Desktop with no undo step and a
-/// notice, instead of overlapping its neighbours.
+/// D-26, TILE-03: a docked window that loses its room after docking floats, on screen at its own frame, with no undo
+/// step and a notice.
 @Suite struct ArrangerReflowTests {
-    @Test func aDockedWindowThatLosesItsRoomFloatsToTheDesktopWithANotice() async throws {
+    @Test func aDockedWindowThatLosesItsRoomFloatsAtItsFrameWithANotice() async throws {
         var harness = await twoDocked()
         let depth = harness.arranger.history.depth(for: key)
         // b's 610 pt minimum still fits beside a.
         let fits = await harness.send(.event(.windowChanged(try learned(harness, b, width: 610))))
         #expect(notices(fits).isEmpty)
         #expect(harness.arranger.world[key]?.tree.state(of: b) == .present)
-        // 800 + 610 + Desktop 1 + two gaps > 1424; beside a Desktop tile holding a, b still fits (610 + 800 + 8).
+        // 820 + 610 + one gap > 1424, so a floats; b, alone, fits.
         let before = try #require(await harness.frame(a))
-        let effects = await harness.send(.event(.windowChanged(try learned(harness, a, width: 800))))
+        let effects = await harness.send(.event(.windowChanged(try learned(harness, a, width: 820))))
 
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.tree.state(of: a) == nil && desk.desktop.contains(a))
         #expect(desk.tree.state(of: b) == .present)
-        let mins = [a: Size(width: 800, height: 100), b: Size(width: 610, height: 100)]
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: mins).desktopRect)
-        #expect(desk.desktop.frame(of: a) == Planner.clamp(before, into: desktop))
+        // a's tile was on screen, so the clamp keeps it: a floats where it was, never moved (D-05).
+        #expect(desk.desktop.frame(of: a) == Planner.clamp(before, into: visible))
+        #expect(desk.desktop.frame(of: a) == before)
         #expect(harness.arranger.history.depth(for: key) == depth, "a lost-room float added an undo step")
         #expect(notices(effects) == [.lostRoom([a])])
-        let frames = setFrames(effects)
-        let floated = try #require(frames[a]), docked = try #require(frames[b])
-        #expect(!floated.overlaps(docked))
-        #expect(await harness.frame(a) == floated)
+        #expect(setFrames(effects)[a] == nil)
+        #expect(await harness.frame(a) == before)
     }
 
     @Test func windowsLosingRoomInOneReplanGiveOneNotice() async throws {
@@ -87,29 +85,32 @@ private func twoDocked() async -> Harness {
 
 extension ArrangerReflowTests {
     /// The live scenario through the fake: the minimums come from refused writes (02-15), not from the test.
-    /// 783 + 627 cannot share the 1424 pt row with the Desktop tile (+ 17), but 627 fits beside a Desktop tile
-    /// holding the 783 pt window (+ 8).
-    @Test func minimumsLearnedFromRefusedWritesFloatTheWiderWindowClearOfItsNeighbour() async throws {
+    /// 800 + 660 + the gap cannot share the 1424 pt row, so the 800 pt window floats on screen at its own width; it may
+    /// overlap its neighbour (D-05). Alone, a fills the row and refuses nothing: its minimum is learned beside b.
+    @Test func minimumsLearnedFromRefusedWritesFloatTheWiderWindowOnScreen() async throws {
         var harness = await Harness.started(frames: [
             1: Rect(x: 40, y: 312, width: 823, height: 300), 2: Rect(x: 900, y: 312, width: 667, height: 300),
         ])
-        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 783, height: 150) }
-        await harness.fake.update(2) { $0.hiddenMinimum = Size(width: 627, height: 150) }
+        await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 800, height: 150) }
+        await harness.fake.update(2) { $0.hiddenMinimum = Size(width: 660, height: 150) }
         await harness.send(.command(.dock, focused: a))
-        await harness.fake.advance(by: .seconds(1.1))
-        _ = await harness.refresh()
-        #expect(harness.arranger.windows[a.identity]?.learnedMinimum?.width == 783)
-
         await harness.send(.command(.dock, focused: b))
         #expect(harness.arranger.world[key]?.tree.state(of: b) == .present)
+        // Halves of 708: a refuses its half.
+        await harness.fake.advance(by: .seconds(1.1))
+        _ = await harness.refresh()
+        #expect(harness.arranger.windows[a.identity]?.learnedMinimum?.width == 800)
+        #expect(harness.arranger.world[key]?.tree.state(of: a) == .present, "a floated before b's minimum was known")
+
+        // a's 800 leaves b 616: b refuses that by more than the learner's 32 pt margin.
         await harness.fake.advance(by: .seconds(1.1))
         let effects = await harness.refresh()
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.desktop.contains(a) && desk.tree.state(of: b) == .present)
         #expect(notices(effects) == [.lostRoom([a])])
-        let floated = try #require(await harness.frame(a)), docked = try #require(await harness.frame(b))
-        #expect(!floated.overlaps(docked))
-        #expect(floated.width == 783, "the floated window was written below its minimum")
+        let floated = try #require(await harness.frame(a))
+        #expect(inside(floated, visible))
+        #expect(floated.width == 800, "the floated window was written below its minimum")
     }
 }
 
@@ -129,7 +130,7 @@ private func moved(_ rect: Rect, by dx: Double, _ dy: Double) -> Rect {
 }
 
 /// The echo rule (03-01 discretion) and TILE-07: Transom's own writes are not moves; a docked window its app moved
-/// goes back to its tile at most once per second; a floating window stays where it was left unless that is on a tile.
+/// goes back to its tile at most once per second; a floating window stays where it was left, over a tile too (D-05).
 extension ArrangerReflowTests {
     @Test func transomsOwnWriteComingBackWithin2PointsIsNotAMove() async throws {
         var harness = await twoDocked()
@@ -163,7 +164,7 @@ extension ArrangerReflowTests {
         #expect(await harness.frame(a) == tile)
     }
 
-    @Test func aFloatingWindowMovedInsideTheDesktopIsRecordedWhereItWasLeft() async throws {
+    @Test func aFloatingWindowMovedOverATileIsRecordedWhereItWasLeft() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: a))
         let depth = harness.arranger.history.depth(for: key)
@@ -175,34 +176,20 @@ extension ArrangerReflowTests {
         #expect(setFrameCount(effects) == 0)
     }
 
-    @Test func aFloatingWindowMovedOntoADockedTileIsClampedIntoTheDesktop() async throws {
-        var harness = await Harness.started()
-        await harness.send(.command(.dock, focused: a))
-        let depth = harness.arranger.history.depth(for: key)
-        let target = Rect(x: 600, y: 300, width: 150, height: 120)
-        await harness.fake.userMove(2, to: target)
-        let effects = await harness.refresh()
-        let desk = try #require(harness.arranger.world[key])
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        let clamped = Planner.clamp(target, into: desktop)
-        #expect(setFrameCount(effects) == 1)
-        #expect(setFrames(effects)[b] == clamped)
-        #expect(desk.desktop.frame(of: b) == clamped)
-        #expect(harness.arranger.history.depth(for: key) == depth)
-    }
-
     @Test func aRefusedWriteReadBackIsAnEchoNotAMoveToUndo() async throws {
         var harness = await Harness.started()
         await harness.fake.update(1) { $0.hiddenMinimum = Size(width: 900, height: 100) }
+        await harness.send(.command(.dock, focused: b))  // b fills the row, so a docks beside it in a 708 pt half
+        let performed = await harness.fake.performed.count
         let effects = await harness.send(.command(.dock, focused: a))
-        #expect(setFrameCount(effects) == 1)
+        #expect(setFrameCount(effects) == 2)
         let actual = try #require(await harness.frame(a))
         #expect(actual.width == 900)
-        // The frameApplied and windowResized the write caused were fed by `send`: nothing was written again.
-        #expect(await harness.fake.performed.count == 1)
+        // The frameApplied and windowResized the writes caused were fed by `send`: nothing was written again.
+        #expect(await harness.fake.performed.count == performed + 2)
         let again = await harness.send(.event(.windowResized(a, actual)))
         #expect(again.isEmpty)
-        #expect(await harness.fake.performed.count == 1)
+        #expect(await harness.fake.performed.count == performed + 2)
     }
 
     @Test func aNarrowerDisplayThatLeavesADockedWindowNoRoomFloatsItWithOneNotice() async throws {
@@ -220,5 +207,45 @@ extension ArrangerReflowTests {
         guard case .lostRoom(let windows)? = lost.first else { return }
         #expect(windows.contains(a))
         #expect(harness.arranger.world[key]?.desktop.contains(a) == true)
+    }
+}
+
+/// WR-02: relaxing one waiting placeholder's minimum can leave another one without room. That one is relaxed too, rather
+/// than taken for a real window to float, which has no frame and stopped the display's plan.
+@Suite struct ArrangerLostRoomPlaceholderTests {
+    @Test func aPlaceholderLeftWithoutRoomByAnotherRelaxedOneIsRelaxedToo() throws {
+        func display(_ width: Double) -> DisplayInfo {
+            DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: width, height: 625), visibleFrame: Rect(x: 0, y: 25, width: width, height: 600), currentSpaceID: nil)
+        }
+        func found(_ window: WindowRef, x: Double, minimum: Double) -> WindowInfo {
+            WindowInfo(window: window, frame: Rect(x: x, y: 100, width: 300, height: 200), state: .present, displayUUID: "main",
+                learnedMinimum: Size(width: minimum, height: 100))
+        }
+        let r = WindowRef(identity: WindowIdentity(windowID: 3, pid: 950, bundleID: "com.example.other"))
+        var arranger = Arranger()
+        let start = ContinuousClock.now
+        // H[r 50 | a 500 | b 300] on a wide display.
+        var world = World(), history = UndoHistory()
+        try world.addDesk(key)
+        try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
+            for window in [r, a, b] { try desk.tree.applyDrop(.layoutEdge(.right), window: window, ids: &ids) }
+        }
+        _ = arranger.handle(.restore(world, homeFrames: [:]), now: start)
+        let inventory = WindowInventory(
+            displays: [display(3000)], windows: [found(r, x: 100, minimum: 50), found(a, x: 1000, minimum: 500), found(b, x: 2000, minimum: 300)],
+            initialRefreshComplete: true)
+        _ = arranger.handle(.inventory(inventory), now: start)
+        try #require(arranger.world[key]?.tree.windows.count == 3)
+        _ = arranger.handle(.event(.appTerminated(pid: pid)), now: start)
+        _ = arranger.handle(.event(.windowDestroyed(a)), now: start)
+        _ = arranger.handle(.event(.windowDestroyed(b)), now: start)
+        try #require(arranger.isPlaceholder(a) && arranger.isPlaceholder(b))
+
+        // Inner width 364: a (500) has no room; relaxed to 1x1 it leaves b (300) none, as 1 + 300 + 50 + 2 gaps is 367.
+        let effects = arranger.handle(
+            .inventory(WindowInventory(displays: [display(380)], windows: [found(r, x: 100, minimum: 50)], initialRefreshComplete: true)), now: start)
+
+        #expect(!effects.contains { if case .fault = $0 { true } else { false } }, "\(effects)")
+        #expect(arranger.world[key]?.tree.windows.count == 3, "a window left the tree")
     }
 }

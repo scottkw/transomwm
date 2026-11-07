@@ -5,7 +5,7 @@ import TransomModel
 public enum Navigator {
     /// Why a camera command can't act, with its UI-SPEC Surface 1 announcement.
     public enum Refusal: Error, Equatable, Sendable {
-        case alreadyHome, nothingToZoomIn, noEarlierView, noLaterView, noArea(Edge), noDockedWindow, desktopHidden, paused, notReady
+        case alreadyHome, nothingToZoomIn, noEarlierView, noLaterView, noArea(Edge), noDockedWindow, paused, notReady
         case fullScreen
 
         public var announcement: String {
@@ -19,7 +19,6 @@ public enum Navigator {
             case .noArea(.top): "No area above"
             case .noArea(.bottom): "No area below"
             case .noDockedWindow: "No docked window to frame"
-            case .desktopHidden: "The Desktop tile is hidden"
             case .paused: "Arranging is paused"
             case .notReady: "Transom needs Accessibility access"
             case .fullScreen: "Zoom isn't available in full screen"
@@ -78,9 +77,10 @@ public enum Navigator {
 
     /// One level down from the view's node: the child toward `focusedLeaf` when it is in view, else the child under
     /// `pointer` in `resolution` (the view's on-screen one), else the largest child by area, ties to the lower NodeID.
-    /// Nil on a leaf (a tab group is a leaf).
+    /// Nil on a leaf (a tab group is a leaf). An empty area is never picked (8.1.1 D-16, E7).
     public static func stepIn(view: ViewTarget, tree: LayoutTree, resolution: Resolution, focusedLeaf: NodeID?, pointer: Point?) -> NodeID? {
-        guard let node = node(of: view, in: tree), case .split(_, let children, _)? = tree.node(node) else { return nil }
+        guard let node = node(of: view, in: tree), case .split(_, let all, _)? = tree.node(node) else { return nil }
+        let children = all.filter { tree.node($0) != .spacer }
         if let focusedLeaf {
             let path = ancestors(of: focusedLeaf, in: tree)
             if let i = path.firstIndex(of: node), i + 1 < path.count { return path[i + 1] }
@@ -93,12 +93,12 @@ public enum Navigator {
     /// The node across `edge` of the view's node in the home resolution, at the same depth (edges from the root): its
     /// near side within `gap + 1` pt of the view's far side and overlapping it on the other axis. The longest overlap
     /// wins, ties to the earliest in `recency` (the most recently viewed), then the lower NodeID. Nil at home.
-    /// `Neighbours.neighbour` skips splits, hence this variant.
+    /// `Neighbours.neighbour` skips splits, hence this variant. An empty area is never a view (E7).
     public static func pan(view: ViewTarget, edge: Edge, tree: LayoutTree, homeResolution: Resolution, gap: Double, recency: [NodeID]) -> NodeID? {
         guard case .node(let id) = view, let rect = homeResolution.nodeRects[id] else { return nil }
         let depth = ancestors(of: id, in: tree).count
         var best: (overlap: Double, rank: Int, id: NodeID)?
-        for (other, candidate) in homeResolution.nodeRects where other != id && ancestors(of: other, in: tree).count == depth {
+        for (other, candidate) in homeResolution.nodeRects where other != id && tree.node(other) != .spacer && ancestors(of: other, in: tree).count == depth {
             let distance: Double, overlap: Double
             switch edge {
             case .right: distance = candidate.minX - rect.maxX
@@ -207,21 +207,19 @@ extension Arranger {
         return true
     }
 
-    /// Every leaf of that display's committed view with its on-screen rect: collapsed tiles and the Desktop tile included,
-    /// splits never. The band preview's `tiles` (04-06); empty for a display with no desk.
+    /// Every leaf of that display's committed view with its on-screen rect: collapsed tiles included, splits and empty
+    /// areas never (8.1.1 D-16, E7). The band preview's `tiles` (04-06); empty for a display with no desk.
     public func shownLeafRects(displayUUID uuid: String) throws(LayoutError) -> [NodeID: Rect] {
         guard let display = displays.first(where: { $0.uuid == uuid }), let desk = world[Self.key(display)] else { return [:] }
         let plan = try ViewPlanner.plan(
-            desk: desk, view: resolvedView(for: Self.key(display)), area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames,
+            desk: desk, view: resolvedView(for: Self.key(display)), area: display.visibleFrame, gap: gap, mins: minimums,
             collapsible: camera.collapsible)
-        return plan.resolution.nodeRects.filter { if case .split? = desk.tree.node($0.key) { false } else { true } }
+        return plan.resolution.nodeRects.filter { switch desk.tree.node($0.key) { case .split?, .spacer?: false; default: true } }
     }
 
-    /// The docked window's leaf, or the Desktop tile for a present floater on a shown Desktop.
+    /// The docked window's leaf; nil for a floating window (8.1.1 UI-SPEC Surface 2).
     public func leafNode(of window: WindowRef) -> NodeID? {
-        guard let desk = deskKey(of: window).flatMap({ world[$0] }) else { return nil }
-        if let leaf = desk.tree.leaf(containing: window) { return leaf }
-        return desk.tree.isDesktopHidden == false && desk.desktop.windows.contains { $0.window == window && $0.state == .present } ? .desktop : nil
+        deskKey(of: window).flatMap { world[$0]?.tree.leaf(containing: window) }
     }
 
     /// Whether that display's committed view frames the focused docked window (Frame Focused Window's checkmark).
@@ -230,11 +228,6 @@ extension Arranger {
             let leaf = world[Self.key(display)]?.tree.leaf(containing: focused)
         else { return false }
         return resolvedView(for: Self.key(display)) == .node(leaf)
-    }
-
-    /// Whether that display's committed view frames the Desktop tile (Frame Desktop's checkmark).
-    public func isFramingDesktop(displayUUID uuid: String) -> Bool {
-        displays.first { $0.uuid == uuid }.map { resolvedView(for: Self.key($0)) == .node(.desktop) } ?? false
     }
 
     typealias CameraStep = (target: ViewTarget, kind: PendingMove.Kind)
@@ -274,7 +267,7 @@ extension Arranger {
         case .stepIn:
             let resolution = withoutWaiting(
                 try ViewPlanner.plan(
-                    desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames, collapsible: camera.collapsible
+                    desk: desk, view: view, area: display.visibleFrame, gap: gap, mins: minimums, collapsible: camera.collapsible
                 ).resolution, tree: desk.tree)
             let focusedLeaf = focused.flatMap { deskKey(of: $0) == key ? leafNode(of: $0) : nil }
             let child = Navigator.stepIn(view: view, tree: desk.tree, resolution: resolution, focusedLeaf: focusedLeaf, pointer: pointer)
@@ -286,7 +279,7 @@ extension Arranger {
         case .pan(let edge):
             guard case .node(let viewed) = view else { return .failure(.noArea(edge)) }
             let home = withoutWaiting(
-                try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums, wanted: wantedFrames).resolution, tree: desk.tree, keeping: viewed)
+                try Planner.plan(desk: desk, area: display.visibleFrame, gap: gap, mins: minimums).resolution, tree: desk.tree, keeping: viewed)
             let recency = history.back.reversed().compactMap { entry -> NodeID? in
                 if entry.desk == key, case .node(let id) = entry.target { id } else { nil }
             }
@@ -297,9 +290,6 @@ extension Arranger {
                 desk.tree.state(of: focused) == .present, let leaf = desk.tree.leaf(containing: focused)
             else { return .failure(.noDockedWindow) }
             return toggle(Navigator.target(leaf, in: desk.tree))
-        case .frameDesktop:
-            guard desk.tree.isDesktopHidden == false else { return .failure(.desktopHidden) }
-            return toggle(Navigator.target(.desktop, in: desk.tree))
         case .overview:
             return .failure(.notReady)  // never a camera step: `camera` faults first and the shell decides availability
         case .view, .saveView:

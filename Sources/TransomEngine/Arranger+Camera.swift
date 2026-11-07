@@ -93,17 +93,18 @@ extension Arranger {
         return camera.views[Self.key(display)] ?? .home
     }
 
-    /// The committed view of `key`. When its node is gone: the deepest node of its stored path still in the tree, else home.
+    /// The committed view of `key`. When its node is gone or an empty area: the deepest node of its stored path still in the tree, else home.
     func resolvedView(for key: DeskKey) -> ViewTarget {
         guard camera.enabled, case .node(let id)? = camera.views[key], let tree = world[key]?.tree else { return .home }
-        if tree.node(id) != nil { return .node(id) }
-        return camera.paths[key]?.last { tree.node($0) != nil }.map { Navigator.target($0, in: tree) } ?? .home
+        if Self.exists(.node(id), in: tree) { return .node(id) }
+        return camera.paths[key]?.last { Self.exists(.node($0), in: tree) }.map { Navigator.target($0, in: tree) } ?? .home
     }
 
     /// The view a camera command starts from: the pending target, else the committed view. A move pending on a desk no
-    /// longer shown (a Space switch) is stale.
+    /// longer shown (a Space switch) is stale, and so is one whose node is gone or now an empty area.
     func currentView(_ uuid: String, _ key: DeskKey) -> ViewTarget {
-        camera.pending[uuid].flatMap { $0.key == key ? $0.target : nil } ?? resolvedView(for: key)
+        if let move = camera.pending[uuid], move.key == key, let tree = world[key]?.tree, Self.exists(move.target, in: tree) { return move.target }
+        return resolvedView(for: key)
     }
 
     /// The view `planShown` plans for `key` (`resolvedView`), committing the fallback when the node is gone.
@@ -120,11 +121,12 @@ extension Arranger {
         camera.paths[key] = if case .node(let id) = view, let tree = world[key]?.tree { Navigator.ancestors(of: id, in: tree) } else { nil }
     }
 
-    /// CONTEXT E: a window outside its display's view (the pending target while a move is pending) moves the camera to the
-    /// smallest view holding both. A `new` one stays unparked until a move settles on its desk (Pitfall 3).
+    /// CONTEXT E: a docked window outside its display's view (the pending target while a move is pending) moves the camera
+    /// to the smallest view holding both. A `new` one stays unparked until a move settles on its desk (Pitfall 3). A
+    /// floating window is never parked by a view (D-14), so it never widens one.
     mutating func widen(toShow window: WindowRef, new: Bool) -> [ArrangerEffect] {
         guard camera.enabled, pauseReasons.isEmpty, !sessionPaused, windows[window.identity]?.isExcluded == false,
-            let key = deskKey(of: window), let display = display(for: key), let tree = world[key]?.tree, let leaf = leafNode(of: window)
+            let key = deskKey(of: window), let display = display(for: key), let tree = world[key]?.tree, let leaf = tree.leaf(containing: window)
         else { return [] }
         let view = currentView(display.uuid, key)
         let target = Navigator.widenTarget(view: view, leaf: leaf, tree: tree)
@@ -143,7 +145,7 @@ extension Arranger {
         for (key, desk) in world.desks where resolvedView(for: key) != .home {
             guard let display = displays.first(where: { $0.uuid == key.displayUUID }),
                 let plan = try? ViewPlanner.plan(
-                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                    desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums,
                     collapsible: camera.collapsible)
             else { continue }
             for window in desk.tree.windows { tiles[window.identity] = plan.frames[window] }
@@ -157,7 +159,7 @@ extension Arranger {
         guard let display = displays.first(where: { $0.uuid == displayUUID }), resolvedView(for: Self.key(display)) != .home,
             let desk = world[Self.key(display)],
             let plan = try? ViewPlanner.plan(
-                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames,
+                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums,
                 collapsible: camera.collapsible)
         else { return nil }
         return (plan.frames, plan.collapsed)
@@ -188,11 +190,9 @@ extension Arranger {
         camera.paths = [:]
         camera.unparkedNew = []
         camera.collapsible = []  // they float with N1: Phase 3 has no collapsed tiles (Surface 3)
-        // Paused, the replan writes nothing: camera-parked and collapsed windows come on screen now (D-D, CR-02). A hidden
-        // Desktop's floaters keep Phase 3's park.
+        // Paused, the replan writes nothing: camera-parked and collapsed windows come on screen now (D-D, CR-02).
         let paused = !pauseReasons.isEmpty || sessionPaused
-        let hidden = Set(world.desks.values.filter { $0.tree.isDesktopHidden == true }.flatMap { $0.desktop.windows.map(\.window.identity) })
-        let rescued = paused ? rescueStranded(desks: world, sparing: hidden) : []
+        let rescued = paused ? rescueStranded(desks: world) : []
         return (rescued.isEmpty ? [] : [.perform(rescued)]) + replan() + showBlocks([:])  // blocks go also when paused
     }
 
@@ -243,7 +243,7 @@ extension Arranger {
             return refused("no desk on display")
         }
         let key = Self.key(display)
-        if case .node(let id) = target, desk.tree.node(id) == nil { return refused("node not found") }
+        if !Self.exists(target, in: desk.tree) { return refused("node not found") }
         var notes: [ArrangerEffect] = []
         _ = effectiveView(for: key, notes: &notes)
         let current = currentView(uuid, key)
@@ -306,8 +306,8 @@ extension Arranger {
         from current: ViewTarget, to target: ViewTarget, display: DisplayInfo, desk: Desk
     ) throws(LayoutError) -> (tiles: [TileMove], strips: [StripMove], placeholders: [TileMove]) {
         let area = display.visibleFrame, mins = learnedMinimums
-        let start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
-        let end = try ViewPlanner.plan(desk: desk, view: target, area: area, gap: gap, mins: mins, wanted: wantedFrames, collapsible: camera.collapsible)
+        let start = try ViewPlanner.plan(desk: desk, view: current, area: area, gap: gap, mins: mins, collapsible: camera.collapsible)
+        let end = try ViewPlanner.plan(desk: desk, view: target, area: area, gap: gap, mins: mins, collapsible: camera.collapsible)
         let before = Self.shown(start, desk), after = Self.shown(end, desk)
         let fromMap = Self.cameraMap(viewRect: Self.viewRect(current, start, area), onto: area)
         let toMap = Self.cameraMap(viewRect: Self.viewRect(target, end, area), onto: area)
@@ -383,9 +383,13 @@ extension Arranger {
         }
     }
 
+    /// An empty area is never a view (E7): `vacate` and `fill` keep the NodeID, so a view can outlive its window.
     static func exists(_ target: ViewTarget, in tree: LayoutTree) -> Bool {
         guard case .node(let id) = target else { return true }
-        return tree.node(id) != nil
+        switch tree.node(id) {
+        case .spacer?, nil: return false
+        case .split?, .panel?, .tabs?: return true
+        }
     }
 
     /// The affine map taking `viewRect` (the view's rect in the home resolution) onto `area` (identity for `.home`).

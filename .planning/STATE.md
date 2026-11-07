@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 08.1.1
-current_phase_name: Remove the Desktop Tile
+current_phase: 9
+current_phase_name: Polish & Ship
 current_plan: Not started
 status: planning
-stopped_at: Phase 08.1 complete, ready to plan Phase 08.1.1
-last_updated: "2026-11-06T00:31:31.646Z"
-last_activity: 2026-11-05
-last_activity_desc: Phase 08.1 complete, transitioned to Phase 08.1.1
-state_head: 0d7aed99ab94dc2ac1134335e3a7e6fff4eb0cdf
+stopped_at: Phase 08.1.1 complete, ready to plan Phase 9
+last_updated: "2026-11-07T04:02:22.610Z"
+last_activity: 2026-11-06
+last_activity_desc: Phase 08.1.1 complete, transitioned to Phase 9
+state_head: 3f1826da839f1e9bfdf14bd03ec06b2744e6fdb7
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 105
-  completed_plans: 105
+  total_plans: 132
+  completed_plans: 132
   percent: 82
 ---
 
@@ -24,22 +24,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-24)
 
 **Core value:** Windows dock into nested, non-overlapping tiles by dragging, and stay correctly arranged as windows open, close and resize. If zoom, tabs or anything else fails, this must still work.
-**Current focus:** Phase 7 — Tab Groups
+**Current focus:** Phase 08.1.1 — Remove the Desktop Tile
 
 ## Current Position
 
-Phase: 08.1.1 — Remove the Desktop Tile
+Phase: 9 — Polish & Ship
 Current Plan: Not started
-Total Plans in Phase: 7
+Total Plans in Phase: 18
 Status: Ready to plan
-Last activity: 2026-11-05 — Phase 08.1 complete, transitioned to Phase 08.1.1
+Last activity: 2026-11-06 — Phase 08.1.1 complete, transitioned to Phase 9
 
 Progress: [████████░░] 82%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 105
+- Total plans completed: 132
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -56,6 +56,7 @@ Progress: [████████░░] 82%
 | 7 | 12 | - | - |
 | 8 | 7 | - | - |
 | 08.1 | 7 | - | - |
+| 08.1.1 | 27 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -164,6 +165,33 @@ Progress: [████████░░] 82%
 | Phase 08.1 P05 | 21 min | 3 tasks | 10 files |
 | Phase 08.1 P06 | 94 min | 3 tasks | 16 files |
 | Phase 08.1 P07 | 30 min | 3 tasks | 6 files |
+| Phase 08.1.1 P01 | 8min | 3 tasks | 15 files |
+| Phase 08.1.1 P02 | 10min | 2 tasks | 12 files |
+| Phase 08.1.1 P03 | 4min | 3 tasks | 14 files |
+| Phase 08.1.1 P04 | 6min | 2 tasks | 12 files |
+| Phase 08.1.1 P05 | 10min | 3 tasks | 20 files |
+| Phase 08.1.1 P06 | 12min | 3 tasks | 20 files |
+| Phase 08.1.1 P07 | 7min | 3 tasks | 12 files |
+| Phase 08.1.1 P08 | 15min | 2 tasks | 8 files |
+| Phase 08.1.1 P09 | 7min | 2 tasks | 15 files |
+| Phase 08.1.1 P10 | 13min | 2 tasks | 13 files |
+| Phase 08.1.1 P11 | 11min | 2 tasks | 15 files |
+| Phase 08.1.1 P12 | 12min | 2 tasks | 8 files |
+| Phase 08.1.1 P13 | 25min | 2 tasks | 10 files |
+| Phase 08.1.1 P14 | 15min | 2 tasks | 15 files |
+| Phase 08.1.1 P15 | 6min | 3 tasks | 7 files |
+| Phase 08.1.1 P16 | 15min | 2 tasks | 20 files |
+| Phase 08.1.1 P17 | 12 min | 2 tasks | 13 files |
+| Phase 08.1.1 P18 | 62min | 3 tasks | 8 files |
+| Phase 08.1.1 P19 | 17 min | 3 tasks | 4 files |
+| Phase 08.1.1 P20 | 9min | 3 tasks | 21 files |
+| Phase 08.1.1 P21 | 24min | 3 tasks | 7 files |
+| Phase 08.1.1 P22 | 8min | 3 tasks | 15 files |
+| Phase 08.1.1 P23 | 8min | 3 tasks | 15 files |
+| Phase 08.1.1 P24 | 9min | 2 tasks | 9 files |
+| Phase 08.1.1 P25 | 50min | 3 tasks | 10 files |
+| Phase 08.1.1 P26 | 10min | 3 tasks | 4 files |
+| Phase 08.1.1 P27 | 15min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -460,6 +488,57 @@ Recent decisions affecting current work:
 - [Phase 08.1]: A new window on a Space not showing floats on that Space's desk rather than docking there
 - [Phase 08.1]: vm-session.sh syncs the guest before tart stop, because stopping straight after a suite undid its restored guest state
 - [Phase 08.1]: TILE-21, TILE-22 and TILE-23 marked complete at 08.1-07 with UI-SPEC's four host checks still open for /gsd-verify-work
+- [Phase 08.1.1]: 08.1.1-01: legacy layouts migrate by swapping the Desktop tile for a stand-in panel, validating the whole legacy tree, then removeLeaf; World schema 2, layout.json schema 4
+- [Phase 08.1.1]: 08.1.1-01: requirements.mark-complete skipped for MODEL-05/MODEL-09/TILE-24; they stay Pending for later plans of 8.1.1
+- [Phase 08.1.1]: 08.1.1-02: the quit-restore live test is rewritten, not deleted. It pauses, parks the floater with the fixture's move and expects it back on screen through terminationPlan's stranded rule.
+- [Phase 08.1.1]: 08.1.1-02: ArrangerRestoreTests' second hide site was parkedC, not the crash-loop test. parkedC and its three Restore All hidden-Desktop tests were deleted.
+- [Phase 08.1.1]: 08.1.1-03: retired KeyboardShortcuts raw values toggleDesktop and frameDesktop are kept in a comment in Hotkeys.swift and asserted absent by HotkeyTableTests, which also checks ⌃⌥⌘H and ⌃⌥⌘G stay unbound
+- [Phase 08.1.1]: 08.1.1-04: CommandTests keeps its no-focused-window test (renamed withNoFocusedWindowTheWindowScopedItemsAreOff) minus the Desktop-toggle line, since its dock/float/focus checks guard a live rule
+- [Phase 08.1.1]: 08.1.1-04: tests that used toggleDesktop only as some command now use finderSplit (paused availability) and camera(.back) (rate limiter)
+- [Phase 08.1.1]: 08.1.1-05: Halves and thirds are five more FourthSlot cases (names FourthSlot/.dockFourth kept); thirds use FourthSlot.oneThird/twoThirds in both the slot table and FourthCopy's exact label switch
+- [Phase 08.1.1]: 08.1.1-05: Dock Window ▸ is Arrange's first item; .dock's menu title is "Where It Is", its Shortcuts row "Dock Window Where It Is"
+- [Phase 08.1.1]: 08.1.1-06: Planner and ViewPlanner never frame, clamp, size for or park a floating window; FramePlan.frames holds docked windows only (D-05, D-14)
+- [Phase 08.1.1]: 08.1.1-06: widen(toShow:) acts for docked windows only, so a new floater never moves the camera
+- [Phase 08.1.1]: 08.1.1-06: lost-room floats are one pass, clamped into the visible frame; cascades start at the visible frame's top-left
+- [Phase 08.1.1]: Split with New Finder Window with no focused docked tile splits the largest tile; with no tile it docks at the layout edge, the root on an empty desk
+- [Phase 08.1.1]: autoTile always floats the new window first so the undo snapshot holds it where it opened
+- [Phase 08.1.1]: Tear-off landing keeps its clamp preview, now the display's visible frame
+- [Phase 08.1.1]: 08.1.1-08: ⇧ and Hold ⌥ pull-outs always undock at the release frame (no ghost, clamp or room refusal); the undock drag plan is deleted and dragPlan caches by DeskKey
+- [Phase 08.1.1]: 08.1.1-08: an empty desk docks a drag only from the 24 pt edge band (hover filters .emptyLayout; keyboard Dock unchanged)
+- [Phase 08.1.1]: 08.1.1-08: floatingGroupTarget runs first for every hover target, so a floater's centre in front of a docked tile (even the dragged window's own) wins the group dwell (RESEARCH A1, UAT 08.1.1-18)
+- [Phase 08.1.1]: 08.1.1-09: the flip is one line, Desk.init(tree: LayoutTree = LayoutTree()); every engine-created desk (World.addDesk, autoTile) starts with no tree and no Desktop tile (D-01)
+- [Phase 08.1.1]: 08.1.1-10: where the Desktop tile was only a stand-in sibling in a test layout, a docked window takes its place so the test keeps its subject; savingAViewWithNoWindowsIsRefusedAndKeepsTheSlot deleted (every node now holds a window)
+- [Phase 08.1.1]: 08.1.1-10: SKIP_A passes; the branch is still in a named-skip state with SKIP_B failing. 08.1.1-11 must run next; nothing ships or merges before it ends with a green swift test
+- [Phase 08.1.1]: 08.1.1-11: Desktop-centre drags re-aimed at the dragged window's own tile centre, Desktop-band drags at the visible frame's bottom edge band; the Hold ⌥ precedence table's outcomes are unchanged and all pass
+- [Phase 08.1.1]: 08.1.1-11: the named skip is over; plain swift test is green in all four targets (244/472/118/1248), no product code changed
+- [Phase 08.1.1]: 08.1.1-12: live fourths tests keep their labels and weights by docking a second fixture window first (one docked tile, D-04)
+- [Phase 08.1.1]: 08.1.1-12: the too-big live test learns both minimums beside each other; window 0 floats on screen at its own frame (D-05), window 1 spans the visible frame
+- [Phase 08.1.1]: 08.1.1-12: ViewsIntegrationTests seeds [(A / B) | D] so the saved column is not the whole desk
+- [Phase 08.1.1]: 08.1.1-13: focusNeighbour's .desktop? arm folded into the .split?/nil arm (exhaustive, no default); 08.1.1-16 deletes it with the case
+- [Phase 08.1.1]: 08.1.1-13: a saved view naming only floating windows resolves home at runtime with N15, not N17; no layout.json rewrite (RESEARCH OQ3, pinned by aViewOfOnlyFloatingWindowsGoesHome)
+- [Phase 08.1.1]: 08.1.1-14: Arranger.wantedFrames stays (Float, Float Group, Move Out, Snap read it); only the Planner's unread wanted: parameter was deleted
+- [Phase 08.1.1]: 08.1.1-14: Resolution.desktopRect stays in TransomModel for 08.1.1-16; the engine no longer reads it
+- [Phase 08.1.1]: 08.1.1-15: FourthTests' share table re-derived on docked tiles only; an empty desk makes the window the root for every slot (D-04)
+- [Phase 08.1.1]: 08.1.1-15: hidden-Desktop tests deleted, not converted (FourthTests aHiddenDesktopKeeps..., TabGroupModelTests theLastDockedLeafLeavingShowsAHiddenDesktop); a Desktop child standing for another participating tile becomes a docked tile with the same weight
+- [Phase 08.1.1]: 08.1.1-16: Node has no Desktop case; a schema-4 file naming a Desktop node is set aside as corrupt, schema <= 3 still migrates through LegacyNode
+- [Phase 08.1.1]: 08.1.1-17: migration docs outside the three allowed files say 'legacy Desktop node'; Arranger.matchLog's 'Desktop' log fallback kept
+- [Phase 08.1.1]: 08.1.1-18: Four macOS 27.2 live-suite failures (TabGroup close confirmation, OverviewSpaceSwitch x3, TabStripSpace, Overview helper exit) fail identically at 475030e before this phase and pass on 15.7; deferred, not phase regressions
+- [Phase 08.1.1]: 08.1.1-18: Hold ⌥ live tests dock into a docked window's tile, not the empty desk's edge band, where macOS 27 draws its own edge-tiling guide (RESEARCH E1)
+- [Phase 08.1.1]: 08.1.1-19: In the VMs the real app shows its SAFE-04 conflict alert centred at each launch (edge tiling stays on for HoldOption); intended, not a regression. OptionsBundle step 5 grabs window 1 at 7/8 of its width rather than dismissing the alert, so no conflictNotNow is written in the guest
+- [Phase 08.1.1]: 08.1.1-20: D-20 option-a built: Node.spacer empty-area leaf, layout.json schema 5 (schema 4 backs up then saves as 5). Windowless splits are rejected/reduced through the adjacent-spacer rule alone. fill(_:with:states:) takes no ids: plan 22 calls it without ids:
+- [Phase 08.1.1]: 08.1.1-21: insertFourth rebuilds the root split from pieces (fresh NodeIDs for empty pieces); every position is exact (E1), empty first (E2), nothing grows (E3)
+- [Phase 08.1.1]: 08.1.1-21: margins(of:axis:)/trimMargins work on any node, so 08.1.1-23's corners can reuse them on a child
+- [Phase 08.1.1]: 08.1.1-21: E4 vacates a panel leaf or a whole docked group moved to a position on the same desk; a lone tab moved without its group still leaves the group
+- [Phase 08.1.1]: 08.1.1-22: DropZones.target clamps the point into the root's rect only for the empty-area check, so .fill covers the outer gap and every non-empty result is unchanged
+- [Phase 08.1.1]: 08.1.1-22: A drag keeps .fill only within DropZones.displayEdgeBand (as .emptyLayout); the keyboard Dock keeps it everywhere
+- [Phase 08.1.1]: 08.1.1-22: The Finder split with a docked window focused keeps today's insert (siblings share weight, an empty area in that split shrinks too)
+- [Phase 08.1.1]: 08.1.1-23: insertFourth's body became insertShare(within:) over any node; a corner is insertShare inside a docked child spanning its half, else insertFourth along the first axis then the window leaf split with an empty area
+- [Phase 08.1.1]: 08.1.1-23: Arranger.dockFourth takes a DropTarget (.fourth or .corner); corners have no drag band
+- [Phase 08.1.1]: 08.1.1-24: corner default chords are ⇧⌃⌥⌘- = [ ] (Top Left, Top Right, Bottom Left, Bottom Right), rebindable, enabled with zoom off; fourthNames includes .dockCorner (8.1.1 D-17)
+- [Phase 08.1.1]: 8.1.1 D-18: the group dwell's 'in front' is the window server's stacking read once from the CG list at mouse-down; focus recency is only the fallback (08.1.1-25)
+- [Phase 08.1.1]: 8.1.1 D-18: with stacking known, unlisted windows rank behind every listed one and a tie goes to the docked window (08.1.1-25)
+- [Phase 08.1.1]: 08.1.1-26: D-16/D-17 proven live on macOS 27.2 and 15.7 (Fourths, OptionsBundle, HotkeyConflict suites, first run each); OptionsBundle step 1 derives the gap from window 0's left inset
+- [Phase 08.1.1]: 08.1.1-27: UAT re-check says hold ⌥ for edge/group drags in Hold ⌥ mode; ⌃/⌃⌘ fourth drags need no ⌥
 
 ### Quick Tasks Completed
 
@@ -471,6 +550,8 @@ Recent decisions affecting current work:
 | 261027-ijh | Rename Pane to Transom (code 221fd39, docs 0d33bba) | 2026-10-27 | 0d33bba | [261027-ijh-rename-the-app-from-pane-to-transom-acro](./quick/261027-ijh-rename-the-app-from-pane-to-transom-acro/) |
 | 5 | Write a comprehensive README.md for Transom | 2026-10-27 | 739295b | — |
 | 6 | Add the MIT LICENSE file | 2026-10-27 | fb0e29b | — |
+| 261106-bru | Fix menu bar icon clipped on non-Retina external display | 2026-11-06 | 6d6be69 | [261106-bru-fix-menu-bar-icon-clipped-on-non-retina-](./quick/261106-bru-fix-menu-bar-icon-clipped-on-non-retina-/) |
+| fast | E5: a minimised window leaving no longer grows an empty area (ponytail review of 08.1.1) | 2026-11-06 | 407e458 | — |
 
 ### Pending Todos
 
@@ -504,8 +585,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-05T01:34:28.762Z
-Stopped at: Phase 08.1 complete, ready to plan Phase 08.1.1
+Last session: 2026-11-06T22:44:44.891Z
+Stopped at: Phase 08.1.1 complete, ready to plan Phase 9
 Resume file: None
 
 ## Deferred Verification

@@ -15,7 +15,7 @@ private func window(_ id: UInt32) -> WindowRef {
 private let a = window(1), f = window(2), b = window(3)
 private let frameA = Rect(x: 40, y: 80, width: 320, height: 232)
 private let frameB = Rect(x: 730, y: 400, width: 150, height: 120)
-/// Small, at the bottom right, clear of the tiles once a and b dock.
+/// Small, at the bottom right: over b once a and b dock.
 private let smallF = Rect(x: 1250, y: 700, width: 150, height: 100)
 
 private func shifted(_ rect: Rect, _ dx: Double, _ dy: Double = 0) -> Rect {
@@ -64,7 +64,7 @@ private func announced(_ effects: [ArrangerEffect]) -> [String] {
     effects.compactMap { if case .announce(let text) = $0 { text } else { nil } }
 }
 
-/// [a | b | Desktop] with f floating clear of both tiles, in `mode`, and the plan of that desk.
+/// [a | b] across the whole visible frame with f floating over b, in `mode`, and the plan of that desk.
 private func docked(_ mode: DragToDockMode = .holdOption) async throws -> (Harness, FramePlan) {
     var harness = await Harness.started(frames: [1: frameA, 2: smallF, 3: frameB])
     await harness.send(.command(.dock, focused: a))
@@ -74,10 +74,15 @@ private func docked(_ mode: DragToDockMode = .holdOption) async throws -> (Harne
     return (harness, plan)
 }
 
-/// How far from b's press the pointer must go to sit over the Desktop tile's centre.
-private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Double, dy: Double) {
-    let desktop = try #require(plan.desktopRect)
-    return (desktop.midX - grab(frame).x, desktop.midY - grab(frame).y)
+/// How far from b's press the pointer must go to sit over its own tile's centre: no region, and no other panel.
+private func toOwnCentre(_ plan: FramePlan, from frame: Rect) throws -> (dx: Double, dy: Double) {
+    let rb = try #require(plan.frames[b])
+    return (rb.midX - grab(frame).x, rb.midY - grab(frame).y)
+}
+
+/// The visible frame's bottom edge band, under b: a dock region (the layout's bottom edge), over no panel but b's.
+private func bottomBand(_ plan: FramePlan) throws -> Point {
+    Point(x: try #require(plan.frames[b]).midX, y: area.maxY - 12)
 }
 
 /// TILE-22: Hold ⌥'s plain drag, its 16 pt rule (D-08, D-08a), and Automatically mode unchanged (D-07).
@@ -85,7 +90,7 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
     @Test func aPlainDragFloatsADockedWindowInsideTheDwell() async throws {
         var (harness, plan) = try await docked()
         let rb = try #require(plan.frames[b])
-        let to = try toDesktop(plan, from: rb)
+        let to = try toOwnCentre(plan, from: rb)
         let during = await drag(&harness, b, from: rb, by: to.dx, to.dy)
         let depth = harness.arranger.history.depth(for: mainKey)
 
@@ -97,15 +102,15 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
         #expect(announced(released) == [FourthCopy.floating])
         #expect(previews(during + released).isEmpty, "regions on a plain drag")
-        // The neighbour reflows into what b left.
+        // The neighbour reflows into what b left: a fills the visible frame.
         let after = try Planner.plan(desk: desk, area: area, gap: 8, mins: [:])
-        #expect(after.frames[a] != plan.frames[a] || after.desktopRect != plan.desktopRect)
+        #expect(after.frames[a] == Rect(x: 8, y: 33, width: 1424, height: 859))
     }
 
     @Test func aPlainDragPastTheDwellDrawsNothingAndGivesTheSameResult() async throws {
         var (harness, plan) = try await docked()
         let rb = try #require(plan.frames[b])
-        let to = try toDesktop(plan, from: rb)
+        let to = try toOwnCentre(plan, from: rb)
         _ = await drag(&harness, b, from: rb, by: to.dx, to.dy)
         harness.now += .milliseconds(150)
         #expect(previews(await harness.send(.tick)).isEmpty)
@@ -153,23 +158,19 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         #expect(desk.desktop.contains(b))
     }
 
-    /// UI-SPEC Surface 2: the neighbour reflows into what the window left, and the release frame crosses it.
-    @Test func aPlainDragThatWouldCrossATileClampsAndAnnounces() async throws {
+    /// UI-SPEC Surface 2 row 2: the neighbour reflows into what the window left, and the release frame crosses it. D-05:
+    /// no ghost while dragging, and the window floats at its release frame.
+    @Test func aPlainDragThatWouldCrossATileFloatsAtItsReleaseFrameAndAnnounces() async throws {
         var (harness, plan) = try await docked()
         let rb = try #require(plan.frames[b])
-        _ = await drag(&harness, b, from: rb, by: 20)
+        let during = await drag(&harness, b, from: rb, by: 20)
         harness.now += .milliseconds(150)
         let tick = await harness.send(.tick)
-        guard case .clamp = previews(tick).first else {
-            Issue.record("no clamp ghost: \(tick)")
-            return
-        }
+        #expect(previews(during + tick).isEmpty, "a pull-out showed a preview")
         let released = await up(&harness, from: rb, by: 20)
         let desk = try #require(harness.arranger.world[mainKey])
-        let desktop = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
-        let frame = try #require(desk.desktop.frame(of: b))
         #expect(desk.tree.state(of: b) == nil)
-        #expect(frame.minX >= desktop.minX && frame.maxX <= desktop.maxX, "\(frame) is outside \(desktop)")
+        #expect(desk.desktop.frame(of: b) == shifted(rb, 20))
         #expect(announced(released) == [FourthCopy.floating])
     }
 
@@ -189,7 +190,7 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
     @Test func aPlainDragOfAFloatingWindowJustMovesIt() async throws {
         var (harness, _) = try await docked()
         let depth = harness.arranger.history.depth(for: mainKey)
-        // Far enough over the Desktop tile that the regions would show in Automatically mode, and under 16 pt also moves.
+        // Far enough over b's tile that the regions would show in Automatically mode, and under 16 pt also moves.
         for dx in [-5.0, -60.0] {
             let from = try #require(harness.arranger.world[mainKey]?.desktop.frame(of: f))
             let during = await drag(&harness, f, from: from, by: dx)
@@ -217,10 +218,10 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
         #expect(announced(released) == [FourthCopy.floating])
     }
 
-    @Test func automaticallyAPlainDragOverTheDesktopCentreSnapsBackSilently() async throws {
+    @Test func automaticallyAPlainDragOverItsOwnTileCentreSnapsBackSilently() async throws {
         var (harness, plan) = try await docked(.automatic)
         let rb = try #require(plan.frames[b])
-        let to = try toDesktop(plan, from: rb)
+        let to = try toOwnCentre(plan, from: rb)
         _ = await drag(&harness, b, from: rb, by: to.dx, to.dy)
         let depth = harness.arranger.history.depth(for: mainKey)
         let released = await up(&harness, from: rb, by: to.dx, to.dy)
@@ -233,7 +234,7 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
     @Test func automaticallyAShiftDragFloatsWithNoAnnouncement() async throws {
         var (harness, plan) = try await docked(.automatic)
         let rb = try #require(plan.frames[b])
-        let to = try toDesktop(plan, from: rb)
+        let to = try toOwnCentre(plan, from: rb)
         _ = await drag(&harness, b, from: rb, by: to.dx, to.dy, [.shift])
         harness.now += .milliseconds(150)
         await harness.send(.tick)
@@ -246,8 +247,7 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
 
     @Test func optionPressedMidDragShowsTheRegionsAndDocks() async throws {
         var (harness, plan) = try await docked()
-        let desktop = try #require(plan.desktopRect)
-        let band = Point(x: desktop.minX + 5, y: desktop.midY)
+        let band = try bottomBand(plan)
         let dx = band.x - grab(smallF).x, dy = band.y - grab(smallF).y
         _ = await drag(&harness, f, from: smallF, by: dx, dy)
         await harness.send(pointer(.flagsChanged, band.x, band.y, [.option]))
@@ -268,8 +268,8 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
 
     @Test func optionPressedWithTheDwellNotElapsedIsAMiss() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b])
-        let to = try toDesktop(plan, from: rb)
+        let rb = try #require(plan.frames[b]), band = try bottomBand(plan)
+        let to = (dx: band.x - grab(rb).x, dy: band.y - grab(rb).y)
         _ = await drag(&harness, b, from: rb, by: to.dx, to.dy)
         await harness.send(pointer(.flagsChanged, grab(rb).x + to.dx, grab(rb).y + to.dy, [.option]))
         let depth = harness.arranger.history.depth(for: mainKey)
@@ -286,8 +286,7 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
 
     @Test func optionReleasedMidDragWithdrawsThePreviewAndTheReleaseIsPlainAtOnce() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
-        let band = Point(x: desktop.maxX - 5, y: desktop.midY)
+        let rb = try #require(plan.frames[b]), band = try bottomBand(plan)
         let dx = band.x - grab(rb).x, dy = band.y - grab(rb).y
         _ = await drag(&harness, b, from: rb, by: dx, dy, [.option])
         harness.now += .milliseconds(150)
@@ -371,49 +370,50 @@ private func toDesktop(_ plan: FramePlan, from frame: Rect) throws -> (dx: Doubl
 // MARK: The precedence table (UI-SPEC Surface 2, D-08, D-09, D-10)
 
 extension ArrangerHoldOptionTests {
-    enum Place: Sendable { case desktopCentre, desktopBand, otherPanel }
+    /// b's tile centre (for b its own tile), the visible frame's bottom edge band under b, and a's centre.
+    enum Place: Sendable { case bCentre, edgeBand, otherPanel }
     enum Outcome: Sendable { case floats, stays, swaps, docks, snapsBack }
 }
 
 /// A docked b dragged over `Place` and held past the dwell. ⌃ joins these rows with the fourths.
 private let dockedDrops: [(DragToDockMode, Modifiers, ArrangerHoldOptionTests.Place, ArrangerHoldOptionTests.Outcome)] = [
     // Row 1: ⇧ first, with anything.
-    (.automatic, [.shift], .desktopCentre, .floats), (.holdOption, [.shift], .desktopCentre, .floats),
+    (.automatic, [.shift], .bCentre, .floats), (.holdOption, [.shift], .bCentre, .floats),
     (.automatic, [.shift, .command], .otherPanel, .floats), (.holdOption, [.shift, .command], .otherPanel, .floats),
-    (.automatic, [.shift, .option], .desktopBand, .floats), (.holdOption, [.shift, .option], .desktopBand, .floats),
+    (.automatic, [.shift, .option], .edgeBand, .floats), (.holdOption, [.shift, .option], .edgeBand, .floats),
     // Row 4: ⌘ over another docked panel.
     (.automatic, [.command], .otherPanel, .swaps), (.holdOption, [.command], .otherPanel, .swaps),
     (.holdOption, [.command, .option], .otherPanel, .swaps),
     // Row 5: Automatically is Phase 3, with ⌘ and ⌥ having no say here.
-    (.automatic, [], .desktopBand, .docks), (.automatic, [], .desktopCentre, .snapsBack),
-    (.automatic, [.command], .desktopBand, .docks), (.automatic, [.command], .desktopCentre, .snapsBack),
-    (.automatic, [.option], .desktopBand, .docks), (.automatic, [.option], .desktopCentre, .snapsBack),
+    (.automatic, [], .edgeBand, .docks), (.automatic, [], .bCentre, .snapsBack),
+    (.automatic, [.command], .edgeBand, .docks), (.automatic, [.command], .bCentre, .snapsBack),
+    (.automatic, [.option], .edgeBand, .docks), (.automatic, [.option], .bCentre, .snapsBack),
     // Row 6: ⌥ in Hold ⌥ mode acts as Automatically, also with ⌘ and no swap target.
-    (.holdOption, [.option], .desktopBand, .docks), (.holdOption, [.option], .desktopCentre, .snapsBack),
-    (.holdOption, [.command, .option], .desktopBand, .docks), (.holdOption, [.command, .option], .desktopCentre, .snapsBack),
+    (.holdOption, [.option], .edgeBand, .docks), (.holdOption, [.option], .bCentre, .snapsBack),
+    (.holdOption, [.command, .option], .edgeBand, .docks), (.holdOption, [.command, .option], .bCentre, .snapsBack),
     // Row 7: ⌘ with no swap target never pulls a window out.
-    (.holdOption, [.command], .desktopCentre, .snapsBack), (.holdOption, [.command], .desktopBand, .snapsBack),
+    (.holdOption, [.command], .bCentre, .snapsBack), (.holdOption, [.command], .edgeBand, .snapsBack),
     // Row 8: the plain drag.
-    (.holdOption, [], .desktopCentre, .floats), (.holdOption, [], .desktopBand, .floats), (.holdOption, [], .otherPanel, .floats),
+    (.holdOption, [], .bCentre, .floats), (.holdOption, [], .edgeBand, .floats), (.holdOption, [], .otherPanel, .floats),
 ]
 
 /// A floating f dragged over `Place` and held past the dwell.
 private let floatingDrops: [(DragToDockMode, Modifiers, ArrangerHoldOptionTests.Place, ArrangerHoldOptionTests.Outcome)] = [
-    (.automatic, [], .desktopCentre, .stays), (.automatic, [], .desktopBand, .docks),
-    (.automatic, [.command], .desktopBand, .docks), (.automatic, [.shift], .desktopBand, .stays),
-    (.holdOption, [.option], .desktopCentre, .stays), (.holdOption, [.option], .desktopBand, .docks),
-    (.holdOption, [.command, .option], .desktopBand, .docks), (.holdOption, [.shift], .desktopBand, .stays),
-    (.holdOption, [], .desktopCentre, .stays), (.holdOption, [], .desktopBand, .stays),
-    (.holdOption, [.command], .desktopCentre, .stays), (.holdOption, [.command], .desktopBand, .stays),
+    (.automatic, [], .bCentre, .stays), (.automatic, [], .edgeBand, .docks),
+    (.automatic, [.command], .edgeBand, .docks), (.automatic, [.shift], .edgeBand, .stays),
+    (.holdOption, [.option], .bCentre, .stays), (.holdOption, [.option], .edgeBand, .docks),
+    (.holdOption, [.command, .option], .edgeBand, .docks), (.holdOption, [.shift], .edgeBand, .stays),
+    (.holdOption, [], .bCentre, .stays), (.holdOption, [], .edgeBand, .stays),
+    (.holdOption, [.command], .bCentre, .stays), (.holdOption, [.command], .edgeBand, .stays),
 ]
 
 private let modes: [DragToDockMode] = [.automatic, .holdOption]
 
 private func point(_ place: ArrangerHoldOptionTests.Place, _ plan: FramePlan) throws -> Point {
-    let desktop = try #require(plan.desktopRect), ra = try #require(plan.frames[a])
+    let rb = try #require(plan.frames[b]), ra = try #require(plan.frames[a])
     return switch place {
-    case .desktopCentre: Point(x: desktop.midX, y: desktop.midY)
-    case .desktopBand: Point(x: desktop.maxX - 5, y: desktop.midY)
+    case .bCentre: Point(x: rb.midX, y: rb.midY)
+    case .edgeBand: try bottomBand(plan)
     case .otherPanel: Point(x: ra.midX, y: ra.midY)
     }
 }
@@ -427,7 +427,8 @@ extension ArrangerHoldOptionTests {
         let dx = to.x - grab(rb).x, dy = to.y - grab(rb).y
         _ = await drag(&harness, b, from: rb, by: dx, dy, held)
         harness.now += .milliseconds(150)
-        await harness.send(.tick)
+        let tick = await harness.send(.tick)
+        #expect(!previews(tick).contains { if case .clamp = $0 { true } else { false } }, "a clamp ghost: \(tick)")
         let depth = harness.arranger.history.depth(for: mainKey)
 
         let released = await up(&harness, from: rb, by: dx, dy, held)
@@ -435,7 +436,7 @@ extension ArrangerHoldOptionTests {
         let desk = try #require(harness.arranger.world[mainKey])
         switch outcome {
         case .floats:
-            #expect(desk.tree.state(of: b) == nil && desk.desktop.contains(b), "b did not float")
+            #expect(desk.tree.state(of: b) == nil && desk.desktop.frame(of: b) == shifted(rb, dx, dy), "b did not float at its release frame")
             #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
         case .swaps:
             #expect(desk.tree.windows == [b, a], "no swap: \(desk.tree.windows)")
@@ -458,7 +459,8 @@ extension ArrangerHoldOptionTests {
         let dx = to.x - grab(smallF).x, dy = to.y - grab(smallF).y
         _ = await drag(&harness, f, from: smallF, by: dx, dy, held)
         harness.now += .milliseconds(150)
-        await harness.send(.tick)
+        let tick = await harness.send(.tick)
+        #expect(!previews(tick).contains { if case .clamp = $0 { true } else { false } }, "a clamp ghost: \(tick)")
         let depth = harness.arranger.history.depth(for: mainKey)
 
         _ = await up(&harness, from: smallF, by: dx, dy, held)
@@ -468,7 +470,7 @@ extension ArrangerHoldOptionTests {
             #expect(desk.tree.state(of: f) != nil, "f did not dock")
             #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
         } else {
-            #expect(desk.desktop.contains(f), "f left the Desktop tile")
+            #expect(desk.desktop.frame(of: f) == shifted(smallF, dx, dy), "f did not stay where released")
             #expect(harness.arranger.history.depth(for: mainKey) == depth)
         }
     }
@@ -478,7 +480,7 @@ extension ArrangerHoldOptionTests {
     @Test func commandWithNoSwapTargetShowsTheSnapBackAndNeverPullsOut() async throws {
         var (harness, plan) = try await docked()
         let rb = try #require(plan.frames[b])
-        let to = try toDesktop(plan, from: rb)
+        let to = try toOwnCentre(plan, from: rb)
         _ = await drag(&harness, b, from: rb, by: to.dx, to.dy, [.command])
         harness.now += .milliseconds(150)
         #expect(previews(await harness.send(.tick)) == [.snapBack(rb, label: nil)])
@@ -504,30 +506,29 @@ extension ArrangerHoldOptionTests {
 
     // MARK: The plain drag's refusals
 
-    @Test func withTheDesktopHiddenAPlainDragSnapsBackAndSaysWhy() async throws {
-        var (harness, _) = try await docked()
-        await harness.send(.command(.toggleDesktop, focused: a))
-        let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
-        let rb = try #require(plan.frames[b])
-        let text = "Show the Desktop Tile to float windows"
-        _ = await drag(&harness, b, from: rb, by: 0, 60)
-        harness.now += .milliseconds(150)
-        #expect(previews(await harness.send(.tick)) == [.snapBack(rb, label: text)])
-        let depth = harness.arranger.history.depth(for: mainKey)
-
-        let released = await up(&harness, from: rb, by: 0, 60)
-
-        #expect(announced(released) == [text])
-        #expect(setFrames(released)[b] == rb)
-        #expect(harness.arranger.world[mainKey]?.tree.state(of: b) == .present)
-        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+    /// UI-SPEC Surface 2 rows 5-6 in Hold ⌥ mode: with ⌥ held an empty desk docks from its edge band only; without ⌥ the
+    /// band is a plain move.
+    @Test func onAnEmptyDeskOptionDocksFromTheEdgeBandOnly() throws {
+        let band = Point(x: 10, y: 460), middle = Point(x: 720, y: 460)
+        let held = try dragOnAnEmptyDesk(to: band, [.option], mode: .holdOption)
+        #expect(previews(held.tick) == [.dock(wholeVisibleTile)], "tick gave \(held.tick)")
+        #expect(held.arranger.world[mainKey]?.tree.root != nil, "⌥ in the band did not dock")
+        #expect(held.arranger.history.depth(for: mainKey) == held.steps + 1)
+        for (point, modifiers): (Point, Modifiers) in [(middle, .option), (band, Modifiers())] {
+            let run = try dragOnAnEmptyDesk(to: point, modifiers, mode: .holdOption)
+            #expect(previews(run.tick).isEmpty, "\(modifiers) at \(point) gave \(run.tick)")
+            #expect(run.arranger.world[mainKey]?.tree.root == nil)
+            #expect(run.arranger.world[mainKey]?.desktop.frame(of: f) == run.released)
+            #expect(run.arranger.history.depth(for: mainKey) == run.steps)
+            #expect(announced(run.up).isEmpty)
+        }
     }
 
-    @Test func aPlainDragOfAWindowTooBigForTheDesktopIsBlockedAndSnapsBack() throws {
-        // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
-        var tree = LayoutTree.withDesktop()
+    /// UI-SPEC Surface 2 row 4 (row gone): a pull-out never lacks room, whatever the window's minimum.
+    @Test func aPlainDragOfAWindowTooBigForAnyRoomStillFloatsAtItsReleaseFrame() throws {
+        var tree = LayoutTree()
         var ids = IDSource()
-        try tree.insert(a, at: .top, of: .desktop, ids: &ids)
+        try tree.applyDrop(.layoutEdge(.bottom), window: a, ids: &ids)
         try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
         let world = try World(ids: ids, desks: [mainKey: Desk(tree: tree)])
         let mins = [a: Size(width: 100, height: 600), b: Size(width: 100, height: 300)]
@@ -537,8 +538,6 @@ extension ArrangerHoldOptionTests {
         let infos = [info(1, frame: frameA, minimum: mins[a]), info(3, frame: frameB, minimum: mins[b])]
         _ = arranger.handle(.inventory(WindowInventory(displays: [mainDisplay], windows: infos, initialRefreshComplete: true)), now: start)
         _ = arranger.handle(.dragToDock(.holdOption), now: start)
-        let restored = try #require(arranger.world[mainKey])
-        let ra = try #require(try Planner.plan(desk: restored, area: area, gap: 8, mins: mins).frames[a])
         let from = try #require(arranger.windows[a.identity]).frame
         let press = grab(from), to = Point(x: 700, y: 800)
 
@@ -548,10 +547,10 @@ extension ArrangerHoldOptionTests {
         let tick = arranger.handle(.tick, now: start + .milliseconds(150))
         let released = arranger.handle(pointer(.up, to.x, to.y), now: start + .milliseconds(200))
 
-        #expect(previews(tick).contains { if case .blocked = $0 { true } else { false } }, "tick gave \(tick)")
-        #expect(announced(released) == ["Not enough room to dock here"])
-        #expect(arranger.world[mainKey]?.tree.state(of: a) == .present)
-        #expect(setFrames(released)[a] == ra)
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
+        #expect(announced(released) == [FourthCopy.floating])
+        #expect(arranger.world[mainKey]?.tree.state(of: a) == nil)
+        #expect(arranger.world[mainKey]?.desktop.frame(of: a) == shifted(from, to.x - press.x, to.y - press.y))
     }
 
     // MARK: Group dwell (D-09)
@@ -582,7 +581,7 @@ extension ArrangerHoldOptionTests {
         #expect(tree.node(try #require(tree.leaf(containing: b))) == .tabs(windows: [b, a], selected: 1))
     }
 
-    /// On the Desktop tile a floating window's centre is the target (Phase 7 D-02).
+    /// On an empty desk a floating window's centre is the target (Phase 7 D-02).
     @Test(arguments: [(Modifiers(), false), (Modifiers.option, true)])
     func aWindowHeldOnAFloatingCentreGroupsOnlyWithOption(held: Modifiers, groups: Bool) async throws {
         var harness = await Harness.started(frames: [1: frameA, 2: smallF, 3: frameB])
@@ -603,7 +602,7 @@ extension ArrangerHoldOptionTests {
         var (arranger, group, _, content) = try holdOptionGroup(at: start)  // [a | [b, f]], f selected
         let ra = try tile(arranger, a)
         let to = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
-        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: try desktopRect(arranger))
+        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: area)
         _ = try tear(&arranger, f, of: group, to: to, at: start)
         let depth = arranger.history.depth(for: mainKey)
 
@@ -621,7 +620,7 @@ extension ArrangerHoldOptionTests {
         var (arranger, group, _, content) = try holdOptionGroup(at: start)
         let ra = try tile(arranger, a)
         let to = Point(x: ra.minX + 0.1 * ra.width, y: ra.midY)
-        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: try desktopRect(arranger))
+        let expected = Planner.clamp(landing(arranger, f, content: content, at: to), into: area)
         _ = try tear(&arranger, f, of: group, to: to, at: start)
         let tick = arranger.handle(.tick, now: start + DragSession.dwell)
         #expect(previews(tick) == [.clamp(expected)], "tick gave \(tick)")
@@ -791,11 +790,6 @@ private func groupPreviews(_ effects: [ArrangerEffect]) -> [PreviewState] {
 private func tile(_ arranger: Arranger, _ window: WindowRef) throws -> Rect {
     let desk = try #require(arranger.world[mainKey])
     return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[window])
-}
-
-private func desktopRect(_ arranger: Arranger) throws -> Rect {
-    let desk = try #require(arranger.world[mainKey])
-    return try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).desktopRect)
 }
 
 /// [a | [b, f]], f selected, on an Arranger with no window system, in Hold ⌥ mode.

@@ -86,7 +86,7 @@ public enum ArrangementSwitch: Equatable, Sendable {
     }
 
     /// Where windows floated from a vanished display go (D-10): each at its own size, 24 pt right of and below the one
-    /// before, the first at `start` (the receiving Desktop tile's top-left), clamped inside `visible`.
+    /// before, the first at `start` (the receiving visible frame's top-left), clamped inside `visible`.
     public static func cascade(frames: [Rect], from start: Point, in visible: Rect) -> [Rect] {
         frames.enumerated().map { index, frame in
             let offset = 24 * Double(index)

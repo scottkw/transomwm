@@ -20,7 +20,7 @@ import Testing
     @Test func aValidURLDispatchesOnceAndAnythingElseNothing() throws {
         var opened: [Command] = []
         let delegate = AppDelegate(restore: {}, writeCleanExit: {}, open: { opened.append($0) }, gate: CommandGate(scheme: "transom-debug"))
-        let urls = try ["transom-debug://restore", "transom-debug://restore?x=1", "transom://toggle-desktop", "transom-debug://zoom",
+        let urls = try ["transom-debug://restore", "transom-debug://restore?x=1", "transom://float-all", "transom-debug://zoom",
             "transom-debug://restore", "transom-debug://split-finder"].map { try #require(URL(string: $0)) }
         delegate.application(NSApplication.shared, open: urls)
         // The second restore is inside the same second.
@@ -49,10 +49,10 @@ import Testing
         let arrange = ArrangeController(system: AXWindowSystem())
         var beeps = 0
         arrange.beep = { beeps += 1 }
-        // Not started: no display, so Hide Desktop Tile has no desk to act on.
-        await arrange.dispatch(.toggleDesktop, from: .url)
+        // Not started: no display, so Float All has no desk to act on.
+        await arrange.dispatch(.floatAll, from: .url)
         #expect(beeps == 0)
-        await arrange.dispatch(.toggleDesktop, from: .hotkey)
+        await arrange.dispatch(.floatAll, from: .hotkey)
         #expect(beeps == 1)
     }
 

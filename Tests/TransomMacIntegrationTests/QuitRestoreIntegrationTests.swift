@@ -34,14 +34,14 @@ private func listedFrame(_ fixture: FixtureProcess, _ index: Int) async throws -
     return (system, refs)
 }
 
-/// SAFE-01 live (D-15, Pattern 11): the quit restore puts a parked fixture window back at its home frame, and a hung app
+/// SAFE-01 live (D-15, Pattern 11): the quit restore puts a parked fixture window back on screen, and a hung app
 /// never holds it past its limit. Fixture windows only; nothing is persisted.
 @Suite(.serialized, .enabled(if: IntegrationEnv.trusted, "needs a process with the Accessibility grant"))
 @MainActor struct QuitRestoreIntegrationTests {
-    /// Window 0 docked, window 1 floating; hiding the Desktop parks window 1. The quit restore brings it home and leaves
-    /// the docked window alone.
+    /// Window 0 docked, window 1 floating; with Transom paused, window 1 is moved to the park rect. The quit restore brings
+    /// it back on screen and leaves the docked window alone.
     @Test(.timeLimit(.minutes(1)))
-    func theQuitRestoreReturnsAParkedWindowToItsHomeFrame() async throws {
+    func theQuitRestoreBringsAParkedFloaterBackOnScreen() async throws {
         let fixture = try await FixtureProcess.launch(["standard", "standard"])
         defer { fixture.terminate() }
         let (system, refs) = try await tracking([fixture])
@@ -56,21 +56,33 @@ private func listedFrame(_ fixture: FixtureProcess, _ index: Int) async throws -
         let key = try #require(controller.arranger.deskKey(of: refs[0]))
         try #require(controller.arranger.world[key]?.tree.state(of: refs[0]) == .present, "window 0 did not dock")
         try #require(controller.arranger.isFloating(refs[1]), "window 1 is not floating")
-        await controller.dispatch(.toggleDesktop, focused: refs[0])
-        let home = try #require(controller.arranger.homeFrames[refs[1].identity], "hiding the Desktop recorded no home frame")
-        var parkedAt: Rect?
-        let parked = await waitUntil(timeout: .seconds(3)) {
-            parkedAt = try? await listedFrame(fixture, 1)
-            return parkedAt.map { !near($0, home) } ?? false
+        let displays = Displays.current()
+        let display = try #require(displays.first { $0.uuid == key.displayUUID })
+        // The dock's frame write lands a moment after the command: read window 0 once it is at its tile, not mid-move.
+        let desk = try #require(controller.arranger.world[key])
+        let tile = try #require(try Planner.plan(desk: desk, area: display.visibleFrame, gap: controller.arranger.gap, mins: [:]).frames[refs[0]])
+        var dockedAt: Rect?
+        let atTile = await waitUntil(timeout: .seconds(3)) {
+            dockedAt = try? await listedFrame(fixture, 0)
+            return dockedAt.map { near($0, tile) } ?? false
         }
-        try #require(parked, "window 1 never left its home frame \(home): \(String(describing: parkedAt))")
-        let dockedFrame = try #require(try await listedFrame(fixture, 0))
+        try #require(atTile, "window 0 never reached its tile \(tile): \(String(describing: dockedAt))")
+        let dockedFrame = try #require(dockedAt)
+        // Paused, so Transom does not put the floater back itself before the quit.
+        await controller.dispatch(.togglePause, focused: nil)
+        let floating = try #require(try await listedFrame(fixture, 1))
+        let park = display.parkedFrame(size: floating.size, among: displays)
+        _ = try await fixture.send("move 1 \(Int(park.x)) \(Int(park.y))")
+        let seen = await waitUntil(timeout: .seconds(3)) {
+            controller.arranger.windows[refs[1].identity].map { Recovery.isStranded($0.frame, displays: displays) } ?? false
+        }
+        try #require(seen, "Transom never saw window 1 at the park rect \(park)")
 
         let restored = controller.restoreForTermination(limit: .seconds(2))
         arrange = nil  // Transom exits after the restore: nothing may react to the move
         #expect(restored == 1)
         let back = try #require(try await listedFrame(fixture, 1))
-        #expect(near(back, home), "window 1 is at \(back), not its home frame \(home)")
+        #expect(!Recovery.isStranded(back, displays: displays), "window 1 is still parked at \(back)")
         let docked = try #require(try await listedFrame(fixture, 0))
         #expect(near(docked, dockedFrame), "the docked window moved from \(dockedFrame) to \(docked)")
     }

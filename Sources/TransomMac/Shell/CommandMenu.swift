@@ -10,16 +10,22 @@ import TransomModel
 @MainActor final class CommandMenu: NSObject, NSMenuItemValidation {
     /// Every command with a menu item, in no particular order: the status menu places them.
     static let commands: [Command] = [
-        .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
+        .dock, .float, .undo, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
         .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
         .swapPrevious, .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .snap(.leftThird), .snap(.centerThird),
         .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
         .arrangeAll, .floatAll, .restoreAll,
         .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
-        .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
+        .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow),
         .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
-    ] + fourthColumns + fourthRows
+    ] + halfColumns + halfRows + corners + thirdColumns + thirdRows + fourthColumns + fourthRows
 
+    private static let halfColumns: [Command] = [.dockFourth(.firstHalf, .horizontal), .dockFourth(.secondHalf, .horizontal)]
+    private static let halfRows: [Command] = [.dockFourth(.firstHalf, .vertical), .dockFourth(.secondHalf, .vertical)]
+    private static let corners: [Command] = DockCorner.allCases.map { .dockCorner($0) }
+    private static let thirdColumns: [Command] = thirdSlots.map { .dockFourth($0, .horizontal) }
+    private static let thirdRows: [Command] = thirdSlots.map { .dockFourth($0, .vertical) }
+    private static let thirdSlots: [FourthSlot] = [.firstThird, .middleThird, .lastThird]
     private static let fourthColumns: [Command] = fourthSlots.map { .dockFourth($0, .horizontal) }
     private static let fourthRows: [Command] = fourthSlots.map { .dockFourth($0, .vertical) }
     private static let fourthSlots: [FourthSlot] = [.first, .second, .third, .fourth, .middle]
@@ -27,7 +33,8 @@ import TransomModel
     let focusMenu = NSMenuItem(title: "Focus", action: nil, keyEquivalent: "")
     let splitMenu = NSMenuItem(title: "Split", action: nil, keyEquivalent: "")
     let moveMenu = NSMenuItem(title: MenuCopy.moveMenu, action: nil, keyEquivalent: "")
-    let fourthMenu = NSMenuItem(title: MenuCopy.fourthMenu, action: nil, keyEquivalent: "")
+    /// The first item of Arrange (08.1.1 UI-SPEC Surface 3): every docking position with its hotkey.
+    let dockMenu = NSMenuItem(title: MenuCopy.fourthMenu, action: nil, keyEquivalent: "")
     let snapMenu = NSMenuItem(title: MenuCopy.snapMenu, action: nil, keyEquivalent: "")
     let moveViewMenu = NSMenuItem(title: ZoomCopy.moveViewMenu, action: nil, keyEquivalent: "")
     let tabsMenu = NSMenuItem(title: TabCopy.tabsMenu, action: nil, keyEquivalent: "")
@@ -60,7 +67,10 @@ import TransomModel
         focusMenu.submenu = submenu("Focus", [.focus(.left), .focus(.right), .focus(.top), .focus(.bottom)])
         splitMenu.submenu = submenu("Split", [.growTile, .shrinkTile, nil, .balanceSplit, .rotateSplit, .flipSplit, nil, .finderSplit])
         moveMenu.submenu = submenu(MenuCopy.moveMenu, Self.edges.map { .moveOrSnap($0) })
-        fourthMenu.submenu = submenu(MenuCopy.fourthMenu, Self.fourthColumns + [nil] + Self.fourthRows)
+        dockMenu.submenu = submenu(MenuCopy.fourthMenu, groups: [
+            (nil, [.dock]), (MenuCopy.halvesHeader, Self.halfColumns + Self.halfRows), (MenuCopy.cornersHeader, Self.corners),
+            (MenuCopy.thirdsHeader, Self.thirdColumns + Self.thirdRows), (MenuCopy.fourthsHeader, Self.fourthColumns + Self.fourthRows),
+        ])
         let snap = submenu(MenuCopy.snapMenu, [
             nil, .snap(.leftThird), .snap(.centerThird), .snap(.rightThird), nil, .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft),
             .snap(.bottomRight), nil, .snap(.maximize), .snap(.center),
@@ -73,17 +83,14 @@ import TransomModel
 
     /// The Zoom section (UI-SPEC Surface 6; 06 Surface 4 puts Show Overview first): the header, the camera items, `previews` (nil while Screen Recording is
     /// granted) and `toggle`; with zoom off only the header and Turn On Zoom. Enabled states come from `update`.
-    /// `takeover` is Replace Mission Control (O2), after Frame Desktop.
-    func zoomSection(
-        enabled: Bool, framingWindow: Bool, framingDesktop: Bool, takeover: NSMenuItem? = nil, previews: NSMenuItem?, toggle: NSMenuItem
-    ) -> [NSMenuItem] {
+    /// `takeover` is Replace Mission Control (O2), after Frame Focused Window.
+    func zoomSection(enabled: Bool, framingWindow: Bool, takeover: NSMenuItem? = nil, previews: NSMenuItem?, toggle: NSMenuItem) -> [NSMenuItem] {
         toggle.title = enabled ? ZoomCopy.turnOffZoom : ZoomCopy.turnOnZoom
         guard enabled else { return [.sectionHeader(title: ZoomCopy.zoomSection), toggle] }
         item(for: .camera(.frameWindow)).state = framingWindow ? .on : .off
-        item(for: .camera(.frameDesktop)).state = framingDesktop ? .on : .off
         let steps = [CameraCommand.overview, .zoomOutAll, .stepOut, .stepIn, .back, .forward].map { item(for: .camera($0)) }
-        let frames = [item(for: .camera(.frameWindow)), item(for: .camera(.frameDesktop))]
-        return [.sectionHeader(title: ZoomCopy.zoomSection)] + steps + [moveViewMenu] + frames + [takeover, previews].compactMap { $0 } + [toggle]
+        let frame = item(for: .camera(.frameWindow))
+        return [.sectionHeader(title: ZoomCopy.zoomSection)] + steps + [moveViewMenu, frame] + [takeover, previews].compactMap { $0 } + [toggle]
     }
 
     func halfItem(_ edge: Edge) -> NSMenuItem {
@@ -137,6 +144,19 @@ import TransomModel
     private func submenu(_ title: String, _ commands: [Command?]) -> NSMenu {
         let menu = NSMenu(title: title)
         for command in commands { menu.addItem(command.map(item(for:)) ?? .separator()) }
+        return menu
+    }
+
+    /// A separator and a section header (macOS 14) before each headed group.
+    private func submenu(_ title: String, groups: [(header: String?, commands: [Command])]) -> NSMenu {
+        let menu = NSMenu(title: title)
+        for group in groups {
+            if let header = group.header {
+                menu.addItem(.separator())
+                menu.addItem(.sectionHeader(title: header))
+            }
+            for command in group.commands { menu.addItem(item(for: command)) }
+        }
         return menu
     }
 }

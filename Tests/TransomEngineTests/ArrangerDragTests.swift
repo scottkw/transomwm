@@ -164,22 +164,21 @@ private func previews(_ effects: [ArrangerEffect]) -> [PreviewState] {
 private let a = window(1), b = window(3)
 private let frameA = Rect(x: 40, y: 80, width: 320, height: 232)
 private let frameB = Rect(x: 730, y: 400, width: 150, height: 120)
-/// Small, at the bottom right, clear of the tiles once a and b dock.
+/// Small, at the bottom right: over b once a and b dock.
 private let smallF = Rect(x: 1250, y: 700, width: 150, height: 100)
 private let mainDisplay = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1440, height: 900), visibleFrame: area, currentSpaceID: nil)
 private let noRoom = "Not enough room to dock here"
-private let showDesktop = "Show the Desktop Tile to float windows"
 
 private func centre(_ rect: Rect) -> Point { Point(x: rect.midX, y: rect.midY) }
 
-/// [a | b | Desktop] with f floating clear of both tiles, and the plan of that desk.
+/// [a | b] across the whole visible frame with f floating over b, and the plan of that desk.
 private func docked() async throws -> (Harness, FramePlan) {
     var harness = await Harness.started(frames: [1: frameA, 2: smallF, 3: frameB])
     await harness.send(.command(.dock, focused: a))
     await harness.send(.command(.dock, focused: b))
     let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
     let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
-    #expect(plan.frames[f] == nil, "f is not clear of the tiles")
+    #expect(plan.frames[f] == nil, "f is planned as a tile")
     #expect(abs(rb.minX - ra.maxX - 8) < 0.5, "a and b are not side by side: \(ra) \(rb)")
     return (harness, plan)
 }
@@ -260,9 +259,10 @@ extension ArrangerDragTests {
         #expect(harness.arranger.history.depth(for: mainKey) == depth)
     }
 
-    @Test func aFloatingWindowOverACentreInsideTheDesktopGetsNoPreviewAndAPlainMove() async throws {
+    @Test func aFloatingWindowOverAGapGetsNoPreviewAndAPlainMove() async throws {
         var (harness, plan) = try await docked()
-        let point = centre(try #require(plan.desktopRect))
+        let ra = try #require(plan.frames[a])
+        let point = Point(x: ra.maxX + 4, y: ra.midY)
         _ = await drag(&harness, f, from: smallF, to: point)
         harness.now += .milliseconds(150)
         #expect(previews(await harness.send(.tick)).isEmpty)
@@ -271,26 +271,26 @@ extension ArrangerDragTests {
         #expect(setFrames(up)[f] == nil)
     }
 
-    @Test func aFloatingWindowWhoseReleaseFrameCrossesATileGetsTheClampGhost() async throws {
+    /// D-05 (UI-SPEC Surface 2 row 1): no clamp ghost while dragging, and the release keeps the frame across a tile.
+    @Test func aFloatingWindowWhoseReleaseFrameCrossesATileStaysWhereItIsReleased() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
+        let rb = try #require(plan.frames[b])
         let point = centre(rb)
         _ = await drag(&harness, f, from: smallF, to: point)
         harness.now += .milliseconds(150)
-        let clamped = Planner.clamp(released(smallF, at: point), into: desktop)
-        #expect(previews(await harness.send(.tick)) == [.clamp(clamped)])
+        #expect(previews(await harness.send(.tick)).isEmpty)
         let up = await harness.send(pointer(.up, point.x, point.y))
-        #expect(harness.arranger.world[mainKey]?.desktop.frame(of: f) == clamped)
-        #expect(setFrames(up)[f] == clamped)
+        #expect(harness.arranger.world[mainKey]?.desktop.frame(of: f) == released(smallF, at: point))
+        #expect(setFrames(up)[f] == nil)
     }
 
     @Test func shiftUndocksADockedWindowAtItsReleaseFrame() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
-        let point = Point(x: desktop.midX, y: desktop.minY + 40)
+        let rb = try #require(plan.frames[b])
+        let point = Point(x: rb.midX, y: rb.minY + 40)
         _ = await drag(&harness, b, from: rb, to: point, [.shift])
         harness.now += .milliseconds(150)
-        #expect(previews(await harness.send(.tick)).isEmpty, "a bypass clear of the tiles showed a preview")
+        #expect(previews(await harness.send(.tick)).isEmpty, "a bypass over its own tile showed a preview")
         let depth = harness.arranger.history.depth(for: mainKey)
 
         await harness.send(pointer(.up, point.x, point.y, [.shift]))
@@ -300,11 +300,34 @@ extension ArrangerDragTests {
         #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
     }
 
+    /// D-05 (UI-SPEC Surface 2 row 2): ⇧ pulls a docked window out at its release frame over another tile, with no
+    /// ghost, no clamp and one undo step; the tile left takes the room.
+    @Test func shiftPullsADockedWindowOutAtItsReleaseFrameOverAnotherTile() async throws {
+        var (harness, plan) = try await docked()
+        let ra = try #require(plan.frames[a]), rb = try #require(plan.frames[b])
+        let point = Point(x: rb.midX, y: rb.minY + 40)
+        #expect(released(ra, at: point).overlaps(rb), "the release frame is not over b")
+        let during = await drag(&harness, a, from: ra, to: point, [.shift])
+        harness.now += .milliseconds(150)
+        #expect(previews(during + (await harness.send(.tick))).isEmpty, "a pull-out showed a preview")
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        let up = await harness.send(pointer(.up, point.x, point.y, [.shift]))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.state(of: a) == nil)
+        #expect(desk.desktop.frame(of: a) == released(ra, at: point))
+        #expect(setFrames(up)[a] == nil, "the pulled-out window was moved")
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+        let refilled = try #require(try Planner.plan(desk: desk, area: area, gap: 8, mins: [:]).frames[b])
+        #expect(refilled.width > rb.width)
+        #expect(await harness.frame(b) == refilled)
+    }
+
     /// WR-02 (review 03-26): undoing a ⇧-undock docks the window again with its pre-dock frame, where Float sends it.
     @Test func undoingAShiftUndockGivesBackThePreDockFrame() async throws {
         var (harness, plan) = try await docked()
-        let rb = try #require(plan.frames[b]), desktop = try #require(plan.desktopRect)
-        let point = Point(x: desktop.midX, y: desktop.minY + 40)
+        let rb = try #require(plan.frames[b])
+        let point = Point(x: rb.midX, y: rb.minY + 40)
         _ = await drag(&harness, b, from: rb, to: point, [.shift])
         harness.now += .milliseconds(150)
         await harness.send(.tick)
@@ -316,47 +339,44 @@ extension ArrangerDragTests {
         #expect(await harness.frame(b) == frameB)
     }
 
-    @Test func shiftWithTheDesktopHiddenShowsTheLabelledSnapBackAndAnnounces() async throws {
-        var (harness, _) = try await docked()
-        await harness.send(.command(.toggleDesktop, focused: a))
-        let plan = try Planner.plan(desk: try #require(harness.arranger.world[mainKey]), area: area, gap: 8, mins: [:])
-        let ra = try #require(plan.frames[a])
-        let point = Point(x: ra.midX, y: ra.midY + 100)
-        _ = await drag(&harness, a, from: ra, to: point, [.shift])
-        harness.now += .milliseconds(150)
-        #expect(previews(await harness.send(.tick)) == [.snapBack(ra, label: showDesktop)])
-        let up = await harness.send(pointer(.up, point.x, point.y, [.shift]))
-        #expect(up.contains(.announce(showDesktop)))
-        #expect(setFrames(up)[a] == ra)
-        #expect(harness.arranger.world[mainKey]?.tree.state(of: a) == .present)
-    }
-
-    @Test func shiftWithAWindowTooBigForTheDesktopShowsBlockedOverTheDesktop() throws {
-        // [[a | b] ; Desktop]: undocking a leaves [b ; Desktop], and b's 300 pt plus a's 600 pt do not fit in 875.
-        var tree = LayoutTree.withDesktop()
+    /// UI-SPEC Surface 2 row 4 (row gone): pulling a window out of the layout never lacks room, whatever its minimum.
+    @Test func shiftWithAWindowTooBigForAnyRoomStillUndocksAtItsReleaseFrame() throws {
+        var tree = LayoutTree()
         var ids = IDSource()
-        try tree.insert(a, at: .top, of: .desktop, ids: &ids)
+        try tree.applyDrop(.layoutEdge(.bottom), window: a, ids: &ids)
         try tree.insert(b, at: .right, of: try #require(tree.leaf(containing: a)), ids: &ids)
         let world = try World(ids: ids, desks: [mainKey: Desk(tree: tree)])
         let mins = [a: Size(width: 100, height: 600), b: Size(width: 100, height: 300)]
         let start = ContinuousClock.now
         var arranger = bare([info(1, frame: frameA, minimum: mins[a]), info(3, frame: frameB, minimum: mins[b])], world: world)
-        let restored = try #require(arranger.world[mainKey])
-        let ra = try #require(try Planner.plan(desk: restored, area: area, gap: 8, mins: mins).frames[a])
         let infoA = try #require(arranger.windows[a.identity])
+        let point = Point(x: 700, y: 800)
 
-        _ = drag(&arranger, a, from: infoA.frame, to: Point(x: 700, y: 800), [.shift], at: start)
+        _ = drag(&arranger, a, from: infoA.frame, to: point, [.shift], at: start)
         let tick = arranger.handle(.tick, now: start + .milliseconds(150))
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
+        let up = arranger.handle(pointer(.up, point.x, point.y, [.shift]), now: start + .milliseconds(200))
+        #expect(!up.contains(.announce(noRoom)))
+        #expect(arranger.world[mainKey]?.tree.state(of: a) == nil)
+        #expect(arranger.world[mainKey]?.desktop.frame(of: a) == released(infoA.frame, at: point))
+    }
 
-        var undocked = try #require(arranger.world[mainKey])
-        try undocked.tree.remove(a)
-        try undocked.desktop.add(a, frame: infoA.frame)
-        let desktop = try #require(try Planner.plan(desk: undocked, area: area, gap: 8, mins: mins).desktopRect)
-        #expect(previews(tick) == [.blocked(desktop)], "tick gave \(tick)")
-        let up = arranger.handle(pointer(.up, 700, 800, [.shift]), now: start + .milliseconds(200))
-        #expect(up.contains(.announce(noRoom)))
-        #expect(arranger.world[mainKey]?.tree.state(of: a) == .present)
-        #expect(setFrames(up)[a] == ra)
+    /// D-08, UI-SPEC Surface 2 row 6: on an empty desk the pointer 10 pt from the left edge previews the whole visible
+    /// frame, and the release docks the window as the first tile in one undo step.
+    @Test func anEmptyDeskDocksFromItsEdgeBandAsTheWholeVisibleFrame() throws {
+        let run = try dragOnAnEmptyDesk(to: Point(x: 10, y: 460))
+        #expect(previews(run.tick) == [.dock(wholeVisibleTile)], "tick gave \(run.tick)")
+        let desk = try #require(run.arranger.world[mainKey])
+        #expect(desk.tree.root == desk.tree.leaf(containing: f) && desk.tree.root != nil)
+        #expect(setFrames(run.up)[f] == wholeVisibleTile)
+        #expect(run.arranger.history.depth(for: mainKey) == run.steps + 1)
+    }
+
+    /// UI-SPEC planner note 1 (corrected by RESEARCH): the keyboard Dock still docks anywhere on an empty desk.
+    @Test func theKeyboardDockTargetOnAnEmptyDeskIsTheWholeLayoutEvenInTheMiddle() throws {
+        let desk = Desk(tree: LayoutTree())
+        let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: [:])
+        #expect(Planner.dockTarget(at: Point(x: 720, y: 460), desk: desk, area: area, resolution: plan.resolution) == .emptyLayout)
     }
 
     @Test func shiftPressedAfterADockPreviewWithdrawsItAndRestartsTheDwell() async throws {
@@ -421,5 +441,96 @@ extension ArrangerDragTests {
         let next = await harness.send(pointer(.down, rb.midX, rb.minY + 10, press: b))
         #expect(setFrames(next)[a] == ra, "the old drag was dropped without the miss rules")
         #expect(harness.arranger.drag?.window == b)
+    }
+}
+
+// MARK: - Empty areas (8.1.1 D-16, rule E6)
+
+/// a docked to the left half on an empty desk, so the right half is an empty area, with f floating; Hold ⌥ when asked.
+private func leftHalfDocked(_ mode: DragToDockMode) async -> Harness {
+    var harness = await Harness.started(frames: [1: frameA, 2: floatingFrame])
+    await harness.send(.dragToDock(mode))
+    await harness.send(.command(.dockFourth(.firstHalf, .horizontal), focused: a))
+    return harness
+}
+
+/// The right child of [a .5 | X .5] in the visible frame (0, 25, 1440, 875) with gap 8: inner (8, 33, 1424, 859),
+/// each half (1424 - 8) / 2 = 708 wide.
+private let rightHalf = Rect(x: 724, y: 33, width: 708, height: 859)
+private let leftHalf = Rect(x: 8, y: 33, width: 708, height: 859)
+
+extension ArrangerDragTests {
+    /// E6: within 24 pt of the screen edge over the empty half, the preview is exactly that half and the release docks
+    /// there in one undo step; the docked window doesn't move. Hold ⌥ with ⌥ held behaves the same.
+    @Test(arguments: [(DragToDockMode.automatic, Modifiers()), (DragToDockMode.holdOption, Modifiers.option)])
+    func aFloaterDraggedToTheEdgeOverAnEmptyHalfDocksIntoIt(mode: DragToDockMode, modifiers: Modifiers) async throws {
+        var harness = await leftHalfDocked(mode)
+        #expect(await harness.frame(a) == leftHalf)
+        let depth = harness.arranger.history.depth(for: mainKey)
+        _ = await dragFloating(&harness, to: 1430, 460, modifiers)
+        harness.now += .milliseconds(150)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.dock(rightHalf)], "tick gave \(tick)")
+
+        let up = await harness.send(pointer(.up, 1430, 460, modifiers))
+        let tree = try #require(harness.arranger.world[mainKey]?.tree)
+        let root = try #require(tree.root)
+        #expect(tree.node(root) == .split(
+            axis: .horizontal, children: [try #require(tree.leaf(containing: a)), try #require(tree.leaf(containing: f))], weights: [0.5, 0.5]))
+        #expect(setFrames(up)[f] == rightHalf)
+        #expect(setFrames(up)[a] == nil, "the docked window moved")
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
+    }
+
+    /// E6: anywhere else over the empty half the drag shows nothing and the release only moves the window.
+    @Test(arguments: [(DragToDockMode.automatic, Modifiers()), (DragToDockMode.holdOption, Modifiers.option)])
+    func aFloaterDraggedIntoTheMiddleOfAnEmptyHalfJustMoves(mode: DragToDockMode, modifiers: Modifiers) async throws {
+        var harness = await leftHalfDocked(mode)
+        let depth = harness.arranger.history.depth(for: mainKey)
+        let during = await dragFloating(&harness, to: 1000, 460, modifiers)
+        harness.now += .milliseconds(150)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick).isEmpty, "tick gave \(tick)")
+
+        let up = await harness.send(pointer(.up, 1000, 460, modifiers))
+        let desk = try #require(harness.arranger.world[mainKey])
+        #expect(desk.tree.windows == [a])
+        #expect(desk.desktop.frame(of: f) == released(floatingFrame, at: Point(x: 1000, y: 460)))
+        #expect(harness.arranger.history.depth(for: mainKey) == depth)
+        #expect(!writes(during + up, f))
+    }
+}
+
+extension ArrangerDragTests {
+    /// Review WR-01 (E4, E6, E1): a docked window dragged to the screen edge over the empty area beside it previews that
+    /// area, docks into it at exactly its span, and leaves an empty area where it was: [a | _] becomes [_ | a] and
+    /// [_ | a | _] (the center third) becomes [_ | a], a in exactly the right third.
+    @Test(arguments: [(FourthSlot.firstHalf, FourthSlot.secondHalf), (.middleThird, .lastThird)])
+    func aDockedWindowDraggedIntoTheEmptyAreaBesideItMovesThere(from slot: FourthSlot, to expected: FourthSlot) async throws {
+        var reference = await Harness.started(frames: [1: frameA])
+        await reference.send(.command(.dockFourth(expected, .horizontal), focused: a))
+        let target = try #require(await reference.frame(a))
+        var harness = await Harness.started(frames: [1: frameA])
+        await harness.send(.command(.dockFourth(slot, .horizontal), focused: a))
+        let start = try #require(await harness.frame(a))
+        let depth = harness.arranger.history.depth(for: mainKey)
+
+        _ = await drag(&harness, a, from: start, to: Point(x: 1430, y: 460))
+        harness.now += .milliseconds(150)
+        let tick = await harness.send(.tick)
+        #expect(previews(tick) == [.dock(target)], "tick gave \(tick)")
+        let up = await harness.send(pointer(.up, 1430, 460))
+
+        let tree = try #require(harness.arranger.world[mainKey]?.tree)
+        guard case let .split(_, children, weights)? = tree.node(try #require(tree.root)) else {
+            Issue.record("no root split: \(tree)")
+            return
+        }
+        #expect(children.map { tree.node($0) } == [.spacer, .panel(a)])
+        #expect(weights == (reference.arranger.world[mainKey]?.tree.root).flatMap { root in
+            if case let .split(_, _, w)? = reference.arranger.world[mainKey]?.tree.node(root) { w } else { nil }
+        })
+        #expect(setFrames(up)[a] == target)
+        #expect(harness.arranger.history.depth(for: mainKey) == depth + 1)
     }
 }

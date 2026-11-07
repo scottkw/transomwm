@@ -37,15 +37,16 @@ public struct LayoutFileError: Error, Equatable, Sendable {
     public let reason: String
 }
 
-/// The contents of layout.json: the World (with each desk's Desktop tile, D-24), the home frames, the wanted frames
-/// and the session record, in one file so they can never disagree (D-16, RESEARCH Pattern 10). Schema 2 (06-SPIKE
-/// "Schema decision") adds the current display `arrangement`, the other arrangements' `layoutSets` (D-09) and the
-/// `spaces` table giving each desk's Space ID its durable UUID (D-13). Schema 3 (D-10, D-14) keeps window titles, so
-/// windows are re-matched after a relaunch; it has the same shape, and the bump stops an older Transom overwriting a
-/// file whose titles it would strip; it also holds the saved views (D-14). Every array is sorted, so equal contents
-/// give equal bytes.
+/// The contents of layout.json: the World (each desk's docked tree and floating layer, 8.1.1 D-01), the home frames,
+/// the wanted frames and the session record, in one file so they can never disagree (D-16, RESEARCH Pattern 10). Schema
+/// 2 (06-SPIKE "Schema decision") adds the current display `arrangement`, the other arrangements' `layoutSets` (D-09)
+/// and the `spaces` table giving each desk's Space ID its durable UUID (D-13). Schema 3 (D-10, D-14) keeps window
+/// titles, so windows are re-matched after a relaunch; it has the same shape, and the bump stops an older Transom
+/// overwriting a file whose titles it would strip; it also holds the saved views (D-14). Schema 4 (8.1.1 D-02) has no
+/// Desktop tile: an older World inside migrates on load. Schema 5 (8.1.1 D-16) adds empty areas (`spacer` nodes); a
+/// schema 4 file has the same shape without them. Every array is sorted, so equal contents give equal bytes.
 public struct LayoutFile: Codable, Equatable, Sendable {
-    public static let schemaVersion = 3
+    public static let schemaVersion = 5
     /// Cap on stored arrangements (T-06-07).
     public static let maxLayoutSets = 16
 

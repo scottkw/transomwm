@@ -1,13 +1,14 @@
 import Foundation
 
+/// No Desktop case since 8.1.1 (D-01): a file naming one fails to decode. `LegacyNode` reads older files.
 public enum Node: Codable, Equatable, Sendable {
     /// `weights.count == children.count`, each weight >= `LayoutTree.minWeight`, sum 1.
     case split(axis: Axis, children: [NodeID], weights: [Double])
     case panel(WindowRef)
     case tabs(windows: [WindowRef], selected: Int)
-    /// The Desktop tile (D-24): floating windows live inside its rect. Hidden means it gets no rect,
-    /// its space goes to the docked tiles and its floating windows are parked. Only `NodeID.desktop` holds it.
-    case desktop(hidden: Bool)
+    /// A part of the screen kept empty (8.1.1 D-16): no window, never drawn, never a focus, swap or group target;
+    /// floating windows show through it.
+    case spacer
 }
 
 /// Messages name NodeIDs and window identities only, never window titles.
@@ -29,10 +30,6 @@ public enum LayoutError: Error, Equatable, Sendable {
     case deskNotFound(DeskKey)
     case deskExists(DeskKey)
     case invariantViolated(String)
-    /// Hiding the Desktop tile was asked while no window is docked; it would leave the desk with no tile.
-    case nothingDocked
-    /// The edit cannot apply to the Desktop tile at this NodeID (it holds no windows and never tabs).
-    case desktopTile(NodeID)
     /// A grow or shrink of a child of this split changed nothing: every weight it could move is at `minWeight`.
     case atSizeLimit(NodeID)
 }
@@ -105,6 +102,11 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                 guard axis != parentAxis || siblings - 1 + children.count > Self.maxChildren else {
                     throw .invariantViolated("split \(id) has the same axis as its parent split")
                 }
+                // Also rejects every split with no window below it: its deepest split has two or more children, all
+                // empty areas (8.1.1 D-16).
+                if let pair = zip(children, children.dropFirst()).first(where: { nodes[$0] == .spacer && nodes[$1] == .spacer }) {
+                    throw .invariantViolated("split \(id) holds adjacent empty areas \(pair.0) and \(pair.1)")
+                }
                 stack.append(contentsOf: children.map { ($0, depth + 1, axis, children.count) })
             case let .panel(window):
                 try see(window)
@@ -114,8 +116,8 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                     throw .invariantViolated("tab group \(id) selects \(selected) of \(windows.count) tabs")
                 }
                 for window in windows { try see(window) }
-            case .desktop:
-                guard id == .desktop else { throw .invariantViolated("node \(id) is a Desktop tile; only \(NodeID.desktop) may be") }
+            case .spacer:
+                guard depth > 0 else { throw .invariantViolated("root \(id) is an empty area") }
             }
         }
         guard visited.count == nodes.count else {
@@ -148,7 +150,7 @@ public struct LayoutTree: Codable, Equatable, Sendable {
             case let .split(_, children, _)?: stack.append(contentsOf: children.reversed())
             case let .panel(window)?: result.append(window)
             case let .tabs(windows, _)?: result.append(contentsOf: windows)
-            case .desktop?, nil: break
+            case .spacer?, nil: break
             }
         }
         return result
@@ -159,26 +161,12 @@ public struct LayoutTree: Codable, Equatable, Sendable {
             switch node {
             case let .panel(window): window == w
             case let .tabs(windows, _): windows.contains(w)
-            case .split, .desktop: false
+            case .split, .spacer: false
             }
         }?.key
     }
 
     public func state(of w: WindowRef) -> WindowState? { states[w.identity] }
-
-    /// A layout holding only the visible Desktop tile: what every new desk starts as (D-24).
-    public static func withDesktop() -> LayoutTree {
-        var tree = LayoutTree()
-        tree.root = .desktop
-        tree.nodes[.desktop] = .desktop(hidden: false)
-        return tree
-    }
-
-    /// Whether the Desktop tile is hidden; nil when the tree has no Desktop tile.
-    public var isDesktopHidden: Bool? {
-        guard case let .desktop(hidden)? = nodes[.desktop] else { return nil }
-        return hidden
-    }
 
     func assertValid() {
         #if DEBUG
@@ -197,9 +185,15 @@ public struct LayoutTree: Codable, Equatable, Sendable {
     }
 
     public init(from decoder: any Decoder) throws {
+        try self.init(from: decoder, legacy: false)
+    }
+
+    /// `legacy`: the nodes are World schema 1's (`LegacyNode`), migrated off the Desktop tile.
+    fileprivate init(from decoder: any Decoder, legacy: Bool) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let root = try container.decodeIfPresent(NodeID.self, forKey: .root)
-        let nodes = try container.decode([NodeID: Node].self, forKey: .nodes)
+        let nodes = legacy ? [:] : try container.decode([NodeID: Node].self, forKey: .nodes)
+        let legacyNodes = legacy ? try container.decode([NodeID: LegacyNode].self, forKey: .nodes) : [:]
         let records = try container.decode([StateRecord].self, forKey: .states)
         let tree: LayoutTree
         do throws(LayoutError) {
@@ -209,7 +203,9 @@ public struct LayoutTree: Codable, Equatable, Sendable {
                     throw .invariantViolated("duplicate state record for window \(record.window.windowID) pid \(record.window.pid)")
                 }
             }
-            tree = try LayoutTree(root: root, nodes: nodes, states: states)
+            tree = legacy
+                ? try LayoutTree(legacyRoot: root, nodes: legacyNodes, states: states)
+                : try LayoutTree(root: root, nodes: nodes, states: states)
         } catch {
             throw DecodingError.dataCorrupted(.init(
                 codingPath: decoder.codingPath, debugDescription: "invalid layout tree", underlyingError: error))
@@ -223,5 +219,54 @@ public struct LayoutTree: Codable, Equatable, Sendable {
         try container.encode(nodes, forKey: .nodes)
         let records = states.sorted { $0.key < $1.key }.map { StateRecord(window: $0.key, state: $0.value) }
         try container.encode(records, forKey: .states)
+    }
+}
+
+/// Decode-only: the node shape of World schema 1 (layout.json schema 3 and older, Phases 3–8.1), which had the Desktop
+/// tile. Its case names and labels are `Node`'s, so the synthesized decoder reads the same JSON keys.
+enum LegacyNode: Decodable {
+    case split(axis: Axis, children: [NodeID], weights: [Double])
+    case panel(WindowRef)
+    case tabs(windows: [WindowRef], selected: Int)
+    case desktop(hidden: Bool)
+}
+
+/// Decode-only: a World schema 1 tree, migrated off its Desktop tile as it decodes.
+struct LegacyLayoutTree: Decodable {
+    let tree: LayoutTree
+
+    init(from decoder: any Decoder) throws {
+        tree = try LayoutTree(from: decoder, legacy: true)
+    }
+}
+
+extension LayoutTree {
+    /// A World schema 1 tree without its Desktop tile (8.1.1 D-02). The tile is first swapped for a stand-in panel so
+    /// the whole legacy shape goes through `validate()` (a hostile file is rejected, never repaired), and then the
+    /// stand-in leaves through `removeLeaf`, as a closed window does: its share goes back to its siblings by weight, a
+    /// one-child split collapses, and a tile that was alone leaves `root == nil`. The stand-in is no window and never
+    /// outlives this init. A Desktop tile anywhere but NodeID 0 is rejected.
+    init(legacyRoot root: NodeID?, nodes legacy: [NodeID: LegacyNode], states: [WindowIdentity: WindowState]) throws(LayoutError) {
+        let standIn = WindowRef(identity: WindowIdentity(windowID: 0, pid: -1, bundleID: ""))
+        let desktop = NodeID(raw: 0)
+        var nodes: [NodeID: Node] = [:]
+        var states = states
+        var hasDesktop = false
+        for (id, node) in legacy {
+            switch node {
+            case let .split(axis, children, weights): nodes[id] = .split(axis: axis, children: children, weights: weights)
+            case let .panel(window): nodes[id] = .panel(window)
+            case let .tabs(windows, selected): nodes[id] = .tabs(windows: windows, selected: selected)
+            case .desktop:
+                guard id == desktop else { throw .invariantViolated("node \(id) is a Desktop tile; only \(desktop) may be") }
+                guard states[standIn.identity] == nil else { throw .duplicateWindow(standIn) }
+                nodes[id] = .panel(standIn)
+                states[standIn.identity] = .present
+                hasDesktop = true
+            }
+        }
+        var tree = try LayoutTree(root: root, nodes: nodes, states: states)
+        if hasDesktop { _ = try tree.removeLeaf(desktop) }
+        self = tree
     }
 }

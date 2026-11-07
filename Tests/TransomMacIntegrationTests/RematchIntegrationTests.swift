@@ -34,7 +34,7 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         let directory = FileManager.default.temporaryDirectory.appending(path: "transom-rematch-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        // Session 1, built headlessly: [Fixture 0 | Fixture 1 | Desktop], saved with titles.
+        // Session 1, built headlessly: [Fixture 0 | Fixture 1], saved with titles.
         let first = try await FixtureProcess.launch(["standard", "standard"])
         defer { first.terminate() }
         let firstPID = first.pid
@@ -48,7 +48,7 @@ private func near(_ a: Rect, _ b: Rect) -> Bool {
         var world = builder.world, history = UndoHistory()
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
             for window in windows where desk.desktop.contains(window) { try desk.desktop.remove(window) }
-            try desk.tree.insert(windows[0], at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: windows[0], ids: &ids)
             guard let leaf = desk.tree.leaf(containing: windows[0]) else { throw .windowNotFound(windows[0]) }
             try desk.tree.insert(windows[1], at: .right, of: leaf, ids: &ids)
         }

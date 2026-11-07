@@ -1,6 +1,6 @@
 import Foundation
 
-/// A window floating on a desk's Desktop layer, with its frame in desk coordinates (the global
+/// A window on a desk's floating layer, with its frame in desk coordinates (the global
 /// top-left space described in Geometry.swift).
 public struct FloatingWindow: Codable, Equatable, Sendable {
     public let window: WindowRef
@@ -8,7 +8,7 @@ public struct FloatingWindow: Codable, Equatable, Sendable {
     public var state: WindowState
 }
 
-/// A tab group on the Desktop layer (D-02): a grouping over floating windows that stay in `DesktopLayer.windows`, each
+/// A tab group on the floating layer (D-02): a grouping over floating windows that stay in `DesktopLayer.windows`, each
 /// with its stored frame equal to the group's content rect (RESEARCH Pattern 2, add-alongside).
 public struct FloatingTabGroup: Codable, Equatable, Sendable {
     /// Minted from the World's IDSource; never a tree NodeID of the same desk.

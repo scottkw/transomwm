@@ -38,13 +38,19 @@ public struct PointerEvent: Equatable, Sendable {
     public var modifiers: Modifiers
     public var pressWindow: WindowRef?
     public var pressTab: WindowRef?
+    /// Front to back, tracked windows only, read by the shell on `down` (8.1.1 D-18); nil when unknown.
+    public var stacking: [WindowIdentity]?
 
-    public init(kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil, pressTab: WindowRef? = nil) {
+    public init(
+        kind: Kind, location: Point, modifiers: Modifiers = [], pressWindow: WindowRef? = nil, pressTab: WindowRef? = nil,
+        stacking: [WindowIdentity]? = nil
+    ) {
         self.kind = kind
         self.location = location
         self.modifiers = modifiers
         self.pressWindow = pressWindow
         self.pressTab = pressTab
+        self.stacking = stacking
     }
 }
 
@@ -58,7 +64,7 @@ public enum PreviewState: Equatable, Sendable {
     case swap(target: Rect, origin: Rect)
     /// The tile a docked window goes back to, with an optional label.
     case snapBack(Rect, label: String?)
-    /// Where a floating window lands, clamped inside the Desktop tile.
+    /// Where a floating window lands, clamped inside the visible frame.
     case clamp(Rect)
     /// Zoom on: the drop is accepted and windows collapse (ZOOM-13). The frame the window would get if minimum sizes
     /// were ignored, labelled with who collapses (`CollapseCopy`).
@@ -94,28 +100,33 @@ public enum CollapseCopy {
 public enum FourthCopy {
     public static let floating = "Floating"
 
-    /// A fourth's name, in sentence case: "1st column", "Middle half row" (UI-SPEC Surface 3).
+    /// A slot's own name, in sentence case: "1st column", "Middle half row", "Left half", "Center third" (08.1 UI-SPEC
+    /// Surface 3, 08.1.1 UI-SPEC label table). The only label: a window always gets exactly its position (8.1.1 D-16,
+    /// E1), so 08.1 D-23 holds without naming grown spans.
     public static func label(_ slot: FourthSlot, _ axis: Axis) -> String {
         let line = axis == .horizontal ? "column" : "row"
+        let (lead, middle, trail) = axis == .horizontal ? ("Left", "Center", "Right") : ("Top", "Middle", "Bottom")
         return switch slot {
         case .first: "1st \(line)"
         case .second: "2nd \(line)"
         case .third: "3rd \(line)"
         case .fourth: "4th \(line)"
         case .middle: "Middle half \(line)"
+        case .firstHalf: "\(lead) half"
+        case .secondHalf: "\(trail) half"
+        case .firstThird: "\(lead) third"
+        case .middleThird: "\(middle) third"
+        case .lastThird: "\(trail) third"
         }
     }
 
-    /// What a window given `span` of the desk gets (D-23): a slot grown into an empty side is named by its share.
-    public static func label(_ slot: FourthSlot, _ axis: Axis, span: (start: Double, end: Double)) -> String {
-        let (lead, trail) = axis == .horizontal ? ("Left", "Right") : ("Top", "Bottom")
-        return switch (span.start, span.end) {
-        case (0, 1): "Whole desk"
-        case (0, 0.5): "\(lead) half"
-        case (0.5, 1): "\(trail) half"
-        case (0, 0.75): "\(lead) three quarters"
-        case (0.25, 1): "\(trail) three quarters"
-        default: label(slot, axis)  // the slot's own span, the only other result of `fourthSpan`
+    /// A corner quarter's name (8.1.1 D-17): "Top left quarter".
+    public static func label(_ corner: DockCorner) -> String {
+        switch corner {
+        case .topLeft: "Top left quarter"
+        case .topRight: "Top right quarter"
+        case .bottomLeft: "Bottom left quarter"
+        case .bottomRight: "Bottom right quarter"
         }
     }
 
@@ -123,8 +134,8 @@ public enum FourthCopy {
     public static func docked(_ label: String) -> String { "Docked to \(label.lowercased())" }
 }
 
-/// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or on the Desktop tile a plain
-/// floating window (the middle 50% of its frame) or a floating group (the middle 50% of its content rect).
+/// What a centre drop groups with (D-02): a docked leaf, a panel or an existing group; or a floating window's centre (the
+/// middle 50% of its frame) or a floating group's (of its content rect), ahead of any docked tile beneath.
 enum GroupTarget: Equatable, Sendable {
     case tile(DeskKey, NodeID)
     case floating(DeskKey, WindowRef)
@@ -137,9 +148,9 @@ enum DropAction: Equatable, Sendable {
     /// The window joins the target as its selected tab (D-03).
     case group(DeskKey, GroupTarget)
     case swap(WindowRef)
-    /// ⇧ on a docked window: it floats at its release frame, clamped inside the Desktop tile if it crosses a tile.
+    /// ⇧ on a docked window, or Hold ⌥'s plain pull-out: it floats at its release frame.
     case undock
-    /// The miss rules: a docked window snaps back, a floating one stays where released (clamped if it crosses a tile).
+    /// The miss rules: a docked window snaps back, a floating one stays where released.
     case miss
     /// A torn-off tab with no dock or group target: it floats at its landing frame on this desk (D-10).
     case tearOffFloat(DeskKey)
@@ -154,8 +165,6 @@ struct Hover: Equatable, Sendable {
     var swapWith: WindowRef?
     /// The modifiers that apply: ⇧, and ⌘ for a docked window.
     var modifiers: Modifiers = []
-    /// A floating (or ⇧-undocking) window's frame crosses a docked tile.
-    var crossesTiles = false
     /// The centre under the pointer that groups after `DragSession.groupDwell`; `target` is nil meanwhile.
     var groupTarget: GroupTarget?
     /// A tear-off's pointer is back over its source strip: no preview, and a release cancels (D-10).
@@ -170,7 +179,7 @@ struct Decision: Equatable, Sendable {
     var action: DropAction
     /// The display the preview is drawn on.
     var display: String?
-    /// When set, the preview is a clamp ghost that follows the window: its frame clamped into this Desktop rect.
+    /// The tear-off landing: the preview is a ghost of the landing frame clamped onto this rect, the visible frame.
     var clampInto: Rect?
 }
 
@@ -231,6 +240,8 @@ public struct DragSession: Equatable, Sendable {
     var groupAnchor: Point?
     var groupSince: ContinuousClock.Instant?
     var groupDecision: Decision?
+    /// The press's front-to-back stacking from the shell (8.1.1 D-18); nil when unknown.
+    var stacking: [WindowIdentity]?
 
     /// The decision a release applies: the group dwell's once it completed, else the Phase 3 one.
     var current: Decision? { groupDecision ?? decision }

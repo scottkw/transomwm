@@ -13,7 +13,7 @@ private func ref(_ id: UInt32) -> WindowRef {
 
 private let a = ref(1), b = ref(2), c = ref(3)
 
-/// [a | V[b, c] | Desktop] (with `four`, V[b, c, d]) re-attached from a saved World (as ArrangerFocusTests), zoom on.
+/// [a | V[b, c]] (with `four`, V[b, c, d]) re-attached from a saved World (as ArrangerFocusTests), zoom on.
 private func nested(four: Bool = false) async throws -> Harness {
     var frames: [UInt32: Rect] = [
         1: Rect(x: 40, y: 80, width: 320, height: 232), 2: Rect(x: 1000, y: 100, width: 300, height: 200),
@@ -25,7 +25,7 @@ private func nested(four: Bool = false) async throws -> Harness {
     var history = UndoHistory()
     try world.addDesk(key)
     try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         guard let left = desk.tree.leaf(containing: a) else { throw .windowNotFound(a) }
         try desk.tree.insert(b, at: .right, of: left, ids: &ids)
         guard let middle = desk.tree.leaf(containing: b) else { throw .windowNotFound(b) }
@@ -162,19 +162,42 @@ private func expectRefused(_ effects: [ArrangerEffect], _ announcement: String, 
         let one = NodeID(raw: 1), two = NodeID(raw: 2), three = NodeID(raw: 3)
         let tree = try LayoutTree(
             root: one,
-            nodes: [one: .split(axis: .horizontal, children: [two, three, .desktop], weights: [0.4, 0.4, 0.2]), two: .panel(a), three: .panel(b),
-                .desktop: .desktop(hidden: false)],
+            nodes: [one: .split(axis: .horizontal, children: [two, three], weights: [0.5, 0.5]), two: .panel(a), three: .panel(b)],
             states: [a.identity: .present, b.identity: .present])
         func resolution(_ widthTwo: Double, _ widthThree: Double) -> Resolution {
             Resolution(nodeRects: [
                 one: Rect(x: 0, y: 0, width: 1000, height: 500), two: Rect(x: 0, y: 0, width: widthTwo, height: 500),
-                three: Rect(x: widthTwo, y: 0, width: widthThree, height: 500), .desktop: Rect(x: 900, y: 0, width: 100, height: 500),
+                three: Rect(x: widthTwo, y: 0, width: widthThree, height: 500),
             ])
         }
 
         #expect(Navigator.stepIn(view: .home, tree: tree, resolution: resolution(300, 600), focusedLeaf: nil, pointer: nil) == three)
         #expect(Navigator.stepIn(view: .home, tree: tree, resolution: resolution(450, 450), focusedLeaf: nil, pointer: nil) == two)
         #expect(Navigator.stepIn(view: .node(two), tree: tree, resolution: resolution(450, 450), focusedLeaf: nil, pointer: nil) == nil)
+    }
+
+    /// 8.1.1 D-16, E7: Step In and Move View never land on an empty area. [a .25 | empty .5 | b .25]: the pointer over
+    /// the empty area, or none, picks the largest docked child (a and b tie: the lower NodeID); a's right is nothing.
+    @Test func stepInAndPanNeverPickAnEmptyArea() throws {
+        let one = NodeID(raw: 1), two = NodeID(raw: 2), three = NodeID(raw: 3), four = NodeID(raw: 4)
+        let tree = try LayoutTree(
+            root: one,
+            nodes: [one: .split(axis: .horizontal, children: [two, three, four], weights: [0.25, 0.5, 0.25]), two: .panel(a), three: .spacer, four: .panel(b)],
+            states: [a.identity: .present, b.identity: .present])
+        let r = try resolve(tree, in: Rect(x: 0, y: 0, width: 1000, height: 500), mins: [:], gap: 8)
+        #expect(Navigator.stepIn(view: .home, tree: tree, resolution: r, focusedLeaf: nil, pointer: Point(x: 500, y: 250)) == two)
+        #expect(Navigator.stepIn(view: .home, tree: tree, resolution: r, focusedLeaf: nil, pointer: nil) == two)
+        #expect(Navigator.stepIn(view: .home, tree: tree, resolution: r, focusedLeaf: nil, pointer: Point(x: 900, y: 250)) == four)
+        #expect(Navigator.pan(view: .node(two), edge: .right, tree: tree, homeResolution: r, gap: 8, recency: []) == nil)
+    }
+
+    /// E7: the zoom band preview draws no tile for an empty area.
+    @Test func theBandPreviewDrawsNoEmptyArea() async throws {
+        var harness = await Harness.started(frames: [1: Rect(x: 40, y: 80, width: 320, height: 232)])
+        await harness.send(.zoomEnabled(true))
+        await harness.send(.command(.dockFourth(.firstHalf, .horizontal), focused: a))
+        let leafA = try #require(harness.arranger.leafNode(of: a))
+        #expect(try harness.arranger.shownLeafRects(displayUUID: "main").keys.sorted() == [leafA])
     }
 
     @Test func stepInOnASingleLeafIsRefused() async throws {
@@ -245,7 +268,7 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
     return (tree, resolution)
 }
 
-/// ZOOM-09, ZOOM-10, ZOOM-11: Move View, Frame Focused Window and Frame Desktop with toggle-back.
+/// ZOOM-09, ZOOM-10: Move View and Frame Focused Window with toggle-back.
 @Suite struct PanAndFrameNavigatorTests {
     @Test func panMovesToTheSameDepthNeighbourWithTheLongestSharedEdge() async throws {
         // n3 spans 0..496: with the bottom row cut at 200 it shares 292 pt with n7 and 196 with n5.
@@ -318,6 +341,15 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
         #expect(harness.arranger.view(on: "main") == .home)
     }
 
+    /// 8.1.1 UI-SPEC Surface 2: a floating window has no leaf, so no zoom, hover ring or green button reaches it.
+    @Test func leafNodeIsForDockedWindowsOnly() async throws {
+        var harness = try await nested()
+        #expect(harness.arranger.leafNode(of: b) == (try leaf(b, harness)))
+        await harness.send(.command(.float, focused: c))
+        #expect(harness.arranger.isFloating(c))
+        #expect(harness.arranger.leafNode(of: c) == nil)
+    }
+
     @Test func frameWindowRefusesFloatingExcludedOrNoFocus() async throws {
         var harness = try await nested()
         expectRefused(await harness.camera(.frameWindow), "No docked window to frame", command: "frameWindow")
@@ -332,37 +364,6 @@ private func rows(cut: Double) throws -> (LayoutTree, Resolution) {
         excluded.isExcluded = true
         await harness.send(.event(.windowChanged(excluded)))
         expectRefused(await harness.camera(.frameWindow, focused: b), "No docked window to frame", command: "frameWindow")
-    }
-
-    @Test func frameDesktopTogglesAndIsRefusedWhileHidden() async throws {
-        var harness = try await nested()
-        let main = CommandContext(focused: nil, ready: true, displayUUID: "main")
-        #expect(harness.arranger.availability(.camera(.frameDesktop), context: main))
-
-        #expect(await harness.step(.frameDesktop) == .node(.desktop))
-        #expect(harness.arranger.isFramingDesktop(displayUUID: "main"))
-        #expect(await harness.step(.frameDesktop) == .home)
-        #expect(!harness.arranger.isFramingDesktop(displayUUID: "main"))
-
-        await harness.send(.command(.toggleDesktop, focused: a))
-        #expect(harness.arranger.world[key]?.tree.isDesktopHidden == true)
-        expectRefused(await harness.camera(.frameDesktop), "The Desktop tile is hidden", command: "frameDesktop")
-        #expect(!harness.arranger.availability(.camera(.frameDesktop), context: main))
-    }
-
-    /// IN-01: with nothing docked the Desktop tile is the root, so framing it is home, never `.node(root)`.
-    @Test func frameDesktopOnAnEmptyDeskStaysHome() async throws {
-        var harness = try await nested()
-        for id: UInt32 in [1, 2, 3] { await harness.fake.close(id) }
-        await harness.refresh()
-        #expect(harness.arranger.world[key]?.tree.root == .desktop)
-        #expect(harness.arranger.view(on: "main") == .home)
-
-        let effects = await harness.camera(.frameDesktop)
-        await harness.settle(effects)
-
-        #expect(moves(effects).allSatisfy { $0.to == .home })
-        #expect(harness.arranger.view(on: "main") == .home)
     }
 }
 
@@ -493,19 +494,19 @@ private func entry(_ raw: UInt64) -> ViewEntry {
     }
 }
 
-/// H[n1 = a, n2 = V[n3 = b, n4 = c], Desktop] under root n5, with on-screen tiles side by side.
+/// H[n1 = a, n2 = V[n3 = b, n4 = c]] under root n5, with on-screen tiles side by side and nothing right of x = 800.
 private func band() throws -> (LayoutTree, [NodeID: Rect]) {
     let tree = try LayoutTree(
         root: n[5],
         nodes: [
-            n[5]: .split(axis: .horizontal, children: [n[1], n[2], .desktop], weights: [0.4, 0.4, 0.2]),
+            n[5]: .split(axis: .horizontal, children: [n[1], n[2]], weights: [0.5, 0.5]),
             n[2]: .split(axis: .vertical, children: [n[3], n[4]], weights: [0.5, 0.5]),
-            n[1]: .panel(a), n[3]: .panel(b), n[4]: .panel(c), .desktop: .desktop(hidden: false),
+            n[1]: .panel(a), n[3]: .panel(b), n[4]: .panel(c),
         ],
         states: [a.identity: .present, b.identity: .present, c.identity: .present])
     let tiles: [NodeID: Rect] = [
         n[1]: Rect(x: 0, y: 0, width: 400, height: 1000), n[3]: Rect(x: 400, y: 0, width: 400, height: 500),
-        n[4]: Rect(x: 400, y: 500, width: 400, height: 500), .desktop: Rect(x: 800, y: 0, width: 200, height: 1000),
+        n[4]: Rect(x: 400, y: 500, width: 400, height: 500),
     ]
     return (tree, tiles)
 }
@@ -536,15 +537,16 @@ private func band() throws -> (LayoutTree, [NodeID: Rect]) {
         #expect(Navigator.rectTarget(band: Rect(x: 0, y: 0, width: 0, height: 0), tiles: tiles, tree: tree) == nil)
     }
 
-    @Test func collapsedAndDesktopTilesCount() async throws {
+    /// 8.1.1 D-01: only docked leaves are tiles; the bare desktop past them holds no target.
+    @Test func onlyLeafTilesCount() async throws {
         let (tree, tiles) = try band()
-        #expect(Navigator.rectTarget(band: Rect(x: 850, y: 450, width: 100, height: 100), tiles: tiles, tree: tree) == .desktop)
-        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 450, width: 400, height: 350), tiles: tiles, tree: tree) == n[5])
+        #expect(Navigator.rectTarget(band: Rect(x: 850, y: 450, width: 100, height: 100), tiles: tiles, tree: tree) == nil)
+        #expect(Navigator.rectTarget(band: Rect(x: 550, y: 450, width: 400, height: 350), tiles: tiles, tree: tree) == n[4])
 
-        // The engine's tiles: every leaf of the committed view on screen, the Desktop tile included, splits never.
+        // The engine's tiles: every leaf of the committed view on screen, splits never.
         var harness = try await nested()
         let shown = try harness.arranger.shownLeafRects(displayUUID: "main")
-        #expect(Set(shown.keys) == [try leaf(a, harness), try leaf(b, harness), try leaf(c, harness), .desktop])
+        #expect(Set(shown.keys) == [try leaf(a, harness), try leaf(b, harness), try leaf(c, harness)])
         try await harness.go(.node(try column(harness)))
         #expect(Set(try harness.arranger.shownLeafRects(displayUUID: "main").keys) == [try leaf(b, harness), try leaf(c, harness)])
     }
@@ -575,7 +577,8 @@ private let e = ref(5)
         #expect(moves(await harness.send(.event(.windowFocused(c)))).isEmpty)
     }
 
-    @Test func aNewWindowOutsideTheViewWidensAndIsNotParkedFirst() async throws {
+    /// D-14: a new floating window is never parked by a view, so the camera stays where it is.
+    @Test func aNewFloatingWindowWhileZoomedInIsNotParkedAndDoesNotMoveTheCamera() async throws {
         var harness = try await nested()
         try await harness.go(.node(try column(harness)))
         #expect(await harness.fake.parked.contains(a.identity))
@@ -586,16 +589,11 @@ private let e = ref(5)
         effects += await harness.refresh()
 
         #expect(harness.arranger.world[key]?.desktop.contains(e) == true)
-        let move = try #require(moves(effects).first)
-        #expect(moves(effects).count == 1)
-        #expect(move.to == .home)
+        #expect(moves(effects).isEmpty)
         #expect(!effects.contains { if case .perform(let commands) = $0 { commands.contains(.park(e, displayUUID: "main")) } else { false } })
-        #expect(!(await harness.fake.parked.contains(e.identity)), "the new window was parked before the camera showed it")
-
-        await harness.settle(effects)
-        #expect(harness.arranger.view(on: "main") == .home)
-        #expect(!(await harness.fake.parked.contains(e.identity)))
-        #expect(!(await harness.fake.parked.contains(a.identity)))
+        #expect(!(await harness.fake.parked.contains(e.identity)), "the new floating window was parked")
+        #expect(harness.arranger.view(on: "main") == .node(try column(harness)))
+        #expect(await harness.fake.parked.contains(a.identity))
     }
 
     @Test func aViewWhoseNodeDisappearedFallsBackToTheDeepestLiveAncestor() async throws {

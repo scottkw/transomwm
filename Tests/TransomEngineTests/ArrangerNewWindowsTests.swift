@@ -19,8 +19,8 @@ private func found(_ window: WindowRef, _ frame: Rect, minimum: Size? = nil) -> 
     WindowInfo(window: window, frame: frame, state: .present, displayUUID: "main", learnedMinimum: minimum)
 }
 
-/// One display whose visible area is `width` x `height`, with New Windows: Tile, a docked on the left of the Desktop and
-/// f floating clear of it on the right.
+/// One display whose visible area is `width` x `height`, with New Windows: Tile, a docked alone, filling it (D-08), and
+/// f floating over it on the right.
 private struct Scene {
     var arranger: Arranger
     let start = ContinuousClock.now
@@ -32,7 +32,6 @@ private struct Scene {
         self.minimums = minimums
         area = Rect(x: 0, y: 25, width: width, height: height)
         let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: width, height: height + 25), visibleFrame: area, currentSpaceID: nil)
-        // a's centre is near the left edge halfway down, so its dock lands on the Desktop's left edge.
         let frameA = Rect(x: 40, y: area.midY - 116, width: 320, height: 232)
         let frameF = Rect(x: area.maxX - 200, y: 60, width: 150, height: 120)
         let inventory = WindowInventory(
@@ -86,7 +85,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     }
 
     @Test func aTallFocusedTileGetsTheNewWindowBelow() throws {
-        var scene = Scene(width: 1000, height: 900)
+        var scene = Scene(width: 900, height: 1000)
         scene.focus(a)
         let before = try scene.tile(of: a)
         #expect(before.height > before.width, "precondition: a's tile is not tall: \(before)")
@@ -110,37 +109,32 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(left.width < before.width && right.minX > left.maxX - 1, "n did not land beside a: \(left) | \(right)")
     }
 
+    /// a, the only tile, is the largest; wide, so n lands on its right.
     @Test func aFloatingFocusSplitsTheLargestTile() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 1000, height: 100)])
+        var scene = Scene(width: 1600, height: 600)
         scene.focus(f)
-        let desktop = try #require(try scene.plan().desktopRect)
-        #expect(try scene.tile(of: a).width > desktop.width, "precondition: a's tile is not the largest")
 
         scene.arrive()
 
-        let after = try #require(try scene.plan().desktopRect)
         let left = try scene.tile(of: a), tile = try scene.tile(of: n)
-        #expect(tile.minX > left.maxX - 1 && tile.maxX < after.minX + 1, "n is not beside a: \(left) | \(tile) | \(after)")
+        #expect(tile.minX > left.maxX - 1 && near(tile.maxX, scene.area.maxX - 8), "n is not beside a: \(left) | \(tile)")
     }
 
     @Test func noFocusAtAllSplitsTheLargestTile() throws {
         var scene = Scene(width: 1600, height: 600)
         scene.arrive()
-        let after = try #require(try scene.plan().desktopRect)
-        let tile = try scene.tile(of: n)
-        #expect(tile.minX > after.maxX - 1 && near(tile.height, after.height), "\(after) | \(tile)")
+        let left = try scene.tile(of: a), tile = try scene.tile(of: n)
+        #expect(tile.minX > left.maxX - 1 && near(tile.height, left.height), "\(left) | \(tile)")
     }
 
-    @Test func withNothingDockedItIsTheFirstTileBesideTheDesktop() throws {
+    @Test func withNothingDockedItIsTheFirstTileFillingTheVisibleFrame() throws {
         var scene = Scene(width: 1600, height: 600, docked: false)
         scene.focus(a)  // floating, so not a docked tile
 
         scene.arrive()
 
-        let desktop = try #require(try scene.plan().desktopRect)
-        let tile = try scene.tile(of: n)
         #expect(scene.desk?.tree.windows == [n])
-        #expect(tile.minX > desktop.maxX - 1 && near(tile.height, desktop.height), "\(desktop) | \(tile)")
+        #expect(try scene.tile(of: n) == Rect(x: 8, y: 33, width: 1584, height: 584))
     }
 
     @Test func aDeskThatDoesNotExistYetIsCreated() throws {
@@ -153,6 +147,131 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         _ = arranger.handle(.event(.windowCreated(opened(n))), now: start)
 
         #expect(arranger.world[key]?.tree.windows == [n])
+    }
+
+    // MARK: Empty areas (8.1.1 D-16, E6)
+
+    /// [a .5 | empty .5] with a focused: the new window fills the empty half, and a is not split.
+    @Test func aTiledNewWindowFillsTheEmptyHalfBeforeSplittingTheFocusedTile() throws {
+        var scene = Scene(width: 1600, height: 600, docked: false)
+        _ = scene.arranger.handle(.command(.dockFourth(.firstHalf, .horizontal), focused: a), now: scene.start)
+        scene.focus(a)
+        let steps = scene.undoSteps
+
+        scene.arrive()
+
+        // Inner (8, 33, 1584, 584), halves (1584 - 8) / 2 = 788 wide.
+        #expect(try scene.tile(of: a) == Rect(x: 8, y: 33, width: 788, height: 584))
+        #expect(try scene.tile(of: n) == Rect(x: 804, y: 33, width: 788, height: 584))
+        #expect(scene.undoSteps == steps + 1)
+    }
+
+    /// [empty .25 | a .25 | empty .5]: the new window takes the larger empty area, the right half.
+    @Test func aTiledNewWindowFillsTheLargestEmptyArea() throws {
+        var scene = Scene(width: 1600, height: 600, docked: false)
+        _ = scene.arranger.handle(.command(.dockFourth(.second, .horizontal), focused: a), now: scene.start)
+        scene.focus(a)
+        let before = try scene.tile(of: a)
+        let tree = try #require(scene.desk?.tree)
+        let largest = try #require(Arranger.largestEmptyArea(try scene.plan().resolution, in: tree))
+        #expect(largest.1.minX > before.maxX, "precondition: the right half is not the largest empty area")
+
+        scene.arrive()
+
+        #expect(try scene.tile(of: n) == largest.1)
+        #expect(try scene.tile(of: a) == before)
+    }
+
+    // MARK: An empty desk (8.1.1 D-08)
+
+    /// New Windows: Tile on a desk restored with no tree at all, so this holds before and after new desks lose their
+    /// Desktop tile (08.1.1-09); f floats.
+    private func emptyDesk(zoom: Bool = false) throws -> (arranger: Arranger, area: Rect, start: ContinuousClock.Instant) {
+        var arranger = Arranger(newWindows: .tile)
+        let start = ContinuousClock.now
+        let area = Rect(x: 0, y: 25, width: 1600, height: 600)
+        let display = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1600, height: 625), visibleFrame: area, currentSpaceID: nil)
+        _ = arranger.handle(.restore(try World(ids: IDSource(), desks: [key: Desk(tree: LayoutTree())]), homeFrames: [:]), now: start)
+        let floater = found(f, Rect(x: 1400, y: 60, width: 150, height: 120))
+        _ = arranger.handle(.inventory(WindowInventory(displays: [display], windows: [floater], initialRefreshComplete: true)), now: start)
+        if zoom { _ = arranger.handle(.zoomEnabled(true), now: start) }
+        _ = arranger.handle(.event(.windowFocused(f)), now: start)
+        return (arranger, area, start)
+    }
+
+    @Test func withNothingDockedATiledNewWindowFillsTheVisibleFrame() throws {
+        var (arranger, area, start) = try emptyDesk()
+        try #require(arranger.world[key]?.tree.root == nil, "precondition: the desk is not empty")
+        let steps = arranger.history.depth(for: key)
+
+        let effects = arranger.handle(.event(.windowCreated(opened(n))), now: start + .milliseconds(400))
+
+        let desk = try #require(arranger.world[key])
+        let root = try #require(desk.tree.root)
+        #expect(desk.tree.leaf(containing: n) == root)
+        #expect(!desk.desktop.contains(n))
+        let plan = try Planner.plan(desk: desk, area: area, gap: 8, mins: [:])
+        #expect(plan.resolution.nodeRects[root] == Rect(x: 8, y: 33, width: 1584, height: 584))
+        #expect(arranger.history.depth(for: key) == steps + 1)
+        #expect(!effects.contains(.beep))
+
+        _ = arranger.handle(.command(.undo, focused: f), now: start + .seconds(1))
+
+        let undone = try #require(arranger.world[key])
+        #expect(undone.tree.root == nil)
+        #expect(undone.desktop.frame(of: n) == opening)
+    }
+
+    @Test func withNothingDockedAndZoomOnAWindowBiggerThanTheScreenDocksCollapsed() throws {
+        var (arranger, _, start) = try emptyDesk(zoom: true)
+
+        _ = arranger.handle(.event(.windowCreated(opened(n, minimum: Size(width: 1700, height: 100)))), now: start + .milliseconds(400))
+
+        #expect(arranger.world[key]?.tree.leaf(containing: n) != nil)
+        #expect(arranger.camera.collapsible.contains(n.identity))
+    }
+
+    @Test func withNothingDockedAndZoomOffAWindowBiggerThanTheScreenFloatsSilently() throws {
+        var (arranger, _, start) = try emptyDesk()
+        let steps = arranger.history.depth(for: key)
+
+        let effects = arranger.handle(.event(.windowCreated(opened(n, minimum: Size(width: 1700, height: 100)))), now: start + .milliseconds(400))
+
+        let desk = try #require(arranger.world[key])
+        #expect(desk.tree.root == nil)
+        #expect(desk.desktop.frame(of: n) == opening)
+        #expect(arranger.history.depth(for: key) == steps)
+        #expect(!effects.contains(.beep))
+        #expect(!effects.contains { if case .announce = $0 { true } else { false } }, "\(effects)")
+    }
+
+    // MARK: A desk that looks empty: its only docked window is minimized (CR-01)
+
+    private func minimizedDesk() -> Scene {
+        var scene = Scene(width: 1600, height: 600)
+        _ = scene.arranger.handle(.event(.windowStateChanged(a, .absent)), now: scene.start)
+        return scene
+    }
+    private let wholeFrame = Rect(x: 8, y: 33, width: 1584, height: 584)
+
+    @Test func withTheOnlyDockedWindowMinimizedATiledNewWindowFillsTheVisibleFrame() throws {
+        var scene = minimizedDesk()
+        scene.arrive()
+        #expect(try scene.tile(of: n) == wholeFrame)
+    }
+
+    @Test func withTheOnlyDockedWindowMinimizedDockFillsTheVisibleFrame() throws {
+        var scene = minimizedDesk()
+        let effects = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)
+        #expect(!effects.contains(.beep))
+        #expect(try scene.tile(of: f) == wholeFrame)
+    }
+
+    @Test func withTheOnlyDockedWindowMinimizedArrangeAllFillsTheVisibleFrame() throws {
+        var scene = minimizedDesk()
+        let effects = scene.arranger.handle(.command(.arrangeAll, focused: f), now: scene.start)
+        #expect(!effects.contains(.beep))
+        #expect(try scene.tile(of: f) == wholeFrame)
     }
 
     // MARK: One undo step (D-06)
@@ -377,7 +496,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         var layout = World()
         try layout.addDesk(key)
         try layout.reflow(key) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(saved, at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: saved, ids: &ids)
         }
         let live = [saved, other].map { CGWindowEntry(windowID: $0.windowID, pid: $0.pid, bounds: opening, layer: 0, onScreen: false, alpha: 1) }
         _ = arranger.handle(.restore(layout, homeFrames: [:]), now: start)
@@ -402,7 +521,7 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     // MARK: No room (D-06)
 
     @Test func noRoomWithZoomOffFloatsSilently() throws {
-        // As in ArrangerFinderTests: docked beside a, n's minimum can't fit, and floating it can't size the Desktop either.
+        // As in ArrangerFinderTests: docked beside a, n's minimum can't fit.
         var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
         scene.focus(a)
         let steps = scene.undoSteps
@@ -504,101 +623,6 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
     }
 
-    /// With a Desktop hidden, `admit` shows it again, as for one that can't dock at all (D-31).
-    @Test func aMinimumLearnedAfterDockingOnAHiddenDesktopShowsIt() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 1000, height: 100)])
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        scene.arrive()
-        #expect(scene.isDocked(n) && scene.desk?.tree.isDesktopHidden == true, "precondition")
-
-        let effects = scene.arranger.handle(.event(.windowChanged(opened(n, minimum: Size(width: 650, height: 100)))), now: scene.start + .seconds(2))
-
-        #expect(scene.isFloating(n) && scene.floatingFrame(n) == opening)
-        #expect(scene.desk?.tree.isDesktopHidden != true)
-        #expect(!effects.contains { if case .notice = $0 { true } else { false } }, "\(effects)")
-    }
-
-    // MARK: A hidden Desktop (D-31)
-
-    @Test func docksWithoutShowingAHiddenDesktopAndUndoShowsIt() throws {
-        var scene = Scene(width: 1600, height: 600)
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        #expect(scene.desk?.tree.isDesktopHidden == true, "precondition: the Desktop is not hidden")
-        let steps = scene.undoSteps
-
-        scene.arrive()
-
-        #expect(scene.isDocked(n))
-        #expect(scene.desk?.tree.isDesktopHidden == true, "docking showed the Desktop")
-        #expect(scene.undoSteps == steps + 1)
-
-        _ = scene.arranger.handle(.command(.undo, focused: a), now: scene.start + .seconds(1))
-
-        #expect(scene.isFloating(n) && !scene.isDocked(n))
-        #expect(scene.desk?.tree.isDesktopHidden != true, "a floating window can't exist on a hidden Desktop")
-        #expect(scene.floatingFrame(n) != nil)
-    }
-
-    /// The snapshot has no n, so undo re-admits it: at where it opened, not at its tile.
-    @Test func undoOnAHiddenDesktopFloatsItWhereItOpened() throws {
-        var scene = Scene(width: 1600, height: 600)
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        scene.arrive()
-        let tile = try scene.tile(of: n)
-        #expect(tile != opening)
-        _ = scene.arranger.handle(.event(.windowMoved(n, tile)), now: scene.start + .seconds(1))
-
-        let effects = scene.arranger.handle(.command(.undo, focused: a), now: scene.start + .seconds(2))
-
-        #expect(scene.floatingFrame(n) == opening)
-        #expect(scene.arranger.wantedFrames[n.identity] == opening)
-        // Where it opened, moved clear of a's tile as any floater is.
-        let target = Planner.clamp(opening, into: try #require(try scene.plan().desktopRect))
-        #expect(effects.contains { effect in
-            if case .perform(let commands) = effect { commands.contains(.setFrame(n, target)) } else { false }
-        }, "\(effects)")
-    }
-
-    /// Collapsed with zoom on, n is parked with a corner on the display; undo must bring it back, not float it there.
-    @Test func undoOnAHiddenDesktopBringsBackACollapsedWindow() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 200, height: 100), f: Size(width: 700, height: 100)])
-        _ = scene.arranger.handle(.zoomEnabled(true), now: scene.start)
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        scene.arrive(opened(n, minimum: Size(width: 1950, height: 100)))
-        #expect(scene.isDocked(n) && scene.arranger.camera.collapsible.contains(n.identity), "precondition: n did not collapse")
-        let parked = Rect(x: 1599, y: 624, width: 400, height: 300)
-        _ = scene.arranger.handle(.event(.windowMoved(n, parked)), now: scene.start + .seconds(1))
-
-        let effects = scene.arranger.handle(.command(.undo, focused: a), now: scene.start + .seconds(2))
-
-        #expect(scene.isFloating(n))
-        #expect(scene.floatingFrame(n) == opening, "stranded at \(String(describing: scene.floatingFrame(n)))")
-        // Where it opened, moved clear of a's tile as any floater is.
-        let target = Planner.clamp(opening, into: try #require(try scene.plan().desktopRect))
-        #expect(effects.contains { effect in
-            if case .perform(let commands) = effect { commands.contains(.setFrame(n, target)) } else { false }
-        }, "\(effects)")
-    }
-
-    @Test func aRefusedOneShowsAHiddenDesktopThroughAdmit() throws {
-        var scene = Scene(width: 1600, height: 600, minimums: [a: Size(width: 1000, height: 100)])
-        scene.focus(a)
-        _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        #expect(scene.desk?.tree.isDesktopHidden == true, "precondition: the Desktop is not hidden")
-        let steps = scene.undoSteps
-
-        let effects = scene.arrive(opened(n, minimum: Size(width: 650, height: 100)))
-
-        #expect(scene.isFloating(n) && !scene.isDocked(n))
-        #expect(scene.desk?.tree.isDesktopHidden != true, "a floating window needs the Desktop")
-        #expect(scene.undoSteps == steps)
-        #expect(!effects.contains(.beep))
-    }
-
     // MARK: During a drag (WR-01)
 
     /// Presses `window` and reports it dragged by `dx`, so the session is classified: a size change is a resize.
@@ -622,12 +646,8 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
     }
 
     /// One edge resize of a, with or without a window opening halfway through.
-    private func resizingA(openingOne: Bool, hiddenDesktop: Bool = false) throws -> Scene {
+    private func resizingA(openingOne: Bool) throws -> Scene {
         var scene = Scene(width: 1600, height: 600)
-        if hiddenDesktop {
-            _ = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)
-            _ = scene.arranger.handle(.command(.toggleDesktop, focused: a), now: scene.start)
-        }
         scene.focus(a)
         let tile = try scene.tile(of: a)
         _ = scene.arranger.handle(.event(.frameApplied(a, requested: tile, actual: tile)), now: scene.start)
@@ -643,16 +663,14 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         return scene
     }
 
-    @Test(arguments: [false, true])
-    func aWindowOpeningDuringAResizeFloatsAfterItAndChangesNothing(hiddenDesktop: Bool) throws {
-        let plain = try resizingA(openingOne: false, hiddenDesktop: hiddenDesktop)
-        var scene = try resizingA(openingOne: true, hiddenDesktop: hiddenDesktop)
+    @Test func aWindowOpeningDuringAResizeFloatsAfterItAndChangesNothing() throws {
+        let plain = try resizingA(openingOne: false)
+        var scene = try resizingA(openingOne: true)
 
         #expect(scene.isFloating(n) && !scene.isDocked(n))
         #expect(scene.floatingFrame(n) == opening)
         #expect(scene.undoSteps == plain.undoSteps, "the new window took an undo step")
         #expect(try weights(scene, around: a) == weights(plain, around: a), "the drag's result changed")
-        if hiddenDesktop { #expect(scene.desk?.tree.isDesktopHidden != true, "a floating window needs the Desktop") }
 
         // Only that gesture: the next window tiles again.
         let next = ref(21)
@@ -660,9 +678,10 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
         #expect(scene.isDocked(next))
     }
 
-    /// One gap drag between a and the Desktop, with or without a window opening halfway through.
+    /// One gap drag between a and f, docked on its right, with or without a window opening halfway through.
     private func draggingTheGap(openingOne: Bool) throws -> Scene {
         var scene = Scene(width: 1600, height: 600)
+        _ = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)
         scene.focus(a)
         let tree = try #require(scene.desk?.tree)
         let resolution = try scene.plan().resolution
@@ -705,15 +724,15 @@ private func near(_ a: Double, _ b: Double) -> Bool { abs(a - b) <= 1 }
 
     @Test func finderSplitsWindowGoesWhereThePressAsked() throws {
         var scene = Scene(width: 1600, height: 600)
+        _ = scene.arranger.handle(.command(.dock, focused: f), now: scene.start)  // [a | f]
         _ = scene.arranger.handle(.command(.finderSplit, focused: a), now: scene.start)
-        scene.focus(f)  // the ordinary rule would split the largest tile, not a's
+        scene.focus(f)  // the ordinary rule would split f's tile, the focused one, not a's
         let steps = scene.undoSteps
 
         let effects = scene.arrive(opened(finder(10)))
 
-        let desktop = try #require(try scene.plan().desktopRect)
-        let left = try scene.tile(of: a), tile = try scene.tile(of: finder(10))
-        #expect(tile.minX > left.maxX - 1 && tile.maxX < desktop.minX + 1, "\(left) | \(tile) | \(desktop)")
+        let left = try scene.tile(of: a), tile = try scene.tile(of: finder(10)), right = try scene.tile(of: f)
+        #expect(tile.minX > left.maxX - 1 && tile.maxX < right.minX + 1, "\(left) | \(tile) | \(right)")
         #expect(scene.undoSteps == steps + 1)
         #expect(!effects.contains(.beep))
     }

@@ -1,6 +1,7 @@
 import AppKit
 import KeyboardShortcuts
 import TransomEngine
+import TransomModel
 @testable import TransomMac
 import Testing
 
@@ -11,28 +12,37 @@ import Testing
 
     @Test func entriesMapStableNamesToCommands() {
         #expect(Hotkeys.entries.map(\.name.rawValue) == [
-            "dock", "float", "undo", "toggleDesktop", "focusLeft", "focusRight", "focusUp", "focusDown", "finderSplit",
+            "dock", "float", "undo", "focusLeft", "focusRight", "focusUp", "focusDown", "finderSplit",
             "togglePause", "toggleExcludeFrontmost", "moveLeft", "moveRight", "moveUp", "moveDown",
             "swapPrevious", "growTile", "shrinkTile", "balanceSplit", "rotateSplit", "flipSplit", "snapLeftThird", "snapCenterThird",
             "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight", "snapMaximize", "snapCenter",
             "arrangeAll", "floatAll", "restoreAll",
             "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
-            "frameDesktop", "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
+            "showOverview", "nextTab", "previousTab", "moveOutOfGroup",
             "view1", "view2", "view3", "view4", "view5", "view6", "view7", "view8", "view9",
             "saveView1", "saveView2", "saveView3", "saveView4", "saveView5", "saveView6", "saveView7", "saveView8", "saveView9",
+            "dockLeftHalf", "dockRightHalf", "dockTopHalf", "dockBottomHalf",
+            "dockTopLeft", "dockTopRight", "dockBottomLeft", "dockBottomRight",
+            "dockLeftThird", "dockCenterThird", "dockRightThird", "dockTopThird", "dockMiddleThird", "dockBottomThird",
             "dockColumn1", "dockColumn2", "dockColumn3", "dockColumn4", "dockColumnMiddle",
             "dockRow1", "dockRow2", "dockRow3", "dockRow4", "dockRowMiddle",
         ])
         #expect(Hotkeys.entries.map(\.command) == [
-            .dock, .float, .undo, .toggleDesktop, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
+            .dock, .float, .undo, .focus(.left), .focus(.right), .focus(.top), .focus(.bottom), .finderSplit,
             .togglePause, .toggleExcludeFrontmost, .moveOrSnap(.left), .moveOrSnap(.right), .moveOrSnap(.top), .moveOrSnap(.bottom),
             .swapPrevious, .growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .snap(.leftThird), .snap(.centerThird),
             .snap(.rightThird), .snap(.topLeft), .snap(.topRight), .snap(.bottomLeft), .snap(.bottomRight), .snap(.maximize), .snap(.center),
             .arrangeAll, .floatAll, .restoreAll,
             .camera(.zoomOutAll), .camera(.stepOut), .camera(.stepIn), .camera(.back), .camera(.forward), .camera(.pan(.left)),
-            .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow), .camera(.frameDesktop),
+            .camera(.pan(.right)), .camera(.pan(.top)), .camera(.pan(.bottom)), .camera(.frameWindow),
             .camera(.overview), .tabs(.next), .tabs(.previous), .tabs(.moveOut),
         ] + ViewSlot.all.map { .camera(.view($0)) } + ViewSlot.all.map { .camera(.saveView($0)) } + [
+            .dockFourth(.firstHalf, .horizontal), .dockFourth(.secondHalf, .horizontal), .dockFourth(.firstHalf, .vertical),
+            .dockFourth(.secondHalf, .vertical),
+            .dockCorner(.topLeft), .dockCorner(.topRight), .dockCorner(.bottomLeft), .dockCorner(.bottomRight),
+            .dockFourth(.firstThird, .horizontal), .dockFourth(.middleThird, .horizontal),
+            .dockFourth(.lastThird, .horizontal), .dockFourth(.firstThird, .vertical), .dockFourth(.middleThird, .vertical),
+            .dockFourth(.lastThird, .vertical),
             .dockFourth(.first, .horizontal), .dockFourth(.second, .horizontal), .dockFourth(.third, .horizontal), .dockFourth(.fourth, .horizontal),
             .dockFourth(.middle, .horizontal), .dockFourth(.first, .vertical), .dockFourth(.second, .vertical), .dockFourth(.third, .vertical),
             .dockFourth(.fourth, .vertical), .dockFourth(.middle, .vertical),
@@ -41,7 +51,7 @@ import Testing
 
     @Test func defaultsAreControlOptionCommandPlusALetter() {
         let expected: [KeyboardShortcuts.Shortcut] = [
-            .init(.d, modifiers: base), .init(.f, modifiers: base), .init(.z, modifiers: base), .init(.h, modifiers: base),
+            .init(.d, modifiers: base), .init(.f, modifiers: base), .init(.z, modifiers: base),
             .init(.leftArrow, modifiers: base), .init(.rightArrow, modifiers: base), .init(.upArrow, modifiers: base),
             .init(.downArrow, modifiers: base), .init(.n, modifiers: base), .init(.p, modifiers: base),
             .init(.e, modifiers: base), .init(.leftArrow, modifiers: shifted), .init(.rightArrow, modifiers: shifted),
@@ -51,24 +61,51 @@ import Testing
             .init(.three, modifiers: base), .init(.u, modifiers: base), .init(.i, modifiers: base), .init(.j, modifiers: base),
             .init(.k, modifiers: base), .init(.return, modifiers: base), .init(.c, modifiers: base),
             .init(.d, modifiers: shifted), .init(.f, modifiers: shifted), .init(.zero, modifiers: base),
-            // UI-SPEC Hotkeys and URLs (04): O , . [ ] Home End PageUp PageDown M G
+            // UI-SPEC Hotkeys and URLs (04): O , . [ ] Home End PageUp PageDown M (G retired, 8.1.1 D-13)
             .init(.o, modifiers: base), .init(.comma, modifiers: base), .init(.period, modifiers: base),
             .init(.leftBracket, modifiers: base), .init(.rightBracket, modifiers: base), .init(.home, modifiers: base),
             .init(.end, modifiers: base), .init(.pageUp, modifiers: base), .init(.pageDown, modifiers: base),
-            .init(.m, modifiers: base), .init(.g, modifiers: base),
+            .init(.m, modifiers: base),
             // 06 UI-SPEC Surface 4: Show Overview
             .init(.a, modifiers: base),
             // 07 UI-SPEC Surface 7: Next Tab, Previous Tab, Move Out of Group
             .init(.t, modifiers: base), .init(.t, modifiers: shifted), .init(.l, modifiers: base),
         ]
         // 08 UI-SPEC Surface 3: the saved views follow the OS-version rule (ViewChords), not ⌃⌥⌘.
-        #expect(Array(Hotkeys.entries.map(\.name.defaultShortcut).prefix(48)) == expected)
+        #expect(Array(Hotkeys.entries.map(\.name.defaultShortcut).prefix(46)) == expected)
     }
 
-    /// 08.1 UI-SPEC Surface 4: the digit row by key position, columns then rows, 0 last.
-    @Test func theFourthsAreAllFourModifiersPlusADigit() {
-        let digits: [KeyboardShortcuts.Key] = [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero]
-        #expect(Hotkeys.fourthNames.map(\.defaultShortcut) == digits.map { .init($0, modifiers: shifted) })
+    /// 08.1.1 UI-SPEC Surface 4 then 08.1 Surface 4, by key position: halves and thirds on the two letter rows under the right
+    /// hand (upper row columns, home row rows), then the fourths on the digit row, columns then rows, 0 last.
+    @Test func theDockingPositionsAreAllFourModifiersPlusALetterOrADigit() {
+        let keys: [KeyboardShortcuts.Key] = [
+            .y, .u, .h, .j, .minus, .equal, .leftBracket, .rightBracket, .i, .o, .p, .k, .l, .semicolon, .one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero,
+        ]
+        #expect(Hotkeys.fourthNames.map(\.defaultShortcut) == keys.map { .init($0, modifiers: shifted) })
+    }
+
+    /// T-08.1.1-08: the ten new raw values are a persistent contract (Pitfall 13).
+    @Test func theHalfAndThirdNamesKeepTheirRawValues() {
+        let names: [KeyboardShortcuts.Name] = [
+            .dockLeftHalf, .dockRightHalf, .dockTopHalf, .dockBottomHalf, .dockLeftThird, .dockCenterThird, .dockRightThird,
+            .dockTopThird, .dockMiddleThird, .dockBottomThird,
+        ]
+        #expect(names.map(\.rawValue) == [
+            "dockLeftHalf", "dockRightHalf", "dockTopHalf", "dockBottomHalf", "dockLeftThird", "dockCenterThird", "dockRightThird",
+            "dockTopThird", "dockMiddleThird", "dockBottomThird",
+        ])
+        #expect(Hotkeys.fourthNames.filter { !$0.rawValue.hasPrefix("dockColumn") && !$0.rawValue.hasPrefix("dockRow") && !corners.contains($0) } == names)
+    }
+
+    /// T-08.1.1-31 (8.1.1 D-17): the corner raw values are a persistent contract; ⇧⌃⌥⌘ - = over [ ], top row = top corners.
+    private let corners: [KeyboardShortcuts.Name] = [.dockTopLeft, .dockTopRight, .dockBottomLeft, .dockBottomRight]
+
+    @Test func theCornerNamesKeepTheirRawValuesChordsAndCommands() {
+        #expect(corners.map(\.rawValue) == ["dockTopLeft", "dockTopRight", "dockBottomLeft", "dockBottomRight"])
+        #expect(corners.map(\.defaultShortcut) == [.minus, .equal, .leftBracket, .rightBracket].map { .init($0, modifiers: shifted) })
+        #expect(corners.map { name in Hotkeys.entries.first { $0.name == name }?.command } == DockCorner.allCases.map { .dockCorner($0) })
+        #expect(Set(corners).isSubset(of: Hotkeys.fourthNames))
+        #expect(Set(corners).isDisjoint(with: Hotkeys.zoomNames))
     }
 
     @Test func noTwoEntriesShareADefaultChord() {
@@ -77,9 +114,9 @@ import Testing
         #expect(Set(chords).count == chords.count)
     }
 
-    /// TILE-10: zoom off disables zoom names only, so the fourths must stay out of them.
-    @Test func theFourthsAreNotZoomNames() {
-        #expect(Hotkeys.fourthNames.count == 10)
+    /// TILE-10: zoom off disables zoom names only, so the docking positions must stay out of them.
+    @Test func theDockingPositionsAreNotZoomNames() {
+        #expect(Hotkeys.fourthNames.count == 24)
         #expect(Set(Hotkeys.zoomNames).isDisjoint(with: Hotkeys.fourthNames))
     }
 
@@ -98,29 +135,39 @@ import Testing
         #expect(KeyboardShortcuts.Name.restoreAll.defaultShortcut == .init(.zero, modifiers: base))
     }
 
-    /// Every Phase 3 name, verbatim from 03-UI-SPEC.md Surface 6, so a rename fails here (Pitfall 13).
-    @Test func theTableKeepsThe33Phase3Names() {
+    /// Every Phase 3 name, verbatim from 03-UI-SPEC.md Surface 6, so a rename fails here (Pitfall 13); toggleDesktop is
+    /// retired (8.1.1 D-09).
+    @Test func theTableKeepsThe32LivePhase3Names() {
         let spec: Set<String> = [
             "focusLeft", "focusRight", "focusUp", "focusDown", "moveLeft", "moveRight", "moveUp", "moveDown", "dock", "float",
             "swapPrevious", "undo", "growTile", "shrinkTile", "balanceSplit", "rotateSplit", "flipSplit", "finderSplit",
             "snapLeftThird", "snapCenterThird", "snapRightThird", "snapTopLeft", "snapTopRight", "snapBottomLeft", "snapBottomRight",
-            "snapMaximize", "snapCenter", "arrangeAll", "floatAll", "toggleDesktop", "togglePause", "restoreAll", "toggleExcludeFrontmost",
+            "snapMaximize", "snapCenter", "arrangeAll", "floatAll", "togglePause", "restoreAll", "toggleExcludeFrontmost",
         ]
-        #expect(spec.count == 33)
+        #expect(spec.count == 32)
         #expect(spec.isSubset(of: Set(Hotkeys.entries.map(\.name.rawValue))))
     }
 
-    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, plus Show Overview (06 UI-SPEC Surface 4) and the
-    /// 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 33 + 12 + the 3 tab names (07
-    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) = 76.
-    @Test func theZoomNamesAreTheUISpecElevenPlusShowOverviewAndTheSavedViews() {
+    /// The 11 zoom names, verbatim from 04-UI-SPEC.md Hotkeys and URLs, less frameDesktop (retired, 8.1.1 D-13), plus
+    /// Show Overview (06 UI-SPEC Surface 4) and the 18 saved-view names (08 UI-SPEC Surface 3, D-17), which zoom off disables with them; 32 + 11 + the 3 tab names (07
+    /// Surface 7, enabled with zoom off) + 18 + the 10 fourths (08.1 Surface 4, enabled with zoom off) + the 10 halves and thirds (08.1.1 Surface 4, enabled with zoom off) + the 4 corners (8.1.1 D-17) = 88.
+    @Test func theZoomNamesAreTheUISpecTenPlusShowOverviewAndTheSavedViews() {
         let zoom = [
-            "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow", "frameDesktop",
+            "zoomOutAll", "stepOut", "stepIn", "zoomBack", "zoomForward", "panLeft", "panRight", "panUp", "panDown", "frameWindow",
             "showOverview",
         ] + (1...9).map { "view\($0)" } + (1...9).map { "saveView\($0)" }
         #expect(Hotkeys.zoomNames.map(\.rawValue) == zoom)
-        #expect(Hotkeys.entries.count == 76)
+        #expect(Hotkeys.entries.count == 88)
         #expect(Set(Hotkeys.entries.filter { if case .camera = $0.command { true } else { false } }.map(\.name.rawValue)) == Set(zoom))
+    }
+
+    /// T-08.1.1-06: a binding stored under a retired raw value must never fire another command.
+    @Test func theRetiredDesktopNamesAreNotInTheTable() {
+        let names = Set(Hotkeys.entries.map(\.name.rawValue))
+        #expect(!names.isEmpty)
+        #expect(names.isDisjoint(with: ["toggleDesktop", "frameDesktop"]))
+        #expect(!Hotkeys.entries.contains { $0.name.defaultShortcut == .init(.h, modifiers: base) }, "⌃⌥⌘H reaches apps")
+        #expect(!Hotkeys.entries.contains { $0.name.defaultShortcut == .init(.g, modifiers: base) }, "⌃⌥⌘G reaches apps")
     }
 
     /// 07 UI-SPEC Surface 7: persistent names (Pitfall 13), not zoom names.

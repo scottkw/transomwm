@@ -7,7 +7,7 @@ import Testing
 /// ScreenCaptureKit is never touched (SnapshotCapture's touch counter stays at 0).
 @Suite(.serialized) @MainActor struct ZoomOffTests {
     static let commands: [CameraCommand] =
-        [.zoomOutAll, .stepOut, .stepIn, .back, .forward, .frameWindow, .frameDesktop] + [Edge.left, .right, .top, .bottom].map(CameraCommand.pan)
+        [.zoomOutAll, .stepOut, .stepIn, .back, .forward, .frameWindow] + [Edge.left, .right, .top, .bottom].map(CameraCommand.pan)
 
     @Test func zoomOffNeverTouchesScreenCaptureKit() async {
         let before = SnapshotCapture.touches

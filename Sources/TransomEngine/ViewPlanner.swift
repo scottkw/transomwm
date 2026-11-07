@@ -1,7 +1,7 @@
 import TransomModel
 
 /// What the camera shows on one display (D-A). Home is a case, not a NodeID: the root's ID changes on every split
-/// (RESEARCH Pattern 2). `.node(.desktop)` is the Desktop view.
+/// (RESEARCH Pattern 2). No view hides floating windows (D-14).
 public enum ViewTarget: Hashable, Sendable {
     case home
     case node(NodeID)
@@ -19,7 +19,7 @@ extension LayoutTree {
             case let .split(_, children, _): stack.append(contentsOf: children)
             case let .panel(window): keptStates[window.identity] = states[window.identity]
             case let .tabs(windows, _): for window in windows { keptStates[window.identity] = states[window.identity] }
-            case .desktop: break
+            case .spacer: break
             }
         }
         return try LayoutTree(root: id, nodes: kept, states: keptStates)
@@ -35,30 +35,28 @@ public struct ViewPlan: Equatable, Sendable {
     public var parkSizes: [WindowRef: Size] = [:]
     public var unfit: Set<WindowRef>
     public var collapsed: [WindowRef: Rect]
-    public var desktopRect: Rect?
     public var resolution: Resolution
     public var homeResolution: Resolution
 }
 
 /// Pure camera layout (RESEARCH Pattern 1): `.home` is exactly `Planner.plan`; `.node(X)` resolves X's subtree in the
-/// whole `area` and parks every present window outside it at its own size (a hidden tab at its home content size).
+/// whole `area` and parks every present docked window outside it at its own size (a hidden tab at its home content
+/// size). Floating windows are never parked by a view: they stay on screen above the zoomed tiles (D-14).
 public enum ViewPlanner {
     public static func plan(
-        desk: Desk, view: ViewTarget, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect] = [:],
-        collapsible: Set<WindowIdentity> = []
+        desk: Desk, view: ViewTarget, area: Rect, gap: Double, mins: [WindowRef: Size], collapsible: Set<WindowIdentity> = []
     ) throws(LayoutError) -> ViewPlan {
         guard case .node(let id) = view else {
-            var plan = try collapsing(desk: desk, area: area, gap: gap, mins: mins, wanted: wanted, collapsible: collapsible)
+            var plan = try collapsing(desk: desk, area: area, gap: gap, mins: mins, collapsible: collapsible)
             plan.homeResolution = plan.resolution
             return plan
         }
-        let home = try self.plan(desk: desk, view: .home, area: area, gap: gap, mins: mins, wanted: wanted, collapsible: collapsible)
+        let home = try self.plan(desk: desk, view: .home, area: area, gap: gap, mins: mins, collapsible: collapsible)
         let tree = try desk.tree.subtree(at: id)
-        let showsDesktop = tree.nodes[.desktop] != nil
-        let viewDesk = Desk(tree: tree, desktop: showsDesktop ? desk.desktop : DesktopLayer())
-        var plan = try collapsing(desk: viewDesk, area: area, gap: gap, mins: mins, wanted: wanted, collapsible: collapsible)
+        // The floating layer comes along so a floating group's hidden members still park through the Planner.
+        let viewDesk = Desk(tree: tree, desktop: desk.desktop)
+        var plan = try collapsing(desk: viewDesk, area: area, gap: gap, mins: mins, collapsible: collapsible)
         let outside = desk.tree.windows.filter { tree.states[$0.identity] == nil && desk.tree.state(of: $0) == .present }
-            + (showsDesktop ? [] : desk.desktop.windows.filter { $0.state == .present }.map(\.window))
         plan.parks = (plan.parks + outside).sorted { $0.identity < $1.identity }
         // A hidden tab outside the view keeps its home content size, so it is never parked twice (Pitfall 12).
         plan.parkSizes.merge(home.parkSizes.filter { outside.contains($0.key) }) { view, _ in view }
@@ -71,19 +69,19 @@ public enum ViewPlanner {
     /// below its minimum on an axis is collapsed (parked, its share the block rect); one still unfit at 1x1 is parked
     /// with no block. Unfit windows outside `collapsible` stay unfit (OS-caused lost room floats, CONTEXT E).
     private static func collapsing(
-        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], wanted: [WindowIdentity: Rect], collapsible: Set<WindowIdentity>
+        desk: Desk, area: Rect, gap: Double, mins: [WindowRef: Size], collapsible: Set<WindowIdentity>
     ) throws(LayoutError) -> ViewPlan {
-        var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins, wanted: wanted)
+        var plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: mins)
         var shrunk: Set<WindowRef> = []
         var tiny = mins
         // Each pass grows `shrunk`, which the window count bounds, so this ends.
         while case let more = plan.unfit.filter({ collapsible.contains($0.identity) && !shrunk.contains($0) }), !more.isEmpty {
             shrunk.formUnion(more)
             for window in more { tiny[window] = Size(width: 1, height: 1) }
-            plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: tiny, wanted: wanted)
+            plan = try Planner.plan(desk: desk, area: area, gap: gap, mins: tiny)
         }
         var result = ViewPlan(
-            frames: plan.frames, parks: plan.parks, parkSizes: plan.parkSizes, unfit: plan.unfit, collapsed: [:], desktopRect: plan.desktopRect,
+            frames: plan.frames, parks: plan.parks, parkSizes: plan.parkSizes, unfit: plan.unfit, collapsed: [:],
             resolution: plan.resolution, homeResolution: plan.resolution)
         guard !shrunk.isEmpty else { return result }
         for window in shrunk {

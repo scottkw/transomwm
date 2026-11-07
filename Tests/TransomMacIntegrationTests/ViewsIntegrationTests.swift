@@ -47,30 +47,31 @@ import Testing
     /// Connects to the window server first (see ZoomSettleIntegrationTests).
     init() { _ = NSApplication.shared }
 
-    /// Phase 3 docking alone never gives a node holding only two windows (a | b | Desktop), so the session starts from a
-    /// saved [(A / B) | Desktop] with C floating. The view is saved on the (A / B) column; C then splits A's tile and B moves
-    /// up under A, so A and B's lowest common node is a new one, then Transom relaunches.
+    /// Phase 3 docking alone never gives a node holding only two windows (a | b | c), so the session starts from a saved
+    /// [(A / B) | D] with C floating; D keeps the column from being the whole desk. The view is saved on the (A / B) column;
+    /// C then splits A's tile and B moves up under A, so A and B's lowest common node is a new one, then Transom relaunches.
     @Test(.timeLimit(.minutes(1)))
     func aViewSurvivesASplitAMoveAndARelaunch() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: "transom-views-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let fixture = try await FixtureProcess.launch(["standard", "standard", "standard"])
+        let fixture = try await FixtureProcess.launch(["standard", "standard", "standard", "standard"])
         defer { fixture.terminate() }
         let fixturePID = fixture.pid
 
         let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
         await system.start()
         let refs = try await tracked(system, fixture)
-        let (a, b, c) = (refs[0], refs[1], refs[2])
+        let (a, b, c, d) = (refs[0], refs[1], refs[2], refs[3])
         var builder = Arranger()
         _ = builder.handle(.inventory(await system.inventory()), now: .now)
         let key = try #require(builder.deskKey(of: a))
         var seed = builder.world, history = UndoHistory()
         try seed.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            for window in [a, b] where desk.desktop.contains(window) { try desk.desktop.remove(window) }
-            try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+            for window in [a, b, d] where desk.desktop.contains(window) { try desk.desktop.remove(window) }
+            try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
             guard let leaf = desk.tree.leaf(containing: a) else { throw .windowNotFound(a) }
             try desk.tree.insert(b, at: .bottom, of: leaf, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: d, ids: &ids)
         }
         try LayoutStore(directory: directory).save(LayoutFile(world: seed, homeFrames: [:], session: SessionRecord(cleanExit: true, launchedAt: Date())))
 
@@ -89,7 +90,18 @@ import Testing
             await arrange.zoom(to: .home, displayUUID: key.displayUUID)
             try #require(await settled(arrange, key, on: .home), "the camera never came home")
 
-            // C docks from the Desktop tile, then moves left across the column: on a tie the smaller NodeID, A, takes it.
+            // C docks from D's left edge band, between the column and D, then moves left across the column: on a tie the
+            // smaller NodeID, A, takes it.
+            let visible = try #require(arrange.arranger.displays.first { $0.uuid == key.displayUUID }).visibleFrame
+            let desk = try #require(arrange.arranger.world[key])
+            let tileD = try #require(try Planner.plan(desk: desk, area: visible, gap: arrange.arranger.gap, mins: [:]).frames[d])
+            let size = try #require(fixture.windows.first { $0.index == 2 }).frame.size
+            let x = (tileD.minX + tileD.width * 0.15 - size.width / 2).rounded(), y = (tileD.midY - size.height / 2).rounded()
+            _ = try await fixture.send("move 2 \(Int(x)) \(Int(y))")
+            let seen = await waitUntil(timeout: .seconds(2)) {
+                arrange.arranger.windows[c.identity].map { abs($0.frame.x - x) <= 1 && abs($0.frame.y - y) <= 1 } ?? false
+            }
+            try #require(seen, "the Arranger never saw C at \(x),\(y)")
             await arrange.dispatch(.dock, focused: c)
             await arrange.dispatch(.moveOrSnap(.left), focused: c)
             let tree = try #require(arrange.arranger.world[key]?.tree)
@@ -146,18 +158,26 @@ import Testing
         try await show(first, on: display)
         do {
             try await show(second, on: display)
+            // A second docked window, so the saved leaf is not the whole desk (alone it would be the home view). It is
+            // another app launched first, so the fixture's window 0 stays the focused one: focusing the other would
+            // widen the camera to show it.
+            let other = try await FixtureProcess.launch(["standard"])
+            defer { other.terminate() }
             let fixture = try await FixtureProcess.launch(["standard"])
             defer { fixture.terminate() }
-            let fixturePID = fixture.pid
-            let system = AXWindowSystem(appFilter: { pid, _ in pid == fixturePID })
+            let pids = [other.pid, fixture.pid]
+            let system = AXWindowSystem(appFilter: { pid, _ in pids.contains(pid) })
             await system.start()
+            let beside = try #require(try await tracked(system, other).first)
             let window = try #require(try await tracked(system, fixture).first)
             let arrange = ArrangeController(system: system, zoomEnabled: true)
             defer { withExtendedLifetime(arrange) {} }
             await arrange.start()
             await drainEvents(arrange)
             let slot = ViewSlot(4)!
+            await arrange.dispatch(.dock, focused: beside)
             await arrange.dispatch(.dock, focused: window)
+            try #require(arrange.arranger.deskKey(of: window).flatMap { arrange.arranger.world[$0]?.tree.windows.count } == 2, "the two fixture windows did not both dock")
             let key = try #require(arrange.arranger.deskKey(of: window))
             try #require(key.spaceID == second, "the fixture window is on \(key), not Space \(second)")
             let leaf = try #require(arrange.arranger.leafNode(of: window))

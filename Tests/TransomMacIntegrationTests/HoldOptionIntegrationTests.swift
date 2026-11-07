@@ -27,9 +27,9 @@ import Testing
         let drag = PostedDrag()
         defer { drag.finish() }
         try await drag.press(at: grab)
-        // One tile's width right, so the release frame fits where the Desktop tile is once window 0 has reflowed: a shorter
-        // drag on the VM's 1024 pt display crosses window 0's new tile and is rightly clamped.
-        try await drag.move(to: CGPoint(x: grab.x + tile.width + 8, y: grab.y + 25))
+        // Half a tile left, so the release frame stays on screen: window 1 is the right half of [0 | 1], and a drag right
+        // would leave it off the edge, where it is rightly clamped back. A floater may cover window 0's tile (D-05).
+        try await drag.move(to: CGPoint(x: grab.x - tile.width / 2, y: grab.y + 25))
         try await Task.sleep(for: .milliseconds(100))  // the window catches up with the pointer
         let last = try #require(DragFramePoller.bounds(of: id), "the dragged window has no CG bounds")
         drag.release()
@@ -65,7 +65,7 @@ import Testing
         let grab = try LiveArrange.titleBar(of: ref.windowID, frame: frame)
         try await drag.press(at: grab)
         try await drag.move(to: CGPoint(x: grab.x + 40, y: grab.y + 20), each: sample)
-        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .always }, "the press was never a move")
+        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .always }, "the press was never a move: strip \(arrange.arranger.dragOptionStrip), drag \(String(describing: arrange.arranger.drag)), session flags \(CGEventSource.flagsState(.combinedSessionState).rawValue)")
         try await drag.hold(.option)
         try await drag.move(to: Self.leftBand(try LiveArrange.visibleFrame()), each: sample)
         try await Self.rest(each: sample)
@@ -104,7 +104,7 @@ import Testing
         let grab = try LiveArrange.titleBar(of: ref.windowID, frame: frame)
         try await drag.press(at: grab)
         try await drag.move(to: CGPoint(x: grab.x + 40, y: grab.y + 20), each: sample)
-        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .withControl }, "the press was never a move")
+        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .withControl }, "the press was never a move: strip \(arrange.arranger.dragOptionStrip), drag \(String(describing: arrange.arranger.drag)), session flags \(CGEventSource.flagsState(.combinedSessionState).rawValue)")
         try await drag.hold(.option)
         try await drag.move(to: Self.leftBand(try LiveArrange.visibleFrame()), each: sample)
         try await Self.rest(each: sample)
@@ -158,6 +158,83 @@ import Testing
         #expect(docked, "the release did not dock the window")
     }
 
+    /// UAT 7a (8.1.1 D-18): three apps. B is docked over the whole desk and was activated last; T is ordered in front of
+    /// it without activating, so the window server, not focus, says T is in front. W, dragged with ⌥ held and rested on
+    /// T's centre, groups with T and B stays docked.
+    @Test(.timeLimit(.minutes(1)))
+    func aFrontFloaterTakesTheGroupDwellOverTheDockedWindowBeneath() async throws {
+        // Launched T, W, then B, so B's app is the one activated last (the host's state when 7a failed).
+        let tApp = try await FixtureProcess.launch(["standard"])
+        defer { tApp.terminate() }
+        let wApp = try await FixtureProcess.launch(["standard"])
+        defer { wApp.terminate() }
+        let bApp = try await FixtureProcess.launch(["standard"])
+        defer { bApp.terminate() }
+        try await Task.sleep(for: .milliseconds(300))  // the fixture activates itself
+        let (arrange, refs) = try await LiveArrange.start([bApp, tApp, wApp])
+        defer { withExtendedLifetime(arrange) {} }
+        try #require(refs.count == 3)
+        let (b, t, w) = (refs[0], refs[1], refs[2])
+        await arrange.setDragToDock(.holdOption)
+        try #require(arrange.startTap(), "the event tap was refused")
+        defer { arrange.stopTap() }
+
+        let visible = try LiveArrange.visibleFrame()
+        await arrange.dispatch(.dock, focused: b)
+        // The settled tile (D-08), not the first big frame: B passes through smaller frames on the way (15.7, run 1).
+        let gap = arrange.arranger.gap
+        let bFrame = Rect(x: visible.minX + gap, y: visible.minY + gap, width: visible.width - 2 * gap, height: visible.height - 2 * gap)
+        var seen: Rect?
+        let filled = await waitUntil(timeout: .seconds(3)) {
+            seen = try? await LiveArrange.frame(bApp, 0)
+            return seen.map { LiveArrange.near($0, bFrame) } ?? false
+        }
+        try #require(filled, "B did not fill the desk: \(String(describing: seen)), planned \(bFrame)")
+        let key = try #require(arrange.arranger.deskKey(of: b))
+
+        let size = try #require(tApp.windows.first).frame.size
+        let tx = (visible.midX - size.width / 2).rounded(), ty = (visible.midY - size.height / 2).rounded()
+        let wx = visible.minX + 20, wy = (visible.maxY - size.height - 20).rounded()
+        _ = try await tApp.send("move 0 \(Int(tx)) \(Int(ty))")
+        _ = try await wApp.send("move 0 \(Int(wx)) \(Int(wy))")
+        _ = try await tApp.send("order-front 0")
+        _ = try await wApp.send("order-front 0")
+        let placed = await waitUntil(timeout: .seconds(2)) {
+            [(t, tx, ty), (w, wx, wy)].allSatisfy { ref, x, y in
+                arrange.arranger.windows[ref.identity].map { abs($0.frame.x - x) <= 1 && abs($0.frame.y - y) <= 1 } ?? false
+            }
+        }
+        try #require(placed, "the Arranger never saw T and W move")
+        let tFrame = try #require(try await LiveArrange.frame(tApp, 0))
+        let centre = CGPoint(x: tFrame.midX, y: tFrame.midY)
+        let atCentre = CGWindowList.onScreenFrontToBack()?.first { $0.layer == 0 && $0.bounds.contains(Point(x: centre.x, y: centre.y)) }
+        try #require(atCentre?.windowID == t.windowID, "T is not in front at its centre: \(String(describing: atCentre?.windowID))")
+        let focus = arrange.arranger.focusOrder
+        print("7a: focus rank T \(focus.firstIndex(of: t.identity).map(String.init) ?? "none"), B \(focus.firstIndex(of: b.identity).map(String.init) ?? "none")")
+
+        let drag = PostedDrag()
+        defer { drag.finish() }
+        let grab = try LiveArrange.titleBar(of: w.windowID, frame: try #require(try await LiveArrange.frame(wApp, 0)))
+        try await drag.press(at: grab)
+        try await drag.move(to: CGPoint(x: grab.x + 40, y: grab.y - 20))
+        try #require(await waitUntil(timeout: .seconds(2)) { arrange.arranger.dragOptionStrip == .always }, "the press was never a move: drag \(String(describing: arrange.arranger.drag))")
+        try await drag.hold(.option)
+        try await drag.move(to: centre)
+        try await Task.sleep(for: .milliseconds(600))
+        let shown = arrange.arranger.drag?.shown
+        let pressFocus = arrange.arranger.focusOrder
+        print("7a: at the press focus rank T \(pressFocus.firstIndex(of: t.identity).map(String.init) ?? "none"), B \(pressFocus.firstIndex(of: b.identity).map(String.init) ?? "none")")
+        drag.release()
+
+        let grouped = await waitUntil(timeout: .seconds(3)) {
+            arrange.arranger.world[key]?.desktop.groups.contains { Set($0.members) == [w, t] } ?? false
+        }
+        #expect(grouped, "W and T did not group; preview at release \(String(describing: shown))")
+        #expect(arrange.arranger.world[key]?.tree.windows == [b], "B is no longer docked alone")
+        let bNow = try #require(try await LiveArrange.frame(bApp, 0))
+        #expect(LiveArrange.near(bNow, bFrame), "B moved: \(bNow), was \(bFrame)")
+    }
+
     // MARK: Helpers
 
     /// These tests mean nothing unless macOS's ⌥ tiling is on. Read only: nothing here writes the setting.
@@ -166,10 +243,16 @@ import Testing
         try #require(value == nil || (value as? Bool) == true, "EnableTilingOptionAccelerator is off in this guest")
     }
 
-    /// One fixture window, floating in the middle of the main display, with a controller tracking it.
+    /// Fixture window 0, floating in the middle of the main display, with a controller tracking it. Window 1 is docked
+    /// behind it and fills the desk, so ⌥ has a tile to dock into away from the screen edge: an empty desk docks only
+    /// from its edge band, where macOS's own edge tiling draws its guide (RESEARCH E1).
     private static func floatingWindow() async throws -> (FixtureProcess, ArrangeController, TransomModel.WindowRef, Rect) {
-        let fixture = try await FixtureProcess.launch(["standard"])
+        let fixture = try await FixtureProcess.launch(["standard", "standard"])
         let (arrange, refs) = try await LiveArrange.start(fixture)
+        await arrange.dispatch(.dock, focused: refs[1])
+        let key = try #require(arrange.arranger.deskKey(of: refs[1]))
+        try #require(arrange.arranger.world[key]?.tree.windows == [refs[1]], "window 1 did not dock alone")
+        _ = try await fixture.send("order-back 1")
         let visible = try LiveArrange.visibleFrame()
         let size = try #require(fixture.windows.first).frame.size
         let x = (visible.midX - size.width / 2).rounded(), y = (visible.midY - size.height / 2).rounded()
@@ -182,7 +265,7 @@ import Testing
         return (fixture, arrange, refs[0], try #require(try await LiveArrange.frame(fixture, 0)))
     }
 
-    /// The Desktop tile's left band, with nothing docked, and clear of the screen edge where macOS's edge tiling acts (RESEARCH E1).
+    /// Window 1's tile's left band, clear of the screen edge where macOS's edge tiling acts (RESEARCH E1).
     private static func leftBand(_ visible: Rect) -> CGPoint { CGPoint(x: visible.minX + visible.width / 8, y: visible.midY) }
 
     /// 300 ms with the pointer at rest, past the dwell, sampling as it goes.

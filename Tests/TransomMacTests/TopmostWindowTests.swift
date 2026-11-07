@@ -54,6 +54,17 @@ private let textEdit = entry(202, pid: 500, layer: 0, Rect(x: 12, y: 375, width:
         #expect(topmost([dock, textEdit], display: nil) == nil)
     }
 
+    /// 8.1.1 D-18: the press's stacking keeps tracked layer-0 windows in list order, untracked ones and repeats dropped.
+    @Test func frontToBackKeepsTrackedLayer0WindowsInListOrder() {
+        let identity = { (id: UInt32) in WindowIdentity(windowID: id, pid: 500, bundleID: "com.example.fixture") }
+        let tracked: [UInt32: WindowIdentity] = [10: identity(10), 11: identity(11), 30: identity(30)]
+        let menu = entry(30, pid: 400, layer: 25, Rect(x: 0, y: 0, width: 1024, height: 24))
+        let t = entry(10, pid: 500, layer: 0, Rect(x: 100, y: 100, width: 300, height: 200))
+        let untracked = entry(20, pid: 600, layer: 0, Rect(x: 0, y: 0, width: 500, height: 500))
+        let b = entry(11, pid: 500, layer: 0, Rect(x: 0, y: 25, width: 1024, height: 743))
+        #expect(CGWindowList.frontToBack([menu, t, untracked, b, t]) { tracked[$0] } == [identity(10), identity(11)])
+    }
+
     @Test func noLayer0HitOrAnEmptyListIsNil() {
         #expect(topmost([dock]) == nil)
         #expect(topmost([]) == nil)

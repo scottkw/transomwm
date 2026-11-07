@@ -117,6 +117,21 @@ import Testing
     @Test func zoomItemTitles() {
         #expect(MenuCopy.commandTitle(.dockFourth(.first, .horizontal)) == "1st Column")
         #expect(MenuCopy.commandTitle(.dockFourth(.middle, .vertical)) == "Middle Half Row")
+        #expect(MenuCopy.commandTitle(.dock) == "Where It Is")
+        #expect(MenuCopy.fourthMenu == "Dock Window")
+        #expect([MenuCopy.halvesHeader, MenuCopy.cornersHeader, MenuCopy.thirdsHeader, MenuCopy.fourthsHeader] == [
+            "Halves", "Corners", "Thirds", "Fourths",
+        ])
+        #expect(DockCorner.allCases.map { MenuCopy.commandTitle(.dockCorner($0)) } == ["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
+        let halvesAndThirds: [(FourthSlot, Axis)] = [
+            (.firstHalf, .horizontal), (.secondHalf, .horizontal), (.firstHalf, .vertical), (.secondHalf, .vertical),
+            (.firstThird, .horizontal), (.middleThird, .horizontal), (.lastThird, .horizontal),
+            (.firstThird, .vertical), (.middleThird, .vertical), (.lastThird, .vertical),
+        ]
+        #expect(halvesAndThirds.map { MenuCopy.fourthTitle($0, $1) } == [
+            "Left Half", "Right Half", "Top Half", "Bottom Half", "Left Third", "Center Third", "Right Third", "Top Third",
+            "Middle Third", "Bottom Third",
+        ])
         #expect(MenuCopy.commandTitle(.camera(.zoomOutAll)) == "Zoom Out to All Windows")
         #expect(MenuCopy.commandTitle(.camera(.view(ViewSlot(1)!))) == "Go to View 1")
         #expect(MenuCopy.commandTitle(.camera(.saveView(ViewSlot(9)!))) == "Save View 9")
@@ -126,7 +141,6 @@ import Testing
         #expect(MenuCopy.commandTitle(.camera(.forward)) == "Forward")
         #expect(Edge.allCases.map { MenuCopy.commandTitle(.camera(.pan($0))) } == ["Left", "Right", "Up", "Down"])
         #expect(MenuCopy.commandTitle(.camera(.frameWindow)) == "Frame Focused Window")
-        #expect(MenuCopy.commandTitle(.camera(.frameDesktop)) == "Frame Desktop")
     }
 
     @Test func exclusionCopyQuotesTheAppName() {
@@ -151,7 +165,7 @@ import Testing
         #expect(MenuCopy.newWindowsTitle(.tile) == "New Windows: Tile")
         #expect(MenuCopy.newWindowsChoice(.float) == "Float")
         #expect(MenuCopy.newWindowsChoice(.tile) == "Tile")
-        #expect(MenuCopy.newWindowsTooltip(.float) == "New windows float on the Desktop tile until you dock them.")
+        #expect(MenuCopy.newWindowsTooltip(.float) == "New windows float until you dock them.")
         #expect(MenuCopy.newWindowsTooltip(.tile) == "New windows dock beside the focused tile. Dialogs, panels and excluded apps still float.")
         #expect(MenuCopy.newWindowsAnnouncement(.float) == "New windows float")
         #expect(MenuCopy.newWindowsAnnouncement(.tile) == "New windows tile")

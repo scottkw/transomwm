@@ -11,18 +11,18 @@ private func ref(_ id: UInt32) -> WindowRef {
 @Suite struct NoticeCopyTests {
     @Test func oneWindowThatLostItsRoomIsNamedByItsApp() {
         #expect(NoticeCopy.text(for: .lostRoom([ref(1)]), appName: { _ in "Safari" })
-            == "A \u{201C}Safari\u{201D} window no longer fits its tile, so it's floating on the Desktop.")
+            == "A \u{201C}Safari\u{201D} window no longer fits its tile, so it's floating.")
     }
 
     @Test func severalWindowsThatLostTheirRoomAreCounted() {
         #expect(NoticeCopy.text(for: .lostRoom([ref(1), ref(2)]), appName: { _ in "Safari" })
-            == "2 windows no longer fit their tiles, so they're floating on the Desktop.")
+            == "2 windows no longer fit their tiles, so they're floating.")
     }
 
     @Test func aLongAppNameIsTruncatedTo32Characters() {
         let name = String(repeating: "x", count: 40)
         #expect(NoticeCopy.text(for: .lostRoom([ref(1)]), appName: { _ in name })
-            == "A \u{201C}\(MenuCopy.truncatedAppName(name))\u{201D} window no longer fits its tile, so it's floating on the Desktop.")
+            == "A \u{201C}\(MenuCopy.truncatedAppName(name))\u{201D} window no longer fits its tile, so it's floating.")
     }
 
     @Test func theLostRoomGlyphIsMacwindow() {
@@ -41,8 +41,8 @@ private func ref(_ id: UInt32) -> WindowRef {
     }
 
     @Test func arrangeLeftoversIsN5WithSingularAndPlural() {
-        #expect(NoticeCopy.text(for: .arrangeLeftovers(count: 1), appName: { _ in "" }) == "1 window didn't fit, so it stays floating on the Desktop.")
-        #expect(NoticeCopy.text(for: .arrangeLeftovers(count: 2), appName: { _ in "" }) == "2 windows didn't fit, so they stay floating on the Desktop.")
+        #expect(NoticeCopy.text(for: .arrangeLeftovers(count: 1), appName: { _ in "" }) == "1 window didn't fit, so it stays floating.")
+        #expect(NoticeCopy.text(for: .arrangeLeftovers(count: 2), appName: { _ in "" }) == "2 windows didn't fit, so they stay floating.")
         #expect(NoticeCopy.glyph(for: .arrangeLeftovers(count: 2)) == "macwindow")
     }
 
@@ -50,9 +50,9 @@ private func ref(_ id: UInt32) -> WindowRef {
         let base = "Transom quit unexpectedly. Your windows are back on screen and your layout is restored."
         #expect(NoticeCopy.text(for: .crashRecovered(unplaced: 0), appName: { _ in "" }) == base)
         #expect(NoticeCopy.text(for: .crashRecovered(unplaced: 1), appName: { _ in "" })
-            == base + " 1 window couldn't be placed and is floating on the Desktop.")
+            == base + " 1 window couldn't be placed and is floating.")
         #expect(NoticeCopy.text(for: .crashRecovered(unplaced: 3), appName: { _ in "" })
-            == base + " 3 windows couldn't be placed and are floating on the Desktop.")
+            == base + " 3 windows couldn't be placed and are floating.")
         #expect(NoticeCopy.glyph(for: .crashRecovered(unplaced: 0)) == "lifepreserver")
         #expect(Notice.crashRecovered(unplaced: 0).isCrashNotice)
     }

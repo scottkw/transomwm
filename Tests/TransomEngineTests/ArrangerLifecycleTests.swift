@@ -213,7 +213,7 @@ func info(_ id: UInt32, frame: Rect, kind: WindowKind = .dockable, excluded: Boo
 
 /// TILE-09: Float and Undo, each one undo step, and the availability rule shared by menu items and hotkeys.
 extension ArrangerLifecycleTests {
-    @Test func floatPutsADockedWindowOnTheDesktopAtItsPreDockFrame() async throws {
+    @Test func floatPutsADockedWindowAtItsPreDockFrameClampedOnScreen() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))
         await harness.send(.command(.dock, focused: w2))
@@ -221,8 +221,7 @@ extension ArrangerLifecycleTests {
         let effects = await harness.send(.command(.float, focused: w1))
         let desk = try #require(harness.arranger.world[key])
         #expect(desk.tree.state(of: w1) == nil)
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        #expect(desk.desktop.frame(of: w1) == Planner.clamp(frame1, into: desktop))  // G-03-4, user decision 2026-10-27
+        #expect(desk.desktop.frame(of: w1) == Planner.clamp(frame1, into: visible))  // G-03-4, user decision 2026-10-27
         #expect(desk.desktop.frame(of: w1) != tile)
         #expect(setFrames(effects)[w2] != nil, "the neighbour was not re-planned")
         #expect(harness.arranger.history.depth(for: key) == 3)
@@ -305,7 +304,7 @@ extension ArrangerLifecycleTests {
 /// TILE-20, WIN-07: a minimised or fullscreen docked window lends its space and comes back to the same tile;
 /// nothing is written while the session is paused.
 extension ArrangerLifecycleTests {
-    /// [w1 | w2 | Desktop], with both docked windows' frames.
+    /// [w1 | w2] across the visible frame, with both docked windows' frames.
     private func twoDocked() async throws -> (Harness, Rect, Rect) {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))

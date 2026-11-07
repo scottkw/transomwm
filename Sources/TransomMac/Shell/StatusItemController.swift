@@ -127,19 +127,17 @@ import os
     /// Items 6–18: the Arrange section, enabled by the one availability rule (which also greys the camera items).
     private func addArrangeItems(to menu: NSMenu, context: CommandContext) {
         commands.update(focusedFloats: arrange.arranger.isFloating(context.focused)) { arrange.arranger.availability($0, context: context) }
-        commands.item(for: .toggleDesktop).title = MenuCopy.desktopToggle(hidden: arrange.arranger.isDesktopHidden(focused: context.focused))
         menu.addItem(.sectionHeader(title: MenuCopy.arrangeSection))
-        for command in [Command.dock, .float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
+        menu.addItem(commands.dockMenu)  // holds .dock's item, which an NSMenuItem allows in one menu only (Pitfall 6)
+        for command in [Command.float, .swapPrevious, .undo] { menu.addItem(commands.item(for: command)) }
         menu.addItem(commands.focusMenu)
         menu.addItem(commands.moveMenu)
-        menu.addItem(commands.fourthMenu)
         menu.addItem(commands.splitMenu)
         menu.addItem(commands.snapMenu)
         menu.addItem(commands.tabsMenu)
         menu.addItem(.separator())
         menu.addItem(commands.item(for: .arrangeAll))
         menu.addItem(commands.item(for: .floatAll))
-        menu.addItem(commands.item(for: .toggleDesktop))
         // No action greys it out under auto-enabling, as for Restore macOS Window Settings. Menu only (D-24).
         let hasWaiting = arrange.arranger.shownPlaceholderCount > 0
         let clear = NSMenuItem(title: MenuCopy.clearWaitingTiles, action: hasWaiting ? #selector(clearWaitingTiles) : nil, keyEquivalent: "")
@@ -169,7 +167,7 @@ import os
         let uuid = context.displayUUID
         let section = commands.zoomSection(
             enabled: on, framingWindow: uuid.map { arranger.isFramingFocused(displayUUID: $0, focused: context.focused) } ?? false,
-            framingDesktop: uuid.map(arranger.isFramingDesktop) ?? false, takeover: takeoverMenuItem(), previews: previews, toggle: toggle)
+            takeover: takeoverMenuItem(), previews: previews, toggle: toggle)
         for item in section { menu.addItem(item) }
     }
 
@@ -262,6 +260,7 @@ import os
 
     /// Template glyph per the UI-SPEC glyph table: the warning triangle until access is ready, dimmed while paused.
     /// While the pointer display's view is not home it reads "Transom: zoomed in" (paused and not ready win).
+    /// No explicit symbol size: the default (18 x 14 pt) fits the 22 pt square item on every menu bar; a forced 16 pt image measured 23 x 18 pt and lost its bottom edge on a 1x display.
     private func updateGlyph() {
         guard let button = statusItem.button else { return }
         let paused = ready && !arrange.arranger.pauseReasons.isEmpty
@@ -270,8 +269,7 @@ import os
             !ready ? ("exclamationmark.triangle", "Transom: Accessibility access needed")
             : paused ? ("rectangle.split.2x1", MenuCopy.pausedGlyphDescription)
             : zoomed ? ("rectangle.split.2x1", ZoomCopy.zoomedInDescription) : ("rectangle.split.2x1", "Transom")
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
         image?.isTemplate = true
         button.image = image
         button.appearsDisabled = paused

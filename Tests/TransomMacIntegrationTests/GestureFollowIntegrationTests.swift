@@ -154,9 +154,8 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
     for index in refs.indices { _ = try await fixture.send("resize \(index) 120 120") }
     for (index, ref) in refs.enumerated() {
         try await Task.sleep(for: .milliseconds(500))
-        let desk = try #require(arrange.arranger.world[key])
-        let desktop = try #require(try Planner.plan(desk: desk, area: display.visibleFrame, gap: 8, mins: [:]).desktopRect)
-        let x = (desktop.minX + desktop.width * 0.8 - 60).rounded(), y = (desktop.midY - 60).rounded()
+        let area = display.visibleFrame
+        let x = (area.minX + area.width * 0.9 - 60).rounded(), y = (area.midY - 60).rounded()
         _ = try await fixture.send("move \(index) \(Int(x)) \(Int(y))")
         let moved = await waitUntil(timeout: .seconds(2)) {
             arrange.arranger.windows[ref.identity].map { abs($0.frame.x - x) <= 1 && abs($0.frame.y - y) <= 1 } ?? false
@@ -274,28 +273,23 @@ private func center(_ rect: Rect) -> CGPoint { CGPoint(x: rect.midX, y: rect.mid
         }
     }
 
-    /// GEST-03: no ⌥, the pointer over bare wallpaper: the Desktop tile's empty area, else (the VM's own TextEdit, Notes
-    /// and Finder windows may cover the whole visible frame, and only fixture windows may be touched) any bare wallpaper
-    /// on the display, such as the band behind the Dock.
+    /// GEST-03: no ⌥, the pointer over bare wallpaper. Docked tiles fill the visible frame (08.1.1 D-01), and only fixture
+    /// windows may be touched, so it is any bare wallpaper on the display, such as the band behind the Dock.
     @Test(.timeLimit(.minutes(1)))
     func aNoOptionPinchOnWallpaperZooms() async throws {
         try await withDesk { desk in
-            let tree = try #require(desk.arrange.arranger.world[ZoomInput.deskKey(desk.display)])
-            let desktop = try #require(try Planner.plan(desk: tree, area: desk.visible, gap: 8, mins: [:]).desktopRect)
             let list = try #require(CGWindowList.onScreenFrontToBack())
             let bounds = CGDisplayBounds(CGMainDisplayID())
             let screen = Rect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: bounds.height)
             var point: CGPoint?
-            for area in [desktop, screen] where point == nil {
-                for x in stride(from: area.minX + 8, to: area.maxX - 8, by: 8) where point == nil {
-                    for y in stride(from: area.minY + 8, to: area.maxY - 8, by: 8) where point == nil {
-                        let p = CGPoint(x: x, y: y)
-                        if GestureTapRules.surface(at: p, in: list, excludingPID: getpid(), display: bounds) == .wallpaper { point = p }
-                    }
+            for x in stride(from: screen.minX + 8, to: screen.maxX - 8, by: 8) where point == nil {
+                for y in stride(from: screen.minY + 8, to: screen.maxY - 8, by: 8) where point == nil {
+                    let p = CGPoint(x: x, y: y)
+                    if GestureTapRules.surface(at: p, in: list, excludingPID: getpid(), display: bounds) == .wallpaper { point = p }
                 }
             }
             let wallpaper = try #require(point, "no bare wallpaper on the display")
-            print("wallpaper pinch at \(wallpaper), Desktop tile \(desktop)")
+            print("wallpaper pinch at \(wallpaper)")
             #expect(try await post(pinch(1.2, flags: []), at: wallpaper, downstream: desk.downstream) == 0)
             #expect(await desk.idle(), "the stage never revealed")
             #expect(desk.view != .home, "a no-⌥ pinch on the wallpaper did not zoom in")

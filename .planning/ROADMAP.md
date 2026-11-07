@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Tab Groups** - Drop-to-group windows from any apps under a tab strip with group-wide buttons (completed 2026-11-03)
 - [x] **Phase 8: Saved Views, URLs & Persistence** - Views 1-9, `transom://` commands, layouts restored across restarts and reboots (completed 2026-11-04)
 - [x] **Phase 08.1: Window Behaviour Options** (completed 2026-11-05)
-- [ ] **Phase 08.1.1: Remove the Desktop Tile** - Docked windows fill the screen; floating windows sit on top like normal macOS windows
+- [x] **Phase 08.1.1: Remove the Desktop Tile** - Docked windows fill the screen; floating windows sit on top like normal macOS windows (completed 2026-11-06)
 - [ ] **Phase 9: Polish & Ship** - Settings, onboarding, launch at login, GitHub Releases update check, Homebrew cask
 
 ## Phase Details
@@ -459,7 +459,7 @@ Plans:
 ### Phase 08.1.1: Remove the Desktop Tile (INSERTED)
 
 **Goal**: As a user, I want docked windows to fill the whole screen and floating windows to sit on top of them like normal macOS windows, so that I never have to learn or manage a "Desktop tile".
-**Requirements**: TBD (discuss-phase)
+**Requirements**: MODEL-05, MODEL-09, TILE-06, TILE-07, TILE-14, TILE-15, TILE-16, TILE-21, TILE-23, TILE-24, TILE-25, TILE-26, ZOOM-11
 **Depends on:** Phase 8.1
 **Success Criteria** (what must be TRUE):
   1. No Desktop tile appears in any layout; docked windows share the whole visible frame
@@ -467,10 +467,36 @@ Plans:
   3. Hide/Show Desktop Tile (menu, `⌃⌥⌘H`, `transom://toggle-desktop`) is gone or repurposed, and README says so
   4. Existing layout.json files migrate: Desktop-tile nodes are dropped, floating windows keep their frames
 **Scope notes**: Inserted 2026-11-05. User decision after Phase 8.1 host UAT ("Why the hell would I need a Desktop Tile"): hiding the tile hid FileZilla with no visible way back, and a new floating window re-showed a hidden tile. Supersedes the Desktop tile parts of TILE-15 and Phase 3 D-31. Open for discuss-phase: what replaces ⌃⌥⌘H, where a new floating window opens, what an empty desk shows, whether fourths and Tile-mode placement change now that no Desktop tile takes space. Also check the collapsed-window "minimize" seen in the same UAT. User request (2026-11-05): the menu-bar menu should offer every supported docking configuration with its hotkey. Dock to Fourth (10 items with hotkeys) exists; discuss adding halves and thirds as docking commands (today they snap floating windows only), and making the menu easier to find.
-**Plans:** 0 plans
+**Plans:** 27/27 plans complete
 
-Plans:
-- [ ] TBD (run /gsd-plan-phase 08.1.1 to break down)
+Plans (sequential: one SwiftPM build tree, and most plans touch Arranger.swift):
+- [x] 08.1.1-01-PLAN.md — Migration: schema 1–3 layout.json loses its Desktop tile (legacy decode, World 2, layout.json 4), parked windows come back, requirement amendments
+- [x] 08.1.1-02-PLAN.md — Tests whose subject is a hidden Desktop tile or Frame Desktop retire; incidental hide steps go
+- [x] 08.1.1-03-PLAN.md — Hide/Show Desktop Tile and Frame Desktop leave the shell (menus, hotkeys, Shortcuts, wallpaper double-click); toasts say "floating"
+- [x] 08.1.1-04-PLAN.md — The two commands leave the engine, URL and CLI; New Windows tooltip says float
+- [x] 08.1.1-05-PLAN.md — Halves and thirds on every route and the Dock Window submenu with hotkeys; D-12 regression row
+- [x] 08.1.1-06-PLAN.md — Floating windows are never framed, sized, parked or hidden by a zoomed view; hidden-Desktop paths deleted
+- [x] 08.1.1-07-PLAN.md — Commands on the visible frame and on an empty desk (Tile, Dock, Arrange All, Finder split, snap, Float, tab floats)
+- [x] 08.1.1-08-PLAN.md — Drags: no clamp ghost or undock refusal, empty-desk edge band, front floating window wins the group dwell
+- [x] 08.1.1-09-PLAN.md — The flip, part 1: new desks are empty (the only product change), model target re-derived; engine batches skipped by name (user-approved)
+- [x] 08.1.1-10-PLAN.md — The flip, part 2: fourths, planner, view, focus and command suites re-derived without a Desktop share
+- [x] 08.1.1-11-PLAN.md — The flip, part 3: drag, tab, restore and lifecycle suites and LayoutStoreTests re-derived; plain `swift test` green again
+- [x] 08.1.1-12-PLAN.md — Live integration suites follow the empty desk (setups, layouts, Desktop-rect oracles); FourthsIntegrationTests in the VM
+- [x] 08.1.1-13-PLAN.md — Contract 1: no engine or shell path reads a Desktop leaf; a floating-only saved view goes home
+- [x] 08.1.1-14-PLAN.md — Contract 2: plans carry no Desktop rect, planners take no unread `wanted:`, labels say area
+- [x] 08.1.1-15-PLAN.md — Contract 3: no test builds or hides a Desktop tile; fourths table counts docked tiles only
+- [x] 08.1.1-16-PLAN.md — Contract 4: delete the Desktop node kind and its API; a schema-4 file naming one is set aside
+- [x] 08.1.1-17-PLAN.md — README, source docs and the Phase 9 note for D-12
+- [x] 08.1.1-18-PLAN.md — The migration and every touched live suite on real windows in both VMs; new chords vs macOS; host UAT checklist
+- [x] 08.1.1-19-PLAN.md — Gap closure: OptionsBundleIntegrationTests re-derived for the empty desk and run in both VMs; LayoutFile schema-4 doc and the rematch log label say floating
+- [x] 08.1.1-20-PLAN.md — Gap closure (UAT, D-16): decision gate, then an invisible empty area in the layout (`Node.spacer`), layout.json schema 5, vacate/fill and the leave rule
+- [x] 08.1.1-21-PLAN.md — Gap closure (D-16): halves, thirds and fourths take exactly their part; empty space first, nothing grows, a moved window leaves its place empty; position labels only
+- [x] 08.1.1-22-PLAN.md — Gap closure (D-16): empty areas in drags (edge band fills), Dock Where It Is, Tile, Arrange All and Finder split fill them first; focus and zoom skip them
+- [x] 08.1.1-23-PLAN.md — Gap closure (D-17): corner quarters in the model and engine, by URL and CLI
+- [x] 08.1.1-24-PLAN.md — Gap closure (D-17): corner hotkeys ⇧⌃⌥⌘ - = [ ], the Corners menu section and Shortcuts rows
+- [x] 08.1.1-25-PLAN.md — Gap closure (D-18): real window stacking decides the group dwell; 7a as an engine test and a three-app VM test
+- [x] 08.1.1-26-PLAN.md — Gap closure: exact positions, corners, the real app's options and the corner chords on real windows in both VMs
+- [x] 08.1.1-27-PLAN.md — Gap closure: README, UI-SPEC and REQUIREMENTS for D-16/D-17/D-18; host re-check list in 08.1.1-UAT.md
 
 ### Phase 9: Polish & Ship
 
@@ -489,7 +515,7 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 **Research**: Standard patterns; port gifsmith's GitHub Releases updater (`~/dev/gifsmith/internal/update`, `internal/services/updates.go`) to Swift; notarisation and Homebrew are well documented (Rectangle and Amethyst casks as models)
-**Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Transom" for existing macOS apps before release.
+**Scope notes**: SwiftUI only inside `NSHostingController`. Onboarding includes the monthly Screen Recording explanation and an App Translocation check. CI checks the designated requirement so TCC grants survive updates. Own Homebrew tap first, then homebrew/cask. Add a macOS-beta compatibility checklist for the private APIs. Check the name "Transom" for existing macOS apps before release. From 08.1 UAT and 8.1.1 D-12: a collapsed block can read as a minimized window; the Desktop tile was not the cause (RESEARCH D-12 Investigation).
 
 ## Progress
 

@@ -16,7 +16,7 @@ private func tree(root: UInt64, _ nodes: [UInt64: Node]) throws -> LayoutTree {
         switch node {
         case let .panel(window): states[window.identity] = .present
         case let .tabs(windows, _): for window in windows { states[window.identity] = .present }
-        case .split, .desktop: break
+        case .split, .spacer: break
         }
     }
     return try LayoutTree(root: n(root), nodes: Dictionary(uniqueKeysWithValues: nodes.map { (n($0.key), $0.value) }), states: states)

@@ -13,13 +13,12 @@ nonisolated public enum ZoomCopy {
 
     // MARK: Reveal announcements (Accessibility)
 
-    /// "Showing all windows", "Showing “Safari”", "Showing 3 windows", plus ", 1 collapsed" / ", 2 collapsed";
-    /// "Showing the Desktop". `appName` names the one window of a one-window view.
+    /// "Showing all windows", "Showing “Safari”", "Showing 3 windows", plus ", 1 collapsed" / ", 2 collapsed".
+    /// `appName` names the one window of a one-window view.
     public static func revealAnnouncement(view: ViewTarget, appName: String?, windowCount: Int, collapsed: Int) -> String {
         let shown: String
         switch view {
         case .home: shown = "Showing all windows"
-        case .node(.desktop): shown = "Showing the Desktop"
         case .node:
             if windowCount == 1, let appName {
                 shown = "Showing \u{201C}\(MenuCopy.truncatedAppName(appName))\u{201D}"
@@ -69,9 +68,10 @@ nonisolated public enum ZoomCopy {
         case .camera(.pan(let edge)): "Move View \(MenuCopy.direction(edge))"
         case .focus(let edge): "Focus \(MenuCopy.direction(edge))"
         case .moveOrSnap(let edge): "Move Window \(MenuCopy.direction(edge)) or Snap to \(MenuCopy.snapTitle(half(edge)))"
-        case .toggleDesktop: "Hide or Show Desktop Tile"
         case .togglePause: "Pause or Resume Arranging"
+        case .dock: "Dock Window Where It Is"
         case .dockFourth(let slot, let axis): "Dock to \(MenuCopy.fourthTitle(slot, axis))"
+        case .dockCorner(let corner): "Dock to \(MenuCopy.cornerTitle(corner)) Quarter"
         default: MenuCopy.commandTitle(command)
         }
     }
@@ -129,5 +129,4 @@ nonisolated public enum ZoomCopy {
     public static func logPick(_ windowID: UInt32) -> String { "pick \u{2192} window \(windowID)" }
     public static func logPickOff(_ reason: String) -> String { "pick mode off: \(reason)" }
     public static func logTitleBarDoubleClick(_ windowID: UInt32) -> String { "title bar double-click \u{2192} frame window \(windowID)" }
-    public static let logDesktopDoubleClick = "desktop double-click \u{2192} frame desktop"
 }

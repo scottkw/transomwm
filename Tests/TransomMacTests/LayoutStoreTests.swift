@@ -10,18 +10,31 @@ private func ref(_ id: UInt32, title: String = "") -> WindowRef {
     WindowRef(identity: WindowIdentity(windowID: id, pid: 300, bundleID: "com.example.editor"), titleHint: title)
 }
 
-/// [1 | Desktop] with 2 floating; both windows carry a title.
+/// 1 docked, filling the desk, with 2 floating; both windows carry a title.
 private func sampleFile() throws -> LayoutFile {
     var world = World()
     try world.addDesk(key)
     var history = UndoHistory()
     try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(ref(1, title: "Secret plan.txt"), at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: "Secret plan.txt"), ids: &ids)
         try desk.desktop.add(ref(2, title: "Bank statement"), frame: Rect(x: 900, y: 300, width: 400, height: 300))
     }
     return LayoutFile(
         world: world, homeFrames: [ref(2).identity: Rect(x: 50, y: 60, width: 400, height: 300)],
         session: SessionRecord(cleanExit: false, launchedAt: Date(timeIntervalSinceReferenceDate: 800_000_000.25)))
+}
+
+/// 8.1.1 D-16: the main desk holds [window 1 .5 | empty area .5]; NodeIDs 1 (the split), 2 and 3.
+private func emptyAreaFile() throws -> LayoutFile {
+    let tree = try LayoutTree(
+        root: NodeID(raw: 1),
+        nodes: [
+            NodeID(raw: 1): .split(axis: .horizontal, children: [NodeID(raw: 2), NodeID(raw: 3)], weights: [0.5, 0.5]),
+            NodeID(raw: 2): .panel(ref(1, title: "Notes")), NodeID(raw: 3): .spacer,
+        ],
+        states: [ref(1).identity: .present])
+    let world = try World(ids: IDSource(next: 10), desks: [key: Desk(tree: tree)])
+    return LayoutFile(world: world, homeFrames: [:], session: SessionRecord(cleanExit: false, launchedAt: Date(timeIntervalSinceReferenceDate: 800_000_000)))
 }
 
 /// D-16, T-03-15..18, D-10: layout.json is validated whole on load, written atomically and owner-only with titles,
@@ -55,7 +68,7 @@ private func sampleFile() throws -> LayoutFile {
         let file = try sampleFile()
         #expect(try LayoutStore(directory: dir.url).save(file))
         let text = try dir.text()
-        #expect(text.contains("\"schemaVersion\" : 3"))
+        #expect(text.contains("\"schemaVersion\" : \(LayoutFile.schemaVersion)"))
         let homeFrames = try #require(text.range(of: "\"homeFrames\"")), session = try #require(text.range(of: "\"session\""))
         let world = try #require(text.range(of: "\"world\""))
         #expect(homeFrames.lowerBound < session.lowerBound && session.lowerBound < world.lowerBound)
@@ -93,7 +106,7 @@ private func sampleFile() throws -> LayoutFile {
         var world = World()
         try world.addDesk(key)
         try world.reflow(key) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(1, title: String(repeating: "x", count: 8192)), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1, title: String(repeating: "x", count: 8192)), ids: &ids)
         }
         let huge = LayoutFile(world: world, homeFrames: [:], session: SessionRecord(cleanExit: false, launchedAt: .now))
         #expect(throws: LayoutStoreError.self) { try store.save(huge) }
@@ -146,7 +159,7 @@ private func sampleFile() throws -> LayoutFile {
     }
 
     nonisolated static let badFiles: [(String, @MainActor @Sendable () throws -> String)] = [
-        ("too large", { try edited("\"schemaVersion\" : 3", "\"schemaVersion\" : 3" + String(repeating: " ", count: World.maxEncodedBytes)) }),
+        ("too large", { try edited("\"schemaVersion\" : 5", "\"schemaVersion\" : 5" + String(repeating: " ", count: World.maxEncodedBytes)) }),
         ("malformed", { #"{"schemaVersion":1,"world":"# }),
         ("duplicate window", { try edited("\"windowID\" : 2", "\"windowID\" : 1") }),
         // JSON has no NaN; an overflowing literal is the nearest a file gets to a non-finite frame.
@@ -176,7 +189,43 @@ private func sampleFile() throws -> LayoutFile {
         ("unsorted view windows", { try setting("views") { _ in [view(3, windows: [2, 1])] }() }),
         ("duplicate view window", { try setting("views") { _ in [view(3, windows: [1, 1])] }() }),
         ("duplicate wanted frame", { try edited("\"wantedFrames\" : [", "\"wantedFrames\" : [{\"frame\":{\"x\":1,\"y\":1,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}},{\"frame\":{\"x\":5,\"y\":5,\"width\":10,\"height\":10},\"window\":{\"bundleID\":\"com.example.editor\",\"pid\":300,\"windowID\":2}}") }),
+        // 8.1.1 D-16, T-08.1.1-25: empty-area shapes no edit makes are set aside, never repaired.
+        ("empty-area root", { try forgedTree { tree in tree = ["root": 3, "nodes": ["3": ["spacer": [:]]], "states": []] } }),
+        ("two adjacent empty areas", {
+            try forgedTree { tree in
+                var nodes = tree["nodes"] as! [String: Any]
+                nodes["1"] = ["split": ["axis": "horizontal", "children": [2, 3, 4], "weights": [0.5, 0.25, 0.25]]]
+                nodes["4"] = ["spacer": [:]]
+                tree["nodes"] = nodes
+            }
+        }),
+        ("split with no window", {
+            try forgedTree { tree in
+                var nodes = tree["nodes"] as! [String: Any]
+                nodes["1"] = ["split": ["axis": "horizontal", "children": [2, 4], "weights": [0.5, 0.5]]]
+                nodes["4"] = ["split": ["axis": "vertical", "children": [3, 5], "weights": [0.5, 0.5]]]
+                nodes["5"] = ["spacer": [:]]
+                tree["nodes"] = nodes
+            }
+        }),
     ]
+
+    /// `emptyAreaFile()`'s JSON with its main desk's tree changed.
+    static func forgedTree(_ change: (inout [String: Any]) -> Void) throws -> String {
+        let dir = Directory()
+        try LayoutStore(directory: dir.url).save(try emptyAreaFile())
+        var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: dir.file)) as? [String: Any])
+        var world = json["world"] as! [String: Any]
+        var desks = world["desks"] as! [[String: Any]]
+        var desk = desks[0]["desk"] as! [String: Any]
+        var tree = desk["tree"] as! [String: Any]
+        change(&tree)
+        desk["tree"] = tree
+        desks[0]["desk"] = desk
+        world["desks"] = desks
+        json["world"] = world
+        return String(decoding: try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys]), as: UTF8.self)
+    }
 
     @Test(arguments: badFiles)
     func aBadFileIsRejectedWholeAndMovedAside(name: String, text: @MainActor @Sendable () throws -> String) throws {
@@ -227,12 +276,12 @@ private func sampleFile() throws -> LayoutFile {
 
     @Test func aNewerFileIsKeptUntouchedAndNeverOverwritten() throws {
         let dir = Directory()
-        let newer = try Self.edited("\"schemaVersion\" : 3", "\"schemaVersion\" : 4")
+        let newer = try Self.edited("\"schemaVersion\" : 5", "\"schemaVersion\" : 6")
         try dir.write(newer)
         let store = LayoutStore(directory: dir.url)
         store.load()
         #expect(store.contents == nil)
-        #expect(store.loadError == .newerVersion(4))
+        #expect(store.loadError == .newerVersion(6))
         #expect(store.savingDisabled)
         #expect(try dir.text() == newer)
         #expect(dir.corrupted.isEmpty)
@@ -243,6 +292,14 @@ private func sampleFile() throws -> LayoutFile {
 
 /// G-03-11, SAFE-06: wanted frames in layout.json. A file from before them loads with none.
 extension LayoutStoreTests {
+    /// The sample's World as a legacy file loads: a floater with a home frame was parked by a hidden Desktop, so the
+    /// home frame becomes its stored frame (8.1.1 D-02, WR-01).
+    static func withHomeFrameFloating(_ world: World) throws -> World {
+        var world = world
+        try world.recordFloatingFrame(Rect(x: 50, y: 60, width: 400, height: 300), for: ref(2))
+        return world
+    }
+
     @Test func aFileFromBeforeWantedFramesLoadsWithNone() throws {
         let dir = Directory()
         let sample = try sampleFile()
@@ -258,7 +315,7 @@ extension LayoutStoreTests {
         #expect(fresh.loadError == nil)
         let contents = try #require(fresh.contents)
         #expect(contents.wantedFrames.isEmpty)
-        #expect(contents.world == sample.world)
+        #expect(contents.world == (try Self.withHomeFrameFloating(sample.world)))
         #expect(contents.homeFrames == sample.homeFrames)
     }
 
@@ -286,7 +343,7 @@ extension LayoutStoreTests {
         try world.addDesk(key)
         var history = UndoHistory()
         try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-            try desk.tree.insert(ref(1), at: .left, of: .desktop, ids: &ids)
+            try desk.tree.applyDrop(.layoutEdge(.right), window: ref(1), ids: &ids)
             guard let leaf = desk.tree.leaf(containing: ref(1)) else { throw .windowNotFound(ref(1)) }
             try desk.tree.group(ref(2), into: leaf)
             try desk.tree.group(ref(3), into: leaf)
@@ -322,7 +379,7 @@ extension LayoutStoreTests {
         #expect(!store.savingDisabled)
         #expect(dir.corrupted.isEmpty)
         let contents = try #require(store.contents)
-        #expect(contents.schemaVersion == 3)
+        #expect(contents.schemaVersion == LayoutFile.schemaVersion)
         #expect(contents.arrangement.isUnknown)
         #expect(contents.layoutSets.isEmpty)
         #expect(contents.spaces.isEmpty)
@@ -332,7 +389,7 @@ extension LayoutStoreTests {
         #expect(contents.wantedFrames.map(\.window.windowID) == [1])
     }
 
-    @Test func aMigratedFileSavesAsSchema3WithItsSpaceTableAndRoundTrips() throws {
+    @Test func aMigratedFileSavesAsSchema4WithItsSpaceTableAndRoundTrips() throws {
         let dir = Directory()
         try dir.write(LayoutFileV1Fixture.json)
         let store = LayoutStore(directory: dir.url)
@@ -341,7 +398,7 @@ extension LayoutStoreTests {
         contents.spaces = [SavedSpace(id: 3, uuid: "U3"), SavedSpace(id: 4, uuid: "U4")]
         #expect(try store.save(contents))
         let text = try dir.text()
-        #expect(text.contains("\"schemaVersion\" : 3"))
+        #expect(text.contains("\"schemaVersion\" : \(LayoutFile.schemaVersion)"))
         #expect(text.contains("\"spaces\" : ["))
 
         let fresh = LayoutStore(directory: dir.url)
@@ -371,7 +428,7 @@ extension LayoutStoreTests {
     }
 }
 
-/// D-10, D-14, RESEARCH Pitfall 5: schema 3 keeps titles and the boot session; schema 2 loads and saves as schema 3.
+/// D-10, D-14, RESEARCH Pitfall 5: schema 3 keeps titles and the boot session; schema 2 loads and saves as schema 4.
 extension LayoutStoreTests {
     @Test func aSchema3FileRoundTripsItsTitlesAndBootSession() throws {
         let dir = Directory()
@@ -409,7 +466,7 @@ extension LayoutStoreTests {
         #expect(fresh.contents?.views.first?.windows == [ref(1).identity, ref(2).identity])
     }
 
-    @Test func aSchema2FileLoadsWithEmptyTitlesAndSavesAsSchema3() throws {
+    @Test func aSchema2FileLoadsWithEmptyTitlesAndSavesAsSchema4() throws {
         let dir = Directory()
         // Schema 2 as its Transom wrote it: titles redacted (T-03-17) and no boot session.
         let schema2 = try Self.mutated { json in
@@ -432,12 +489,12 @@ extension LayoutStoreTests {
         let contents = try #require(store.contents)
         #expect(contents.session.bootSession == nil)
         #expect(contents.views.isEmpty, "a schema-2 file has no saved views")
-        #expect(contents.world == (try sampleFile()).world)
+        #expect(contents.world == (try Self.withHomeFrameFloating(sampleFile().world)))
         #expect(contents.world.desks.values.allSatisfy { desk in
             (desk.tree.windows + desk.desktop.windows.map(\.window)).allSatisfy { $0.titleHint.isEmpty }
         })
         #expect(try store.save(contents))
-        #expect(try dir.text().contains("\"schemaVersion\" : 3"))
+        #expect(try dir.text().contains("\"schemaVersion\" : \(LayoutFile.schemaVersion)"))
     }
 }
 
@@ -450,5 +507,177 @@ extension LayoutStoreTests {
 
     @Test func theCurrentBootSessionIsReadable() {
         #expect(BootSession.current()?.isEmpty == false)
+    }
+}
+
+/// 8.1.1 D-02, RESEARCH Pitfall 1: a schema-3 file (every 08.1 user's) loads without its Desktop tiles, never set aside;
+/// its docked windows share the whole visible frame, floaters keep their frames, and it saves as schema 4 / World 2.
+extension LayoutStoreTests {
+    @Test func aSchema3FileWithADesktopTileLoadsWithoutItAndSavesAsSchema4() throws {
+        let dir = Directory()
+        try dir.write(LayoutFileV3Fixture.json)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(!store.savingDisabled)
+        #expect(dir.corrupted.isEmpty)
+        // The one-way migration keeps the pre-upgrade file for a downgrade (WR-04).
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir.url.path).filter { $0.hasPrefix(LayoutStore.fileName + ".schema-3-") }
+        #expect(backups.count == 1)
+        #expect(try backups.first.map { try String(contentsOf: dir.url.appending(path: $0), encoding: .utf8) } == LayoutFileV3Fixture.json)
+        let contents = try #require(store.contents)
+        #expect(contents.schemaVersion == LayoutFile.schemaVersion)
+
+        func window(_ id: UInt32, _ title: String) -> WindowRef {
+            WindowRef(identity: WindowIdentity(windowID: id, pid: 300, bundleID: "com.example.editor"), titleHint: title)
+        }
+        let a = window(1, "Notes"), b = window(2, "Terminal")
+        let desk = try #require(contents.world[DeskKey(displayUUID: LayoutFileV3Fixture.display, spaceID: 3)])
+        let root = try #require(desk.tree.root)
+        #expect(desk.tree.node(root) == .split(axis: .horizontal, children: [NodeID(raw: 1), NodeID(raw: 2)], weights: [0.5, 0.5]))
+        #expect(desk.tree.nodes[NodeID(raw: 0)] == nil)
+        #expect(desk.tree.windows == [a, b])
+        #expect(desk.desktop.frame(of: window(3, "Calendar")) == Rect(x: 900, y: 300, width: 400, height: 300))
+        // Parked by the hidden Desktop: its stored frame is its home frame, so it comes back even if it shows up after launch (WR-01).
+        #expect(desk.desktop.frame(of: window(4, "FileZilla")) == Rect(x: 200, y: 150, width: 600, height: 400))
+
+        let set = try #require(contents.layoutSets.first?.world.desks.values.first)
+        #expect(set.tree.root == nil)
+        #expect(set.tree.nodes.isEmpty)
+        #expect(set.desktop.windows.map(\.window.windowID) == [5])
+        #expect(contents.views.first?.windows.map(\.windowID) == [1, 2])
+
+        // No Desktop share: the two docked windows span the visible frame's width less the gaps.
+        let visible = Rect(x: 0, y: 25, width: 1440, height: 875)
+        let frames = try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).frames
+        let left = try #require(frames[a]), right = try #require(frames[b])
+        #expect(left.minX - visible.minX <= 8 && visible.maxX - right.maxX <= 8)
+        #expect(abs(left.width - right.width) < 1)
+
+        #expect(try store.save(contents))
+        let text = try dir.text()
+        #expect(text.contains("\"schemaVersion\" : \(LayoutFile.schemaVersion)"))
+        #expect(text.contains("\"schemaVersion\" : 2"))
+        #expect(!text.contains("\"hidden\""), "a Desktop node was written back")
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == contents)
+    }
+}
+
+/// 8.1.1 WR-01 (iteration 2): a home frame belongs to the World that parked the window, so a layout set where the same
+/// window floats elsewhere keeps its own frame there.
+extension LayoutStoreTests {
+    @Test func aHomeFrameFromTheCurrentWorldLeavesAStoredLayoutSetsFrameAlone() throws {
+        let dir = Directory()
+        // FileZilla (window 4) also floats in the stored layout set, at 100,100 500×400.
+        try dir.write(LayoutFileV3Fixture.json.replacingOccurrences(of: #""windowID" : 5"#, with: #""windowID" : 4"#))
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        let contents = try #require(store.contents)
+        let fileZilla = WindowRef(identity: WindowIdentity(windowID: 4, pid: 300, bundleID: "com.example.editor"))
+        let desk = try #require(contents.world[DeskKey(displayUUID: LayoutFileV3Fixture.display, spaceID: 3)])
+        #expect(desk.desktop.frame(of: fileZilla) == Rect(x: 200, y: 150, width: 600, height: 400))
+        let set = try #require(contents.layoutSets.first?.world.desks.values.first)
+        #expect(set.desktop.frame(of: fileZilla) == Rect(x: 100, y: 100, width: 500, height: 400))
+    }
+}
+
+/// 8.1.1 D-15: the migration's one log line holds counts only, and none for a current file.
+extension LayoutStoreTests {
+    @Test func theMigrationLineCountsDesktopTilesAndParkedWindows() throws {
+        let dir = Directory()
+        try dir.write(LayoutFileV3Fixture.json)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        let contents = try #require(store.contents)
+        #expect(
+            LayoutStore.migrationLine(fromSchema: 3, contents: contents)
+                == "migrated layout.json schema 3 to 5: dropped 2 Desktop tiles, brought back 1 parked windows")
+        // Schema 4 had no Desktop tiles to count (8.1.1 D-20), and a current file needs no line.
+        #expect(LayoutStore.migrationLine(fromSchema: 4, contents: contents) == nil)
+        #expect(LayoutStore.migrationLine(fromSchema: LayoutFile.schemaVersion, contents: contents) == nil)
+
+        try dir.write(LayoutFileV1Fixture.json)
+        store.load()
+        let v1 = try #require(store.contents)
+        #expect(LayoutStore.migrationLine(fromSchema: 1, contents: v1)?.hasPrefix("migrated layout.json schema 1 to 5: ") == true)
+    }
+}
+
+/// 8.1.1 D-02, T-08.1.1-14: the schema-3 fixture relabelled schema 4 (World schema 2) still names its Desktop tiles. No
+/// current Transom writes that, so the file is forged or broken: it is set aside whole, never migrated.
+extension LayoutStoreTests {
+    @Test func aSchema4FileWithADesktopNodeIsSetAside() throws {
+        let forged = LayoutFileV3Fixture.json
+            .replacingOccurrences(of: "\"schemaVersion\" : 3", with: "\"schemaVersion\" : 4")
+            .replacingOccurrences(of: "\"schemaVersion\" : 1", with: "\"schemaVersion\" : 2")
+        try #require(forged.contains("\"hidden\" : false") && !forged.contains("\"schemaVersion\" : 1"))
+        let dir = Directory()
+        try dir.write(forged)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.contents == nil)
+        #expect(store.loadError != nil)
+        #expect(!store.savingDisabled)
+        #expect(!FileManager.default.fileExists(atPath: dir.file.path))
+        let moved = try #require(dir.corrupted.first)
+        #expect(try String(contentsOf: moved, encoding: .utf8) == forged)
+    }
+}
+
+/// 8.1.1 D-16, D-20: schema 5 stores empty areas; a schema-4 file has the same shape without them and saves as schema 5,
+/// with a backup of the schema-4 file first.
+extension LayoutStoreTests {
+    @Test func aSchema5FileWithAnEmptyAreaRoundTrips() throws {
+        let dir = Directory()
+        let file = try emptyAreaFile()
+        try LayoutStore(directory: dir.url).save(file)
+        let saved = try Data(contentsOf: dir.file)
+        #expect(String(decoding: saved, as: UTF8.self).contains("\"spacer\""))
+
+        let fresh = LayoutStore(directory: dir.url)
+        fresh.load()
+        #expect(fresh.loadError == nil)
+        #expect(fresh.contents == file)
+        #expect(try fresh.save(try #require(fresh.contents)))
+        #expect(try Data(contentsOf: dir.file) == saved)
+    }
+
+    @Test func aSchema4FileLoadsUnchangedAndSavesAsSchema5() throws {
+        let schema4 = try Self.edited("\"schemaVersion\" : 5", "\"schemaVersion\" : 4")
+        let dir = Directory()
+        try dir.write(schema4)
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(!store.savingDisabled)
+        let contents = try #require(store.contents)
+        // No Desktop in schema 4, so the floater keeps its stored frame rather than its home frame.
+        #expect(contents.world == (try sampleFile().world))
+        #expect(LayoutStore.migrationLine(fromSchema: 4, contents: contents) == nil)
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir.url.path).filter { $0.hasPrefix(LayoutStore.fileName + ".schema-4-") }
+        #expect(backups.count == 1)
+        #expect(try backups.first.map { try String(contentsOf: dir.url.appending(path: $0), encoding: .utf8) } == schema4)
+
+        #expect(try store.save(contents))
+        #expect(try dir.text().contains("\"schemaVersion\" : 5"))
+    }
+
+    /// Review WR-02 (8.1.1 D-20): with no backup of the schema-4 file, the one-way upgrade must not overwrite it.
+    @Test func aFailedBackupBeforeMigratingDisablesSaving() throws {
+        let schema4 = try Self.edited("\"schemaVersion\" : 5", "\"schemaVersion\" : 4")
+        let dir = Directory()
+        try dir.write(schema4)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.url.path)  // the copy fails
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.url.path) }
+        let store = LayoutStore(directory: dir.url)
+        store.load()
+        #expect(store.loadError == nil)
+        #expect(store.savingDisabled)
+        #expect(try store.save(try #require(store.contents)) == false)
+        #expect(try dir.text() == schema4)
     }
 }

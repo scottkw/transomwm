@@ -23,11 +23,11 @@ private func triple() throws -> (LayoutTree, IDSource) {
     return (tree, ids)
 }
 
-/// The same windows docked as a desk holds them, beside the Desktop tile: H[A, B, C, Desktop].
+/// The same windows docked as a desk holds them: H[A, B, C].
 private func deskTriple() throws -> (LayoutTree, IDSource) {
-    var tree = LayoutTree.withDesktop()
+    var tree = LayoutTree()
     var ids = IDSource()
-    try tree.insert(a, at: .left, of: .desktop, ids: &ids)
+    try tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
     try tree.insert(b, at: .right, of: #require(tree.leaf(containing: a)), ids: &ids)
     try tree.insert(c, at: .right, of: #require(tree.leaf(containing: b)), ids: &ids)
     return (tree, ids)

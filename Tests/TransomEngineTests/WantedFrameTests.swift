@@ -5,21 +5,20 @@ import Testing
 
 private let pid: Int32 = 900
 private let bundleID = "com.example.arranger"  // Harness's app
-// The VM's desk (G-03-11 report): 1024x768, visible maxY 713, so the Desktop's bottom is 701 with a 12 pt gap.
+// The VM's desk (G-03-11 report): 1024x768, visible maxY 713.
 private let visible = Rect(x: 0, y: 37, width: 1024, height: 676)
 private let vm = DisplayInfo(uuid: "main", frame: Rect(x: 0, y: 0, width: 1024, height: 768), visibleFrame: visible, currentSpaceID: nil)
 private let key = DeskKey(displayUUID: "main", spaceID: nil)
 private let gap = 12.0
-private let desktopBottom = visible.maxY - gap
 
 private func ref(_ id: UInt32) -> WindowRef {
     WindowRef(identity: WindowIdentity(windowID: id, pid: pid, bundleID: bundleID))
 }
 
-private let docked = ref(10)
+private let docked = ref(10), below = ref(11)
 private let finder = ref(1), safari = ref(2), textEdit = ref(3)
 private let floaters = [finder, safari, textEdit]
-/// Inside the Desktop rect docking 10 at the top leaves (y 381...701).
+/// Over the docked tiles: D-05, Transom never moves them.
 private let start: [UInt32: Rect] = [
     1: Rect(x: 40, y: 390, width: 460, height: 300),
     2: Rect(x: 420, y: 400, width: 574, height: 290),
@@ -28,23 +27,25 @@ private let start: [UInt32: Rect] = [
 /// The apps' real minimums, which Transom does not know: each refuses to get smaller.
 private let hidden: [UInt32: Size] = [1: Size(width: 460, height: 252), 2: Size(width: 574, height: 224), 3: Size(width: 143, height: 70)]
 
-/// Window 10 docked at the top, the three floaters below it on the Desktop.
+/// Window 10 docked at the top and 11 below it, filling the visible frame, the three floaters over them.
 private func vmDesk() async -> Harness {
     var harness = Harness()
     harness.arranger = Arranger(gap: gap)
     await harness.fake.setDisplays([vm])
     await harness.fake.addApp(FakeApp(pid: pid, bundleID: bundleID))
     await harness.fake.open(.standard(id: 10, pid: pid, frame: Rect(x: 12, y: 49, width: 1000, height: 200)))
+    await harness.fake.open(.standard(id: 11, pid: pid, frame: Rect(x: 12, y: 600, width: 1000, height: 100)))
     for (id, frame) in start.sorted(by: { $0.key < $1.key }) { await harness.fake.open(.standard(id: id, pid: pid, frame: frame)) }
     for (id, minimum) in hidden { await harness.fake.update(id) { $0.hiddenMinimum = minimum } }
     await harness.fake.refreshAll()
     _ = await harness.inbox.take()
     await harness.send(.inventory(await harness.fake.inventory()))
     await harness.send(.command(.dock, focused: docked))
+    await harness.send(.command(.dock, focused: below))  // its centre is near the bottom of 10's tile: V[10, 11]
     return harness
 }
 
-/// The handle between the docked tile and the Desktop.
+/// The handle between the two docked tiles.
 private func rootHandle(_ harness: Harness) throws -> GapHandle {
     let desk = try #require(harness.arranger.world[key])
     let plan = try Planner.plan(desk: desk, area: visible, gap: gap, mins: harness.arranger.minimums)
@@ -58,9 +59,10 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
     await harness.send(.gapDrag(handle, delta: try #require(steps.last), ended: true))
 }
 
-/// G-03-11: Transom's own clamps during a gap drag never replace the frame a floater goes back to (its wanted frame).
+/// Wanted frames: what Float and Undo give back. D-05: Transom never moves a floater on its own.
 @Suite struct WantedFrameTests {
-    @Test func aDesktopThatShrinksAndGrowsBackReturnsFloatersToTheirFrames() async throws {
+    /// D-05: a gap drag that sweeps a docked tile over the floaters never moves them.
+    @Test func aGapDragNeverMovesAFloater() async throws {
         var harness = await vmDesk()
         try await drag(&harness, [50, 100, 150, 190])
         try await drag(&harness, [-50, -100, -150, -190])
@@ -68,53 +70,6 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
             let frame = await harness.frame(window)
             #expect(frame == start[window.windowID], "floater \(window.windowID) is not back")
         }
-    }
-
-    /// G-03-11 B: the drag stops at the floaters' real size, so none hangs below the Desktop or over the docked tile.
-    @Test func aFloaterWhoseMinimumIsAboveTheShrunkenDesktopNeverEndsBelowIt() async throws {
-        var harness = await vmDesk()
-        let handle = try rootHandle(harness)
-        func check(_ step: String) async throws {
-            let top = try #require(await harness.frame(docked))
-            for window in floaters {
-                let frame = try #require(await harness.frame(window))
-                #expect(frame.maxY <= desktopBottom + 0.5, "floater \(window.windowID) below the Desktop at \(step): \(frame)")
-                #expect(!frame.overlaps(top), "floater \(window.windowID) overlaps the docked tile at \(step): \(frame)")
-            }
-        }
-        for delta in [50.0, 100, 150, 190] {
-            await harness.send(.gapDrag(handle, delta: delta, ended: false))
-            try await check("+\(delta)")
-        }
-        await harness.send(.gapDrag(handle, delta: 190, ended: true))
-        try await check("release")
-    }
-
-    /// Plan-check W1: an app that applies the clamp late reads back its old frame, then reports the clamped one.
-    @Test func aClampTheAppAppliesLateIsStillTransomsOwn() async throws {
-        var harness = await vmDesk()
-        let handle = try rootHandle(harness)
-        let step = harness.arranger.handle(.gapDrag(handle, delta: 100, ended: false), now: harness.now)
-        let clamp = try #require(setFrames(step)[textEdit])
-        let old = try #require(start[3])
-        #expect(clamp != old)
-        // Everything but textEdit's write lands at once.
-        let others = step.map { effect -> ArrangerEffect in
-            guard case .perform(let commands) = effect else { return effect }
-            return .perform(commands.filter { if case .setFrame(textEdit, _) = $0 { false } else { true } })
-        }
-        for case .perform(let commands) in others { await harness.fake.perform(commands) }
-        var late = harness.arranger.handle(.event(.frameApplied(textEdit, requested: clamp, actual: old)), now: harness.now)
-        await harness.fake.update(3) { $0.frame = clamp }
-        late += harness.arranger.handle(.event(.windowMoved(textEdit, clamp)), now: harness.now)
-        late += harness.arranger.handle(.event(.windowResized(textEdit, clamp)), now: harness.now)
-        for case .perform(let commands) in late { await harness.fake.perform(commands) }
-        await harness.settle()
-        await harness.send(.gapDrag(handle, delta: 100, ended: true))
-        try await drag(&harness, [-100])
-        #expect(harness.arranger.wantedFrames[textEdit.identity] == old)
-        let frame = await harness.frame(textEdit)
-        #expect(frame == old)
     }
 
     /// D-23: a floater the user moved while paused is not moved back at Resume.
@@ -130,22 +85,6 @@ private func drag(_ harness: inout Harness, _ steps: [Double]) async throws {
         #expect(setFrames(resume)[w2] == nil)
         #expect(await harness.frame(w2) == moved)
         #expect(harness.arranger.wantedFrames[w2.identity] == moved)
-    }
-
-    /// WR-01 (review 03-26): Float clamps a large pre-dock frame into the Desktop the undock leaves, but keeps the
-    /// pre-dock frame as the wanted one, so the window grows back to it once the Desktop does (G-03-4, G-03-11).
-    @Test func aFloatedWindowGrowsBackToItsPreDockFrameWhenTheDesktopDoes() async throws {
-        let w1 = ref(1), w2 = ref(2)
-        let big = Rect(x: 100, y: 100, width: 1200, height: 700)
-        var harness = await Harness.started(frames: [1: big, 2: Rect(x: 730, y: 400, width: 150, height: 120)])
-        await harness.send(.command(.dock, focused: w1))
-        await harness.send(.command(.dock, focused: w2))
-        await harness.send(.command(.float, focused: w1))
-        let clamped = try #require(await harness.frame(w1))
-        #expect(clamped != big && clamped.height < big.height, "w1 was not clamped beside w2: \(clamped)")
-        #expect(harness.arranger.wantedFrames[w1.identity] == big)
-        await harness.send(.command(.float, focused: w2))
-        #expect(await harness.frame(w1) == big)
     }
 
     /// WR-02 (review 03-26): Float All lands at the tile rect (TILE-16); undoing it gives back the pre-dock frame.

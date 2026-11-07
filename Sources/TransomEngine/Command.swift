@@ -4,8 +4,6 @@ import TransomModel
 /// `ArrangeController.dispatch(_:)`. Later plans add cases; never rename one.
 public enum Command: Hashable, Sendable {
     case dock, float, undo
-    /// Hide or show the Desktop tile of the focused window's desk (TILE-15).
-    case toggleDesktop
     /// Focus the nearest tile across that edge of the focused window (D-11, TILE-09).
     case focus(Edge)
     /// Split the current tile with a new Finder window (D-14, TILE-17).
@@ -15,11 +13,13 @@ public enum Command: Hashable, Sendable {
     /// Don't Arrange the frontmost app (TILE-18, D-29). The shell handles it with its exclusion list; the window
     /// system's `windowChanged` events then tell the Arranger.
     case toggleExcludeFrontmost
-    /// Move a docked window into the tile across that edge, or snap a floating one to that half of the Desktop tile
+    /// Move a docked window into the tile across that edge, or snap a floating one to that half of the visible frame
     /// (D-09, D-11, TILE-13, TILE-14).
     case moveOrSnap(Edge)
     /// Dock the focused window, or move it if docked, to a share of the whole desk (TILE-23, D-14, D-15).
     case dockFourth(FourthSlot, Axis)
+    /// Dock the focused window, or move it if docked, to a corner quarter of the whole desk (8.1.1 D-17).
+    case dockCorner(DockCorner)
     /// Swap the focused docked window with the docked window focused before it on the same desk (TILE-11).
     case swapPrevious
     /// Grow or shrink the focused tile by a tenth of its split's length (TILE-13).
@@ -27,7 +27,7 @@ public enum Command: Hashable, Sendable {
     /// Balance or flip the focused tile's parent split; rotate the whole layout from the desk's root split (TILE-12,
     /// D-32). Rotate's hotkey name stays `rotateSplit` (Pitfall 13).
     case balanceSplit, rotateSplit, flipSplit
-    /// Snap a floating window to a target inside the Desktop tile (TILE-14).
+    /// Snap a floating window to a target inside the visible frame (TILE-14).
     case snap(SnapTarget)
     /// Dock every eligible floating window, or float every docked one, on the target desk: one undo step (TILE-16).
     case arrangeAll, floatAll
@@ -50,8 +50,8 @@ public enum CameraCommand: Hashable, Sendable {
     case zoomOutAll, stepOut, stepIn, back, forward
     /// Move View: the node across that edge of the view at the same depth (ZOOM-09).
     case pan(Edge)
-    /// Toggles: frame the focused docked window's leaf or the Desktop tile, or go back when already framed (ZOOM-10, 11).
-    case frameWindow, frameDesktop
+    /// Toggles: frame the focused docked window's leaf, or go back when already framed (ZOOM-10).
+    case frameWindow
     /// Show or dismiss the overview on every display (OVER-01, D-01). The shell handles it; it never reaches the Arranger.
     case overview
     /// Go to the saved view in that slot (⌥1–9, D-01): the smallest node holding its windows still there (D-02).

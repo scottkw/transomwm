@@ -16,10 +16,10 @@ private let invalidFrames: [Rect] = [
     Rect(x: 0, y: 0, width: .infinity, height: 100),
 ]
 
-/// A desk whose tree holds `docked` beside the Desktop tile.
+/// A desk whose tree holds `docked` alone.
 private func dockedDesk(_ docked: WindowRef, ids: inout IDSource) throws -> Desk {
     var desk = Desk()
-    try desk.tree.insert(docked, at: .left, of: .desktop, ids: &ids)
+    try desk.tree.applyDrop(.layoutEdge(.right), window: docked, ids: &ids)
     return desk
 }
 

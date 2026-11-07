@@ -66,7 +66,8 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         #expect(docked == tile)
     }
 
-    /// G-03-4: with no known pre-dock frame (a restored docked window), Float gives a centred frame 90% of the tile.
+    /// G-03-4: with no known pre-dock frame (a restored docked window), Float gives a frame 90% of the tile, centred on
+    /// the visible frame.
     @Test func aFloatWithNoKnownPreDockFrameGetsASlightlySmallerCentredFrame() async throws {
         var source = await Harness.started()
         await source.send(.command(.dock, focused: w1))
@@ -76,9 +77,7 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         _ = restored.handle(.inventory(await source.fake.inventory()), now: .now)
         let effects = restored.handle(.command(.float, focused: w1), now: .now)
         let frame = try #require(setFrames(effects)[w1])
-        let desk = try #require(restored.world[key])
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        #expect(abs(frame.midX - desktop.midX) <= 0.5 && abs(frame.midY - desktop.midY) <= 0.5, "\(frame) not centred in \(desktop)")
+        #expect(abs(frame.midX - visible.midX) <= 0.5 && abs(frame.midY - visible.midY) <= 0.5, "\(frame) not centred in \(visible)")
         #expect(abs(frame.width - 0.9 * tile.width) <= 0.5 && abs(frame.height - 0.9 * tile.height) <= 0.5, "\(frame) vs tile \(tile)")
         #expect(!Planner.near(frame, tile, within: 2))
     }
@@ -104,7 +103,7 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         await harness.send(.command(.dock, focused: w1))
         let tile = try #require(await harness.frame(w1))
         let zoomed = Rect(x: 1000, y: 100, width: 400, height: 700)
-        #expect(!zoomed.overlaps(tile))
+        #expect(zoomed.overlaps(tile), "w1 does not fill the visible frame")  // D-05: a floater over a tile is never clamped
         await harness.send(pointer(.down, greenButton(of: frame2), [.option], press: w2))
         await harness.send(pointer(.up, greenButton(of: frame2), [.option]))
         await harness.fake.update(2) { $0.frame = zoomed }
@@ -114,7 +113,8 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         #expect(await harness.frame(w2) == zoomed)
     }
 
-    @Test func afterAnOptionZoomAcrossATileAFloatingWindowIsClampedIntoTheDesktop() async throws {
+    /// D-05: a floater zoomed across a docked tile keeps the app's frame; Transom never clamps it.
+    @Test func afterAnOptionZoomAcrossATileAFloatingWindowKeepsItsFrame() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))
         await harness.send(pointer(.down, greenButton(of: frame2), [.option], press: w2))
@@ -122,25 +122,21 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         await harness.fake.update(2) { $0.frame = visible }
         _ = await harness.refresh()
         let effects = await harness.send(pointer(.up, greenButton(of: frame2), [.option]))
-        let desk = try #require(harness.arranger.world[key])
-        let desktop = try #require(try Planner.plan(desk: desk, area: visible, gap: 8, mins: [:]).desktopRect)
-        let clamped = try #require(setFrames(effects)[w2], "the zoom across a tile was kept: \(effects)")
-        #expect(inside(clamped, desktop))
+        #expect(setFrames(effects)[w2] == nil, "the zoom across a tile was answered: \(effects)")
+        #expect(harness.arranger.world[key]?.desktop.frame(of: w2) == visible)
+        #expect(await harness.frame(w2) == visible)
         #expect(harness.arranger.drag == nil)
     }
 
-    /// Quick 261027-gqo: a floater clamped to exactly the Desktop tile has its centre in the Desktop's centre zone.
-    /// A plain click still docks it (no beep), and the exact-centre tie picks the Desktop's left edge.
-    @Test func aPlainClickOnAFloaterZoomedToTheWholeDesktopTileDocksIt() async throws {
+    /// Quick 261027-gqo: a floater on exactly a docked tile has its centre in that tile's centre zone.
+    /// A plain click still docks it (no beep), and the exact-centre tie picks the tile's left edge.
+    @Test func aPlainClickOnAFloaterOverAWholeDockedTileDocksIt() async throws {
         var harness = await Harness.started()
         await harness.send(.command(.dock, focused: w1))
-        await harness.send(pointer(.down, greenButton(of: frame2), [.option], press: w2))
-        await harness.fake.update(2) { $0.frame = visible }
+        let tile = try #require(await harness.frame(w1))
+        await harness.fake.userMove(2, to: tile)  // D-05: Transom never clamps a floater there, so the user puts it there
         _ = await harness.refresh()
-        await harness.send(pointer(.up, greenButton(of: frame2), [.option]))
-        let before = try #require(harness.arranger.world[key])
-        let desktop = try #require(try Planner.plan(desk: before, area: visible, gap: 8, mins: [:]).desktopRect)
-        #expect(await harness.frame(w2) == desktop, "the setup does not fill the Desktop tile")
+        #expect(await harness.frame(w2) == tile, "the setup does not cover w1's tile")
         let depth = harness.arranger.history.depth(for: key)
         let effects = await harness.send(.greenButton(w2))
         #expect(!effects.contains(.beep), "the green click beeped: \(effects)")
@@ -148,8 +144,8 @@ private func greenButton(of frame: Rect) -> Point { Point(x: frame.minX + 19, y:
         let after = try #require(harness.arranger.world[key])
         #expect(after.desktop.contains(w2) == false)
         #expect(harness.arranger.history.depth(for: key) == depth + 1)
-        let newDesktop = try #require(try Planner.plan(desk: after, area: visible, gap: 8, mins: [:]).desktopRect)
-        #expect(docked.maxX <= newDesktop.minX, "w2 did not dock left of the Desktop: \(docked) vs \(newDesktop)")
+        let w1Tile = try #require(try Planner.plan(desk: after, area: visible, gap: 8, mins: [:]).frames[w1])
+        #expect(docked.maxX <= w1Tile.minX, "w2 did not dock left of w1: \(docked) vs \(w1Tile)")
     }
 
     @Test func afterAnOptionZoomADockedWindowGoesBackIntoItsTile() async throws {

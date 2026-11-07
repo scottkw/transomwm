@@ -42,7 +42,17 @@ public enum LayoutStoreError: Error, Equatable {
         loadError = nil
         guard FileManager.default.fileExists(atPath: file.path) else { return }
         do {
-            contents = try Self.decode(file)
+            let (decoded, version) = try Self.decode(file)
+            contents = decoded
+            if let line = Self.migrationLine(fromSchema: version, contents: decoded) {
+                Self.logger.info("\(line, privacy: .public)")
+            }
+            // The next save overwrites it one way, so a downgrade can restore this copy by hand (WR-04, 8.1.1 D-20). With no
+            // copy, the file stays untouched: an older Transom refuses the upgraded one.
+            if version != LayoutFile.schemaVersion, !backUp("schema-\(version)") {
+                savingDisabled = true
+                Self.logger.error("could not back up a schema \(version) \(Self.fileName, privacy: .public); not saving layouts this session so it stays readable")
+            }
         } catch {
             loadError = error
             if case .newerVersion(let version) = error {
@@ -53,6 +63,20 @@ public enum LayoutStoreError: Error, Equatable {
             Self.logger.error("rejected \(Self.fileName, privacy: .public): \(String(describing: error), privacy: .public); starting empty")
             setAside()
         }
+    }
+
+    /// The one log line for a file from before schema 4 (8.1.1 D-15), nil for a newer one: only schema 3 and older had
+    /// Desktop tiles to count, and schema 4 → 5 changes nothing in the file (8.1.1 D-20). Counts only, never
+    /// a window, title or path (T-08.1.1-03). Every legacy desk held one Desktop tile (RESEARCH A5); the windows brought
+    /// back are `world`'s floaters with a home frame, which the Arranger's restore returns from the park rect.
+    public static func migrationLine(fromSchema version: Int, contents: LayoutFile) -> String? {
+        guard version <= 3 else { return nil }
+        let desks = contents.world.desks.count + contents.layoutSets.reduce(0) { $0 + $1.world.desks.count }
+        let homes = Set(contents.homeFrames.map(\.window))
+        let parked = contents.world.desks.values.reduce(0) { count, desk in
+            count + desk.desktop.windows.filter { homes.contains($0.window.identity) }.count
+        }
+        return "migrated layout.json schema \(version) to \(LayoutFile.schemaVersion): dropped \(desks) Desktop tiles, brought back \(parked) parked windows"
     }
 
     /// Writes `contents`, window titles included, atomically and owner-only (0600); creates the directory if needed.
@@ -99,7 +123,8 @@ public enum LayoutStoreError: Error, Equatable {
     /// Size cap on the whole file, then a version probe, then the full decode (schema 1 through `LayoutFileV1`, each
     /// World's own validation), then `LayoutFile.validate()`, then every home frame and wanted frame (Persistence.swift's
     /// order). The session record has no field to check beyond its decode.
-    private static func decode(_ url: URL) throws(LayoutStoreError) -> LayoutFile {
+    /// Returns the schema version the file was written in, too.
+    private static func decode(_ url: URL) throws(LayoutStoreError) -> (LayoutFile, Int) {
         let data: Data
         do {
             if let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int, size > World.maxEncodedBytes {
@@ -126,8 +151,9 @@ public enum LayoutStoreError: Error, Equatable {
             switch version {
             // Every user's file at the upgrade: migrated in memory, saved as the current schema (RESEARCH Pitfall 1).
             case 1: contents = try decoder.decode(LayoutFileV1.self, from: data).migrated()
-            // Schema 2 has schema 3's shape with empty titles; the next save writes schema 3.
-            case 2, LayoutFile.schemaVersion:
+            // Schemas 2 to 4 have schema 5's shape, without empty areas; schema 2 and 3 Worlds drop the Desktop tile
+            // on decode (World schema 1). The next save writes the current schema.
+            case 2, 3, 4, LayoutFile.schemaVersion:
                 contents = try decoder.decode(LayoutFile.self, from: data)
                 contents.schemaVersion = LayoutFile.schemaVersion
             default: throw LayoutStoreError.corrupt("unknown schemaVersion \(version)")
@@ -147,12 +173,40 @@ public enum LayoutStoreError: Error, Equatable {
             guard home.frame.isValidGeometry else { throw .invalidEntry("home frame \(index): not finite or out of range") }
             guard seen.insert(home.window).inserted else { throw .invalidEntry("home frame \(index): duplicate window") }
         }
+        // A hidden legacy Desktop left its floaters' stored frames at the park rect; the home frame is where each belongs, so
+        // it comes back even when it shows up after launch (8.1.1 D-02, WR-01).
+        // Schema 4 had no hidden Desktop, so its floaters keep their stored frames.
+        if version <= 3 {
+            for (index, home) in contents.homeFrames.enumerated() {
+                let window = WindowRef(identity: home.window)
+                // A hidden tab would move its whole group, as bringBackParked skips it.
+                func isShownFloater(_ world: World) -> Bool {
+                    world.desks.values.contains { desk in
+                        desk.desktop.contains(window)
+                            && desk.desktop.group(containing: window).map { $0.members[$0.selected] == window } ?? true
+                    }
+                }
+                do throws(LayoutError) {
+                    // The old sweep cleared home frames on every shown Desktop, so an entry for a window anywhere in
+                    // `world` is in `world`'s coordinates; only one absent from it can belong to a stored set.
+                    if contents.world.desks.values.contains(where: { $0.contains(window) }) {
+                        if isShownFloater(contents.world) { try contents.world.recordFloatingFrame(home.frame, for: window) }
+                    } else {
+                        for i in contents.layoutSets.indices where isShownFloater(contents.layoutSets[i].world) {
+                            try contents.layoutSets[i].world.recordFloatingFrame(home.frame, for: window)
+                        }
+                    }
+                } catch {
+                    throw .invalidEntry("home frame \(index): \(error)")
+                }
+            }
+        }
         seen = []
         for (index, wanted) in contents.wantedFrames.enumerated() {
             guard wanted.frame.isValidGeometry else { throw .invalidEntry("wanted frame \(index): not finite or out of range") }
             guard seen.insert(wanted.window).inserted else { throw .invalidEntry("wanted frame \(index): duplicate window") }
         }
-        return contents
+        return (contents, version)
     }
 
     /// Moves the rejected file to `<name>.corrupt-<unix seconds>`, as `backUp` names its copies, so no earlier one is

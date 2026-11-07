@@ -24,18 +24,23 @@ nonisolated public enum MenuCopy {
     public static let arrangeSection = "Arrange"
     public static let safetySection = "Safety"
     public static let exclusionsSection = "Exclusions"
-    public static let fourthMenu = "Dock to Fourth"
+    public static let fourthMenu = "Dock Window"
+    /// The Dock Window submenu's section headers (08.1.1 UI-SPEC Surface 3).
+    public static let halvesHeader = "Halves"
+    public static let cornersHeader = "Corners"
+    public static let thirdsHeader = "Thirds"
+    public static let fourthsHeader = "Fourths"
     public static let clearWaitingTiles = "Clear Waiting Tiles"
 
-    /// A command item's title. Toggles have their own functions (`desktopToggle`).
+    /// A command item's title. Toggles have their own functions (`pauseToggle`).
     public static func commandTitle(_ command: Command) -> String {
         switch command {
-        case .dock: "Dock Window"
+        case .dock: "Where It Is"  // under the Dock Window ▸ parent (08.1.1 UI-SPEC Surface 3)
         case .float: "Float Window"
         case .undo: "Undo Layout Change"
-        case .toggleDesktop: desktopToggle(hidden: false)
         case .focus(let edge), .moveOrSnap(let edge): direction(edge)
         case .dockFourth(let slot, let axis): fourthTitle(slot, axis)
+        case .dockCorner(let corner): cornerTitle(corner)
         case .swapPrevious: "Swap with Previous Window"
         case .growTile: "Grow Tile"
         case .shrinkTile: "Shrink Tile"
@@ -56,15 +61,31 @@ nonisolated public enum MenuCopy {
         }
     }
 
-    /// A Dock to Fourth item (UI-SPEC Surface 4).
+    /// A Dock Window corner item (8.1.1 D-17).
+    public static func cornerTitle(_ corner: DockCorner) -> String {
+        switch corner {
+        case .topLeft: "Top Left"
+        case .topRight: "Top Right"
+        case .bottomLeft: "Bottom Left"
+        case .bottomRight: "Bottom Right"
+        }
+    }
+
+    /// A Dock Window position item (08.1 UI-SPEC Surface 4, 08.1.1 UI-SPEC Surface 4).
     public static func fourthTitle(_ slot: FourthSlot, _ axis: Axis) -> String {
         let line = axis == .horizontal ? "Column" : "Row"
+        let (lead, middle, trail) = axis == .horizontal ? ("Left", "Center", "Right") : ("Top", "Middle", "Bottom")
         return switch slot {
         case .first: "1st \(line)"
         case .second: "2nd \(line)"
         case .third: "3rd \(line)"
         case .fourth: "4th \(line)"
         case .middle: "Middle Half \(line)"
+        case .firstHalf: "\(lead) Half"
+        case .secondHalf: "\(trail) Half"
+        case .firstThird: "\(lead) Third"
+        case .middleThird: "\(middle) Third"
+        case .lastThird: "\(trail) Third"
         }
     }
 
@@ -78,7 +99,6 @@ nonisolated public enum MenuCopy {
         case .forward: "Forward"
         case .pan(let edge): direction(edge)  // the Move View submenu's items
         case .frameWindow: "Frame Focused Window"
-        case .frameDesktop: "Frame Desktop"
         case .overview: "Show Overview"
         case .view(let slot): "Go to View \(slot.number)"
         case .saveView(let slot): "Save View \(slot.number)"
@@ -146,7 +166,7 @@ nonisolated public enum MenuCopy {
 
     public static func newWindowsTooltip(_ mode: NewWindowsMode) -> String {
         switch mode {
-        case .float: "New windows float on the Desktop tile until you dock them."
+        case .float: "New windows float until you dock them."
         case .tile: "New windows dock beside the focused tile. Dialogs, panels and excluded apps still float."
         }
     }
@@ -181,8 +201,6 @@ nonisolated public enum MenuCopy {
         case .holdOption: "Hold Option while dragging to dock"
         }
     }
-
-    public static func desktopToggle(hidden: Bool) -> String { hidden ? "Show Desktop Tile" : "Hide Desktop Tile" }
 
     /// nil at 0, else "1 app not responding" / "N apps not responding".
     public static func degradedLine(count apps: Int) -> String? {

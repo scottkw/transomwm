@@ -156,7 +156,7 @@ extension Arranger {
     public func homePlaceholders(on displayUUID: String) -> [PlaceholderTile] {
         guard !placeholders.table.isEmpty, let display = displays.first(where: { $0.uuid == displayUUID }), let desk = world[Self.key(display)],
             let plan = try? ViewPlanner.plan(
-                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, wanted: wantedFrames, collapsible: camera.collapsible)
+                desk: desk, view: .home, area: display.visibleFrame, gap: gap, mins: learnedMinimums, collapsible: camera.collapsible)
         else { return [] }
         return placeholderTiles(frames: plan.frames, collapsed: plan.collapsed, resolution: plan.resolution)
     }
@@ -167,7 +167,7 @@ extension Arranger {
         guard !placeholders.table.isEmpty else { return resolution }
         var kept = resolution
         kept.nodeRects = resolution.nodeRects.filter { id, _ in
-            guard id != keeping, let sub = try? tree.subtree(at: id), sub.nodes[.desktop] == nil, !sub.windows.isEmpty else { return true }
+            guard id != keeping, let sub = try? tree.subtree(at: id), !sub.windows.isEmpty else { return true }
             return !sub.windows.allSatisfy(isPlaceholder)
         }
         return kept
@@ -333,6 +333,6 @@ extension Arranger {
     }
 
     private func tileName(of window: WindowRef) -> String {
-        world.desks.values.lazy.compactMap { $0.tree.leaf(containing: window) }.first.map { "\($0)" } ?? "Desktop"
+        world.desks.values.lazy.compactMap { $0.tree.leaf(containing: window) }.first.map { "\($0)" } ?? "floating"
     }
 }

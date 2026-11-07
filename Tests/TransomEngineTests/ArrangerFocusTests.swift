@@ -18,16 +18,16 @@ private let b = ref(2)
 private let c = ref(3)
 private let d = ref(4)
 private let e = ref(5)
-/// d overlaps b's rows only; e overlaps c's only.
-private let frameD = Rect(x: 1000, y: 100, width: 300, height: 200)
-private let frameE = Rect(x: 1000, y: 600, width: 300, height: 200)
+/// Over a, left of b and c: d overlaps b's rows only; e overlaps c's only.
+private let frameD = Rect(x: 40, y: 100, width: 300, height: 200)
+private let frameE = Rect(x: 40, y: 600, width: 300, height: 200)
 
-/// [a | V[b, c] | Desktop], with d and e floating on the Desktop when `floating`, re-attached from a saved World so
+/// [a | V[b, c]], with d and e floating over a when `floating`, re-attached from a saved World so
 /// the shape does not depend on where Dock would put each window. Then focused, in order: `focusOrder`.
-private func columns(floating: Bool = true, focusOrder: [WindowRef]) async throws -> Harness {
+private func columns(floating: Bool = true, floatingD: Rect = frameD, focusOrder: [WindowRef]) async throws -> Harness {
     var frames: [UInt32: Rect] = [1: Rect(x: 40, y: 80, width: 320, height: 232), 2: frameD, 3: frameE]
     if floating {
-        frames[4] = frameD
+        frames[4] = floatingD
         frames[5] = frameE
     }
     var harness = await Harness.started(frames: frames)
@@ -35,13 +35,13 @@ private func columns(floating: Bool = true, focusOrder: [WindowRef]) async throw
     var history = UndoHistory()
     try world.addDesk(key)
     try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(a, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: a, ids: &ids)
         guard let left = desk.tree.leaf(containing: a) else { throw .windowNotFound(a) }
         try desk.tree.insert(b, at: .right, of: left, ids: &ids)
         guard let middle = desk.tree.leaf(containing: b) else { throw .windowNotFound(b) }
         try desk.tree.insert(c, at: .bottom, of: middle, ids: &ids)
         if floating {
-            try desk.desktop.add(d, frame: frameD)
+            try desk.desktop.add(d, frame: floatingD)
             try desk.desktop.add(e, frame: frameE)
         }
     }
@@ -69,18 +69,25 @@ private func columns(floating: Bool = true, focusOrder: [WindowRef]) async throw
         #expect(await harness.send(.command(.focus(.right), focused: a)) == [.perform([.focus(c)])])
     }
 
-    @Test func aDesktopNeighbourFocusesItsMostRecentlyFocusedFloatingWindow() async throws {
+    /// 8.1.1 UI-SPEC Surface 2: Focus moves between docked tiles only, however recently a floating window was focused.
+    @Test func aFloatingWindowIsNeverAFocusTarget() async throws {
         var harness = try await columns(focusOrder: [e, d, b])
-        #expect(await harness.send(.command(.focus(.right), focused: b)) == [.perform([.focus(d)])])
-
-        var empty = try await columns(floating: false, focusOrder: [b])
-        #expect(await empty.send(.command(.focus(.right), focused: b)) == [.beep])
+        #expect(await harness.send(.command(.focus(.right), focused: b)) == [.beep])
+        #expect(await harness.send(.command(.focus(.left), focused: b)) == [.perform([.focus(a)])])
     }
 
+    /// From a floating window, Focus starts at the window's frame.
     @Test func aFloatingWindowUsesItsFrame() async throws {
         var harness = try await columns(focusOrder: [b, c, e])
-        #expect(await harness.send(.command(.focus(.left), focused: e)) == [.perform([.focus(c)])])
-        #expect(await harness.send(.command(.focus(.left), focused: d)) == [.perform([.focus(b)])])
+        #expect(await harness.send(.command(.focus(.right), focused: e)) == [.perform([.focus(c)])])
+        #expect(await harness.send(.command(.focus(.right), focused: d)) == [.perform([.focus(b)])])
+        #expect(await harness.send(.command(.focus(.left), focused: d)) == [.beep], "no docked tile left of d")
+    }
+
+    /// A floating window over the right column: Focus Left goes to the docked tile left of its frame.
+    @Test func focusLeftFromAFloaterFocusesTheDockedTileToItsLeft() async throws {
+        var harness = try await columns(floatingD: Rect(x: 1000, y: 100, width: 300, height: 200), focusOrder: [b, d])
+        #expect(await harness.send(.command(.focus(.left), focused: d)) == [.perform([.focus(a)])])
     }
 
     @Test func focusOrderFollowsFocusEventsAndForgetsClosedWindows() async throws {

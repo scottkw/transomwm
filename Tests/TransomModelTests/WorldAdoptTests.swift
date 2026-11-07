@@ -12,13 +12,13 @@ private func ref(_ id: UInt32, pid: Int32 = 100) -> WindowRef {
 private let waiting = ref(1), neighbour = ref(2), member = ref(3)
 private let returning = ref(11, pid: 101)
 
-/// [waiting | neighbour | Desktop], with `returning` floating on `key`; undoing the one edit leaves the empty desk.
+/// [waiting | neighbour], with `returning` floating on `key`; undoing the one edit leaves the empty desk.
 private func docked(history: inout UndoHistory) throws -> World {
     var world = World()
     try world.addDesk(key)
     try world.reflow(key) { desk, _ throws(LayoutError) in try desk.desktop.add(returning, frame: frame) }
     try world.edit(key, history: &history) { desk, ids throws(LayoutError) in
-        try desk.tree.insert(waiting, at: .left, of: .desktop, ids: &ids)
+        try desk.tree.applyDrop(.layoutEdge(.right), window: waiting, ids: &ids)
         guard let leaf = desk.tree.leaf(containing: waiting) else { throw .windowNotFound(waiting) }
         try desk.tree.insert(neighbour, at: .right, of: leaf, ids: &ids)
     }

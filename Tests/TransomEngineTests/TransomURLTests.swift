@@ -7,21 +7,26 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
     URL(string: string).flatMap { TransomURL.parse($0, scheme: scheme) }
 }
 
-/// SAFE-03, TILE-15, TILE-17, Pitfall 21, T-03-40: three parameterless commands, nothing else gets through.
+/// SAFE-03, TILE-17, Pitfall 21, T-03-40: two parameterless commands, nothing else gets through.
 @Suite struct TransomURLTests {
-    @Test func theThreeCommandsParse() {
+    @Test func theTwoCommandsParse() {
         #expect(parse("transom://restore") == .restoreAll)
-        #expect(parse("transom://toggle-desktop") == .toggleDesktop)
         #expect(parse("transom://split-finder") == .finderSplit)
         #expect(parse("transom://restore/") == .restoreAll)
         #expect(parse("transom-debug://restore", scheme: "transom-debug") == .restoreAll)
+    }
+
+    /// Hide/Show Desktop Tile and Frame Desktop were removed (8.1.1 D-09, D-13): their old URLs are unknown and run nothing.
+    @Test func theRemovedDesktopCommandsAreUnknown() {
+        #expect(parse("transom://toggle-desktop") == nil)
+        #expect(parse("transom://frame-desktop") == nil)
     }
 
     /// 04 UI-SPEC Hotkeys and URLs: every navigation action has a URL.
     @Test(arguments: [
         ("zoom-out", CameraCommand.zoomOutAll), ("step-out", .stepOut), ("step-in", .stepIn), ("back", .back), ("forward", .forward),
         ("pan-left", .pan(.left)), ("pan-right", .pan(.right)), ("pan-up", .pan(.top)), ("pan-down", .pan(.bottom)),
-        ("frame-window", .frameWindow), ("frame-desktop", .frameDesktop), ("overview", .overview),
+        ("frame-window", .frameWindow), ("overview", .overview),
     ])
     func theZoomCommandsParse(host: String, command: CameraCommand) {
         #expect(parse("transom://\(host)") == .camera(command))
@@ -63,6 +68,61 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
         "transom://dock-column-1#f", "transom://dock-row-0", "transom://dock-fourth"])
     func malformedFourthURLsAreRejected(_ string: String) {
         #expect(parse(string) == nil)
+    }
+
+    /// 08.1.1 UI-SPEC Surface 4: the ten halves and thirds.
+    @Test(arguments: [
+        ("dock-left-half", FourthSlot.firstHalf, Axis.horizontal), ("dock-right-half", .secondHalf, .horizontal),
+        ("dock-top-half", .firstHalf, .vertical), ("dock-bottom-half", .secondHalf, .vertical),
+        ("dock-left-third", .firstThird, .horizontal), ("dock-center-third", .middleThird, .horizontal), ("dock-right-third", .lastThird, .horizontal),
+        ("dock-top-third", .firstThird, .vertical), ("dock-middle-third", .middleThird, .vertical), ("dock-bottom-third", .lastThird, .vertical),
+    ])
+    func theHalfAndThirdCommandsParse(host: String, slot: FourthSlot, axis: Axis) {
+        #expect(parse("transom://\(host)") == .dockFourth(slot, axis))
+        #expect(parse("transom://\(host)/") == .dockFourth(slot, axis))
+    }
+
+    @Test(arguments: ["transom:///dock-left-half/", "transom://DOCK-LEFT-HALF", "transom://dock-half/left", "transom://dock-left-half/1",
+        "transom://dock-left-half?x=1", "transom://dock-center-third#f", "transom://dock-middle-half"])
+    func malformedHalfAndThirdURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
+    /// 8.1.1 D-17: the four corner quarters.
+    @Test(arguments: [
+        ("dock-top-left", DockCorner.topLeft), ("dock-top-right", .topRight), ("dock-bottom-left", .bottomLeft), ("dock-bottom-right", .bottomRight),
+    ])
+    func theCornerCommandsParse(host: String, corner: DockCorner) {
+        #expect(parse("transom://\(host)") == .dockCorner(corner))
+        #expect(parse("transom://\(host)/") == .dockCorner(corner))
+    }
+
+    @Test(arguments: ["transom:///dock-top-left/", "transom://DOCK-TOP-LEFT", "transom://dock-corner/top-left", "transom://dock-top-left/1",
+        "transom://dock-top-left?x=1", "transom://dock-left-top"])
+    func malformedCornerURLsAreRejected(_ string: String) {
+        #expect(parse(string) == nil)
+    }
+
+    /// T-08.1.1-29: an opened corner URL and an opened half URL share the one dock second.
+    @Test func anOpenedCornerURLSharesTheDockSecondWithAHalf() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockCorner(.topLeft), .zero), (.dockFourth(.firstHalf, .horizontal), .milliseconds(10)),
+            (.dockCorner(.bottomRight), .milliseconds(20)), (.dockFourth(.secondHalf, .vertical), .seconds(1)),
+        ]
+        #expect(attempts.map { limiter.admitOpenedURL($0.0, at: start + $0.1) } == [true, false, false, true])
+    }
+
+    /// T-08.1.1-07: an opened half URL and an opened fourth URL share the one dock second.
+    @Test func anOpenedHalfURLSharesTheDockSecondWithAFourth() {
+        var limiter = TransomURLRateLimiter()
+        let start = ContinuousClock.now
+        let attempts: [(Command, Duration)] = [
+            (.dockFourth(.firstHalf, .horizontal), .zero), (.dockFourth(.first, .vertical), .milliseconds(10)),
+            (.dockFourth(.middleThird, .vertical), .milliseconds(20)), (.dockFourth(.second, .horizontal), .seconds(1)),
+        ]
+        #expect(attempts.map { limiter.admitOpenedURL($0.0, at: start + $0.1) } == [true, false, false, true])
     }
 
     /// WR-09: on the URL route the fourths share a second, on top of each command's own, and other commands are untouched.
@@ -152,7 +212,7 @@ private func parse(_ string: String, scheme: String = "transom") -> Command? {
     @Test func differentCommandsAreLimitedSeparately() {
         var limiter = TransomURLRateLimiter()
         let start = ContinuousClock.now
-        let attempts: [(Command, Duration)] = [(.restoreAll, .zero), (.toggleDesktop, .zero), (.finderSplit, .milliseconds(10)), (.toggleDesktop, .milliseconds(20))]
+        let attempts: [(Command, Duration)] = [(.restoreAll, .zero), (.camera(.back), .zero), (.finderSplit, .milliseconds(10)), (.camera(.back), .milliseconds(20))]
         let admitted = attempts.map { limiter.admit($0.0, at: start + $0.1) }
         #expect(admitted == [true, true, true, false])
     }

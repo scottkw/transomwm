@@ -13,17 +13,20 @@ enum ShortcutsModel {
 
     static let sections: [(title: String, rows: [Row])] = [
         (ZoomCopy.zoomSection, [
-            .showOverview, .zoomOutAll, .stepOut, .stepIn, .zoomBack, .zoomForward, .panLeft, .panRight, .panUp, .panDown, .frameWindow, .frameDesktop,
+            .showOverview, .zoomOutAll, .stepOut, .stepIn, .zoomBack, .zoomForward, .panLeft, .panRight, .panUp, .panDown, .frameWindow,
         ]),
         (ViewCopy.savedViewsSection, [
             .view1, .view2, .view3, .view4, .view5, .view6, .view7, .view8, .view9,
             .saveView1, .saveView2, .saveView3, .saveView4, .saveView5, .saveView6, .saveView7, .saveView8, .saveView9,
         ]),
         (MenuCopy.arrangeSection, [
-            .dock, .float, .swapPrevious, .undo, .focusLeft, .focusRight, .focusUp, .focusDown, .moveLeft, .moveRight, .moveUp, .moveDown,
-            .arrangeAll, .floatAll, .toggleDesktop,
+            .float, .swapPrevious, .undo, .focusLeft, .focusRight, .focusUp, .focusDown, .moveLeft, .moveRight, .moveUp, .moveDown,
+            .arrangeAll, .floatAll,
         ]),
         (MenuCopy.fourthMenu, [
+            .dock, .dockLeftHalf, .dockRightHalf, .dockTopHalf, .dockBottomHalf,
+            .dockTopLeft, .dockTopRight, .dockBottomLeft, .dockBottomRight,
+            .dockLeftThird, .dockCenterThird, .dockRightThird, .dockTopThird, .dockMiddleThird, .dockBottomThird,
             .dockColumn1, .dockColumn2, .dockColumn3, .dockColumn4, .dockColumnMiddle, .dockRow1, .dockRow2, .dockRow3, .dockRow4, .dockRowMiddle,
         ]),
         ("Split", [.growTile, .shrinkTile, .balanceSplit, .rotateSplit, .flipSplit, .finderSplit]),

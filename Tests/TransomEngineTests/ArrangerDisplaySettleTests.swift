@@ -23,11 +23,12 @@ private func displayD(space: UInt64? = nil) -> DisplayInfo {
 }
 private let names = ["D": "DELL U2720Q", "E": "LG UltraFine"]
 
-/// The first window on the left of its display; the second small and inside the right half (ArrangerLifecycleTests).
+/// The first window on the left of its display; the second small, centred three quarters across, so Dock Where It Is
+/// docks it on the right edge of the first, which fills the display (ArrangerLifecycleTests).
 private func startFrame(_ index: Int, on visible: Rect) -> Rect {
     index == 0
         ? Rect(x: visible.minX + 40, y: 80, width: 320, height: 232)
-        : Rect(x: visible.minX + 730, y: 400, width: 150, height: 120)
+        : Rect(x: visible.minX + visible.width * 0.75 - 75, y: 400, width: 150, height: 120)
 }
 
 private func near(_ a: Rect?, _ b: Rect?) -> Bool {
@@ -166,8 +167,8 @@ extension Harness {
         #expect(await harness.frame(ref(3)).map { inside($0, visibleD) } == true)
     }
 
-    /// D-10: floated windows cascade from the Desktop tile's top-left, 24 pt apart, at their own sizes, on screen.
-    @Test func floatedWindowsCascadeFromTheDesktopTileOnScreen() async throws {
+    /// D-10: floated windows cascade from the visible frame's top-left, 24 pt apart, at their own sizes, on screen.
+    @Test func floatedWindowsCascadeFromTheVisibleFramesTopLeftOnScreen() async throws {
         let sizes: [UInt32: Size] = [5: Size(width: 400, height: 300), 6: Size(width: 500, height: 350), 7: Size(width: 300, height: 200)]
         let floating = Dictionary(uniqueKeysWithValues: sizes.map { id, size in
             (id, Rect(x: visibleD.minX + 100 + 200 * Double(id - 5), y: 300, width: size.width, height: size.height))
@@ -176,10 +177,9 @@ extension Harness {
         let unplug = await harness.displayChange { await $0.unplug("D", movingSpacesTo: "L") }
         #expect(disconnected(unplug.settled) == [.displaysDisconnected(names: ["DELL U2720Q"], windows: 3)])
         let desk = try #require(harness.arranger.world[deskL])
-        let desktop = try #require(try Planner.plan(desk: desk, area: visibleL, gap: harness.arranger.gap, mins: [:]).desktopRect)
         for (index, id) in [UInt32(5), 6, 7].enumerated() {
             let offset = 24 * Double(index)
-            let expected = Rect(x: desktop.minX + offset, y: desktop.minY + offset, width: sizes[id]!.width, height: sizes[id]!.height)
+            let expected = Rect(x: visibleL.minX + offset, y: visibleL.minY + offset, width: sizes[id]!.width, height: sizes[id]!.height)
             #expect(near(desk.desktop.frame(of: ref(id)), expected), "window \(id) is not at its cascade frame")
             #expect(near(await harness.frame(ref(id)), expected))
             #expect(inside(expected, visibleL))

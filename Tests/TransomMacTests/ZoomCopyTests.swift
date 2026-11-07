@@ -20,7 +20,6 @@ import Testing
         (.node(NodeID(raw: 7)), nil, 3, 0, "Showing 3 windows"),
         (.node(NodeID(raw: 7)), nil, 3, 1, "Showing 3 windows, 1 collapsed"),
         (.node(NodeID(raw: 7)), nil, 3, 2, "Showing 3 windows, 2 collapsed"),
-        (.node(.desktop), nil, 2, 0, "Showing the Desktop"),
     ])
     func revealAnnouncementsUseExplicitBranches(view: ViewTarget, app: String?, windows: Int, collapsed: Int, expected: String) {
         #expect(ZoomCopy.revealAnnouncement(view: view, appName: app, windowCount: windows, collapsed: collapsed) == expected)
@@ -86,6 +85,13 @@ import Testing
         #expect(ZoomCopy.shortcutTitle(.camera(.saveView(ViewSlot(3)!))) == "Save View 3")
         #expect(ZoomCopy.shortcutTitle(.dockFourth(.first, .horizontal)) == "Dock to 1st Column")
         #expect(ZoomCopy.shortcutTitle(.dockFourth(.middle, .vertical)) == "Dock to Middle Half Row")
+        #expect(ZoomCopy.shortcutTitle(.dock) == "Dock Window Where It Is")
+        #expect(ZoomCopy.shortcutTitle(.dockFourth(.firstHalf, .horizontal)) == "Dock to Left Half")
+        #expect(ZoomCopy.shortcutTitle(.dockFourth(.middleThird, .vertical)) == "Dock to Middle Third")
+        #expect(ZoomCopy.shortcutTitle(.dockCorner(.topLeft)) == "Dock to Top Left Quarter")
+        #expect(ZoomCopy.shortcutTitle(.dockCorner(.bottomRight)) == "Dock to Bottom Right Quarter")
+        #expect(DockCorner.allCases.map(MenuCopy.cornerTitle) == ["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
+        #expect(ZoomCopy.shortcutTitle(.dockFourth(.middleThird, .horizontal)) == "Dock to Center Third")
     }
 
     @Test func theRubberBandCancelCopyMatchesTheContract() {
@@ -94,6 +100,5 @@ import Testing
         #expect(ZoomCopy.logRectCanceled == "rect zoom canceled (Esc)")
         #expect(ZoomCopy.logRepost == "\u{2318}\u{21E7}-click re-posted")
         #expect(ZoomCopy.logPickOn == "pick mode on")
-        #expect(ZoomCopy.logDesktopDoubleClick == "desktop double-click \u{2192} frame desktop")
     }
 }

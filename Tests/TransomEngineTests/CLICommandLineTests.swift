@@ -11,12 +11,17 @@ import Testing
     @Test(arguments: [
         (["view", "3"], "view/3"), (["view/3"], "view/3"), (["save-view", "9"], "save-view/9"), (["save-view/1"], "save-view/1"),
         (["zoom-out"], "zoom-out"), (["move-out-of-group"], "move-out-of-group"), (["dock-column-1"], "dock-column-1"), (["dock-row-middle"], "dock-row-middle"),
+        (["dock-left-half"], "dock-left-half"), (["dock-right-half"], "dock-right-half"), (["dock-top-half"], "dock-top-half"),
+        (["dock-bottom-half"], "dock-bottom-half"), (["dock-left-third"], "dock-left-third"), (["dock-center-third"], "dock-center-third"),
+        (["dock-right-third"], "dock-right-third"), (["dock-top-third"], "dock-top-third"), (["dock-middle-third"], "dock-middle-third"),
+        (["dock-bottom-third"], "dock-bottom-third"), (["dock-top-left"], "dock-top-left"), (["dock-top-right"], "dock-top-right"),
+        (["dock-bottom-left"], "dock-bottom-left"), (["dock-bottom-right"], "dock-bottom-right"),
     ] as [([String], String)])
     func commandsToSend(arguments: [String], path: String) {
         #expect(CLICommandLine.parse(arguments) == .send(path))
     }
 
-    @Test(arguments: ["foo", "VIEW", "zoom-out/3", "transom://view/3", "", "dock-column-5"])
+    @Test(arguments: ["foo", "VIEW", "zoom-out/3", "transom://view/3", "", "dock-column-5", "toggle-desktop", "frame-desktop", "dock-half", "dock-left-quarter"])
     func unknownCommands(_ command: String) {
         #expect(CLICommandLine.parse([command]) == .usage("transom: unknown command \"\(command)\". Run \"transom help\" to see every command."))
     }
@@ -39,6 +44,8 @@ import Testing
         #expect(CLICommandLine.parse(["zoom-out", "3"]) == .usage("transom: zoom-out takes no argument."))
         #expect(CLICommandLine.parse(["help", "3"]) == .usage("transom: help takes no argument."))
         #expect(CLICommandLine.parse(["dock-column-1", "3"]) == .usage("transom: dock-column-1 takes no argument."))
+        #expect(CLICommandLine.parse(["dock-left-half", "3"]) == .usage("transom: dock-left-half takes no argument."))
+        #expect(CLICommandLine.parse(["dock-top-left", "extra"]) == .usage("transom: dock-top-left takes no argument."))
     }
 
     @Test(arguments: [["view", "3", "4"], ["view/3", "4"], ["zoom-out", "3", "4"]] as [[String]])
