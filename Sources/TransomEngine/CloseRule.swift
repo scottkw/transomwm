@@ -34,6 +34,11 @@ public enum CloseDecision: Equatable, Sendable {
 /// minimised, hidden, hidden-tab and other-Space windows never reach the row, and unknown Spaces never count. There is
 /// no OS check: on macOS 14 and 15 the entry leaves the CG list first.
 ///
+/// D-25: `WindowTracker` passes a group's shown tab as no tab member once it has confirmed the whole group closed: the
+/// shown tab answers -25202, no tab is listed or on screen, a member lingers in the CG list and the group's Space
+/// shows, all of it twice and `settleDelay` apart. The shown tab then closes on the same CG evidence as a single
+/// window, and a live group (whose selected tab answers and is listed) never reaches it.
+///
 /// | Session | App        | AX                         | CG      | Decision                          |
 /// |---------|------------|----------------------------|---------|-----------------------------------|
 /// | paused  | any        | any                        | any     | noChange                          |
@@ -42,6 +47,7 @@ public enum CloseDecision: Equatable, Sendable {
 /// | active  | terminated | any                        | present | recheck (WindowServer lag)        |
 /// | active  | alive      | invalidElement             | absent  | closed                            |
 /// | active  | alive      | invalidElement             | present | .absent for a tab member          |
+/// | active  | alive      | invalidElement             | present, its whole group confirmed closed (D-25) | as a non-member |
 /// | active  | alive      | invalidElement             | present, no Space | closed (G-03-9 ghost)   |
 /// | active  | alive      | invalidElement             | present, ordered out on a shown Space | closed (D-23) |
 /// | active  | alive      | invalidElement             | present | recheck                           |
