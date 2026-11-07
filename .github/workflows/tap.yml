@@ -28,6 +28,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HOMEBREW_TAP_TOKEN lives in this environment, which only main and v* tags may deploy to, so a workflow
+    # pushed on another branch can't read it.
+    environment: tap
     env:
       TAG: ${{ inputs.tag || github.event.release.tag_name }}
       REPO: ${{ github.repository }}

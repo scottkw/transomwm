@@ -21,8 +21,7 @@ test suite (`.github/workflows/ci.yml`).
    updates" and "Restrict deletions". Bypass list: the Repository admin role, always. Keep the
    admin role to the maintainer.
 5. **Create the tap** `scottkw/homebrew-transom` (public, empty, `Casks/` is created on the first
-   publish) and add the repository secret `HOMEBREW_TAP_TOKEN` to `scottkw/transomwm` (see
-   Homebrew tap).
+   publish), create the `tap` environment and add `HOMEBREW_TAP_TOKEN` to it (see Homebrew tap).
 6. Run a dry run (below) and check it goes green.
 
 ## Cutting a release
@@ -141,13 +140,20 @@ requires that hash to match the `.sha256` asset (and the release API's asset dig
 prerelease and refuses any tag that is not `releases/latest`, so mark the release latest when you
 publish it, and a re-run cannot move the cask back to an older version.
 
-`HOMEBREW_TAP_TOKEN` is a repository secret on `scottkw/transomwm`: a fine-grained personal access
-token with **Contents: read and write on `scottkw/homebrew-transom` only**, nothing else. Only
-`tap.yml` uses it.
+`HOMEBREW_TAP_TOKEN` is a fine-grained personal access token with **Contents: read and write on
+`scottkw/homebrew-transom` only**, nothing else. It lives in the `tap` environment, not in the
+repository secrets, so a workflow edited on some other branch cannot read it. Only `tap.yml` uses it.
+
+Create the environment (Settings, Environments, New environment, `tap`) with deployment branches
+and tags set to selected only, `main` and the tag pattern `v*` (a published release runs on its
+tag, a re-run from Actions on `main`). A required reviewer is optional. Then set the token:
 
 ```sh
-gh secret set HOMEBREW_TAP_TOKEN --repo scottkw/transomwm
+gh secret set HOMEBREW_TAP_TOKEN --env tap --repo scottkw/transomwm
 ```
+
+If the token was a repository secret before, delete that copy:
+`gh secret delete HOMEBREW_TAP_TOKEN --repo scottkw/transomwm`.
 
 Users install with `brew install --cask scottkw/transom/transom`. The cask has no `auto_updates`:
 Transom's updater downloads the DMG but you install it, so `brew upgrade` keeps managing the cask.
