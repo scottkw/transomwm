@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Local release pipeline for Transom 0.3.0 (D-30): builds the universal Developer ID Release app through
-# build-debug.sh --release, refuses to continue on any signing problem (RESEARCH Pitfall 1), then
-# notarises and staples the app, builds build/Transom-0.3.0.dmg, signs, notarises and staples it, and
-# prints the DMG's sha256 last. Nothing is uploaded. Notarisation needs credentials stored once with
+# Release pipeline for Transom, run locally and by the GitHub Actions release job (D-11): builds the
+# universal Developer ID Release app through build-debug.sh --release, refuses to continue on any signing
+# problem (RESEARCH Pitfall 1), then notarises and staples the app, builds build/Transom-<version>.dmg,
+# signs, notarises and staples it, and prints the DMG's sha256 last. Nothing is uploaded.
+# The version comes from MARKETING_VERSION in xcode/project.yml. The app's designated requirement must
+# equal xcode/designated-requirement.txt exactly: a different one would cost every user the Accessibility
+# grant on update, so change that file only on purpose. Notarisation needs credentials stored once with
 # `xcrun notarytool store-credentials pane-notary`.
 # Usage: scripts/release.sh [--build-only | --skip-notarize]
 #   --build-only     build and verify the app, print its path, stop
@@ -22,15 +25,16 @@ case "${1:-}" in
 esac
 [ $# -le 1 ] || { echo "release: too many arguments" >&2; exit 2; }
 
-version=0.3.0
-identifier=com.eightabyte.transom
+fail() { echo "release: $1" >&2; exit 1; }
+
+version="$(sed -n 's/^ *MARKETING_VERSION: "\(.*\)"$/\1/p' xcode/project.yml)"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "xcode/project.yml: MARKETING_VERSION '$version' is not MAJOR.MINOR.PATCH"
 team=S2K7P43927
 signer="Developer ID Application: Ken Scott ($team)"
 # The notary keychain profile was stored before the rename and keeps that name; no new store-credentials run is needed.
 profile=pane-notary
 dmg="build/Transom-$version.dmg"
 staging=build/dmg-staging
-fail() { echo "release: $1" >&2; exit 1; }
 
 # 1. Build and verify. build-debug.sh already checks the designated requirement (identifier + team).
 # An incremental build can keep an old signed copy of the tool in Contents/Helpers (08-05), so start from no bundle.
@@ -42,8 +46,11 @@ app="$(scripts/build-debug.sh --release | tail -n 1)"
 details="$(codesign -dvv "$app" 2>&1)"
 grep -q '^Timestamp=' <<<"$details" || fail "no secure timestamp on $app"
 codesign --verify --strict --deep --verbose=2 "$app" >&2 || fail "codesign --verify --strict --deep failed"
-requirement="$(codesign -d -r- "$app" 2>&1)"
-case "$requirement" in *"identifier \"$identifier\""*"$team"*) ;; *) fail "designated requirement changed: $requirement" ;; esac
+requirement="$(codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => //p')"
+expected="$(cat xcode/designated-requirement.txt)"
+[ "$requirement" = "$expected" ] || fail "designated requirement changed (users would lose the Accessibility grant):
+  built:     $requirement
+  committed: $expected"
 entitlements="$(codesign -d --entitlements - "$app" 2>/dev/null)"
 for forbidden in get-task-allow disable-library-validation automation.apple-events; do
     case "$entitlements" in *"$forbidden"*) fail "forbidden entitlement present: $forbidden" ;; esac
