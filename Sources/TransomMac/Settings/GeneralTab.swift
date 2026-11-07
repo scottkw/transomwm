@@ -1,9 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// Settings ▸ General (09 UI-SPEC Tab 1). Appearance: the highlight follows the macOS accent or one custom colour
-/// (D-03); every write goes through `HighlightColor.set`, which tells the overlays on screen to redraw.
+/// Settings ▸ General (09 UI-SPEC Tab 1). Startup: launch at login through `loginItem` (SHIP-03), re-read every time the
+/// tab shows. Appearance: the highlight follows the macOS accent or one custom colour (D-03); every write goes through
+/// `HighlightColor.set`, which tells the overlays on screen to redraw.
 struct GeneralTab: View {
+    let loginItem: any LoginItemService
+    @State private var login = LoginItemToggle(status: .notRegistered)
     @State private var custom = HighlightColor.override() != nil
     @State private var color = Color(nsColor: HighlightColor.current)
 
@@ -32,8 +35,29 @@ struct GeneralTab: View {
             })
     }
 
+    private var openAtLogin: Binding<Bool> {
+        Binding(
+            get: { login.isOn },
+            set: { (on: Bool) -> Void in login = LoginItemToggle.toggled(on, service: loginItem) })
+    }
+
     var body: some View {
         Form {
+            Section {
+                Toggle(SettingsCopy.openAtLogin, isOn: openAtLogin)
+                if login.needsApproval {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
+                        Text(SettingsCopy.needsApproval)
+                        Spacer()
+                        Button(SettingsCopy.openLoginItems) { loginItem.openSystemSettingsLoginItems() }
+                    }
+                }
+            } header: {
+                Text(SettingsCopy.startupSection)
+            } footer: {
+                if let footer = login.footer { Self.footer(footer) }
+            }
             Section {
                 HStack(alignment: .bottom) {
                     Picker(SettingsCopy.highlightColor, selection: mode) {
@@ -48,10 +72,14 @@ struct GeneralTab: View {
             } header: {
                 Text(SettingsCopy.appearanceSection)
             } footer: {
-                Text(SettingsCopy.highlightFooter).font(.subheadline).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Self.footer(SettingsCopy.highlightFooter)
             }
         }
         .formStyle(.grouped)
+        .onAppear { login = LoginItemToggle(status: loginItem.status) }
+    }
+
+    private static func footer(_ text: String) -> some View {
+        Text(text).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 }

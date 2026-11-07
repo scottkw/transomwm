@@ -20,6 +20,7 @@ import os
     private let conflicts: ConflictController
     private let showSetup: () -> Void
     private let showTrackedWindows: () -> Void
+    private let loginItem: any LoginItemService = SystemLoginItem()
     private var permissionSubscription: AnyCancellable?
     /// The last access state the subscription saw (it fires before `permission.state` updates).
     private var ready = false
@@ -378,7 +379,7 @@ import os
     /// One factory per Settings tab built so far; later plans add their panes here.
     private func settingsTabs() -> [SettingsPane: () -> NSViewController] {
         [
-            .general: { SettingsWindowController.hosting(GeneralTab()) },
+            .general: { SettingsWindowController.hosting(GeneralTab(loginItem: self.loginItem)) },
             .arranging: {
                 SettingsWindowController.hosting(
                     ArrangingTab(gaps: self.gaps, newWindows: self.newWindows, dragToDock: self.dragToDock, conflicts: self.conflicts),

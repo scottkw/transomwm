@@ -6,6 +6,12 @@ nonisolated public enum SettingsCopy {
     public static let menuItem = "Settings\u{2026}"
 
     // General (Tab 1)
+    public static let startupSection = "Startup"
+    public static let openAtLogin = "Open Transom at login"
+    public static let needsApproval = "Needs your OK in System Settings"
+    public static let openLoginItems = "Open Login Items Settings"
+    public static let loginItemFailed =
+        "macOS didn't allow this. Try again, or add Transom in System Settings \u{25B8} General \u{25B8} Login Items."
     public static let appearanceSection = "Appearance"
     public static let highlightColor = "Highlight color"
     public static let matchSystemAccent = "Match system accent color"
