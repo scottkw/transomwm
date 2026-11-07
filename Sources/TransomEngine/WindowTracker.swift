@@ -366,7 +366,8 @@ public struct WindowTracker: Sendable {
     /// AXWindows or on screen, a member is still in the CG list, and its Spaces at its last listing include a Space a
     /// display shows now. A live group always has a selected tab that answers and, while its Space shows, is listed,
     /// so it never looks closed. A look that still holds `settleDelay` later is confirmed (a Cmd-W's next tab is
-    /// listed sooner); until then the group is pending. A failed list says nothing and changes nothing; a hidden app's
+    /// listed sooner); until then the group is pending. A group that looks closed but for a tab still on screen (macOS
+    /// 27 orders the shown tab out after AX reports it gone) is pending too, with no clock started. A failed list says nothing and changes nothing; a hidden app's
     /// groups, a group on a Space no display shows and a group with no Space data (lookup off) are never confirmed.
     /// Measured: `.build/09-30-tabs-vm27-measure.log`, `.build/09-30-tabs-vm15-measure.log`.
     private mutating func confirmClosedTabGroups(
@@ -392,11 +393,16 @@ public struct WindowTracker: Sendable {
             var shownGone = false
             if case .failure(.invalidElement)? = byID[shown]?.read { shownGone = true }
             let lingering = group.compactMap { cgByID[$0] }
-            let looksClosed = shownGone && group.isDisjoint(with: listed)
-                && !lingering.isEmpty && !lingering.contains(where: \.onScreen)
+            let goneFromAX = shownGone && group.isDisjoint(with: listed) && !lingering.isEmpty
                 && info.spaces.map { !$0.isEmpty && !$0.isDisjoint(with: shownSpaces) } == true
-            guard looksClosed else {
+            guard goneFromAX else {
                 closingGroups[identity] = nil
+                continue
+            }
+            // 27.2: CG orders the shown tab out after AX reports it gone. Recheck, with no clock started yet.
+            guard !lingering.contains(where: \.onScreen) else {
+                closingGroups[identity] = nil
+                pendingGroups.insert(identity)
                 continue
             }
             let since = closingGroups[identity] ?? context.now
