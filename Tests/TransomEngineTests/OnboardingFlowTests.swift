@@ -18,6 +18,17 @@ import Testing
         #expect(!firstRun.contains(.features))
     }
 
+    @Test func moveComesFirstWhenNeeded() {
+        let moving = OnboardingFlow.steps(completed: false, conflictsActive: false, needsMove: true)
+        #expect(moving == [.move] + firstRun)
+        #expect(OnboardingFlow.steps(completed: true, conflictsActive: false, needsMove: true) == [.move, .accessibility])
+        #expect(OnboardingFlow.caption(for: .move, in: moving) == nil)
+        #expect(OnboardingFlow.caption(for: .welcome, in: moving).map { [$0.number, $0.total] } == [1, 4])
+        // A stored later step never skips the move.
+        #expect(OnboardingFlow.resume(stored: "accessibility", in: moving) == .move)
+        #expect(OnboardingFlow.resume(stored: "move", in: firstRun) == .welcome)
+    }
+
     @Test func afterCompletionOnlyAccessibilityShows() {
         #expect(OnboardingFlow.steps(completed: true, conflictsActive: true) == [.accessibility])
         #expect(OnboardingFlow.caption(for: .accessibility, in: [.accessibility]) == nil)

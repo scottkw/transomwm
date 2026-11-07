@@ -7,10 +7,12 @@ public enum OnboardingStep: String, CaseIterable, Sendable {
 /// Pure: the window controller reads `onboarding.completed` and drives the window.
 public enum OnboardingFlow {
     /// The first run walks every applicable step; after completion only the Accessibility step ever shows.
-    /// The macOS window features step shows only while a conflicting feature is on.
-    public static func steps(completed: Bool, conflictsActive: Bool) -> [OnboardingStep] {
-        if completed { return [.accessibility] }
-        return [.welcome, .accessibility, .screenRecording] + (conflictsActive ? [.features] : []) + [.launchAtLogin, .done]
+    /// The macOS window features step shows only while a conflicting feature is on. Move to Applications comes first
+    /// whenever it's needed, completed or not, because it must precede any permission request (D-08).
+    public static func steps(completed: Bool, conflictsActive: Bool, needsMove: Bool = false) -> [OnboardingStep] {
+        let move: [OnboardingStep] = needsMove ? [.move] : []
+        if completed { return move + [.accessibility] }
+        return move + [.welcome, .accessibility, .screenRecording] + (conflictsActive ? [.features] : []) + [.launchAtLogin, .done]
     }
 
     /// Welcome…Launch at login are numbered, counting only the ones in `steps`. Move and Done have no caption, and
@@ -22,8 +24,9 @@ public enum OnboardingFlow {
     }
 
     /// Where a relaunch picks up from the stored last step: past Screen Recording (macOS's Quit & Reopen), at any
-    /// other step still in `steps`, and at the first step for anything else.
+    /// other step still in `steps`, and at the first step for anything else. A needed Move always comes first.
     public static func resume(stored: String?, in steps: [OnboardingStep]) -> OnboardingStep {
+        if steps.first == .move { return .move }
         guard let step = stored.flatMap(OnboardingStep.init(rawValue:)), steps.contains(step) else { return steps[0] }
         return step == .screenRecording ? next(after: step, in: steps) ?? step : step
     }
