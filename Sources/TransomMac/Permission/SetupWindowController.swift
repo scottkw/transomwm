@@ -36,8 +36,15 @@ import os
         stateChanged(permission.state)
     }
 
+    /// Whether the window opens by itself once the launch probe has settled, and with which steps. The first run
+    /// always opens (step 2 passes by itself when access is ready); later launches only when access isn't ready.
+    static func launchDecision(completed: Bool, phase: PermissionPhase) -> (show: Bool, steps: [OnboardingStep]) {
+        (!completed || phase != .ready, OnboardingFlow.steps(completed: completed))
+    }
+
+    /// Opens the steps for the current completion state: after completion, the lone Accessibility step.
     func show() {
-        let steps = OnboardingFlow.steps(completed: completed)
+        let steps = Self.launchDecision(completed: completed, phase: permission.state.phase).steps
         if model.steps != steps {
             model.steps = steps
             go(to: steps[0])
@@ -57,7 +64,7 @@ import os
         }
         guard awaitingLaunchDecision, state.phase != .probing else { return }
         awaitingLaunchDecision = false
-        if (!completed || state.phase != .ready) && !userClosed { show() }
+        if Self.launchDecision(completed: completed, phase: state.phase).show && !userClosed { show() }
     }
 
     /// Continue: the next step, passing the Accessibility step when access is already ready.
@@ -119,6 +126,7 @@ import os
         permission.state.phase != .resetting
     }
 
+    /// Writes nothing: closing before Done leaves the first run pending, and quits nothing.
     func windowWillClose(_ notification: Notification) {
         userClosed = true
     }
