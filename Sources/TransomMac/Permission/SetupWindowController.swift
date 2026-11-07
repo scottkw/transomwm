@@ -10,6 +10,8 @@ import os
 /// Windows) opens it.
 @MainActor final class SetupWindowController: NSObject, NSWindowDelegate {
     static let completedKey = "onboarding.completed"
+    /// The last step reached, so a relaunch mid-setup resumes (UI-SPEC Surface 2).
+    static let stepKey = "onboarding.step"
     private let permission: PermissionController
     private let defaults: UserDefaults
     private let logger = Logger(subsystem: "com.eightabyte.transom", category: "onboarding")
@@ -21,6 +23,8 @@ import os
     /// Screen Recording through `SnapshotCapture`, injected so tests never touch it (RESEARCH Pitfall 5).
     var screenRecordingGranted: (() -> Bool)?
     var requestScreenRecording: (() -> Bool)?
+    /// Done's Open Settings: nil opens the last tab shown.
+    var openSettings: ((SettingsPane?) -> Void)?
     private var screenRecordingPoll: Task<Void, Never>?
 
     init(permission: PermissionController, defaults: UserDefaults = .standard) {
@@ -36,6 +40,7 @@ import os
     /// Call right after `.launched`. A trusted launch waits for its probe, so a working grant never
     /// flashes the window; any other outcome shows it. The first run shows it either way.
     func decideAtLaunch() {
+        if !completed { go(to: OnboardingFlow.resume(stored: defaults.string(forKey: Self.stepKey), in: model.steps)) }
         awaitingLaunchDecision = true
         stateChanged(permission.state)
     }
@@ -89,6 +94,13 @@ import os
         window?.performClose(nil)
     }
 
+    /// Done's Open Settings: completes onboarding, closes the window, then opens Settings on its last tab.
+    func openSettingsFromDone() {
+        guard let openSettings else { preconditionFailure("openSettings not wired") }
+        finish()
+        openSettings(nil)
+    }
+
     /// Back: the step before this one.
     func back() {
         guard let index = model.steps.firstIndex(of: model.current), index > 0 else { return }
@@ -112,6 +124,7 @@ import os
     private func go(to step: OnboardingStep) {
         guard model.current != step else { return }
         model.current = step
+        defaults.set(step.rawValue, forKey: Self.stepKey)
         screenRecordingPoll?.cancel()
         screenRecordingPoll = nil
         logger.info("step \(step.rawValue, privacy: .public)")
@@ -141,6 +154,7 @@ import os
             back: { [weak self] in self?.back() },
             allowScreenRecording: { [weak self] in self?.allowScreenRecording() },
             finish: { [weak self] in self?.finish() },
+            openSettings: { [weak self] in self?.openSettingsFromDone() },
             close: { [weak self] in self?.closeAccessibilityStep() })
         let hosting = NSHostingController(rootView: view)
         // The hosting controller publishes SwiftUI's size as preferredContentSize, which the window applies,
@@ -174,9 +188,13 @@ import os
         permission.state.phase != .resetting
     }
 
-    /// Writes nothing: closing before Done leaves the first run pending, and quits nothing.
+    /// Closing from Screen Recording onward completes the first run; closing earlier leaves it pending. Quits nothing.
     func windowWillClose(_ notification: Notification) {
         userClosed = true
+        if [.screenRecording, .features, .launchAtLogin, .done].contains(model.current) {
+            defaults.set(true, forKey: Self.completedKey)
+            logger.info("completed by close")
+        }
         screenRecordingPoll?.cancel()
         screenRecordingPoll = nil
     }

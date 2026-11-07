@@ -26,4 +26,5 @@ nonisolated public enum OnboardingCopy {
     public static let continueButton = "Continue"
     public static let quitButton = "Quit Transom"
     public static let doneButton = "Done"
+    public static let openSettingsButton = "Open Settings"
 }

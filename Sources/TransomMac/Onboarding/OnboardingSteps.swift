@@ -26,6 +26,7 @@ struct OnboardingView: View {
     let back: () -> Void
     let allowScreenRecording: () -> Void
     let finish: () -> Void
+    let openSettings: () -> Void
     let close: () -> Void
     @AccessibilityFocusState private var headingFocused: Bool
 
@@ -81,6 +82,7 @@ struct OnboardingView: View {
             } detail: {
                 EmptyView()
             } buttons: {
+                Button(OnboardingCopy.openSettingsButton, action: openSettings)
                 defaultButton(OnboardingCopy.doneButton, action: finish)
             }
         default:

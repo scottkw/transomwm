@@ -19,6 +19,13 @@ public enum OnboardingFlow {
         return (index + 1, numbered.count)
     }
 
+    /// Where a relaunch picks up from the stored last step: past Screen Recording (macOS's Quit & Reopen), at any
+    /// other step still in `steps`, and at the first step for anything else.
+    public static func resume(stored: String?, in steps: [OnboardingStep]) -> OnboardingStep {
+        guard let step = stored.flatMap(OnboardingStep.init(rawValue:)), steps.contains(step) else { return steps[0] }
+        return step == .screenRecording ? next(after: step, in: steps) ?? step : step
+    }
+
     public static func next(after step: OnboardingStep, in steps: [OnboardingStep]) -> OnboardingStep? {
         guard let index = steps.firstIndex(of: step), index + 1 < steps.count else { return nil }
         return steps[index + 1]
