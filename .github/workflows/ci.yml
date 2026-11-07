@@ -20,6 +20,8 @@ defaults:
 jobs:
   test:
     runs-on: macos-26
+    # A hung swift test would otherwise hold a macOS runner for the 6-hour default.
+    timeout-minutes: 60
     # Live AX suites are opt-in (TRANSOM_LIVE=1), so even an AX-trusted runner skips the fixture suite.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
