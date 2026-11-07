@@ -24,6 +24,8 @@ concurrency:
 
 jobs:
   cask:
+    # A prerelease never reaches the cask; the in-app updater ignores prereleases too.
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -42,6 +44,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' is not vMAJOR.MINOR.PATCH"; exit 1; }
+          # Only releases/latest (never a prerelease) goes in the cask, so a dispatch can't move it back to an older tag.
+          latest=$(gh api "repos/$REPO/releases/latest" --jq .tag_name)
+          [ "$latest" = "$TAG" ] || { echo "::error::$TAG is not releases/latest ($latest)"; exit 1; }
           version="${TAG#v}"
           dmg="Transom-$version-universal.dmg"
           mkdir -p dl

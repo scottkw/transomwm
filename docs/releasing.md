@@ -137,7 +137,9 @@ Delete the exported .p12 afterwards.
 `tap.yml` downloads the published `Transom-X.Y.Z-universal.dmg` and its `.sha256`, hashes the DMG,
 requires that hash to match the `.sha256` asset (and the release API's asset digest), renders
 `packaging/homebrew/transom.rb.template` and pushes `Casks/transom.rb` to
-`scottkw/homebrew-transom`. A re-run with the same version and hash changes nothing.
+`scottkw/homebrew-transom`. A re-run with the same version and hash changes nothing. It skips a
+prerelease and refuses any tag that is not `releases/latest`, so mark the release latest when you
+publish it, and a re-run cannot move the cask back to an older version.
 
 `HOMEBREW_TAP_TOKEN` is a repository secret on `scottkw/transomwm`: a fine-grained personal access
 token with **Contents: read and write on `scottkw/homebrew-transom` only**, nothing else. Only
