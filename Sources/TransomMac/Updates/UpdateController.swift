@@ -115,13 +115,15 @@ import os
         machine.succeed(.verifying(release))
         let check = verify
         let status = await Task.detached { check(file) }.value
-        guard status == errSecSuccess else {
-            logger.error("verify failed: team id (\(status, privacy: .public))")
-            machine.fail(.verifyFailed, manual: true)
-            return
-        }
-        guard DMGVerifier.quarantine(file) else {
-            logger.error("verify failed: quarantine")
+        let quarantined = status == errSecSuccess && DMGVerifier.quarantine(file)
+        guard quarantined else {
+            // gifsmith: a failed check deletes the file.
+            if status == errSecSuccess {
+                logger.error("verify failed: quarantine")
+            } else {
+                logger.error("verify failed: team id (\(status, privacy: .public))")
+            }
+            try? FileManager.default.removeItem(at: file)
             machine.fail(.verifyFailed, manual: true)
             return
         }

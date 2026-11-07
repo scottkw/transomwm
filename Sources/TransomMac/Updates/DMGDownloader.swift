@@ -19,27 +19,45 @@ final class DMGDownloader {
         self.directory = directory
     }
 
-    /// The verified-size, matching-digest file at `directory/assetName`. `progress` runs at most every 100 ms.
+    /// The verified-size, matching-digest file at `directory/assetName`. `progress` runs at most every 100 ms. Old
+    /// update files go first; on any failure nothing is left behind.
     func download(_ release: UpdateRelease, progress: @escaping @MainActor (Double?) -> Void) async throws -> URL {
         guard UpdateFeed.isAllowedDownload(release.url) else { throw Failure.download }
         let files = FileManager.default
         try files.createDirectory(at: directory, withIntermediateDirectories: true)
         try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        try clean()
         let final = directory.appending(path: release.assetName)
         let part = directory.appending(path: release.assetName + ".part")
         var request = URLRequest(url: release.url)
         request.setValue("Transom", forHTTPHeaderField: "User-Agent")
-        try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, any Error>) in
-            let delegate = Delegate(release: release, part: part, progress: progress, done: done)
-            let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-            session.downloadTask(with: request).resume()
-            session.finishTasksAndInvalidate()
+        do {
+            try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, any Error>) in
+                let delegate = Delegate(release: release, part: part, progress: progress, done: done)
+                let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+                session.downloadTask(with: request).resume()
+                session.finishTasksAndInvalidate()
+            }
+            try files.moveItem(at: part, to: final)
+            return final
+        } catch {
+            try? files.removeItem(at: part)
+            try? files.removeItem(at: final)
+            throw error
         }
-        try files.moveItem(at: part, to: final)
-        return final
     }
 
-    func clean() throws {}
+    /// gifsmith `Clean`: removes only Transom's own update files (`Transom-*-universal.dmg` and `.part`); other files
+    /// stay. A missing folder is fine.
+    func clean() throws {
+        let files = FileManager.default
+        guard files.fileExists(atPath: directory.path) else { return }
+        for url in try files.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey]) {
+            let name = url.lastPathComponent
+            let own = name.hasPrefix("Transom-") && (name.hasSuffix("-universal.dmg") || name.hasSuffix("-universal.dmg.part"))
+            if own, try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true { try files.removeItem(at: url) }
+        }
+    }
 
     nonisolated static func sha256Hex(of file: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: file)
@@ -57,6 +75,8 @@ final class DMGDownloader {
         let done: CheckedContinuation<Void, any Error>
         var redirects = 0
         var lastProgress = Date.distantPast
+        /// More bytes than the asset size: cancelled, and a size failure rather than a network one.
+        var oversized = false
         var outcome: Result<Void, any Error> = .failure(Failure.download)
 
         init(release: UpdateRelease, part: URL, progress: @escaping @MainActor (Double?) -> Void,
@@ -80,6 +100,13 @@ final class DMGDownloader {
 
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
                         totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+            // gifsmith's LimitReader(size + 1): an endless body is cut off.
+            guard totalBytesWritten <= release.size else {
+                oversized = true
+                outcome = .failure(Failure.digest)
+                downloadTask.cancel()
+                return
+            }
             let now = Date()
             guard now.timeIntervalSince(lastProgress) >= 0.1 else { return }
             lastProgress = now
@@ -106,7 +133,8 @@ final class DMGDownloader {
         }
 
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
-            done.resume(with: error.map { _ in .failure(Failure.download) } ?? outcome)
+            if error != nil, !oversized { outcome = .failure(Failure.download) }
+            done.resume(with: outcome)
         }
     }
 }
