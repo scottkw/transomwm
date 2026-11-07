@@ -120,6 +120,10 @@ None. The Task 2 and Task 3 RED stubs (`clean()`, `isHomebrew`, empty copy const
 - A failed open keeps the verified DMG in the Updates folder (gifsmith). The next download's `clean()` removes it.
 - `notarized` in the requirement may consult Apple (RESEARCH A11). The real-DMG run passed online, and it was not tested offline.
 
+## Commit count note
+
+The measured `commits: 6` (`plan_head_before..plan_head_after`) includes fcddc02, "test: keep the 70 KB bad-file text out of the printed test argument". It touches only `Tests/TransomMacTests/MinimumHintsStoreTests.swift`. It landed on the branch from outside this executor between 732f8a8 and 8e1984c and is not part of this plan. This plan made 5 task commits. The full host suite ran after fcddc02, so the gate covered it.
+
 ## Self-Check: PASSED
 
 - Files: DMGDownloader.swift, DMGVerifier.swift, InstallLocation.swift, UpdateDownloadTests.swift and UpdateRealDMGTests.swift all exist.
