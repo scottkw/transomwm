@@ -73,7 +73,7 @@ final class CollapsedBlockView: NSView {
         let fits: (CGSize) -> Bool = { (card: CGSize) -> Bool in
             block.width >= card.width + clearance && block.height >= icon + gap + card.height + clearance
         }
-        return fits(fullCard) ? .full : .iconOnly
+        return fits(fullCard) ? .full : fits(lineCard) ? .lineOne : .iconOnly
     }
 
     private static var titleFont: NSFont { NSFont.preferredFont(forTextStyle: .body) }
