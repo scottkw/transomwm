@@ -973,12 +973,12 @@ var signalSources: [any DispatchSourceSignal] = []
 for number in [SIGINT, SIGHUP, SIGTERM] {
     signal(number, SIG_IGN)
     let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
-    source.setEventHandler { MainActor.assumeIsolated { Run.finish(130, reason: "signal \(number)") } }
+    source.setEventHandler { MainActor.assumeIsolated { () -> Void in Run.finish(130, reason: "signal \(number)") } }
     source.resume()
     signalSources.append(source)
 }
 DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(seconds)) {
-    MainActor.assumeIsolated { Run.finish(subcommand == "takeover-crash" ? 1 : 0, reason: "timeout after \(seconds) s") }
+    MainActor.assumeIsolated { () -> Void in Run.finish(subcommand == "takeover-crash" ? 1 : 0, reason: "timeout after \(seconds) s") }
 }
 
 DispatchQueue.main.async {
