@@ -87,9 +87,17 @@ public enum TransomMacApp {
         conflictController.takeover = takeover
         conflictController.isDragging = { arrangeController.arranger.isDragging }
         conflictController.presentAlert = { [unowned conflictController] in conflictController.showModelessAlert($0) }
+        // Off outside a Release bundle (T-09-19); `swift run` has no Info.plist, hence "dev" (Capabilities' convention).
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String
+        let updates = UpdateController(
+            client: GitHubReleaseClient(configuration: GitHubReleaseClient.configuration(), userAgent: "Transom/\(version ?? "dev")"),
+            currentVersion: version ?? "dev", build: info?["CFBundleVersion"] as? String ?? "?",
+            isEnabled: UpdateController.isEnabled(bundleID: Bundle.main.bundleIdentifier, version: version))
         let controller = StatusItemController(
             system: system, arrange: arrangeController, dispatch: dispatch, permission: permissionController, gaps: gaps,
             dragToDock: dragToDock, newWindows: newWindows, exclusions: exclusions, freezeTest: freezeTest, conflicts: conflictController,
+            updates: updates,
             showTrackedWindows: { trackedController.show() },
             showSetup: { setupController.show() }
         )

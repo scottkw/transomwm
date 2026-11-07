@@ -20,6 +20,14 @@ import os
         self.isEnabled = isEnabled
     }
 
+    /// On only in a Release bundle with a version (Debug is `….debug`; `swift run` has no Info.plist), so a dev build
+    /// never updates itself (T-09-19). A Release bundle with a malformed version is a broken build: crash.
+    static func isEnabled(bundleID: String?, version: String?) -> Bool {
+        guard bundleID == "com.eightabyte.transom", let version else { return false }
+        precondition(UpdateVersion.parse(version) != nil, "Release bundle with a malformed version: \(version)")
+        return true
+    }
+
     func checkNow() async {
         guard isEnabled, status != .checking else { return }
         let previous = status

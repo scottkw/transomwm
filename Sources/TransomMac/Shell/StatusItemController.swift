@@ -18,6 +18,7 @@ import os
     private let exclusions: ExclusionStore
     private let freezeTest: FreezeTest
     private let conflicts: ConflictController
+    private let updates: UpdateController
     private let showSetup: () -> Void
     private let showTrackedWindows: () -> Void
     private let loginItem: any LoginItemService = SystemLoginItem()
@@ -44,7 +45,7 @@ import os
     /// `showSetup` opens the "Set Up Transom" window from the Grant/Fix item. `dispatch` is the call every hotkey makes.
     init(
         system: AXWindowSystem, arrange: ArrangeController, dispatch: @escaping (Command) -> Void, permission: PermissionController,
-        gaps: GapPreference, dragToDock: DragToDockPreference, newWindows: NewWindowsPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
+        gaps: GapPreference, dragToDock: DragToDockPreference, newWindows: NewWindowsPreference, exclusions: ExclusionStore, freezeTest: FreezeTest, conflicts: ConflictController, updates: UpdateController, showTrackedWindows: @escaping () -> Void, showSetup: @escaping () -> Void
     ) {
         self.system = system
         self.arrange = arrange
@@ -56,6 +57,7 @@ import os
         self.exclusions = exclusions
         self.freezeTest = freezeTest
         self.conflicts = conflicts
+        self.updates = updates
         self.showTrackedWindows = showTrackedWindows
         self.showSetup = showSetup
         super.init()
@@ -406,6 +408,7 @@ import os
                 SettingsWindowController.hosting(
                     ExclusionsTab(exclusions: self.exclusions, displayName: { [weak self] in self?.displayName(of: $0) }), height: 560)
             },
+            .updates: { SettingsWindowController.hosting(UpdatesTab(controller: self.updates)) },
         ]
     }
 
