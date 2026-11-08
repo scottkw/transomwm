@@ -8,6 +8,8 @@ public enum CLIProtocol {
     public static let maxRequestBytes = 256
     /// How long the tool waits to send, and then for the reply (UI-SPEC Surface 5).
     public static let timeout: TimeInterval = 2
+    /// Test hook: seconds to wait instead of `timeout`, for tests whose listener shares a busy main queue.
+    public static let timeoutEnvironmentKey = "TRANSOM_CLI_TIMEOUT"
     public static let ok = "ok"
     public static let rate = "rate"
     public static let rejected = "rejected"

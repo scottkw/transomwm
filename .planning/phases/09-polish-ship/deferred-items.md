@@ -116,3 +116,37 @@ Resolved in 09-29 (D-23).
   No crash report. The earlier "silent early exit" was log truncation (a 70 KB test argument line, fixed in fcddc02)
   hiding real failures. `--no-parallel` is kept until the user decides (D-21); parallel would cut the CI test step from
   about 12 min to under a minute.
+
+## 09-28 (2026-11-08)
+
+- **Task 1 (done):** v0.9.0 tagged on main (7c4510a); release run https://github.com/scottkw/transomwm/actions/runs/42445497219
+  passed (gate + release); published with `gh release edit v0.9.0 --draft=false --latest` (D-28: no reviewer, Claude
+  publishes).
+- **Task 2, public release (unauthenticated `releases/latest`, `.build/09-28-t2.log`):** tag v0.9.0, not draft or
+  prerelease, published 2026-11-08T04:19:52Z. Assets `Transom-0.9.0-universal.dmg` (uploaded, 10575256 bytes, digest
+  `sha256:73f49423d4046eb53964fca89f5293038f7a6c9328e7d0c7be797010c1913b80`) and `Transom-0.9.0-universal.dmg.sha256`
+  (uploaded). The .sha256 downloaded with plain `curl` (no token) holds the same hash. The release body has no "brew" or
+  "Homebrew" (D-26). Report a Problem target `https://github.com/scottkw/transomwm/issues/new` answers 302 (sign-in
+  redirect for anonymous visitors).
+- **Task 3 guest cleanup (user, in pane-test only):** the guest held Transom 0.3.0 (`/Applications/Transom.app`, Oct 27,
+  Developer ID S2K7P43927, no quarantine). Claude's own cleanup command was blocked by a Claude Code safety check, so the
+  user ran `pkill -x Transom; rm -rf /Applications/Transom.app; defaults delete com.eightabyte.transom; rm -f
+  ~/Library/Preferences/com.eightabyte.transom.plist; tccutil reset All com.eightabyte.transom`. tccutil answered
+  `No such bundle identifier "com.eightabyte.transom"` (the app was already gone), so any old TCC grant for the release
+  bundle may still be there. Left in place: `~/Library/Application Support/Transom` (`layout.json`,
+  `min-size-hints.json`; shared with Transom Debug, written by the live tests), the `.debug` preferences and Transom
+  Debug.app. Inventory before cleanup: no Transom login item in `sfltool dumpbtm`, no LaunchAgents
+  (`.build/09-28-vm-inventory.log`).
+- **Task 3, clean DMG install in pane-test (macOS 15.7.7, `.build/09-28-vm.log`, first run after cleanup):** clean-guest
+  precondition held. Plain `curl` download of the DMG and .sha256 from the public release; browser-style quarantine
+  `0081;<hex time>;Safari;` written on the DMG. `shasum -a 256 -c`: `Transom-0.9.0-universal.dmg: OK`. `spctl -a -t open
+  --context context:primary-signature` on the DMG: accepted, source=Notarized Developer ID, origin=Developer ID
+  Application: Ken Scott (S2K7P43927). `hdiutil attach -readonly` checksums verified; `ditto` to /Applications; detach
+  OK. `spctl -a -t exec` on /Applications/Transom.app: accepted, source=Notarized Developer ID, same origin.
+  `codesign -d -r-` `designated =>` equals `xcode/designated-requirement.txt`. App quarantine: `0081;6aeffaa2;Safari;`,
+  carried from the image by `ditto` (no quarantine gap: the first open goes through Gatekeeper's first-open check).
+  No `Caskroom/transom` under `/opt/homebrew` or `/usr/local`, so `InstallLocation` treats it as a disk-image install.
+  VM stopped, no tart process, no lock.
+- **Open for verify-work (09-UAT.md):** the first-open, onboarding, Updates and launch-at-login checks in the guest,
+  and the five host checks. In the guest, the shared `layout.json` may give 0.9.0 a restored layout at first launch, and
+  a leftover release TCC grant may skip the Accessibility prompt.

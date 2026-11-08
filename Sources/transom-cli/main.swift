@@ -31,9 +31,10 @@ let text = "\(scheme)://\(path)"
 guard let url = URL(string: text), TransomURL.parse(url, scheme: scheme) != nil else { fail(CLICopy.unknownCommand(path), 64) }
 guard let remote = CFMessagePortCreateRemote(nil, portName as CFString) else { fail(CLICopy.notRunning, 2) }
 
+let timeout = ProcessInfo.processInfo.environment[CLIProtocol.timeoutEnvironmentKey].flatMap(TimeInterval.init) ?? CLIProtocol.timeout
 var replyData: Unmanaged<CFData>?
 let status = CFMessagePortSendRequest(
-    remote, CLIProtocol.version, Data(text.utf8) as CFData, CLIProtocol.timeout, CLIProtocol.timeout, CFRunLoopMode.defaultMode.rawValue, &replyData)
+    remote, CLIProtocol.version, Data(text.utf8) as CFData, timeout, timeout, CFRunLoopMode.defaultMode.rawValue, &replyData)
 let reply = replyData.map { String(decoding: $0.takeRetainedValue() as Data, as: UTF8.self) }
 let outcome = status == kCFMessagePortSuccess && reply != nil
     ? CLIProtocol.exitCode(reply: reply ?? "", command: path) : CLIProtocol.exitCode(sendStatus: status)

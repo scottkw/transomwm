@@ -30,7 +30,8 @@ import Testing
         let process = Process()
         process.executableURL = try tool()
         process.arguments = arguments
-        process.environment = [CLIProtocol.portEnvironmentKey: port]
+        // The listener answers on the main queue, which parallel @MainActor tests keep busy past the 2 s default.
+        process.environment = [CLIProtocol.portEnvironmentKey: port, CLIProtocol.timeoutEnvironmentKey: "30"]
         let stderr = Pipe()
         process.standardError = stderr
         try process.run()

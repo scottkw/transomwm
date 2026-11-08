@@ -37,7 +37,7 @@ nonisolated public enum NoticeCopy {
                     + (count == 1 ? "1 window from them is" : "\(count) windows from them are") + " floating here until you reconnect them."
             }
         case .takeoverCrashed:
-            "Transom quit unexpectedly, so Mission Control has its keys back. Choose Replace Mission Control in the Transom menu to use them for the overview again."
+            "Transom quit unexpectedly, so Mission Control has its keys back. Turn on Settings ▸ Zoom & Gestures ▸ Use the Mission Control keys for the overview to use them again."
         case .takeoverApplyFailed:
             "Couldn't take over Mission Control's keys, so Mission Control works as before."
         case .crashRecovered(let unplaced):

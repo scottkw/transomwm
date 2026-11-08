@@ -105,6 +105,14 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
 - **D-27 (user, 2026-11-08, after the 09-27 diagnostic):** CI runs `swift test` in parallel again. The D-21 "early exit"
   was log truncation hiding a real failure, not a crash (09-27 deferred-items); the parallel diagnostic job is removed.
 
+- **D-28 (user, 2026-11-08, at the v0.9.0 tag):** No manual approval and no manual tagging. The `release` environment has
+  no required reviewer (branch/tag policy only); Claude tags `vX.Y.Z` on `main` (through the admin bypass of the tag
+  ruleset), lets the release job run, checks the draft, and publishes it with `--latest`.
+
+- **D-29 (user, 2026-11-08):** Skip the Phase 9 host on-screen UAT (Settings tabs, onboarding, menu-bar controls, update
+  dot, Dell 1x glyph, collapsed label). The phase closes on the automated host and VM tests plus the release checks;
+  anything found in use goes into 0.9.1. Verification records these items as not seen on screen, not as passed.
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.
