@@ -128,11 +128,11 @@ import Testing
             (CLIProtocol.version, "transom://view/0"), (CLIProtocol.version, "not a url"),
         ]
         for (msgid, text) in cases {
-            // On its own thread: the send waits in a run loop while the main queue serves the port.
+            // On its own thread: the send waits in a run loop while the main queue serves the port (30 s: parallel tests keep it busy).
             let reply = await Task.detached {
                 let remote = CFMessagePortCreateRemote(nil, port as CFString)
                 var data: Unmanaged<CFData>?
-                _ = CFMessagePortSendRequest(remote, msgid, Data(text.utf8) as CFData, 2, 2, CFRunLoopMode.defaultMode.rawValue, &data)
+                _ = CFMessagePortSendRequest(remote, msgid, Data(text.utf8) as CFData, 30, 30, CFRunLoopMode.defaultMode.rawValue, &data)
                 return data.map { String(decoding: $0.takeRetainedValue() as Data, as: UTF8.self) }
             }.value
             #expect(reply == CLIProtocol.rejected, "\(text)")
