@@ -116,7 +116,7 @@ private func ref(_ id: UInt32) -> WindowRef {
 
     @Test func takeoverCrashedIsN10() {
         #expect(NoticeCopy.text(for: .takeoverCrashed, appName: { _ in "" })
-            == "Transom quit unexpectedly, so Mission Control has its keys back. Choose Replace Mission Control in the Transom menu to use them for the overview again.")
+            == "Transom quit unexpectedly, so Mission Control has its keys back. Turn on Settings ▸ Zoom & Gestures ▸ Use the Mission Control keys for the overview to use them again.")
         #expect(NoticeCopy.glyph(for: .takeoverCrashed) == "lifepreserver")
         #expect(!NoticeCopy.isWarning(.takeoverCrashed))
         #expect(!Notice.takeoverCrashed.isCrashNotice, "queued behind N2/N3, never holding the toast like them")
