@@ -3,6 +3,10 @@ status: diagnosed
 trigger: "g-02-10-tab-group-stale-rows: A native tab group is one tracked window. New tabs, tab switches and Cmd-W change its title and tab count, but never add or leave extra rows."
 created: 2026-10-27T20:00:00-05:00
 updated: 2026-10-27T20:45:00-05:00
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus

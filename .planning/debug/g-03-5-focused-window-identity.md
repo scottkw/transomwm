@@ -4,6 +4,10 @@ trigger: "G-03-5: with TextEdit window A docked, focused TextEdit windows B/C ca
 created: 2026-10-26T15:00:00-05:00
 updated: 2026-10-26T15:50:00-05:00
 goal: find_root_cause_only
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus

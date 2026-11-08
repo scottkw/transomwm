@@ -13,6 +13,7 @@ Out-of-scope issues found while executing plans. Not fixed by the plan that foun
   window did not return within 3 s.
 - **`FreezeTestTests/itResumesByItself` is timing-sensitive.** It failed once under the full `swift test` load (the
   50 ms auto-resume with a 1 s deadline) and passed three times alone.
+  status: acknowledged
 
 ## Found in 03-12
 
@@ -24,6 +25,7 @@ Out-of-scope issues found while executing plans. Not fixed by the plan that foun
 - **`swift format lint --strict` is not clean on the existing code** (about 1,250 findings in Arranger.swift at
   8038b4b under the default rules; there is no `.swift-format` file and no lint step in CI). New 03-12 code follows
   the file's existing style (`var candidate = world, candidateHistory = history`).
+  status: acknowledged
 
 ## Found in 03-16
 
@@ -33,6 +35,7 @@ Out-of-scope issues found while executing plans. Not fixed by the plan that foun
   user's data. A shared helper that also deletes the file, or one fixed suite name per test file, would stop the pile-up.
 - **The plan's `killall` grep baseline is out of date.** `grep -rn killall Sources` finds one hit at 16d0692: the
   03-15 doc comment in `AppDelegate.swift` describing `killall Pane` sending SIGTERM. 03-16 adds none.
+  status: acknowledged
 
 ## Found in 03-17
 
@@ -91,6 +94,7 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   Fix direction: when Space data is known, a layer-0 entry with an empty Space list counts as absent (CloseRule AX-invalid
   row; isAlive). First measure in the VM what minimised windows, Cmd-H-hidden apps and hidden tabs report for Spaces.
   Failing headless tests drafted in .planning/debug/g-03-9-closed-safari-lingers.md.
+  status: acknowledged
 
 ## Found in 03-24
 
@@ -103,6 +107,7 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   that pid's initial refresh into a non-initial follow-up (AXWindowSystem `refresh`, the `inFlight` guard), so that
   app's new windows can still be settling at `.sessionPaused(false)`. Options: keep a shown-Space saved window dormant
   while its app's first read failed, or hold the restore until every app's first read succeeded or it was degraded.
+  status: acknowledged
 
 ## Found in 03-25 and 03-26
 
@@ -116,7 +121,9 @@ Seen during the release run and the clean-Mac install check (Tart VM, macOS 15.7
   session-only and counted by boundary drags only.
 - **(03-25) Float All keeps its tile-rect placement (TILE-16).** The 2026-10-27 decision names Float and the green
   button only. Option: Float All could use each window's pre-dock frame too.
+  status: acknowledged
 
 ## Polish (user, 2026-10-27)
 
 - Green button: after Pane takes a plain click, macOS 15's Move & Resize hover popup (ThemeWidgetControlViewService, layer 101) stays open until the pointer leaves, because the swallowed press never reaches it. Close or dismiss it after a taken press. User asked to log it as polish (G-03-4 hand check on 0.3.10).
+  status: acknowledged

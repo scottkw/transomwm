@@ -9,6 +9,7 @@
 - **Change:** `SpaceChangeRelay` in `ViewsIntegrationTests.swift`. While the test runs, it posts the notification on the test process's workspace center for each SkyLight Space change the system has not announced within 150 ms. On 15.7 the system's notifications balance the count, so it posts nothing. The product's switch-first path, its 500 ms wait for the Arranger and the camera are unchanged and still under test.
 - **Result:** passed on macOS 27.2 on the first run (`.build/09-24-views-vm27.log`) and on macOS 15.7 (`.build/09-24-views-vm15.log`).
 - **Follow-up for 09-25:** `OverviewSpaceSwitchIntegrationTests` and `TabStripSpaceIntegrationTests` fail on 27.2 in the same way ("the Arranger never sees the second Space"). The relay is the likely setup fix there too.
+  status: acknowledged
 
 ### Rematch: `aPlaceholderIsClickThroughAndBehindRealWindows`, fixed (test setup)
 
@@ -17,6 +18,7 @@
 - **Cause, measured:** a temporary copy of the test with diagnostics (`.build/09-24-probe5-vm27.log`) showed that when `close 1` replies on 27.2, the closed fixture window is still on screen under the click point. The second click landed on it, so the fixture stayed frontmost. Once the window had left the on-screen list, the click went through the placeholder panel to the desktop and Finder became frontmost. The panel was click-through both times.
 - **Change:** after `close 1`, the test waits (up to 3 s, required) until that window is gone from the on-screen window list, then clicks. The comment names D-17.
 - **Result:** passed on macOS 27.2 on its third run, the first with the fix (`.build/09-24-rematch-vm27.log`), and on macOS 15.7 (`.build/09-24-rematch-vm15.log`).
+  status: acknowledged
 
 ## 09-25: the other carried macOS 27.2 live failures (D-17, from 08.1.1-18)
 
@@ -26,6 +28,7 @@
 - **Cause, measured:** all three hang off `AXWindowSystem`'s `activeSpaceDidChangeNotification` observer (the `.spaceChanged` event feeds the Arranger's `currentSpaceID` and the visit capture 1 s later). With `SpaceChangeRelay` counting, the system announced 0 of 8 Space changes to the SSH-run test process on 27.2 (`.build/09-25-oss-vm27.log`: "3 Space changes, 0 announced by the system, 3 posted" and so on) and every one on 15.7 (`.build/09-25-oss-vm15.log`: "4 announced, 0 posted"). Same harness gap as Views in 09-24.
 - **Change:** `SpaceChangeRelay` moved from `ViewsIntegrationTests.swift` into `IntegrationSupport.swift` (now two suites use it) and prints its counts at `stop()`. The three tests start one after reading the desktops, with a D-17 comment.
 - **Result:** 6/6 passed on macOS 27.2 on the first run with the fix (`.build/09-25-oss-vm27.log`) and on macOS 15.7 (`.build/09-25-oss-vm15.log`), where the relay posted nothing.
+  status: acknowledged
 
 ### Overview: `overviewOpensPerDisplayAndCloses` helper exit on 27.2, NOT fixed (cause unproven, deviation)
 
@@ -34,6 +37,7 @@
 - **Tried, did not work:** keeping the main thread in the nested pump for the whole 400 ms fade after Esc, on the theory that the Esc keyUp or the key panel's order-out at the end of its fade triggered the stop. The helper still exited with no results (`.build/09-25-overview-vm27.log`). That was the third 27.2 run of the suite (the plan's limit), so the change was reverted and nothing was committed for this test.
 - **Not known:** what stops the helper's loop after the close. It may be the `frames()` await, the `offerExplainerAfterOverview` task 370 ms after the close, or the test's end (fixture terminate or ArrangeController release). The next step is a probe with a marker after every await and a `CFRunLoopObserver` on the main loop's exit, in a fresh plan with its own run budget. No product cause is shown: the real app runs `NSApp.run`, which ignores such stops.
 - **15.7:** run 1 failed at L46 ("opened" false, the first test taking 16 s right after boot; `.build/09-25-overview-vm15.log`). Run 2 passed 3/3 (`.build/09-25-overview-vm15-2.log`; one attempt before it lost rsync before any test ran, `.build/09-25-overview-vm15-2-rsyncdrop.log`). I read run 1 as a slow first open after boot, but it is only one sample.
+  status: acknowledged
 
 ### TabStripSpace: `theStripShowsOnlyOnItsGroupsSpace`, fixed (test setup, the 09-24 Views cause)
 
@@ -41,6 +45,7 @@
 - **Cause, measured:** the strip is ordered out by `tabStripPanels.spaceChanged`, which runs on `AXWindowSystem`'s `.spaceChanged` event, the same notification path. The relay counted "2 Space changes, 0 announced by the system, 2 posted" on 27.2 (`.build/09-25-strip-vm27.log`) and "2 announced, 0 posted" on 15.7 (`.build/09-25-strip-vm15.log`).
 - **Change:** the test starts a `SpaceChangeRelay`, with a D-17 comment.
 - **Result:** passed on macOS 27.2 on the first run with the fix and on macOS 15.7.
+  status: acknowledged
 
 ### TabGroup: `closeAndMinimizeCommandsActOnFixtureWindows` on 27.2, NOT fixed (product gap on macOS 27, deviation)
 
@@ -52,6 +57,7 @@ Resolved in 09-29 (D-23).
 - **Why not a test-setup fix:** real AppKit and SwiftUI apps commonly keep closed windows (window controllers, `isReleasedWhenClosed = false`). On macOS 27 Transom would keep such a closed window tracked and tiled, and Close Group would stop on its 1 s confirmation. Making the fixture release its windows would hide that. Changing `CloseRule` (for example treating "AX gone, CG present but off screen" as closed) is a product decision outside this test-only plan; it needs care because minimised, hidden and other-Space windows are also off screen (those answer AX as valid).
 - **Runs:** 27.2 used its three (base, diag, diag2). 15.7 once, unchanged.
 - **Also seen on 15.7, out of scope:** `aTabDraggedOutWithNoWindowUnderPointerLeavesTheGroup` failed at L46 (`ids.count == 2`): the fixture's launch reported fewer than two windows in `SavedGroup.start`, before any product logic ran. It passed on 27.2 in the baseline. One sample; not investigated.
+  status: acknowledged
 
 ## 09-29: macOS 27 close of a window its app keeps alive (D-23), fixed (product)
 
@@ -72,6 +78,7 @@ Resolved in 09-29 (D-23).
   - (a) A whole native tab group its app closes and keeps alive on macOS 27. Its hidden members could linger in the CG list too, and `decide`'s remaining-members check cannot tell them from live hidden tabs by CG alone, so the group may stay tracked. Resolved in 09-30 (D-25).
   - (b) With the Spaces lookup off, a kept-alive closed window keeps rechecking, as before.
   - (c) A kept-alive closed window whose Space no display shows any more by the time Transom refreshes (Spaces switched first) keeps rechecking until that Space shows.
+  status: acknowledged
 
 ## 09-30: macOS 27 close of a whole native tab group its app keeps alive (D-25), fixed (product)
 
@@ -105,6 +112,7 @@ Resolved in 09-29 (D-23).
   - (d) The 250 ms confirmation assumes AppKit lists the next tab sooner after a Cmd-W (measured: 0 ms and 19 ms on 27.2, 0 ms and 1 ms on 15.7).
   - (e) A native fullscreen tab group closed whole was not measured.
   - (f) A shown tab that stays on screen in CG for more than about 2 s after the close (8 quick rechecks) waits for the 5 s sweep.
+  status: acknowledged
 
 ## 09-27 (2026-11-08)
 
@@ -116,6 +124,7 @@ Resolved in 09-29 (D-23).
   No crash report. The earlier "silent early exit" was log truncation (a 70 KB test argument line, fixed in fcddc02)
   hiding real failures. `--no-parallel` is kept until the user decides (D-21); parallel would cut the CI test step from
   about 12 min to under a minute.
+  status: acknowledged
 
 ## 09-28 (2026-11-08)
 
@@ -150,3 +159,4 @@ Resolved in 09-29 (D-23).
 - **Open for verify-work (09-UAT.md):** the first-open, onboarding, Updates and launch-at-login checks in the guest,
   and the five host checks. In the guest, the shared `layout.json` may give 0.9.0 a restored layout at first launch, and
   a leftover release TCC grant may skip the Accessibility prompt.
+  status: acknowledged

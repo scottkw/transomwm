@@ -3,6 +3,10 @@ status: diagnosed
 trigger: "g-02-12-minimum-not-learned: A refused frame write should teach Transom the window's real minimum. Min Size should show it about a second later, and min-size-hints.json should store it per bundle."
 created: 2026-10-27T20:00:00-05:00
 updated: 2026-10-27T20:40:00-05:00
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus

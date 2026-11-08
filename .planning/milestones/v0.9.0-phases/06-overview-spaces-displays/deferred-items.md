@@ -7,3 +7,4 @@
 - Ruled out: suite parallelism (the suite is `.serialized` and this test runs first), guest screen saver and display sleep (both off), leftover processes in the guest (none). A diagnostic run showed `holdsKeys` already true right after the overview reopens.
 - Unknown: why the posted Esc missed the key panel in those two runs. A possible cause is WindowServer key focus lagging AppKit's `isKeyWindow`, but this is not shown. 06-UAT backstop item covers pressing Esc right after the overview opens on real hardware.
 - Not fixed: no change can be tied to a cause yet. Next step if it recurs: log the WindowServer key window (CGWindowList owner of the key window) at the moment Esc is posted.
+  status: acknowledged
