@@ -102,6 +102,9 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
   stay (harmless without a Caskroom install). Supersedes D-12's tap for 0.9.0 and the Homebrew part of SHIP-05 / ROADMAP
   Phase 9 criterion 5; 09-27 drops the tap steps and 09-28 checks a DMG install instead of a cask install.
 
+- **D-27 (user, 2026-11-08, after the 09-27 diagnostic):** CI runs `swift test` in parallel again. The D-21 "early exit"
+  was log truncation hiding a real failure, not a crash (09-27 deferred-items); the parallel diagnostic job is removed.
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.

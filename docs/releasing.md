@@ -165,19 +165,10 @@ Its `uninstall` removes the "Transom" login item; a Debug build registers its ow
 - **Keep test arguments short.** Swift Testing prints every argument of a parameterised test on one
   log line, and GitHub's log viewer drops everything after a very long line, including the failure
   that follows it. A run can look as if it stopped with no message.
-- **Serial tests (D-21).** CI runs `swift test --no-parallel` because the parallel run on the
-  runner (Swift 6.3.3) appeared to exit early with no message, which it never did locally (6.4).
-  That was most likely the log truncation above hiding a real failure, not a crash. To diagnose,
-  dispatch CI with `parallel: true`:
-
-  ```sh
-  gh workflow run ci.yml --repo scottkw/transomwm --ref main -f parallel=true
-  ```
-
-  It runs `swift test` in parallel once (allowed to fail) and uploads the full log and
-  `~/Library/Logs/DiagnosticReports` as the `parallel-test-diagnostics` artifact; read the log
-  there, not in the web viewer. Drop `--no-parallel` once a parallel run passes, or when the
-  runner has Swift 6.4 and one passes.
+- **Parallel tests (D-21, D-27).** CI runs `swift test` in parallel. An earlier "silent early exit"
+  on the runner was the log truncation above hiding a real failure, not a crash: a full parallel run
+  (2349 tests, 16.8 s) showed one ordinary failing test. If a run seems to stop with no message, look
+  for a very long log line before assuming a crash.
 
 ## macOS betas
 

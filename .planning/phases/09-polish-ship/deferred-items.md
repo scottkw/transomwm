@@ -105,3 +105,14 @@ Resolved in 09-29 (D-23).
   - (d) The 250 ms confirmation assumes AppKit lists the next tab sooner after a Cmd-W (measured: 0 ms and 19 ms on 27.2, 0 ms and 1 ms on 15.7).
   - (e) A native fullscreen tab group closed whole was not measured.
   - (f) A shown tab that stays on screen in CG for more than about 2 s after the close (8 quick rechecks) waits for the 5 s sweep.
+
+## 09-27 (2026-11-08)
+
+- Release dry run on main: https://github.com/scottkw/transomwm/actions/runs/42436534634 — gate and release jobs
+  succeeded (first attempt failed at `notarytool store-credentials` because NOTARY_KEY_ID held the wrong ID; fixed,
+  re-run passed). `UpdateRealDMGTests` passed 3/3 on the CI-built, notarised DMG. No release was created.
+- D-21 parallel diagnostic: https://github.com/scottkw/transomwm/actions/runs/42438056926 — the parallel run did **not**
+  exit early: all 2349 tests ran in 16.8 s with one failure, the `WakeTimerTests` wall-clock flake (fixed in f7b6b56).
+  No crash report. The earlier "silent early exit" was log truncation (a 70 KB test argument line, fixed in fcddc02)
+  hiding real failures. `--no-parallel` is kept until the user decides (D-21); parallel would cut the CI test step from
+  about 12 min to under a minute.
