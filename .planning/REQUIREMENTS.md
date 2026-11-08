@@ -119,14 +119,14 @@
 
 ### Ship
 
-- [ ] **SHIP-01**: Settings window covers gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement, New Windows and Drag to Dock
-- [ ] **SHIP-02**: First-run onboarding walks through permissions and conflicting macOS features
-- [ ] **SHIP-03**: User can launch Transom at login
-- [ ] **SHIP-04**: Transom checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
-- [ ] **SHIP-05**: Releases are Developer ID signed and notarised, and the DMG installs and opens without Gatekeeper warnings (Homebrew cask deferred, Phase 9 D-26)
-- [ ] **SHIP-06**: Menu bar shows back, forward and saved-view buttons with the current view highlighted, and Settings lets the user choose and reorder which controls appear, down to icon only
-- [ ] **SHIP-07**: The menu includes "Report a Problem", and the menu bar icon shows a dot when an update is available
-- [ ] **SHIP-08**: `transom://settings?pane=` opens a specific Settings pane
+- [x] **SHIP-01**: Settings window covers gaps, appearance, gestures, hotkeys, exclusions, Mission Control replacement, New Windows and Drag to Dock
+- [x] **SHIP-02**: First-run onboarding walks through permissions and conflicting macOS features
+- [x] **SHIP-03**: User can launch Transom at login
+- [x] **SHIP-04**: Transom checks the GitHub repo's latest release (automatically, toggleable, and via a "Check for Updates" button in the Settings window opened from the menu-bar icon), notifies the user when a newer version exists, and downloads and verifies the release DMG (sha256 digest + Developer ID Team ID) before opening it — same design as gifsmith's `internal/update`
+- [x] **SHIP-05**: Releases are Developer ID signed and notarised, and the DMG installs and opens without Gatekeeper warnings (Homebrew cask deferred, Phase 9 D-26)
+- [x] **SHIP-06**: Menu bar shows back, forward and saved-view buttons with the current view highlighted, and Settings lets the user choose and reorder which controls appear, down to icon only
+- [x] **SHIP-07**: The menu includes "Report a Problem", and the menu bar icon shows a dot when an update is available
+- [x] **SHIP-08**: `transom://settings?pane=` opens a specific Settings pane
 
 ## v2 Requirements
 
@@ -244,14 +244,14 @@ Populated by the roadmapper on 2026-10-23.
 | VIEW-03 | Phase 8 | Complete |
 | VIEW-04 | Phase 8 | Complete |
 | VIEW-05 | Phase 8 | Complete |
-| SHIP-01 | Phase 9 | Pending |
-| SHIP-02 | Phase 9 | Pending |
-| SHIP-03 | Phase 9 | Pending |
-| SHIP-04 | Phase 9 | Pending |
-| SHIP-05 | Phase 9 | Pending |
-| SHIP-06 | Phase 9 | Pending |
-| SHIP-07 | Phase 9 | Pending |
-| SHIP-08 | Phase 9 | Pending |
+| SHIP-01 | Phase 9 | Complete |
+| SHIP-02 | Phase 9 | Complete |
+| SHIP-03 | Phase 9 | Complete |
+| SHIP-04 | Phase 9 | Complete |
+| SHIP-05 | Phase 9 | Complete |
+| SHIP-06 | Phase 9 | Complete |
+| SHIP-07 | Phase 9 | Complete |
+| SHIP-08 | Phase 9 | Complete |
 
 **Coverage:**
 - v1 requirements: 93 total (TILE-15 superseded, ZOOM-11 retired)
