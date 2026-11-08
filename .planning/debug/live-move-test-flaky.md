@@ -3,6 +3,10 @@ status: awaiting_human_verify
 trigger: "LiveTrackingTests aMoveIsReportedWithin1s intermittently fails at LiveTrackingTests.swift:39 (window never tracked) after plan 02-09"
 created: 2026-10-24T00:00:00Z
 updated: 2026-10-25T00:00:00Z
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: awaiting_human_verify
 ---
 
 ## Current Focus

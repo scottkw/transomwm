@@ -4,6 +4,10 @@ trigger: "Live test ArrangeIntegrationTests.aDockedWindowThatTurnsOutTooBigFloat
 created: 2026-10-26T00:00:00Z
 updated: 2026-10-26T00:00:00Z
 goal: find_root_cause_only
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus

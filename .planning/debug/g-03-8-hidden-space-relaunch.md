@@ -4,6 +4,10 @@ trigger: "G-03-8 (SAFE-06 / Phase 3 SC4): after a Pane relaunch, layout.json kee
 created: 2026-10-26T00:00:00Z
 updated: 2026-10-27T01:45:00Z
 goal: find_root_cause_only
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus

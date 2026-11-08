@@ -4,6 +4,10 @@ trigger: "G-03-9: a closed floating Safari window (2174) stays in layout.json as
 created: 2026-10-26T00:00:00Z
 updated: 2026-10-27T02:55:00Z
 goal: find_root_cause_only
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus

@@ -4,6 +4,10 @@ trigger: "G-03-6 (major), UAT test 15: Reminders' fixed-size Welcome window (768
 created: 2026-10-26T15:00:00-05:00
 updated: 2026-10-26T16:05:00-05:00
 goal: find_root_cause_only
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus

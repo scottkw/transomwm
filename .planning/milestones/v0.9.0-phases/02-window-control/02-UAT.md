@@ -4,6 +4,10 @@ phase: 02-window-control
 source: [02-VERIFICATION.md]
 started: 2026-10-25T21:20:07Z
 updated: 2026-10-27T22:20:33.174Z
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  gap_snapshot: "partial::scenarios=0"
 ---
 
 ## Current Test

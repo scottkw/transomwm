@@ -3,6 +3,10 @@ status: diagnosed
 trigger: "G-02-1: With no Accessibility grant, launch opens a readable Set Up window with a default Open System Settings button. Actual: window exists at 1x28 (title bar only), never sized by its SwiftUI content."
 created: 2026-10-27T20:00:00-05:00
 updated: 2026-10-27T20:25:00-05:00
+audit_acknowledged:
+  milestone: v0.9.0
+  at: 2026-11-08
+  status: diagnosed
 ---
 
 ## Current Focus
