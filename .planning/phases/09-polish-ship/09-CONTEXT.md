@@ -109,6 +109,10 @@ tests. Plain macOS behaviour and simple UX throughout (user preference since 8.1
   no required reviewer (branch/tag policy only); Claude tags `vX.Y.Z` on `main` (through the admin bypass of the tag
   ruleset), lets the release job run, checks the draft, and publishes it with `--latest`.
 
+- **D-29 (user, 2026-11-08):** Skip the Phase 9 host on-screen UAT (Settings tabs, onboarding, menu-bar controls, update
+  dot, Dell 1x glyph, collapsed label). The phase closes on the automated host and VM tests plus the release checks;
+  anything found in use goes into 0.9.1. Verification records these items as not seen on screen, not as passed.
+
 ### Claude's Discretion
 - Exact tab contents beyond the listed settings, copy wording, icons for the view controls, and how the conflicting
   macOS features are detected.
