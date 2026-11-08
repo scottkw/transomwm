@@ -116,3 +116,15 @@ Resolved in 09-29 (D-23).
   No crash report. The earlier "silent early exit" was log truncation (a 70 KB test argument line, fixed in fcddc02)
   hiding real failures. `--no-parallel` is kept until the user decides (D-21); parallel would cut the CI test step from
   about 12 min to under a minute.
+
+## 09-28 (2026-11-08)
+
+- **Task 1 (done):** v0.9.0 tagged on main (7c4510a); release run https://github.com/scottkw/transomwm/actions/runs/42445497219
+  passed (gate + release); published with `gh release edit v0.9.0 --draft=false --latest` (D-28: no reviewer, Claude
+  publishes).
+- **Task 2, public release (unauthenticated `releases/latest`, `.build/09-28-t2.log`):** tag v0.9.0, not draft or
+  prerelease, published 2026-11-08T04:19:52Z. Assets `Transom-0.9.0-universal.dmg` (uploaded, 10575256 bytes, digest
+  `sha256:73f49423d4046eb53964fca89f5293038f7a6c9328e7d0c7be797010c1913b80`) and `Transom-0.9.0-universal.dmg.sha256`
+  (uploaded). The .sha256 downloaded with plain `curl` (no token) holds the same hash. The release body has no "brew" or
+  "Homebrew" (D-26). Report a Problem target `https://github.com/scottkw/transomwm/issues/new` answers 302 (sign-in
+  redirect for anonymous visitors).
