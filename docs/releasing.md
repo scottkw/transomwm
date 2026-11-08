@@ -3,7 +3,7 @@
 GitHub Actions builds every release. A `vX.Y.Z` tag runs `.github/workflows/release.yml`, which
 builds the universal app, signs it with Developer ID, notarises and staples the app and the DMG,
 checks that the in-app updater accepts the DMG and creates a **draft** release with
-`Transom-X.Y.Z-universal.dmg` and its `.sha256`. You publish it by hand. Pushes and pull requests run the test suite (`.github/workflows/ci.yml`).
+`Transom-X.Y.Z-universal.dmg` and its `.sha256`. Claude (or the maintainer) publishes it after checking the draft; no approval step (D-28). Pushes and pull requests run the test suite (`.github/workflows/ci.yml`).
 Homebrew is deferred for 0.9.0 (Phase 9 D-26): `.github/workflows/tap.yml` runs only by hand; see Homebrew tap.
 
 ## Before the first release (one time)
@@ -12,7 +12,7 @@ Homebrew is deferred for 0.9.0 (Phase 9 D-26): `.github/workflows/tap.yml` runs 
    to everyone else, so the in-app updater silently finds nothing and the
    Report a Problem link opens a page nobody can see.
 2. **Create the `release` environment** (Settings, Environments, New environment, `release`):
-   - Required reviewer: `scottkw`. Leave "Prevent self-review" off, or you cannot approve your own runs.
+   - No required reviewer (D-28): the gate job, the branch/tag policy and the tag ruleset are the guards.
    - Deployment branches and tags: selected only, `main` and the tag pattern `v*`.
 3. **Add the five secrets to that environment** (see Secrets).
 4. **Add the tag ruleset** (Settings, Rules, Rulesets, New tag ruleset), name "Release tags:
@@ -38,9 +38,8 @@ Homebrew is deferred for 0.9.0 (Phase 9 D-26): `.github/workflows/tap.yml` runs 
    git push origin vX.Y.Z
    ```
 
-7. The run pauses before the `release` job until you approve it: Actions, the Release run, Review
-   deployments, `release`, Approve and deploy. Before approving, check that the commit is on
-   `main` and that `.github/workflows/release.yml` at that commit is the one on `main`.
+7. The `release` job starts on its own once the gate job passes (no approval, D-28). The gate refuses a
+   tag that is not on `main`.
 8. When the run is green, open the draft (Releases), check the DMG, its `.sha256` and the notes,
    then publish it and mark it latest in one step:
 
